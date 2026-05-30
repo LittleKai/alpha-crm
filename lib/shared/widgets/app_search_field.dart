@@ -34,7 +34,11 @@ class AppSearchField extends StatelessWidget {
           ),
           suffixIcon: controller != null && controller!.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, size: 16, color: AppColors.iconMuted),
+                  icon: const Icon(
+                    Icons.clear,
+                    size: 16,
+                    color: AppColors.iconMuted,
+                  ),
                   onPressed: () {
                     controller!.clear();
                     if (onClear != null) onClear!();
@@ -42,7 +46,10 @@ class AppSearchField extends StatelessWidget {
                   },
                 )
               : null,
-          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: AppSpacing.sm),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 0,
+            horizontal: AppSpacing.sm,
+          ),
         ),
       ),
     );

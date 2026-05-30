@@ -37,7 +37,8 @@ class AppTable extends StatelessWidget {
     this.isError = false,
     this.errorMessage,
     this.emptyTitle = 'Không có dữ liệu',
-    this.emptyDescription = 'Hiện tại chưa có bản ghi nào được lưu trong hệ thống.',
+    this.emptyDescription =
+        'Hiện tại chưa có bản ghi nào được lưu trong hệ thống.',
     this.emptyIcon = Icons.folder_open_outlined,
   });
 
@@ -50,17 +51,25 @@ class AppTable extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: AppColors.errorText, size: 48),
+              const Icon(
+                Icons.error_outline,
+                color: AppColors.errorText,
+                size: 48,
+              ),
               const SizedBox(height: AppSpacing.m),
               Text(
                 'Đã xảy ra lỗi khi tải dữ liệu',
-                style: AppTextStyles.sectionTitle.copyWith(color: AppColors.errorText),
+                style: AppTextStyles.sectionTitle.copyWith(
+                  color: AppColors.errorText,
+                ),
               ),
               if (errorMessage != null) ...[
                 const SizedBox(height: AppSpacing.s),
                 Text(
                   errorMessage!,
-                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -110,7 +119,7 @@ class AppTable extends StatelessWidget {
         if (isLoading)
           Positioned.fill(
             child: Container(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
               child: const Center(
                 child: CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),

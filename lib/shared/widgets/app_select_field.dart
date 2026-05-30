@@ -28,9 +28,7 @@ class AppSelectField<T> extends StatelessWidget {
         if (labelText != null) ...[
           Text(
             labelText!,
-            style: AppTextStyles.label.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: AppSpacing.xs),
         ],
@@ -48,8 +46,13 @@ class AppSelectField<T> extends StatelessWidget {
             ),
             decoration: InputDecoration(
               hintText: hintText,
-              hintStyle: AppTextStyles.body.copyWith(color: AppColors.textMuted),
-              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 0),
+              hintStyle: AppTextStyles.body.copyWith(
+                color: AppColors.textMuted,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: 0,
+              ),
             ),
           ),
         ),

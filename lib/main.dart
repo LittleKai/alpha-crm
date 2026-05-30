@@ -4,11 +4,7 @@ import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {

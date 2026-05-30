@@ -36,10 +36,7 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(
-          color: AppColors.border,
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       child: Column(
@@ -56,7 +53,9 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
               topLeft: Radius.circular(AppSpacing.radiusM),
               topRight: Radius.circular(AppSpacing.radiusM),
               bottomLeft: Radius.circular(_isExpanded ? 0 : AppSpacing.radiusM),
-              bottomRight: Radius.circular(_isExpanded ? 0 : AppSpacing.radiusM),
+              bottomRight: Radius.circular(
+                _isExpanded ? 0 : AppSpacing.radiusM,
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -66,7 +65,9 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
               child: Row(
                 children: [
                   Icon(
-                    _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    _isExpanded
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_right,
                     color: AppColors.textSecondary,
                     size: 20,
                   ),

@@ -40,10 +40,7 @@ class ActivityLogPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(
-          color: AppColors.border,
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,7 +59,9 @@ class ActivityLogPanel extends StatelessWidget {
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s),
@@ -77,7 +76,11 @@ class ActivityLogPanel extends StatelessWidget {
                 const Spacer(),
                 if (onClear != null && logs.isNotEmpty)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.textMuted),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: AppColors.textMuted,
+                    ),
                     onPressed: onClear,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -93,7 +96,9 @@ class ActivityLogPanel extends StatelessWidget {
                 ? Center(
                     child: Text(
                       'Chưa có hoạt động nào được ghi nhận.',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -122,7 +127,9 @@ class ActivityLogPanel extends StatelessWidget {
                                 log.message,
                                 style: AppTextStyles.caption.copyWith(
                                   color: _getLogColor(log.type),
-                                  fontWeight: log.type == LogType.error ? FontWeight.w600 : FontWeight.w500,
+                                  fontWeight: log.type == LogType.error
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
                                 ),
                               ),
                             ),

@@ -25,14 +25,14 @@ class AppMetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 76,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.m,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(
-          color: AppColors.border,
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Row(
         children: [
@@ -44,11 +44,7 @@ class AppMetricCard extends StatelessWidget {
               color: iconBackgroundColor,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 20,
-            ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           const SizedBox(width: AppSpacing.m),
           // Title and Value

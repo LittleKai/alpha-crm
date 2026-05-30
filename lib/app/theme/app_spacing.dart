@@ -31,5 +31,7 @@ class AppSpacing {
   static final BorderRadius borderRadiusXs = BorderRadius.circular(radiusXs);
   static final BorderRadius borderRadiusS = BorderRadius.circular(radiusS);
   static final BorderRadius borderRadiusM = BorderRadius.circular(radiusM);
-  static final BorderRadius borderRadiusPill = BorderRadius.circular(radiusPill);
+  static final BorderRadius borderRadiusPill = BorderRadius.circular(
+    radiusPill,
+  );
 }

@@ -25,18 +25,12 @@ final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.dashboard,
   routes: [
     // Redirect from root '/' to '/dashboard'
-    GoRoute(
-      path: '/',
-      redirect: (context, state) => AppRoutes.dashboard,
-    ),
+    GoRoute(path: '/', redirect: (context, state) => AppRoutes.dashboard),
 
     // Shell Route wrapping all CRM screens
     ShellRoute(
       builder: (context, state, child) {
-        return AppShell(
-          state: state,
-          child: child,
-        );
+        return AppShell(state: state, child: child);
       },
       routes: [
         GoRoute(
@@ -49,7 +43,8 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: AppRoutes.contentTemplates,
-          builder: (context, state) => const ContentTemplatesScreenPlaceholder(),
+          builder: (context, state) =>
+              const ContentTemplatesScreenPlaceholder(),
         ),
         GoRoute(
           path: AppRoutes.messagingBulk,

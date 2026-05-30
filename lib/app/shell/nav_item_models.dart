@@ -16,10 +16,7 @@ class NavGroup {
   final String groupName;
   final List<NavItem> items;
 
-  const NavGroup({
-    required this.groupName,
-    required this.items,
-  });
+  const NavGroup({required this.groupName, required this.items});
 }
 
 final List<NavGroup> navigationGroups = [

@@ -6,47 +6,88 @@ import '../theme/app_spacing.dart';
 import '../theme/app_text_styles.dart';
 import 'app_shell_providers.dart';
 import 'nav_item_models.dart';
+import '../../shared/utils/responsive_breakpoints.dart';
 
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
+  final bool? forceCollapsed;
 
   const AppSidebar({
     super.key,
     required this.currentRoute,
+    this.forceCollapsed,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isCollapsed = ref.watch(sidebarCollapsedProvider);
+    final bool isCollapsed =
+        forceCollapsed ?? ref.watch(sidebarCollapsedProvider);
+    final isMobile = ResponsiveBreakpoints.isMobile(context);
 
-    return Container(
-      width: isCollapsed ? 72 : 250,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          right: BorderSide(
-            color: AppColors.border,
-            width: 1,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: isCollapsed ? 72 : 250,
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(right: BorderSide(color: AppColors.border, width: 1)),
+          ),
+          child: Column(
+            children: [
+              // Branding Header
+              _buildBrandingHeader(isCollapsed),
+              const Divider(height: 1, color: AppColors.borderSoft),
+
+              // Navigation List
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  children: navigationGroups.map((group) {
+                    return _buildGroup(context, group, isCollapsed);
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-      child: Column(
-        children: [
-          // Branding Header
-          _buildBrandingHeader(isCollapsed),
-          const Divider(height: 1, color: AppColors.borderSoft),
-
-          // Navigation List
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              children: navigationGroups.map((group) {
-                return _buildGroup(context, group, isCollapsed);
-              }).toList(),
+        // Circular Collapse Button on the right border
+        if (!isMobile && forceCollapsed == null)
+          Positioned(
+            right: -12, // overlapping the right border (which is 1px wide)
+            top: 52, // centered around y = 64px (since button height is 24px, 64 - 12 = 52px)
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () {
+                  ref.read(sidebarCollapsedProvider.notifier).state =
+                      !isCollapsed;
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border, width: 1),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color.fromRGBO(0, 0, 0, 0.05),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isCollapsed ? Icons.chevron_right : Icons.chevron_left,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -58,8 +99,9 @@ class AppSidebar extends ConsumerWidget {
       ),
       alignment: Alignment.center,
       child: Row(
-        mainAxisAlignment:
-            isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+        mainAxisAlignment: isCollapsed
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.start,
         children: [
           // Avatar Letter 'M' with Gradient
           Container(
@@ -109,14 +151,16 @@ class AppSidebar extends ConsumerWidget {
                 ],
               ),
             ),
-          ]
+          ],
         ],
       ),
     );
   }
 
   Widget _buildGroup(BuildContext context, NavGroup group, bool isCollapsed) {
-    final hasActiveItem = group.items.any((item) => currentRoute == item.routePath);
+    final hasActiveItem = group.items.any(
+      (item) => currentRoute == item.routePath,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,39 +223,51 @@ class AppSidebar extends ConsumerWidget {
     return Container(
       height: 40,
       margin: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
         vertical: AppSpacing.xs,
       ),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           // Nav item button body
-          Material(
-            color: isActive ? AppColors.primarySoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-            child: InkWell(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: Material(
+              color: isActive ? AppColors.primarySoft : Colors.transparent,
               borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-              onTap: () => context.go(item.routePath),
-              child: Row(
-                children: [
-                  const SizedBox(width: AppSpacing.m),
-                  Icon(
-                    item.icon,
-                    color: isActive ? AppColors.primary : AppColors.textSecondary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      item.title,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: isActive ? AppColors.primary : AppColors.textSecondary,
-                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+                onTap: () => context.go(item.routePath),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: AppSpacing.m),
+                      Icon(
+                        item.icon,
+                        color: isActive
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                        size: 20,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: isActive
+                                ? AppColors.primary
+                                : AppColors.textSecondary,
+                            fontWeight: isActive
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -219,15 +275,15 @@ class AppSidebar extends ConsumerWidget {
           if (isActive)
             Positioned(
               left: 0,
-              top: 8,
-              bottom: 8,
-              width: 3,
+              top: 0,
+              bottom: 0,
+              width: 3.5,
               child: Container(
                 decoration: const BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(2),
-                    bottomRight: Radius.circular(2),
+                    topRight: Radius.circular(3),
+                    bottomRight: Radius.circular(3),
                   ),
                 ),
               ),
