@@ -1,17 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/zalo_compliance_guard.dart';
+import '../../settings/providers/settings_provider.dart';
 
 class ScanMembersState {
   final List<ScannedMember> members;
   final String? selectedGroupId;
   final bool isScanning;
   final String? errorText;
+  final String? complianceError;
 
   const ScanMembersState({
     required this.members,
     this.selectedGroupId,
     this.isScanning = false,
     this.errorText,
+    this.complianceError,
   });
 
   ScanMembersState copyWith({
@@ -19,18 +23,31 @@ class ScanMembersState {
     String? selectedGroupId,
     bool? isScanning,
     String? errorText,
+    String? complianceError,
   }) {
     return ScanMembersState(
       members: members ?? this.members,
       selectedGroupId: selectedGroupId ?? this.selectedGroupId,
       isScanning: isScanning ?? this.isScanning,
       errorText: errorText,
+      complianceError: complianceError,
     );
   }
 }
 
 class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
-  ScanMembersNotifier() : super(const ScanMembersState(members: []));
+  final Ref _ref;
+
+  ScanMembersNotifier(this._ref) : super(const ScanMembersState(members: []));
+
+  ComplianceDecision _checkCompliance() {
+    final settings = _ref.read(settingsProvider).settings;
+    return ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: ZaloActionType.scanGroupMembers,
+      targetCount: 1,
+    );
+  }
 
   void selectSavedGroup(String? groupId) {
     if (groupId == null || groupId == 'none') {
@@ -38,7 +55,19 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
       return;
     }
 
-    state = state.copyWith(isScanning: true, selectedGroupId: groupId);
+    final decision = _checkCompliance();
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isScanning: true,
+      selectedGroupId: groupId,
+      complianceError: null,
+    );
     // Simulate loading/scanning saved group
     Future.delayed(const Duration(milliseconds: 500), () {
       List<ScannedMember> loadedMembers = [];
@@ -77,10 +106,19 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
       return;
     }
 
+    final decision = _checkCompliance();
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
     state = state.copyWith(
       isScanning: true,
       errorText: null,
       selectedGroupId: null,
+      complianceError: null,
     );
     Future.delayed(const Duration(milliseconds: 1500), () {
       state = state.copyWith(
@@ -101,5 +139,5 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
 
 final scanMembersProvider =
     StateNotifierProvider<ScanMembersNotifier, ScanMembersState>((ref) {
-      return ScanMembersNotifier();
+      return ScanMembersNotifier(ref);
     });

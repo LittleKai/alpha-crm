@@ -55,7 +55,16 @@ class _FriendByPhoneScreenPlaceholderState
               subtitle:
                   'Gửi lời mời kết bạn hàng loạt theo danh sách số điện thoại hoặc nhóm danh bạ.',
             ),
-            const SizedBox(height: AppSpacing.l),
+            const SizedBox(height: AppSpacing.m),
+            const AppAlert(
+              title: '⚠️ Rủi ro cao — Kết bạn tự động',
+              message:
+                  'Gửi lời mời kết bạn hàng loạt là hành vi rủi ro cao theo chính sách Zalo. '
+                  'Batch/delay KHÔNG đủ để làm cho hành vi này an toàn. Tài khoản có thể bị '
+                  'khóa vĩnh viễn. Chức năng này cần consent rõ ràng và kênh chính thức. '
+                  'Vào Cài đặt → Kiểm soát rủi ro để điều chỉnh.',
+              variant: AppAlertVariant.error,
+            ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

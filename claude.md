@@ -178,3 +178,18 @@ Examples:
 ---
 
 **Remember:** Documentation is the single source of truth.
+
+
+---
+
+## Zalo Integration Direction
+
+- Current product direction is personal Zalo first through the local `zca-js` reference project at `D:\Dev\2.reference_pj\Zalo-ref\zca-js`.
+- Zalo Official Account / OA remains supported as an optional secondary adapter, not the default direction unless the user explicitly asks for official-only mode.
+- Backend service owns all Zalo credentials, cookies, IMEI, user-agent values, QR artifacts, access tokens, and listener sessions. Flutter must never store or display these secrets.
+- Preferred backend channel names are `personal_zca` for the `zca-js` personal-account adapter, `official_oa` for OA/OpenAPI, and `mock` for local test mode.
+- Keep personal-account workflows risk-aware: use rate limits, cooldowns, human approval for high-risk batches, stop conditions, and clear operator status. Do not silently remove safeguards just because personal Zalo is preferred.
+- Do not reintroduce official-only assumptions into docs, settings, guards, or backend code unless the user explicitly changes the product direction.
+- For media/file sends through `zca-js`, remember that file-path image/GIF metadata requires a backend `imageMetadataGetter`; keep that dependency in the Node service, not Flutter.
+
+---

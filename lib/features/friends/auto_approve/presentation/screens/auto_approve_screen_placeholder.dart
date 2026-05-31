@@ -32,7 +32,16 @@ class _AutoApproveScreenPlaceholderState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _Header(),
-            const SizedBox(height: AppSpacing.l),
+            const SizedBox(height: AppSpacing.m),
+            const AppAlert(
+              title: 'Lưu ý — Tự động duyệt kết bạn',
+              message:
+                  'Tính năng này hoạt động với tài khoản cá nhân. Khi chế độ Official API '
+                  'bật, cần đảm bảo tuân thủ chính sách Zalo. Tự động đồng ý kết bạn '
+                  'từ người lạ có thể tạo rủi ro bảo mật cho tài khoản.',
+              variant: AppAlertVariant.warning,
+            ),
+            const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

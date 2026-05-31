@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
+import '../../settings/providers/settings_provider.dart';
 
 class JoinGroupsState {
   final bool isRunning;
@@ -10,6 +12,7 @@ class JoinGroupsState {
   final String groupLinks;
   final int minDelay;
   final int maxDelay;
+  final String? complianceError;
 
   const JoinGroupsState({
     required this.isRunning,
@@ -18,6 +21,7 @@ class JoinGroupsState {
     required this.groupLinks,
     this.minDelay = 10,
     this.maxDelay = 20,
+    this.complianceError,
   });
 
   JoinGroupsState copyWith({
@@ -27,6 +31,7 @@ class JoinGroupsState {
     String? groupLinks,
     int? minDelay,
     int? maxDelay,
+    String? complianceError,
   }) {
     return JoinGroupsState(
       isRunning: isRunning ?? this.isRunning,
@@ -35,16 +40,18 @@ class JoinGroupsState {
       groupLinks: groupLinks ?? this.groupLinks,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
+      complianceError: complianceError,
     );
   }
 }
 
 class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
+  final Ref _ref;
   Timer? _timer;
   int _currentLinkIndex = 0;
   List<String> _linksToJoin = [];
 
-  JoinGroupsNotifier()
+  JoinGroupsNotifier(this._ref)
     : super(const JoinGroupsState(isRunning: false, logs: [], groupLinks: ''));
 
   void setAccount(String? accountId) {
@@ -79,9 +86,25 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
 
     if (_linksToJoin.isEmpty) return;
 
+    // Compliance check
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: ZaloActionType.joinGroups,
+      targetCount: _linksToJoin.length,
+    );
+
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
     _currentLinkIndex = 0;
     state = state.copyWith(
       isRunning: true,
+      complianceError: null,
       logs: [
         LogItem(
           timestamp: DateFormat('HH:mm:ss').format(DateTime.now()),
@@ -187,5 +210,5 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
 
 final joinGroupsProvider =
     StateNotifierProvider<JoinGroupsNotifier, JoinGroupsState>((ref) {
-      return JoinGroupsNotifier();
+      return JoinGroupsNotifier(ref);
     });

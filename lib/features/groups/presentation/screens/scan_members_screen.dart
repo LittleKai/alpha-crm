@@ -6,6 +6,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../mock/mock_groups.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
+import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
@@ -42,7 +43,15 @@ class _ScanMembersScreenState extends ConsumerState<ScanMembersScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _Header(),
-            const SizedBox(height: AppSpacing.l),
+            if (state.complianceError != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppAlert(
+                title: 'Hành động bị chặn',
+                message: state.complianceError!,
+                variant: AppAlertVariant.error,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.m),
             _ScanFormCard(
               linkController: _linkController,
               selectedGroupId: state.selectedGroupId,

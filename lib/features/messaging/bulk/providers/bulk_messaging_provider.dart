@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../mock/mock_campaigns.dart';
+import '../../../../shared/utils/zalo_compliance_guard.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class BulkMessagingState {
   final int
@@ -15,6 +17,7 @@ class BulkMessagingState {
   final List<String> logs;
   final int successCount;
   final int failureCount;
+  final String? complianceError;
 
   const BulkMessagingState({
     required this.selectedTab,
@@ -28,6 +31,7 @@ class BulkMessagingState {
     required this.logs,
     required this.successCount,
     required this.failureCount,
+    this.complianceError,
   });
 
   factory BulkMessagingState.initial() {
@@ -58,6 +62,7 @@ class BulkMessagingState {
     List<String>? logs,
     int? successCount,
     int? failureCount,
+    String? complianceError,
   }) {
     return BulkMessagingState(
       selectedTab: selectedTab ?? this.selectedTab,
@@ -71,15 +76,18 @@ class BulkMessagingState {
       logs: logs ?? this.logs,
       successCount: successCount ?? this.successCount,
       failureCount: failureCount ?? this.failureCount,
+      complianceError: complianceError,
     );
   }
 }
 
 class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
-  BulkMessagingNotifier() : super(BulkMessagingState.initial());
+  final Ref _ref;
+
+  BulkMessagingNotifier(this._ref) : super(BulkMessagingState.initial());
 
   void setSelectedTab(int index) {
-    state = state.copyWith(selectedTab: index);
+    state = state.copyWith(selectedTab: index, complianceError: null);
   }
 
   void setRecipientsText(String text) {
@@ -110,6 +118,19 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     state = state.copyWith(logs: [...state.logs, log]);
   }
 
+  ZaloActionType _actionTypeForTab() {
+    switch (state.selectedTab) {
+      case 0:
+        return ZaloActionType.bulkMessageByPhone;
+      case 1:
+        return ZaloActionType.bulkMessageToGroup;
+      case 2:
+        return ZaloActionType.bulkMessageToFriends;
+      default:
+        return ZaloActionType.bulkMessageByPhone;
+    }
+  }
+
   Future<void> startSending() async {
     if (state.isSending) return;
     final recipients = state.recipientsText
@@ -120,10 +141,26 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
     if (recipients.isEmpty || state.selectedAccount == null) return;
 
+    // Compliance check
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: _actionTypeForTab(),
+      targetCount: recipients.length,
+    );
+
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
     state = state.copyWith(
       isSending: true,
       successCount: 0,
       failureCount: 0,
+      complianceError: null,
       logs: [
         '[Hệ thống] Bắt đầu chiến dịch gửi tin nhắn hàng loạt...',
         '[Hệ thống] Tài khoản gửi: ${state.selectedAccount!.name}',
@@ -179,5 +216,5 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
 final bulkMessagingProvider =
     StateNotifierProvider<BulkMessagingNotifier, BulkMessagingState>((ref) {
-      return BulkMessagingNotifier();
+      return BulkMessagingNotifier(ref);
     });

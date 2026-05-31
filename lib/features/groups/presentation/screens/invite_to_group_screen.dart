@@ -67,7 +67,15 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
-            const SizedBox(height: AppSpacing.l),
+            if (state.complianceError != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppAlert(
+                title: 'Hành động bị chặn',
+                message: state.complianceError!,
+                variant: AppAlertVariant.error,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.m),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

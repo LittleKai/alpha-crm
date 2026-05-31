@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
+import '../../settings/providers/settings_provider.dart';
 
 class CreateGroupsState {
   final bool isRunning;
@@ -13,6 +15,7 @@ class CreateGroupsState {
   final String searchQuery;
   final int minDelay;
   final int maxDelay;
+  final String? complianceError;
 
   const CreateGroupsState({
     required this.isRunning,
@@ -23,6 +26,7 @@ class CreateGroupsState {
     this.searchQuery = '',
     this.minDelay = 5,
     this.maxDelay = 10,
+    this.complianceError,
   });
 
   CreateGroupsState copyWith({
@@ -34,6 +38,7 @@ class CreateGroupsState {
     String? searchQuery,
     int? minDelay,
     int? maxDelay,
+    String? complianceError,
   }) {
     return CreateGroupsState(
       isRunning: isRunning ?? this.isRunning,
@@ -44,16 +49,18 @@ class CreateGroupsState {
       searchQuery: searchQuery ?? this.searchQuery,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
+      complianceError: complianceError,
     );
   }
 }
 
 class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
+  final Ref _ref;
   Timer? _timer;
   int _currentGroupIndex = 0;
   List<String> _groupNames = [];
 
-  CreateGroupsNotifier()
+  CreateGroupsNotifier(this._ref)
     : super(
         CreateGroupsState(
           isRunning: false,
@@ -119,9 +126,25 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
 
     if (_groupNames.isEmpty) return;
 
+    // Compliance check
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: ZaloActionType.createGroups,
+      targetCount: _groupNames.length,
+    );
+
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
     _currentGroupIndex = 0;
     state = state.copyWith(
       isRunning: true,
+      complianceError: null,
       logs: [
         LogItem(
           timestamp: DateFormat('HH:mm:ss').format(DateTime.now()),
@@ -237,5 +260,5 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
 
 final createGroupsProvider =
     StateNotifierProvider<CreateGroupsNotifier, CreateGroupsState>((ref) {
-      return CreateGroupsNotifier();
+      return CreateGroupsNotifier(ref);
     });

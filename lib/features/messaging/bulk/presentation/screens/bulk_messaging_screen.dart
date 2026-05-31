@@ -76,6 +76,14 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
               onChanged: notifier.setSelectedTab,
               onManageCampaigns: _showPlaceholder,
             ),
+            if (state.complianceError != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppAlert(
+                title: 'Hành động bị chặn bởi Kiểm soát rủi ro',
+                message: state.complianceError!,
+                variant: AppAlertVariant.error,
+              ),
+            ],
             const SizedBox(height: AppSpacing.m),
             Expanded(
               child: LayoutBuilder(

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
+import '../../settings/providers/settings_provider.dart';
 
 class InviteToGroupState {
   final bool isRunning;
@@ -15,6 +17,7 @@ class InviteToGroupState {
   final int maxInviteCount;
   final int minDelay;
   final int maxDelay;
+  final String? complianceError;
 
   const InviteToGroupState({
     required this.isRunning,
@@ -27,6 +30,7 @@ class InviteToGroupState {
     this.maxInviteCount = 50,
     this.minDelay = 5,
     this.maxDelay = 10,
+    this.complianceError,
   });
 
   InviteToGroupState copyWith({
@@ -40,6 +44,7 @@ class InviteToGroupState {
     int? maxInviteCount,
     int? minDelay,
     int? maxDelay,
+    String? complianceError,
   }) {
     return InviteToGroupState(
       isRunning: isRunning ?? this.isRunning,
@@ -52,16 +57,18 @@ class InviteToGroupState {
       maxInviteCount: maxInviteCount ?? this.maxInviteCount,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
+      complianceError: complianceError,
     );
   }
 }
 
 class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
+  final Ref _ref;
   Timer? _timer;
   int _currentFriendIndex = 0;
   List<String> _friendIdsToInvite = [];
 
-  InviteToGroupNotifier()
+  InviteToGroupNotifier(this._ref)
     : super(
         InviteToGroupState(
           isRunning: false,
@@ -128,6 +135,21 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
     }
     if (state.selectedFriendIds.isEmpty) return;
 
+    // Compliance check
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: ZaloActionType.inviteToGroup,
+      targetCount: state.selectedFriendIds.length,
+    );
+
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return;
+    }
+
     _friendIdsToInvite = state.selectedFriendIds.toList();
     _currentFriendIndex = 0;
 
@@ -145,6 +167,7 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
 
     state = state.copyWith(
       isRunning: true,
+      complianceError: null,
       logs: [
         LogItem(
           timestamp: DateFormat('HH:mm:ss').format(DateTime.now()),
@@ -254,5 +277,5 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
 
 final inviteToGroupProvider =
     StateNotifierProvider<InviteToGroupNotifier, InviteToGroupState>((ref) {
-      return InviteToGroupNotifier();
+      return InviteToGroupNotifier(ref);
     });

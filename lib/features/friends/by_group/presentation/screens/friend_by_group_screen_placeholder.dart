@@ -53,7 +53,16 @@ class _FriendByGroupScreenPlaceholderState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _Header(),
-            const SizedBox(height: AppSpacing.l),
+            const SizedBox(height: AppSpacing.m),
+            const AppAlert(
+              title: '⚠️ Rủi ro cao — Kết bạn từ nhóm',
+              message:
+                  'Quét thành viên nhóm và gửi lời mời kết bạn hàng loạt có nguy cơ '
+                  'bị Zalo nhận diện là hành vi spam. Tài khoản có thể bị khóa. '
+                  'Vào Cài đặt → Kiểm soát rủi ro để điều chỉnh.',
+              variant: AppAlertVariant.error,
+            ),
+            const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

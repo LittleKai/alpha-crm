@@ -1,0 +1,21 @@
+{
+  "name": "zalo-bot-service",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Alpha CRM Zalo integration service — personal-first via zca-js, with optional OA fallback",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc --watch & node --watch dist/server.js",
+    "zalo:login-personal": "tsc && node dist/personal-login.js"
+  },
+  "dependencies": {
+    "zca-js": "file:../../../../../../2.reference_pj/Zalo-ref/zca-js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
