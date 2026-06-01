@@ -94,26 +94,13 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
       }
     }
     
-    // 2. Nếu chưa có thiết bị, tự động gọi API đăng ký thiết bị máy chủ
+    // 2. Nếu chưa có thiết bị, thông báo lỗi cho người dùng
     if (devId == null) {
-      final String platform = kIsWeb ? 'web' : 'windows';
-      final String finger = 'alpha-crm-fingerprint-${DateTime.now().millisecondsSinceEpoch}';
-      
-      final registerRes = await CrmCloudApi.post('/crm/devices/register', {
-        'machineFingerprint': finger,
-        'displayName': kIsWeb ? 'Chrome Web App Host' : 'Windows Desktop Host',
-        'platform': platform,
-      });
-      
-      if (registerRes['success'] == true && registerRes['data'] != null) {
-        devId = registerRes['data']['deviceId']?.toString();
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          errorText: registerRes['message'] ?? 'Không thể đăng ký thiết bị máy chủ để bắt đầu ghép đôi.',
-        );
-        return false;
-      }
+      state = state.copyWith(
+        isLoading: false,
+        errorText: 'Chưa tìm thấy thiết bị máy chủ nào. Vui lòng chạy "npm run crm:register-device" trên máy chủ để đăng ký trước khi ghép đôi.',
+      );
+      return false;
     }
     
     // 3. Gọi API bắt đầu ghép đôi với deviceId hợp lệ

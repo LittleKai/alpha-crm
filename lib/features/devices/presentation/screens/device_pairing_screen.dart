@@ -42,7 +42,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   @override
   Widget build(BuildContext context) {
     final deviceState = ref.watch(crmDeviceProvider);
-    final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
 
     return Scaffold(
       appBar: AppBar(
@@ -118,7 +118,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     if (deviceState.isPaired) ...[
                       _buildPairedState(deviceState),
                     ] else ...[
-                      if (isAndroid) ...[
+                      if (isClient) ...[
                         _buildAndroidPairingInput(deviceState),
                       ] else ...[
                         _buildWindowsHostPairing(deviceState),

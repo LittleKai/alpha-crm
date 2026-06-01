@@ -92,7 +92,7 @@ class CrmCloudApi {
       }
       return {'success': true, 'data': decoded};
     } catch (e) {
-      return {'success': false, 'message': 'JSON Parse Error: ${e.toString()}'};
+      return {'success': false, 'message': 'HTTP ${response.statusCode}: JSON Parse Error: ${e.toString()}'};
     }
   }
 }

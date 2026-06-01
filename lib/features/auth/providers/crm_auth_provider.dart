@@ -70,16 +70,31 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   }
 
   Future<void> _initialize() async {
+    state = state.copyWith(isLoading: true);
+    bool receivedWebToken = false;
+
     // 1. Đăng ký bộ lắng nghe Web SSO nếu chạy trên môi trường Web
     if (kIsWeb) {
       setupWebAuthListener(onTokenReceived: (token) async {
         debugPrint('[CrmAuthNotifier] Nhận SSO token từ postMessage.');
+        receivedWebToken = true;
         await setTokenAndFetchUser(token);
       });
-    }
 
+      // Timeout fallback for Web SSO
+      Future.delayed(const Duration(seconds: 3), () async {
+        if (!receivedWebToken && mounted) {
+          debugPrint('[CrmAuthNotifier] SSO Timeout. Fallback to local token.');
+          await _checkLocalToken();
+        }
+      });
+    } else {
+      await _checkLocalToken();
+    }
+  }
+
+  Future<void> _checkLocalToken() async {
     // 2. Khôi phục token đã lưu trước đó
-    state = state.copyWith(isLoading: true);
     final token = await CrmAuthTokenStore.getToken();
     if (token != null && token.isNotEmpty) {
       await setTokenAndFetchUser(token);
