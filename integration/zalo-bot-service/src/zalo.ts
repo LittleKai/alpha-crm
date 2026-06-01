@@ -4,7 +4,7 @@
  */
 
 import { config } from './config.js';
-import type { ZaloChannel, ZaloSendMessageRequest, ZaloSendMessageResult, ZaloChannelStatus } from './channels/types.js';
+import type { ZaloChannel, ZaloSendMessageRequest, ZaloSendMessageResult, ZaloChannelStatus, ZaloFriend, ZaloGroupMember } from './channels/types.js';
 import { PersonalZcaChannel } from './channels/personal-zca-channel.js';
 import { OfficialOaChannel } from './channels/official-oa-channel.js';
 import { MockZaloChannel } from './channels/mock-channel.js';
@@ -43,3 +43,76 @@ export async function sendMessage(
 export function handleWebhookEvent(event: Record<string, unknown>): void {
   channel.handleWebhookEvent?.(event);
 }
+
+export async function getAllGroups(): Promise<any[]> {
+  if (!channel.getAllGroups) return [];
+  return channel.getAllGroups();
+}
+
+export async function leaveGroup(groupId: string, silent = false): Promise<boolean> {
+  if (!channel.leaveGroup) return false;
+  return channel.leaveGroup(groupId, silent);
+}
+
+export function getAccounts(): any[] {
+  if (!channel.getAccounts) return [];
+  return channel.getAccounts();
+}
+
+export async function deleteAccount(accountId: string): Promise<boolean> {
+  if (!channel.deleteAccount) return false;
+  return channel.deleteAccount(accountId);
+}
+
+export async function initializeZalo(): Promise<void> {
+  if (channel.startListener) {
+    console.log('[zalo] Initializing and starting Zalo listener on boot...');
+    await channel.startListener();
+  }
+}
+
+export async function getAllFriends(): Promise<ZaloFriend[]> {
+  if (!channel.getAllFriends) return [];
+  return channel.getAllFriends();
+}
+
+export async function getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {
+  if (!channel.getGroupMembers) return [];
+  return channel.getGroupMembers(groupId);
+}
+
+export async function getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[] }> {
+  if (!channel.getGroupLinkMembers) return { groupId: '', groupName: '', totalMember: 0, members: [] };
+  return channel.getGroupLinkMembers(link);
+}
+
+export async function createGroup(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }> {
+  if (!channel.createGroup) return { success: false, error: 'Method not supported on current channel.' };
+  return channel.createGroup(name, members);
+}
+
+export async function joinGroup(link: string): Promise<{ success: boolean; error?: string }> {
+  if (!channel.joinGroup) return { success: false, error: 'Method not supported on current channel.' };
+  return channel.joinGroup(link);
+}
+
+export async function inviteToGroup(userId: string, groupId: string): Promise<{ success: boolean; error?: string }> {
+  if (!channel.inviteToGroup) return { success: false, error: 'Method not supported on current channel.' };
+  return channel.inviteToGroup(userId, groupId);
+}
+
+export async function findUser(phoneNumber: string): Promise<any> {
+  if (!channel.findUser) return null;
+  return channel.findUser(phoneNumber);
+}
+
+export async function sendFriendRequest(userId: string, message: string): Promise<{ success: boolean; error?: string }> {
+  if (!channel.sendFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
+  return channel.sendFriendRequest(userId, message);
+}
+
+export async function acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }> {
+  if (!channel.acceptFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
+  return channel.acceptFriendRequest(userId);
+}
+

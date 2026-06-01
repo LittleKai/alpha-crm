@@ -1,61 +1,210 @@
 /**
  * PersonalZcaChannel — primary channel adapter using zca-js for personal Zalo.
- * Credentials are loaded from backend-local files, never exposed to Flutter.
+ * Supports multiple concurrent active accounts and automatic round-robin rotation.
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
 import { config, projectRoot } from '../config.js';
 import type {
   ZaloChannel,
   ZaloChannelStatus,
   ZaloSendMessageRequest,
   ZaloSendMessageResult,
+  ZaloFriend,
+  ZaloGroupMember,
 } from './types.js';
 
-// zca-js imports — types are inferred at build time from the local package
-import { Zalo, ThreadType } from 'zca-js';
+// zca-js imports
+import { Zalo, ThreadType, FriendEventType } from 'zca-js';
 import type { API, Credentials } from 'zca-js';
 
-let api: API | null = null;
-let listenerRunning = false;
-let lastEventAt: string | null = null;
-let loginError: string | null = null;
+interface ZaloAccountInstance {
+  api: API;
+  uId: string;
+  label: string;
+  listenerRunning: boolean;
+  lastEventAt: string | null;
+  avatar?: string;
+}
 
-async function ensureLogin(): Promise<API> {
-  if (api) return api;
+// Global active accounts pool
+export const accountPool = new Map<string, ZaloAccountInstance>();
+let loginError: string | null = null;
+let poolInitialized = false;
+
+// Round-robin index selector
+let roundRobinIndex = 0;
+
+// Memory Cache for friends and groups to prevent rate limits (429 status code)
+interface CacheEntry<T> {
+  timestamp: number;
+  data: T;
+}
+
+const friendsCache = new Map<string, CacheEntry<ZaloFriend[]>>();
+const groupsCache = new Map<string, CacheEntry<any[]>>();
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+// Export the active account pool loader so server.ts can call it
+export async function ensureLoginPool(): Promise<void> {
+  if (poolInitialized) return;
 
   const credPath = resolve(projectRoot, config.personalCredentialsPath);
-  if (!existsSync(credPath)) {
-    loginError = `Personal credentials not found at ${config.personalCredentialsPath}. Run "npm run zalo:login-personal" to bootstrap.`;
-    throw new Error(loginError);
+  const credDir = dirname(credPath);
+
+  if (!existsSync(credDir)) {
+    mkdirSync(credDir, { recursive: true });
+    console.log(`[PersonalZcaChannel] Created credentials directory: ${credDir}`);
   }
 
+  console.log(`[PersonalZcaChannel] Scanning for credentials in ${credDir}...`);
   try {
-    const raw = readFileSync(credPath, 'utf-8');
+    const files = readdirSync(credDir);
+    const credFiles = files.filter(f => f.startsWith('credentials') && f.endsWith('.json'));
+
+    if (credFiles.length === 0) {
+      console.log('[PersonalZcaChannel] No accounts found. Use the CLI login or UI to bootstrap.');
+      loginError = 'No credentials found.';
+    }
+
+    for (const file of credFiles) {
+      const filePath = resolve(credDir, file);
+      await loadCredentialsFile(filePath);
+    }
+
+    poolInitialized = true;
+    loginError = null;
+  } catch (err) {
+    loginError = `Failed to scan credentials directory: ${err instanceof Error ? err.message : String(err)}`;
+    console.error('[PersonalZcaChannel] Scan error:', err);
+  }
+}
+
+// Add account dynamically (e.g. after QR login)
+export async function addAccountInstance(uId: string, apiInstance: API): Promise<void> {
+  let label = `${config.personalAccountLabel} (${uId})`;
+  let avatar = '';
+  try {
+    const info = await apiInstance.fetchAccountInfo();
+    const displayName = info?.profile?.displayName;
+    avatar = info?.profile?.avatar || '';
+    if (displayName) {
+      label = `${displayName} (${uId})`;
+    }
+  } catch (err) {
+    console.error(`[PersonalZcaChannel] Failed to fetch account display name:`, err);
+  }
+
+  const instance: ZaloAccountInstance = {
+    api: apiInstance,
+    uId,
+    label,
+    listenerRunning: false,
+    lastEventAt: null,
+    avatar,
+  };
+
+  accountPool.set(uId, instance);
+  console.log(`[PersonalZcaChannel] Dynamically added new account to pool: ${label}`);
+  
+  // Auto start listener
+  await startListenerForInstance(instance);
+}
+
+async function loadCredentialsFile(filePath: string): Promise<void> {
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
     const credentials: Credentials = JSON.parse(raw);
 
     const zalo = new Zalo({
       selfListen: config.personalSelfListen,
       logging: true,
     });
-    api = await zalo.login(credentials);
-    loginError = null;
-    console.log('[PersonalZcaChannel] Logged in successfully.');
-    return api;
+
+    const activeApi = await zalo.login(credentials);
+    const uId = activeApi.getOwnId ? activeApi.getOwnId() : `personal_${Date.now()}`;
+    
+    // Add to pool
+    await addAccountInstance(uId, activeApi);
   } catch (err) {
-    loginError = `Login failed: ${err instanceof Error ? err.message : String(err)}`;
-    throw new Error(loginError);
+    console.error(`[PersonalZcaChannel] Failed to load credentials from ${filePath}:`, err);
+  }
+}
+
+async function startListenerForInstance(instance: ZaloAccountInstance): Promise<void> {
+  if (instance.listenerRunning) return;
+  try {
+    const listener = instance.api.listener;
+    if (listener) {
+      listener.removeAllListeners("friend_event");
+      listener.on("friend_event", async (event: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        console.log(`[PersonalZcaChannel - ${instance.label}] Event friend_event received:`, JSON.stringify(event));
+
+        if (event.type === FriendEventType.REQUEST && !event.isSelf) {
+          const senderId = event.data?.fromUid;
+          const message = event.data?.message || '';
+          console.log(`[PersonalZcaChannel - ${instance.label}] Friend request from ${senderId}: "${message}"`);
+
+          if (config.allowFriendAutomation) {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Auto-approving friend request for ${senderId}...`);
+            try {
+              await instance.api.acceptFriendRequest(senderId);
+              console.log(`[PersonalZcaChannel - ${instance.label}] Successfully approved friend request for ${senderId}`);
+            } catch (acceptErr) {
+              console.error(`[PersonalZcaChannel - ${instance.label}] Failed to auto-approve friend for ${senderId}:`, acceptErr);
+            }
+          } else {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Auto-approval is disabled (allowFriendAutomation=false).`);
+          }
+        }
+      });
+
+      listener.start();
+      instance.listenerRunning = true;
+      console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener started.`);
+    }
+  } catch (err) {
+    console.error(`[PersonalZcaChannel - ${instance.label}] Failed to start realtime listener:`, err);
+  }
+}
+
+async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<void> {
+  if (!instance.listenerRunning) return;
+  try {
+    const listener = instance.api.listener;
+    if (listener) {
+      listener.stop();
+      listener.removeAllListeners("friend_event");
+      instance.listenerRunning = false;
+      console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
+    }
+  } catch (err) {
+    console.error(`[PersonalZcaChannel - ${instance.label}] Failed to stop realtime listener:`, err);
   }
 }
 
 export class PersonalZcaChannel implements ZaloChannel {
   getStatus(): ZaloChannelStatus {
+    const connected = accountPool.size > 0;
+    const connectedAccounts = Array.from(accountPool.values());
+    const label = connected
+      ? `${accountPool.size} tài khoản Zalo cá nhân`
+      : 'Chưa liên kết tài khoản nào';
+
+    const listenerRunning = connectedAccounts.some(acc => acc.listenerRunning);
+    const lastEventAt = connectedAccounts.reduce<string | null>((latest, acc) => {
+      if (!acc.lastEventAt) return latest;
+      if (!latest) return acc.lastEventAt;
+      return new Date(acc.lastEventAt) > new Date(latest) ? acc.lastEventAt : latest;
+    }, null);
+
     return {
-      connected: api !== null,
+      connected,
       mode: 'personal_zca',
       accountType: 'personal',
-      accountLabel: config.personalAccountLabel,
+      accountLabel: label,
       listenerRunning,
       lastEventAt,
     };
@@ -70,11 +219,23 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
 
     try {
-      const currentApi = await ensureLogin();
+      await ensureLoginPool();
+
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+
+      // Dynamic Round-Robin rotation selector
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[roundRobinIndex % instances.length];
+      roundRobinIndex++;
+
+      console.log(`[PersonalZcaChannel] Round-Robin selected sender account: ${selectedInstance.label}`);
+
       const threadType =
         req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
 
-      const result = await currentApi.sendMessage(
+      const result = await selectedInstance.api.sendMessage(
         { msg: req.message },
         req.recipientId,
         threadType,
@@ -87,48 +248,500 @@ export class PersonalZcaChannel implements ZaloChannel {
     } catch (err) {
       return {
         success: false,
-        error:
-          loginError ||
-          (err instanceof Error ? err.message : 'Unknown personal send error'),
+        error: loginError || (err instanceof Error ? err.message : 'Unknown personal send error'),
       };
     }
   }
 
   handleWebhookEvent(event: Record<string, unknown>): void {
-    lastEventAt = new Date().toISOString();
     const eventName = event['event_name'] as string | undefined;
     console.log(
-      `[PersonalZcaChannel] Event: ${eventName || 'unknown'}`,
+      `[PersonalZcaChannel Webhook] Event: ${eventName || 'unknown'}`,
       JSON.stringify(event).slice(0, 200),
     );
   }
 
   async startListener(): Promise<void> {
-    if (listenerRunning) return;
-    try {
-      const currentApi = await ensureLogin();
-      const listener = currentApi.listener;
-      if (listener) {
-        listener.start();
-        listenerRunning = true;
-        console.log('[PersonalZcaChannel] Listener started.');
-      }
-    } catch (err) {
-      console.error('[PersonalZcaChannel] Failed to start listener:', err);
+    await ensureLoginPool();
+    for (const instance of accountPool.values()) {
+      await startListenerForInstance(instance);
     }
   }
 
   async stopListener(): Promise<void> {
-    if (!listenerRunning || !api) return;
+    for (const instance of accountPool.values()) {
+      await stopListenerForInstance(instance);
+    }
+  }
+
+  async getAllGroups(): Promise<any[]> {
     try {
-      const listener = api.listener;
-      if (listener) {
-        listener.stop();
-        listenerRunning = false;
-        console.log('[PersonalZcaChannel] Listener stopped.');
+      await ensureLoginPool();
+      if (accountPool.size === 0) return [];
+
+      const allGroups: any[] = [];
+      const now = Date.now();
+
+      for (const instance of accountPool.values()) {
+        try {
+          const cached = groupsCache.get(instance.uId);
+          let instanceGroups: any[];
+
+          if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Using cached group list (${cached.data.length} groups, age: ${Math.round((now - cached.timestamp) / 1000)}s).`);
+            instanceGroups = cached.data;
+          } else {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Fetching group list from API...`);
+            const groupsData = await instance.api.getAllGroups();
+            const groupIds = Object.keys(groupsData.gridVerMap || {});
+            
+            if (groupIds.length === 0) {
+              instanceGroups = [];
+            } else {
+              console.log(`[PersonalZcaChannel - ${instance.label}] Fetching details for ${groupIds.length} groups from API...`);
+              const infoData = await instance.api.getGroupInfo(groupIds);
+              const gridInfoMap = infoData.gridInfoMap || {};
+              const myUid = instance.uId;
+
+              instanceGroups = groupIds.map((id) => {
+                const info = gridInfoMap[id] || {};
+                const role = info.creatorId === myUid ? 'Trưởng nhóm' : 'Thành viên';
+                return {
+                  id,
+                  name: `[${instance.uId.slice(-4)}] ${info.name || 'Nhóm không tên'}`,
+                  memberCount: info.totalMember || (info.memberIds ? info.memberIds.length : 0) || 0,
+                  role,
+                  avatar: info.fullAvt || info.avt || '',
+                };
+              });
+            }
+
+            // Update cache
+            groupsCache.set(instance.uId, {
+              timestamp: now,
+              data: instanceGroups,
+            });
+            console.log(`[PersonalZcaChannel - ${instance.label}] Fetched and cached ${instanceGroups.length} groups.`);
+          }
+
+          allGroups.push(...instanceGroups);
+        } catch (err) {
+          console.error(`[PersonalZcaChannel - ${instance.label}] Failed to fetch groups:`, err);
+          // Fall back to stale cache if available
+          const cached = groupsCache.get(instance.uId);
+          if (cached) {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Falling back to stale cached group list.`);
+            allGroups.push(...cached.data);
+          }
+        }
       }
+
+      return allGroups;
     } catch (err) {
-      console.error('[PersonalZcaChannel] Failed to stop listener:', err);
+      console.error('[PersonalZcaChannel] Failed to get Zalo groups:', err);
+      return [];
+    }
+  }
+
+  async leaveGroup(groupId: string, silent = false): Promise<boolean> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) return false;
+
+      let leftAny = false;
+      for (const instance of accountPool.values()) {
+        try {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Attempting to leave group ${groupId}...`);
+          await instance.api.leaveGroup(groupId, silent);
+          console.log(`[PersonalZcaChannel - ${instance.label}] Successfully left group ${groupId}`);
+          leftAny = true;
+          // Invalidate groups cache
+          groupsCache.delete(instance.uId);
+        } catch (err) {
+          // Continue to next instance in case it was not owned by this account
+        }
+      }
+      return leftAny;
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to leave group ${groupId}:`, err);
+      return false;
+    }
+  }
+
+  getAccounts(): any[] {
+    return Array.from(accountPool.values()).map(acc => ({
+      id: acc.uId,
+      label: acc.label,
+      connected: true,
+      listenerRunning: acc.listenerRunning,
+      avatar: acc.avatar || '',
+    }));
+  }
+
+  async deleteAccount(accountId: string): Promise<boolean> {
+    const instance = accountPool.get(accountId);
+    if (!instance) return false;
+
+    try {
+      await stopListenerForInstance(instance);
+      accountPool.delete(accountId);
+
+      // Invalidate caches
+      friendsCache.delete(accountId);
+      groupsCache.delete(accountId);
+
+      const credPath = resolve(projectRoot, config.personalCredentialsPath);
+      const credDir = dirname(credPath);
+      
+      const filePaths = [
+        resolve(credDir, `credentials_${accountId}.json`),
+        resolve(credDir, `credentials.json`), // Delete backward compatibility files too
+      ];
+
+      for (const filePath of filePaths) {
+        if (existsSync(filePath)) {
+          unlinkSync(filePath);
+        }
+      }
+
+      console.log(`[PersonalZcaChannel] Successfully unlinked Zalo account: ${accountId}`);
+      return true;
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to unlink account ${accountId}:`, err);
+      return false;
+    }
+  }
+
+  async getAllFriends(): Promise<ZaloFriend[]> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) return [];
+
+      const allFriends: ZaloFriend[] = [];
+      const seenIds = new Set<string>();
+      const now = Date.now();
+
+      for (const instance of accountPool.values()) {
+        try {
+          const cached = friendsCache.get(instance.uId);
+          let friends: ZaloFriend[];
+
+          if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Using cached friend list (${cached.data.length} friends, age: ${Math.round((now - cached.timestamp) / 1000)}s).`);
+            friends = cached.data;
+          } else {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Fetching friend list from API...`);
+            const rawFriends = await instance.api.getAllFriends();
+            friends = rawFriends.map((f) => ({
+              userId: f.userId,
+              displayName: f.displayName || f.zaloName || '',
+              zaloName: f.zaloName || '',
+              avatar: f.avatar || '',
+              phoneNumber: f.phoneNumber || '',
+              isFriend: true,
+            }));
+            
+            // Update cache
+            friendsCache.set(instance.uId, {
+              timestamp: now,
+              data: friends,
+            });
+            console.log(`[PersonalZcaChannel - ${instance.label}] Fetched and cached ${friends.length} friends.`);
+          }
+
+          for (const f of friends) {
+            if (seenIds.has(f.userId)) continue;
+            seenIds.add(f.userId);
+            allFriends.push(f);
+          }
+        } catch (err) {
+          console.error(`[PersonalZcaChannel - ${instance.label}] Failed to fetch friends:`, err);
+          // Fall back to stale cache if available
+          const cached = friendsCache.get(instance.uId);
+          if (cached) {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Falling back to stale cached friend list.`);
+            for (const f of cached.data) {
+              if (seenIds.has(f.userId)) continue;
+              seenIds.add(f.userId);
+              allFriends.push(f);
+            }
+          }
+        }
+      }
+
+      return allFriends;
+    } catch (err) {
+      console.error('[PersonalZcaChannel] Failed to get all friends:', err);
+      return [];
+    }
+  }
+
+  async getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) return [];
+
+      for (const instance of accountPool.values()) {
+        try {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Fetching members for group ${groupId}...`);
+          const infoData = await instance.api.getGroupInfo(groupId);
+          const info = infoData.gridInfoMap?.[groupId];
+          if (!info) continue;
+
+          const memberIds: string[] = info.memberIds || [];
+          const adminIds: string[] = info.adminIds || [];
+          const creatorId: string = info.creatorId || '';
+          const members: ZaloGroupMember[] = [];
+
+          // Use currentMems for display names when available
+          const currentMemsMap = new Map<string, any>();
+          if (info.currentMems) {
+            for (const m of info.currentMems) {
+              currentMemsMap.set(m.id, m);
+            }
+          }
+
+          // Batch-fetch member profiles for IDs not in currentMems
+          const unknownIds = memberIds.filter(id => !currentMemsMap.has(id));
+          let profilesMap: Record<string, any> = {};
+          if (unknownIds.length > 0) {
+            try {
+              const profileData = await instance.api.getGroupMembersInfo(unknownIds);
+              profilesMap = profileData.profiles || {};
+            } catch {
+              // Proceed with partial data
+            }
+          }
+
+          for (const uid of memberIds) {
+            const cm = currentMemsMap.get(uid);
+            const profile = profilesMap[uid];
+            let role: 'owner' | 'admin' | 'member' = 'member';
+            if (uid === creatorId) role = 'owner';
+            else if (adminIds.includes(uid)) role = 'admin';
+
+            members.push({
+              id: uid,
+              displayName: cm?.dName || profile?.displayName || profile?.zaloName || uid,
+              zaloName: cm?.zaloName || profile?.zaloName || '',
+              avatar: cm?.avatar || profile?.avatar || '',
+              role,
+            });
+          }
+
+          console.log(`[PersonalZcaChannel - ${instance.label}] Found ${members.length} members in group ${groupId}.`);
+          return members;
+        } catch (err) {
+          console.error(`[PersonalZcaChannel - ${instance.label}] Failed to fetch group members:`, err);
+        }
+      }
+
+      return [];
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to get group members for ${groupId}:`, err);
+      return [];
+    }
+  }
+
+  async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[] }> {
+    const empty = { groupId: '', groupName: '', totalMember: 0, members: [] as ZaloGroupMember[] };
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) return empty;
+
+      for (const instance of accountPool.values()) {
+        try {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Fetching group info from link: ${link}`);
+          const data = await instance.api.getGroupLinkInfo({ link });
+
+          const adminIds = data.adminIds || [];
+          const creatorId = data.creatorId || '';
+          const members: ZaloGroupMember[] = (data.currentMems || []).map((m: any) => {
+            let role: 'owner' | 'admin' | 'member' = 'member';
+            if (m.id === creatorId) role = 'owner';
+            else if (adminIds.includes(m.id)) role = 'admin';
+            return {
+              id: m.id,
+              displayName: m.dName || m.zaloName || m.id,
+              zaloName: m.zaloName || '',
+              avatar: m.avatar || '',
+              role,
+            };
+          });
+
+          console.log(`[PersonalZcaChannel - ${instance.label}] Link scan: ${data.name}, ${members.length}/${data.totalMember} members loaded.`);
+          return {
+            groupId: data.groupId,
+            groupName: data.name || '',
+            totalMember: data.totalMember || members.length,
+            members,
+          };
+        } catch (err) {
+          console.error(`[PersonalZcaChannel - ${instance.label}] Failed to fetch group link info:`, err);
+        }
+      }
+
+      return empty;
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to get group link members:`, err);
+      return empty;
+    }
+  }
+
+  async createGroup(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+      
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[0]; // Use the first active account to create the group
+
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to create group "${name}"`);
+      const result = await selectedInstance.api.createGroup({
+        name,
+        members,
+      });
+
+      // Invalidate groups cache immediately
+      groupsCache.delete(selectedInstance.uId);
+
+      return {
+        success: true,
+        groupId: result?.groupId,
+      };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to create group:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async joinGroup(link: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[0]; // Use the first active account to join
+
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to join group from link: ${link}`);
+      await selectedInstance.api.joinGroupLink(link);
+
+      // Invalidate groups cache immediately
+      groupsCache.delete(selectedInstance.uId);
+
+      return {
+        success: true,
+      };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to join group:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async inviteToGroup(userId: string, groupId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+
+      // Try to find which account has access to this group, otherwise use the first active account
+      let selectedInstance = Array.from(accountPool.values())[0];
+      for (const instance of accountPool.values()) {
+        try {
+          const infoData = await instance.api.getGroupInfo(groupId);
+          if (infoData?.gridInfoMap?.[groupId]) {
+            selectedInstance = instance;
+            break;
+          }
+        } catch {
+          // Ignore and check next account
+        }
+      }
+
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to invite user ${userId} to group ${groupId}`);
+      await selectedInstance.api.inviteUserToGroups(userId, groupId);
+
+      return {
+        success: true,
+      };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to invite user to group:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async findUser(phoneNumber: string): Promise<any> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[0];
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to search phone: ${phoneNumber}`);
+      const profile = await selectedInstance.api.findUser(phoneNumber);
+      return profile;
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to find user by phone ${phoneNumber}:`, err);
+      throw err;
+    }
+  }
+
+  async sendFriendRequest(userId: string, message: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[0];
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to send friend request to ${userId}`);
+      await selectedInstance.api.sendFriendRequest(message, userId);
+      return { success: true };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to send friend request to ${userId}:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+      const instances = Array.from(accountPool.values());
+      const selectedInstance = instances[0];
+      console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to accept friend request from ${userId}`);
+      await selectedInstance.api.acceptFriendRequest(userId);
+      
+      // Invalidate friends cache immediately to reflect the new friend list
+      friendsCache.delete(selectedInstance.uId);
+      
+      return { success: true };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] Failed to accept friend request from ${userId}:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 }

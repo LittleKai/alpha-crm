@@ -1,7 +1,7 @@
 # Project Summary
 
-**Last Updated:** 2026-05-31 15:35 +07:00
-**Session:** #9 - Zalo Integration Documentation Rewrite
+**Last Updated:** 2026-06-01 +07:00
+**Session:** #24 - Resolved Zalo avatar double-slash URI crash and dropdown assertion crashes under API failures
 
 ---
 
@@ -46,6 +46,8 @@ integration/
 docs/
   zalo-integration-and-risk-controls.md  Zalo compliance documentation (personal-first)
   zalo-integration-installation-and-usage.md  Setup and usage guide for Zalo integration
+  zalo-reference-sources.md              List of 3 external reference projects and local paths
+  zca-js-unintegrated-apis.md           Catalog of remaining unintegrated APIs from zca-js
   huong-dan-cai-dat-va-su-dung.md        Vietnamese installation and usage guide
 ```
 
@@ -53,20 +55,22 @@ docs/
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http. |
+| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 17 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
-| `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. |
+| `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
-| `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, tables, logs. |
+| `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, tables, logs, compliance warnings popup, update dialog. |
 | `lib/features/**/providers/` | Feature state | Riverpod `StateNotifier` classes for mock interactions. |
 | `lib/mock/` | Mock data | Contacts, campaigns, messages, groups, accounts, system settings (with Zalo compliance fields). |
 | `lib/shared/utils/zalo_compliance_guard.dart` | Shared compliance guard | Channel-mode-aware rule engine evaluating risk for all Zalo actions. |
+| `lib/shared/utils/app_update_service.dart` | Auto-update service | Fetches GitHub Releases API, compares semver, downloads assets, installs updates (Windows .exe, Android .apk). |
+| `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
 | `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |

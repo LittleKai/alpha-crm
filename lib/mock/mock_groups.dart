@@ -4,6 +4,7 @@ class ScannedMember {
   final String phone;
   final String role; // 'Trưởng nhóm', 'Phó nhóm', 'Thành viên'
   final String status; // 'Đã kết bạn', 'Chưa kết bạn', 'Đang gửi yêu cầu'
+  final String avatarUrl;
 
   const ScannedMember({
     required this.id,
@@ -11,6 +12,7 @@ class ScannedMember {
     required this.phone,
     required this.role,
     required this.status,
+    this.avatarUrl = '',
   });
 }
 
@@ -18,11 +20,13 @@ class SavedScannedGroup {
   final String id;
   final String name;
   final int memberCount;
+  final String avatarUrl;
 
   const SavedScannedGroup({
     required this.id,
     required this.name,
     required this.memberCount,
+    this.avatarUrl = '',
   });
 }
 
@@ -32,6 +36,7 @@ class ZaloGroup {
   final int memberCount;
   final String role; // 'Trưởng nhóm', 'Phó nhóm', 'Thành viên'
   final String status; // 'Hoạt động', 'Đang bảo trì'
+  final String avatarUrl;
 
   const ZaloGroup({
     required this.id,
@@ -39,6 +44,7 @@ class ZaloGroup {
     required this.memberCount,
     required this.role,
     this.status = 'Hoạt động',
+    this.avatarUrl = '',
   });
 }
 

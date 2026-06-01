@@ -1,4 +1,4 @@
-enum ZaloChannelMode { personalZca, officialOa, mock }
+enum ZaloChannelMode { personalZca, officialOa }
 
 class SystemSettings {
   final String proxy;
@@ -45,11 +45,11 @@ class SystemSettings {
     this.zaloChannelMode = ZaloChannelMode.personalZca,
     this.officialApiOnly = false,
     this.allowPersonalAccountAutomation = true,
-    this.allowProxyUsage = false,
-    this.allowFriendAutomation = false,
-    this.allowGroupAutomation = false,
+    this.allowProxyUsage = true,
+    this.allowFriendAutomation = true,
+    this.allowGroupAutomation = true,
     this.requireConsentProof = true,
-    this.requireRecentInteraction = false,
+    this.requireRecentInteraction = true,
     this.disableSpintax = true,
     this.requireHumanApproval = true,
     this.humanApprovalThreshold = 20,
@@ -134,6 +134,78 @@ class SystemSettings {
       zaloWebhookPath: zaloWebhookPath ?? this.zaloWebhookPath,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'proxy': proxy,
+      'minDelay': minDelay,
+      'maxDelay': maxDelay,
+      'autoApproveFriend': autoApproveFriend,
+      'autoSendWelcomeMessage': autoSendWelcomeMessage,
+      'welcomeMessageText': welcomeMessageText,
+      'autoAddFriendGroup': autoAddFriendGroup,
+      'zaloChannelMode': zaloChannelMode.name,
+      'officialApiOnly': officialApiOnly,
+      'allowPersonalAccountAutomation': allowPersonalAccountAutomation,
+      'allowProxyUsage': allowProxyUsage,
+      'allowFriendAutomation': allowFriendAutomation,
+      'allowGroupAutomation': allowGroupAutomation,
+      'requireConsentProof': requireConsentProof,
+      'requireRecentInteraction': requireRecentInteraction,
+      'disableSpintax': disableSpintax,
+      'requireHumanApproval': requireHumanApproval,
+      'humanApprovalThreshold': humanApprovalThreshold,
+      'maxBatchSize': maxBatchSize,
+      'dailySendLimit': dailySendLimit,
+      'perRecipientCooldownHours': perRecipientCooldownHours,
+      'maxFailureRatePercent': maxFailureRatePercent,
+      'stopOnReportCount': stopOnReportCount,
+      'quietHoursStart': quietHoursStart,
+      'quietHoursEnd': quietHoursEnd,
+      'allowTestModeOnlyForRiskyActions': allowTestModeOnlyForRiskyActions,
+      'zaloBackendBaseUrl': zaloBackendBaseUrl,
+      'zaloWebhookPath': zaloWebhookPath,
+    };
+  }
+
+  factory SystemSettings.fromJson(Map<String, dynamic> json) {
+    ZaloChannelMode mode = ZaloChannelMode.personalZca;
+    if (json['zaloChannelMode'] == 'officialOa') {
+      mode = ZaloChannelMode.officialOa;
+    } else if (json['zaloChannelMode'] == 'personalZca') {
+      mode = ZaloChannelMode.personalZca;
+    }
+    return SystemSettings(
+      proxy: json['proxy'] ?? '',
+      minDelay: json['minDelay'] ?? 30,
+      maxDelay: json['maxDelay'] ?? 60,
+      autoApproveFriend: json['autoApproveFriend'] ?? true,
+      autoSendWelcomeMessage: json['autoSendWelcomeMessage'] ?? true,
+      welcomeMessageText: json['welcomeMessageText'] ?? 'Chào bạn! Rất vui được kết nối.',
+      autoAddFriendGroup: json['autoAddFriendGroup'] ?? true,
+      zaloChannelMode: mode,
+      officialApiOnly: json['officialApiOnly'] ?? false,
+      allowPersonalAccountAutomation: json['allowPersonalAccountAutomation'] ?? true,
+      allowProxyUsage: json['allowProxyUsage'] ?? true,
+      allowFriendAutomation: json['allowFriendAutomation'] ?? true,
+      allowGroupAutomation: json['allowGroupAutomation'] ?? true,
+      requireConsentProof: json['requireConsentProof'] ?? true,
+      requireRecentInteraction: json['requireRecentInteraction'] ?? true,
+      disableSpintax: json['disableSpintax'] ?? true,
+      requireHumanApproval: json['requireHumanApproval'] ?? true,
+      humanApprovalThreshold: json['humanApprovalThreshold'] ?? 20,
+      maxBatchSize: json['maxBatchSize'] ?? 20,
+      dailySendLimit: json['dailySendLimit'] ?? 100,
+      perRecipientCooldownHours: json['perRecipientCooldownHours'] ?? 24,
+      maxFailureRatePercent: json['maxFailureRatePercent'] ?? 10,
+      stopOnReportCount: json['stopOnReportCount'] ?? 1,
+      quietHoursStart: json['quietHoursStart'] ?? '21:00',
+      quietHoursEnd: json['quietHoursEnd'] ?? '08:00',
+      allowTestModeOnlyForRiskyActions: json['allowTestModeOnlyForRiskyActions'] ?? true,
+      zaloBackendBaseUrl: json['zaloBackendBaseUrl'] ?? 'http://localhost:8787',
+      zaloWebhookPath: json['zaloWebhookPath'] ?? '/api/zalo/webhook',
+    );
+  }
 }
 
 class MockAccounts {
@@ -141,18 +213,18 @@ class MockAccounts {
     proxy: '',
     minDelay: 30,
     maxDelay: 60,
-    autoApproveFriend: false,
-    autoSendWelcomeMessage: false,
+    autoApproveFriend: true,
+    autoSendWelcomeMessage: true,
     welcomeMessageText: 'Chào bạn! Rất vui được kết nối.',
-    autoAddFriendGroup: false,
+    autoAddFriendGroup: true,
     zaloChannelMode: ZaloChannelMode.personalZca,
     officialApiOnly: false,
     allowPersonalAccountAutomation: true,
-    allowProxyUsage: false,
-    allowFriendAutomation: false,
-    allowGroupAutomation: false,
+    allowProxyUsage: true,
+    allowFriendAutomation: true,
+    allowGroupAutomation: true,
     requireConsentProof: true,
-    requireRecentInteraction: false,
+    requireRecentInteraction: true,
     disableSpintax: true,
     requireHumanApproval: true,
     humanApprovalThreshold: 20,

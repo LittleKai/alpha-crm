@@ -113,17 +113,6 @@ class ZaloComplianceGuard {
         }
         break;
 
-      case ZaloChannelMode.mock:
-        // Mock mode: only test sends
-        if (isTestMode || personalActions.contains(actionType)) {
-          return const ComplianceDecision(
-            allowed: true,
-            riskLevel: ZaloRiskLevel.low,
-            title: 'Chế độ Mock',
-            message: 'Chạy trong chế độ mock. Không có thao tác thật trên Zalo.',
-          );
-        }
-        break;
     }
 
     // Block group/friend automation unless allow flag

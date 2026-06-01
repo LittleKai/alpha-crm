@@ -8,11 +8,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "tsc --watch & node --watch dist/server.js",
+    "dev": "tsc && node --watch dist/server.js",
     "zalo:login-personal": "tsc && node dist/personal-login.js"
   },
   "dependencies": {
-    "zca-js": "file:../../../../../../2.reference_pj/Zalo-ref/zca-js"
+    "zca-js": "^2.1.2"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

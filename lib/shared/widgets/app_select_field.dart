@@ -33,11 +33,12 @@ class AppSelectField<T> extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
         ],
         SizedBox(
-          height: 40,
+          height: 45,
           child: DropdownButtonFormField<T>(
             initialValue: value,
             items: items,
             onChanged: onChanged,
+            isExpanded: true,
             style: AppTextStyles.body,
             icon: const Icon(
               Icons.keyboard_arrow_down,
@@ -51,7 +52,7 @@ class AppSelectField<T> extends StatelessWidget {
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.m,
-                vertical: 0,
+                vertical: 8,
               ),
             ),
           ),

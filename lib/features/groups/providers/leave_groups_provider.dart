@@ -2,7 +2,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/image_helper.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
+import '../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../zalo_integration/data/zalo_integration_api.dart';
+import '../../settings/providers/settings_provider.dart';
 
 class LeaveGroupsState {
   final bool isRunning;
@@ -49,11 +53,12 @@ class LeaveGroupsState {
 }
 
 class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
+  final Ref _ref;
   Timer? _timer;
   int _currentGroupIndex = 0;
   List<String> _groupIdsToLeave = [];
 
-  LeaveGroupsNotifier()
+  LeaveGroupsNotifier(this._ref)
     : super(
         LeaveGroupsState(
           isRunning: false,
@@ -101,8 +106,66 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
   Future<void> reloadGroups() async {
     state = state.copyWith(isLoadingGroups: true, selectedGroupIds: {});
+    
+    try {
+      await _ref.read(zaloIntegrationProvider.notifier).checkConnection();
+      final integrationState = _ref.read(zaloIntegrationProvider);
+      
+      if (integrationState.isConnected) {
+        final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+        final apiClient = ZaloIntegrationApi(baseUrl: baseUrl);
+        
+        final result = await apiClient.fetchGroups();
+        if (result['success'] == true && result['groups'] != null) {
+          final List<dynamic> rawList = result['groups'];
+          final realGroups = rawList.map((g) {
+            return ZaloGroup(
+              id: g['id']?.toString() ?? '',
+              name: g['name']?.toString() ?? 'Nhóm không tên',
+              memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
+              role: g['role']?.toString() ?? 'Thành viên',
+              avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
+            );
+          }).toList();
+          
+          String? autoAccountId = state.selectedAccountId;
+          if ((autoAccountId == null || !integrationState.accounts.any((acc) => acc.id == autoAccountId)) && 
+              integrationState.accounts.isNotEmpty) {
+            autoAccountId = integrationState.accounts.first.id;
+            print('[LeaveGroupsNotifier] Auto-selected account ID: $autoAccountId');
+          }
+          
+          state = state.copyWith(
+            isLoadingGroups: false,
+            groups: realGroups,
+            selectedAccountId: autoAccountId,
+          );
+          print('[LeaveGroupsNotifier] Successfully reloaded ${realGroups.length} groups from backend.');
+          return;
+        } else {
+          print('[LeaveGroupsNotifier] Failed to load groups from API: $result');
+        }
+      } else {
+        print('[LeaveGroupsNotifier] Zalo backend is not connected: mode=${integrationState.mode}, error=${integrationState.errorText}');
+      }
+    } catch (e, stack) {
+      print('[LeaveGroupsNotifier] Exception in reloadGroups: $e\n$stack');
+    }
+
+    // Fallback to mock groups if backend is not connected
     await Future.delayed(const Duration(milliseconds: 800));
-    state = state.copyWith(isLoadingGroups: false, groups: MockGroups.myGroups);
+    
+    final integrationState = _ref.read(zaloIntegrationProvider);
+    String? autoAccountId = state.selectedAccountId;
+    if (autoAccountId == null && integrationState.accounts.isNotEmpty) {
+      autoAccountId = integrationState.accounts.first.id;
+    }
+    
+    state = state.copyWith(
+      isLoadingGroups: false,
+      groups: MockGroups.myGroups,
+      selectedAccountId: autoAccountId,
+    );
   }
 
   void clearLogs() {
@@ -162,17 +225,49 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
       ],
     );
 
-    _timer = Timer(const Duration(seconds: 2), () {
+    _timer = Timer(const Duration(seconds: 2), () async {
       final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
-      List<LogItem> updatedLogs = [
-        ...state.logs,
-        LogItem(
-          timestamp: completionTimeStr,
-          message: 'Đã rời nhóm thành công: "${group.name}"',
-          type: LogType.success,
-        ),
-      ];
+      bool leaveSuccess = false;
+      try {
+        final integrationState = _ref.read(zaloIntegrationProvider);
+        if (integrationState.isConnected) {
+          final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+          final apiClient = ZaloIntegrationApi(baseUrl: baseUrl);
+          
+          final result = await apiClient.leaveGroup(
+            groupId: groupId,
+            silent: state.isSilent,
+          );
+          leaveSuccess = result['success'] == true;
+        }
+      } catch (e) {
+        // Handled silently
+      }
+
+      final logTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+      List<LogItem> updatedLogs;
+      
+      // If left successfully or we are in local offline fallback mock mode
+      if (leaveSuccess || !_ref.read(zaloIntegrationProvider).isConnected) {
+        updatedLogs = [
+          ...state.logs,
+          LogItem(
+            timestamp: completionTimeStr,
+            message: 'Đã rời nhóm thành công: "${group.name}"',
+            type: LogType.success,
+          ),
+        ];
+      } else {
+        updatedLogs = [
+          ...state.logs,
+          LogItem(
+            timestamp: logTimeStr,
+            message: 'Không thể rời nhóm: "${group.name}". Lỗi từ hệ thống.',
+            type: LogType.error,
+          ),
+        ];
+      }
 
       final updatedGroupsList = state.groups
           .where((g) => g.id != groupId)
@@ -236,5 +331,5 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
 final leaveGroupsProvider =
     StateNotifierProvider<LeaveGroupsNotifier, LeaveGroupsState>((ref) {
-      return LeaveGroupsNotifier();
+      return LeaveGroupsNotifier(ref);
     });

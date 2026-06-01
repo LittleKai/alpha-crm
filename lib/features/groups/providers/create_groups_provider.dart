@@ -2,13 +2,17 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/image_helper.dart';
 import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../zalo_integration/data/zalo_integration_api.dart';
+import '../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class CreateGroupsState {
   final bool isRunning;
   final List<LogItem> logs;
+  final String? selectedAccountId;
   final String groupNamesText;
   final List<FriendRecord> friends;
   final Set<String> selectedFriendIds;
@@ -20,6 +24,7 @@ class CreateGroupsState {
   const CreateGroupsState({
     required this.isRunning,
     required this.logs,
+    this.selectedAccountId,
     required this.groupNamesText,
     required this.friends,
     required this.selectedFriendIds,
@@ -32,6 +37,7 @@ class CreateGroupsState {
   CreateGroupsState copyWith({
     bool? isRunning,
     List<LogItem>? logs,
+    String? selectedAccountId,
     String? groupNamesText,
     List<FriendRecord>? friends,
     Set<String>? selectedFriendIds,
@@ -43,6 +49,7 @@ class CreateGroupsState {
     return CreateGroupsState(
       isRunning: isRunning ?? this.isRunning,
       logs: logs ?? this.logs,
+      selectedAccountId: selectedAccountId ?? this.selectedAccountId,
       groupNamesText: groupNamesText ?? this.groupNamesText,
       friends: friends ?? this.friends,
       selectedFriendIds: selectedFriendIds ?? this.selectedFriendIds,
@@ -59,6 +66,8 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
   Timer? _timer;
   int _currentGroupIndex = 0;
   List<String> _groupNames = [];
+  int _successCount = 0;
+  int _failCount = 0;
 
   CreateGroupsNotifier(this._ref)
     : super(
@@ -70,6 +79,46 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
           selectedFriendIds: {},
         ),
       );
+
+  ZaloIntegrationApi _getApi() {
+    final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+    return ZaloIntegrationApi(baseUrl: baseUrl);
+  }
+
+  bool get _isConnected => _ref.read(zaloIntegrationProvider).isConnected;
+
+  void setAccount(String? accountId) {
+    state = state.copyWith(selectedAccountId: accountId);
+  }
+
+  Future<void> loadFriends() async {
+    if (_isConnected) {
+      try {
+        final api = _getApi();
+        final response = await api.fetchFriends();
+        if (response['success'] == true && response['friends'] != null) {
+          final List<dynamic> rawFriends = response['friends'];
+          final friends = rawFriends.map((f) {
+            return FriendRecord(
+              id: f['userId']?.toString() ?? '',
+              name: f['displayName']?.toString() ??
+                  f['zaloName']?.toString() ??
+                  '',
+              phone: f['phoneNumber']?.toString() ?? '',
+              avatarUrl: sanitizeImageUrl(f['avatar']?.toString() ?? ''),
+            );
+          }).toList();
+          state = state.copyWith(friends: friends);
+          return;
+        }
+      } catch (_) {
+        // Fall through to mock
+      }
+    }
+
+    // Mock fallback
+    state = state.copyWith(friends: MockGroups.sampleFriends);
+  }
 
   void setGroupNames(String val) {
     state = state.copyWith(groupNamesText: val);
@@ -142,6 +191,8 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
     }
 
     _currentGroupIndex = 0;
+    _successCount = 0;
+    _failCount = 0;
     state = state.copyWith(
       isRunning: true,
       complianceError: null,
@@ -177,50 +228,89 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
       ],
     );
 
-    _timer = Timer(const Duration(seconds: 2), () {
-      final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+    _timer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final api = _getApi();
+        final membersList = state.selectedFriendIds.toList();
+        final response = await api.createGroup(name: groupName, members: membersList);
+        
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
-      // Update logs list with creation success
-      List<LogItem> updatedLogs = [
-        ...state.logs,
-        LogItem(
-          timestamp: completionTimeStr,
-          message:
-              'Tạo nhóm "$groupName" thành công. Đang thêm thành viên đã chọn...',
-          type: LogType.success,
-        ),
-      ];
+        if (response['success'] == true) {
+          _successCount++;
+          final String newGroupId = response['groupId'] ?? '';
+          
+          List<LogItem> updatedLogs = [
+            ...state.logs,
+            LogItem(
+              timestamp: completionTimeStr,
+              message: 'Tạo nhóm "$groupName" thành công. ID nhóm: $newGroupId.',
+              type: LogType.success,
+            ),
+          ];
 
-      // Add selected members logs
-      for (final friendId in state.selectedFriendIds) {
-        final friend = state.friends.firstWhere((f) => f.id == friendId);
-        updatedLogs.add(
-          LogItem(
-            timestamp: completionTimeStr,
-            message: 'Đã thêm thành viên: ${friend.name}',
-            type: LogType.success,
-          ),
+          // Add selected members success logs
+          for (final friendId in state.selectedFriendIds) {
+            final friend = state.friends.firstWhere(
+              (f) => f.id == friendId,
+              orElse: () => FriendRecord(id: friendId, name: friendId, phone: ''),
+            );
+            updatedLogs.add(
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Đã thêm thành viên: ${friend.name}',
+                type: LogType.success,
+              ),
+            );
+          }
+
+          state = state.copyWith(logs: updatedLogs);
+        } else {
+          _failCount++;
+          final errorMsg = response['error'] ?? 'Lỗi không rõ từ server';
+          state = state.copyWith(
+            logs: [
+              ...state.logs,
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Tạo nhóm "$groupName" thất bại: $errorMsg',
+                type: LogType.error,
+              ),
+            ],
+          );
+        }
+      } catch (err) {
+        _failCount++;
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+        state = state.copyWith(
+          logs: [
+            ...state.logs,
+            LogItem(
+              timestamp: completionTimeStr,
+              message: 'Lỗi mạng khi tạo nhóm "$groupName": $err',
+              type: LogType.error,
+            ),
+          ],
         );
       }
 
-      state = state.copyWith(logs: updatedLogs);
       _currentGroupIndex++;
 
       if (_currentGroupIndex < _groupNames.length) {
+        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message:
-                  'Đang giãn cách ${state.minDelay}s trước khi tạo nhóm tiếp theo...',
+              message: 'Đang giãn cách ${delaySeconds}s trước khi tạo nhóm tiếp theo...',
               type: LogType.info,
             ),
           ],
         );
 
-        _timer = Timer(const Duration(seconds: 3), () {
+        _timer = Timer(Duration(seconds: delaySeconds), () {
           _runNextCreation();
         });
       } else {
@@ -236,17 +326,41 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
   void _stopCampaign({required bool finished}) {
     _timer?.cancel();
     final timeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+
+    LogItem finalLog;
+    if (finished) {
+      if (_successCount > 0 && _failCount == 0) {
+        finalLog = LogItem(
+          timestamp: timeStr,
+          message: 'Chiến dịch tự động tạo nhóm hoàn tất thành công. Đã tạo $_successCount nhóm.',
+          type: LogType.success,
+        );
+      } else if (_successCount > 0 && _failCount > 0) {
+        finalLog = LogItem(
+          timestamp: timeStr,
+          message: 'Chiến dịch hoàn tất với lỗi. Thành công: $_successCount, Thất bại: $_failCount.',
+          type: LogType.warning,
+        );
+      } else {
+        finalLog = LogItem(
+          timestamp: timeStr,
+          message: 'Chiến dịch tự động tạo nhóm thất bại. Thất bại: $_failCount nhóm.',
+          type: LogType.error,
+        );
+      }
+    } else {
+      finalLog = LogItem(
+        timestamp: timeStr,
+        message: 'Chiến dịch đã bị dừng bởi người dùng. Thành công: $_successCount, Thất bại: $_failCount.',
+        type: LogType.warning,
+      );
+    }
+
     state = state.copyWith(
       isRunning: false,
       logs: [
         ...state.logs,
-        LogItem(
-          timestamp: timeStr,
-          message: finished
-              ? 'Chiến dịch tự động tạo nhóm hoàn tất.'
-              : 'Chiến dịch đã bị dừng bởi người dùng.',
-          type: finished ? LogType.success : LogType.warning,
-        ),
+        finalLog,
       ],
     );
   }

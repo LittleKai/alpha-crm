@@ -59,4 +59,30 @@ export class OfficialOaChannel implements ZaloChannel {
       JSON.stringify(event).slice(0, 200),
     );
   }
+
+  async getAllGroups(): Promise<any[]> {
+    console.log('[OfficialOaChannel] Official OA does not support personal group listing.');
+    return [];
+  }
+
+  async leaveGroup(groupId: string, silent = false): Promise<boolean> {
+    console.log('[OfficialOaChannel] Official OA does not support leaving personal groups.');
+    return false;
+  }
+
+  getAccounts(): any[] {
+    const hasToken = !!config.zaloOaAccessToken;
+    const hasOaId = !!config.zaloOaId;
+    if (hasToken && hasOaId) {
+      return [
+        { id: config.zaloOaId, label: `OA: ${config.zaloOaId}`, connected: true, listenerRunning: false },
+      ];
+    }
+    return [];
+  }
+
+  async deleteAccount(accountId: string): Promise<boolean> {
+    console.log('[OfficialOaChannel] Official OA does not support dynamic unlinking.');
+    return false;
+  }
 }

@@ -56,15 +56,15 @@ cd integration/zalo-bot-service
 # 2. Tạo file môi trường từ file mẫu
 cp .env.example .env
 
-# 3. Cài đặt các thư viện phụ thuộc (bao gồm cả zca-js cục bộ)
+# 3. Cài đặt các thư viện phụ thuộc (tự động tải zca-js từ NPM)
 npm install
 
 # 4. Biên dịch TypeScript sang JavaScript
 npm run build
 ```
 
-> [!IMPORTANT]  
-> Thư viện `zca-js` được cài đặt dưới dạng local dependency liên kết với thư mục chứa mã nguồn thư viện gốc để đảm bảo hiệu năng và khả năng tùy biến cao nhất.
+> [!NOTE]  
+> Thư viện `zca-js` được cài đặt trực tiếp từ NPM registry (`^2.1.2`) để dễ dàng triển khai độc lập. Tuy nhiên, lập trình viên có thể tham khảo, nghiên cứu cấu trúc API chi tiết bằng cách xem thư mục mã nguồn gốc tại `D:\Dev\2.reference_pj\Zalo-ref\zca-js`.
 
 ### 2.2 Cấu Hình Chi Tiết File `.env`
 

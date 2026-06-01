@@ -14,8 +14,8 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../providers/leave_groups_provider.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class LeaveGroupsScreen extends ConsumerStatefulWidget {
   const LeaveGroupsScreen({super.key});
@@ -30,6 +30,16 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   final _maxDelayController = TextEditingController(text: '10');
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(zaloIntegrationProvider.notifier).checkConnection().then((_) {
+        ref.read(leaveGroupsProvider.notifier).reloadGroups();
+      });
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _minDelayController.dispose();
@@ -41,7 +51,6 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(leaveGroupsProvider);
     final notifier = ref.read(leaveGroupsProvider.notifier);
-    final settingsState = ref.watch(settingsProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     // Filter groups list
@@ -50,9 +59,22 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
       return q.isEmpty || g.name.toLowerCase().contains(q);
     }).toList();
 
-    final activeAccounts = settingsState.accounts
-        .where((acc) => acc.isConnected)
-        .toList();
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final activeAccounts = zaloState.accounts.map((acc) {
+      return ZaloAccount(
+        id: acc.id,
+        name: acc.label,
+        phone: acc.id,
+        type: 'Cá nhân',
+        isConnected: acc.connected,
+      );
+    }).toList();
+
+    if (state.selectedAccountId == null && activeAccounts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.setAccount(activeAccounts.first.id);
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -169,7 +191,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: state.selectedAccountId,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
               hintText: 'Chọn tài khoản...',
               items: accounts
                   .map(
@@ -374,10 +396,31 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                       return CheckboxListTile(
                         title: Row(
                           children: [
-                            Text(
-                              group.name,
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                fontWeight: FontWeight.w600,
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: group.avatarUrl.isNotEmpty ? NetworkImage(group.avatarUrl) : null,
+                              child: group.avatarUrl.isEmpty
+                                  ? Text(
+                                      group.name.isNotEmpty
+                                          ? group.name.substring(0, 1).toUpperCase()
+                                          : 'G',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Expanded(
+                              child: Text(
+                                group.name,
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: AppSpacing.s),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_text_styles.dart';
+import '../../shared/widgets/compliance_warnings_popup.dart';
 
 class AppTopbar extends ConsumerWidget {
   final String currentRoute;
@@ -79,6 +80,8 @@ class AppTopbar extends ConsumerWidget {
               ),
             ),
           ),
+          const SizedBox(width: AppSpacing.s),
+          const WarningIconButton(),
         ],
       ),
     );

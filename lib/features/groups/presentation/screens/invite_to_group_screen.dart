@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../mock/mock_campaigns.dart';
 import '../../../../mock/mock_groups.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
@@ -14,8 +13,8 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../providers/invite_to_group_provider.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class InviteToGroupScreen extends ConsumerStatefulWidget {
   const InviteToGroupScreen({super.key});
@@ -32,6 +31,16 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
   final _maxDelayController = TextEditingController(text: '10');
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(zaloIntegrationProvider.notifier).checkConnection();
+      ref.read(inviteToGroupProvider.notifier).loadFriends();
+      ref.read(inviteToGroupProvider.notifier).loadGroups();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _maxInviteController.dispose();
@@ -44,7 +53,6 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(inviteToGroupProvider);
     final notifier = ref.read(inviteToGroupProvider.notifier);
-    final settingsState = ref.watch(settingsProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     // Filter friends list
@@ -55,9 +63,14 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
           f.phone.contains(q);
     }).toList();
 
-    final activeAccounts = settingsState.accounts
-        .where((acc) => acc.isConnected)
-        .toList();
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final activeAccounts = zaloState.accounts;
+
+    if (state.selectedAccountId == null && activeAccounts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.setAccount(activeAccounts.first.id);
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -155,7 +168,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
   Widget _buildConfigCard(
     InviteToGroupState state,
     InviteToGroupNotifier notifier,
-    List<ZaloAccount> accounts,
+    List<ZaloConnectedAccount> accounts,
     bool useColumns,
   ) {
     final hasActiveAccount = accounts.isNotEmpty;
@@ -182,30 +195,74 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: state.selectedAccountId,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
               hintText: 'Chọn tài khoản gửi...',
               items: accounts
                   .map(
-                    (acc) => DropdownMenuItem(
-                      value: acc.id,
-                      child: Text('${acc.name} (${acc.phone})'),
-                    ),
+                    (acc) {
+                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                      return DropdownMenuItem(
+                        value: acc.id,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                              child: acc.avatarUrl.isEmpty
+                                  ? Text(
+                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Text(
+                              cleanLabel,
+                              style: AppTextStyles.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   )
                   .toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
             ),
             const SizedBox(height: AppSpacing.m),
           ],
-          Text('Chọn nhóm Zalo nhận lời mời *', style: AppTextStyles.label),
+           Text('Chọn nhóm Zalo nhận lời mời *', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
-            value: state.selectedGroupId,
+            value: state.groups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : null,
             hintText: 'Chọn nhóm nhận...',
-            items: MockGroups.myGroups
+            items: state.groups
                 .map(
                   (g) => DropdownMenuItem(
                     value: g.id,
-                    child: Text('${g.name} (${g.memberCount} TV)'),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: AppColors.surfaceMuted,
+                          backgroundImage: g.avatarUrl.isNotEmpty ? NetworkImage(g.avatarUrl) : null,
+                          child: g.avatarUrl.isEmpty
+                              ? Text(
+                                  g.name.isNotEmpty ? g.name[0].toUpperCase() : 'G',
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: Text(
+                            '${g.name} (${g.memberCount} TV)',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
                 .toList(),
@@ -386,14 +443,41 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                         friend.id,
                       );
                       return CheckboxListTile(
-                        title: Text(
-                          friend.name,
-                          style: AppTextStyles.bodyMedium,
+                        title: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: friend.avatarUrl.isNotEmpty ? NetworkImage(friend.avatarUrl) : null,
+                              child: friend.avatarUrl.isEmpty
+                                  ? Text(
+                                      friend.name.isNotEmpty
+                                          ? friend.name.substring(0, 1).toUpperCase()
+                                          : 'F',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Expanded(
+                              child: Text(
+                                friend.name,
+                                style: AppTextStyles.bodyMedium,
+                              ),
+                            ),
+                          ],
                         ),
-                        subtitle: Text(
-                          friend.phone,
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textMuted,
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(left: 36.0),
+                          child: Text(
+                            friend.phone.isNotEmpty ? friend.phone : friend.id,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textMuted,
+                            ),
                           ),
                         ),
                         value: isChecked,

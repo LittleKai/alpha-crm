@@ -42,6 +42,22 @@ declare module 'zca-js' {
     Group = 1,
   }
 
+  export enum FriendEventType {
+    ADD = 0,
+    REMOVE = 1,
+    REQUEST = 2,
+    UNDO_REQUEST = 3,
+    REJECT_REQUEST = 4,
+    SEEN_FRIEND_REQUEST = 5,
+    BLOCK = 6,
+    UNBLOCK = 7,
+    BLOCK_CALL = 8,
+    UNBLOCK_CALL = 9,
+    PIN_UNPIN = 10,
+    PIN_CREATE = 11,
+    UNKNOWN = 12,
+  }
+
   export interface SendMessageResult {
     msgId?: string;
   }
@@ -49,6 +65,8 @@ declare module 'zca-js' {
   export interface Listener {
     start(): void;
     stop(): void;
+    on(event: string, listener: (...args: any[]) => void): this;
+    removeAllListeners(event?: string): this;
   }
 
   export class API {
@@ -58,17 +76,39 @@ declare module 'zca-js' {
       type?: ThreadType,
     ): Promise<SendMessageResult>;
     listener: Listener;
+    acceptFriendRequest(senderId: string): Promise<any>;
+    leaveGroup(groupId: string, silent?: boolean): Promise<any>;
+    getAllGroups(): Promise<any>;
+    getGroupInfo(groupIds: string | string[]): Promise<any>;
+    getAllFriends(count?: number, page?: number, avatarSize?: any): Promise<any[]>;
+    getGroupMembersInfo(memberIds: string | string[]): Promise<any>;
+    getGroupLinkInfo(payload: { link: string; memberPage?: number }): Promise<any>;
+    getOwnId(): string;
+    fetchAccountInfo(): Promise<any>;
+    createGroup(options: { name?: string; members: string[]; avatarPath?: string }): Promise<any>;
+    joinGroupLink(link: string): Promise<any>;
+    inviteUserToGroups(userId: string, groupId: string | string[]): Promise<any>;
+    addUserToGroup(memberId: string | string[], groupId: string): Promise<any>;
+    findUser(phoneNumber: string): Promise<any>;
+    sendFriendRequest(message: string, userId: string): Promise<any>;
   }
 
   export enum LoginQRCallbackEventType {
-    GotQRCode = 'gotQRCode',
-    GotLoginInfo = 'gotLoginInfo',
+    QRCodeGenerated = 0,
+    QRCodeExpired = 1,
+    QRCodeScanned = 2,
+    QRCodeDeclined = 3,
+    GotLoginInfo = 4,
   }
 
   export interface LoginQRCallbackEvent {
     type: LoginQRCallbackEventType;
-    data?: Credentials | null;
-    actions: unknown;
+    data?: any;
+    actions?: {
+      saveToFile: (qrPath?: string) => Promise<unknown>;
+      retry: () => unknown;
+      abort: () => unknown;
+    } | null;
   }
 
   export type LoginQRCallback = (event: LoginQRCallbackEvent) => void;

@@ -11,7 +11,9 @@ import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
+import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/create_groups_provider.dart';
 
 class CreateGroupsScreen extends ConsumerStatefulWidget {
@@ -35,6 +37,10 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
           .read(createGroupsProvider.notifier)
           .setGroupNames(_namesController.text);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(zaloIntegrationProvider.notifier).checkConnection();
+      ref.read(createGroupsProvider.notifier).loadFriends();
+    });
   }
 
   @override
@@ -50,7 +56,15 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(createGroupsProvider);
     final notifier = ref.read(createGroupsProvider.notifier);
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final activeAccounts = zaloState.accounts;
     final isMobile = ResponsiveBreakpoints.isMobile(context);
+
+    if (state.selectedAccountId == null && activeAccounts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.setAccount(activeAccounts.first.id);
+      });
+    }
 
     final filteredFriends = state.friends.where((f) {
       final q = state.searchQuery.toLowerCase();
@@ -80,7 +94,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1100;
-                  final col1 = _buildConfigCard(state, notifier, useColumns);
+                  final col1 = _buildConfigCard(state, notifier, activeAccounts, useColumns);
                   final col2 = _buildFriendsCard(
                     state,
                     notifier,
@@ -146,8 +160,11 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
   Widget _buildConfigCard(
     CreateGroupsState state,
     CreateGroupsNotifier notifier,
+    List<ZaloConnectedAccount> accounts,
     bool useColumns,
   ) {
+    final hasActiveAccount = accounts.isNotEmpty;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -155,44 +172,74 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
           Text('CẤU HÌNH TẠO NHÓM', style: AppTextStyles.sectionTitle),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Nhập tên nhóm và cấu hình thời gian delay',
+            'Chọn tài khoản nguồn và nhập tên nhóm cần tạo',
             style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: AppSpacing.m),
+          Text('Chọn tài khoản Zalo *', style: AppTextStyles.label),
+          const SizedBox(height: AppSpacing.xs),
+          if (!hasActiveAccount) ...[
+            const AppAlert(
+              message: 'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
+              variant: AppAlertVariant.error,
+            ),
+            const SizedBox(height: AppSpacing.m),
+          ] else ...[
+            AppSelectField<String>(
+              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+              hintText: 'Chọn tài khoản...',
+              items: accounts
+                  .map(
+                    (acc) {
+                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                      return DropdownMenuItem(
+                        value: acc.id,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                              child: acc.avatarUrl.isEmpty
+                                  ? Text(
+                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Text(
+                              cleanLabel,
+                              style: AppTextStyles.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  )
+                  .toList(),
+              onChanged: state.isRunning ? null : notifier.setAccount,
+            ),
+            const SizedBox(height: AppSpacing.m),
+          ],
           Text(
             'Tên các nhóm cần tạo (mỗi dòng một nhóm) *',
             style: AppTextStyles.label,
           ),
           const SizedBox(height: AppSpacing.xs),
-          if (useColumns)
-            Expanded(
-              child: TextField(
-                controller: _namesController,
-                enabled: !state.isRunning,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                style: AppTextStyles.body,
-                decoration: const InputDecoration(
-                  hintText:
-                      'VD: Khách hàng Bất Động Sản Q9\nHội Thảo Alpha Studio 2026',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            )
-          else
-            TextField(
-              controller: _namesController,
-              enabled: !state.isRunning,
-              minLines: 5,
-              maxLines: 8,
-              keyboardType: TextInputType.multiline,
-              style: AppTextStyles.body,
-              decoration: const InputDecoration(
-                hintText:
-                    'VD: Khách hàng Bất Động Sản Q9\nHội Thảo Alpha Studio 2026',
-                alignLabelWithHint: true,
-              ),
+          TextField(
+            controller: _namesController,
+            enabled: !state.isRunning,
+            minLines: 5,
+            maxLines: 8,
+            keyboardType: TextInputType.multiline,
+            style: AppTextStyles.body,
+            decoration: const InputDecoration(
+              hintText:
+                  'VD: Khách hàng Bất Động Sản Q9\nHội Thảo Alpha Studio 2026',
+              alignLabelWithHint: true,
             ),
+          ),
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
@@ -255,7 +302,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
               ),
             ],
           ),
-          if (useColumns) const Spacer() else const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.m),
           AppButton(
             text: state.isRunning
                 ? 'Dừng tạo nhóm'
@@ -347,14 +394,41 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                         friend.id,
                       );
                       return CheckboxListTile(
-                        title: Text(
-                          friend.name,
-                          style: AppTextStyles.bodyMedium,
+                        title: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: friend.avatarUrl.isNotEmpty ? NetworkImage(friend.avatarUrl) : null,
+                              child: friend.avatarUrl.isEmpty
+                                  ? Text(
+                                      friend.name.isNotEmpty
+                                          ? friend.name.substring(0, 1).toUpperCase()
+                                          : 'F',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Expanded(
+                              child: Text(
+                                friend.name,
+                                style: AppTextStyles.bodyMedium,
+                              ),
+                            ),
+                          ],
                         ),
-                        subtitle: Text(
-                          friend.phone,
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textMuted,
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(left: 36.0),
+                          child: Text(
+                            friend.phone.isNotEmpty ? friend.phone : friend.id,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textMuted,
+                            ),
                           ),
                         ),
                         value: isChecked,

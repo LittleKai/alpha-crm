@@ -5,15 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../providers/join_groups_provider.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class JoinGroupsScreen extends ConsumerStatefulWidget {
   const JoinGroupsScreen({super.key});
@@ -33,6 +32,9 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
     _linksController.addListener(() {
       ref.read(joinGroupsProvider.notifier).setLinks(_linksController.text);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(zaloIntegrationProvider.notifier).checkConnection();
+    });
   }
 
   @override
@@ -47,12 +49,16 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(joinGroupsProvider);
     final notifier = ref.read(joinGroupsProvider.notifier);
-    final settingsState = ref.watch(settingsProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
-    final activeAccounts = settingsState.accounts
-        .where((acc) => acc.isConnected)
-        .toList();
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final activeAccounts = zaloState.accounts;
+
+    if (state.selectedAccountId == null && activeAccounts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.setAccount(activeAccounts.first.id);
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -141,7 +147,7 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
   Widget _buildConfigCard(
     JoinGroupsState state,
     JoinGroupsNotifier notifier,
-    List<ZaloAccount> accounts,
+    List<ZaloConnectedAccount> accounts,
     bool useColumns,
   ) {
     final hasActiveAccount = accounts.isNotEmpty;
@@ -171,14 +177,36 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: state.selectedAccountId,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
               hintText: 'Chọn tài khoản Zalo...',
               items: accounts
                   .map(
-                    (acc) => DropdownMenuItem(
-                      value: acc.id,
-                      child: Text('${acc.name} (${acc.phone})'),
-                    ),
+                    (acc) {
+                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                      return DropdownMenuItem(
+                        value: acc.id,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                              child: acc.avatarUrl.isEmpty
+                                  ? Text(
+                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Text(
+                              cleanLabel,
+                              style: AppTextStyles.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   )
                   .toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
@@ -190,33 +218,18 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
             style: AppTextStyles.label,
           ),
           const SizedBox(height: AppSpacing.xs),
-          if (useColumns)
-            Expanded(
-              child: TextField(
-                controller: _linksController,
-                enabled: !state.isRunning,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                style: AppTextStyles.body,
-                decoration: const InputDecoration(
-                  hintText: 'https://zalo.me/g/xxxxx\nhttps://zalo.me/g/yyyyy',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            )
-          else
-            TextField(
-              controller: _linksController,
-              enabled: !state.isRunning,
-              minLines: 5,
-              maxLines: 8,
-              keyboardType: TextInputType.multiline,
-              style: AppTextStyles.body,
-              decoration: const InputDecoration(
-                hintText: 'https://zalo.me/g/xxxxx\nhttps://zalo.me/g/yyyyy',
-                alignLabelWithHint: true,
-              ),
+          TextField(
+            controller: _linksController,
+            enabled: !state.isRunning,
+            minLines: 5,
+            maxLines: 8,
+            keyboardType: TextInputType.multiline,
+            style: AppTextStyles.body,
+            decoration: const InputDecoration(
+              hintText: 'https://zalo.me/g/xxxxx\nhttps://zalo.me/g/yyyyy',
+              alignLabelWithHint: true,
             ),
+          ),
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [

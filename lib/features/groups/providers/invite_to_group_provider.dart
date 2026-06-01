@@ -2,9 +2,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
+import '../../../shared/utils/image_helper.dart';
 import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../zalo_integration/data/zalo_integration_api.dart';
+import '../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class InviteToGroupState {
   final bool isRunning;
@@ -12,6 +15,7 @@ class InviteToGroupState {
   final String? selectedAccountId;
   final String? selectedGroupId;
   final List<FriendRecord> friends;
+  final List<ZaloGroup> groups;
   final Set<String> selectedFriendIds;
   final String searchQuery;
   final int maxInviteCount;
@@ -25,6 +29,7 @@ class InviteToGroupState {
     this.selectedAccountId,
     this.selectedGroupId,
     required this.friends,
+    required this.groups,
     required this.selectedFriendIds,
     this.searchQuery = '',
     this.maxInviteCount = 50,
@@ -39,6 +44,7 @@ class InviteToGroupState {
     String? selectedAccountId,
     String? selectedGroupId,
     List<FriendRecord>? friends,
+    List<ZaloGroup>? groups,
     Set<String>? selectedFriendIds,
     String? searchQuery,
     int? maxInviteCount,
@@ -52,6 +58,7 @@ class InviteToGroupState {
       selectedAccountId: selectedAccountId ?? this.selectedAccountId,
       selectedGroupId: selectedGroupId ?? this.selectedGroupId,
       friends: friends ?? this.friends,
+      groups: groups ?? this.groups,
       selectedFriendIds: selectedFriendIds ?? this.selectedFriendIds,
       searchQuery: searchQuery ?? this.searchQuery,
       maxInviteCount: maxInviteCount ?? this.maxInviteCount,
@@ -73,10 +80,18 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
         InviteToGroupState(
           isRunning: false,
           logs: [],
-          friends: const [],
+          friends: MockGroups.sampleFriends,
+          groups: MockGroups.myGroups,
           selectedFriendIds: {},
         ),
       );
+
+  ZaloIntegrationApi _getApi() {
+    final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+    return ZaloIntegrationApi(baseUrl: baseUrl);
+  }
+
+  bool get _isConnected => _ref.read(zaloIntegrationProvider).isConnected;
 
   void setAccount(String? accountId) {
     state = state.copyWith(selectedAccountId: accountId);
@@ -129,6 +144,64 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
     state = state.copyWith(logs: []);
   }
 
+  Future<void> loadFriends() async {
+    if (_isConnected) {
+      try {
+        final api = _getApi();
+        final response = await api.fetchFriends();
+        if (response['success'] == true && response['friends'] != null) {
+          final List<dynamic> rawFriends = response['friends'];
+          final friends = rawFriends.map((f) {
+            return FriendRecord(
+              id: f['userId']?.toString() ?? '',
+              name: f['displayName']?.toString() ??
+                  f['zaloName']?.toString() ??
+                  '',
+              phone: f['phoneNumber']?.toString() ?? '',
+              avatarUrl: sanitizeImageUrl(f['avatar']?.toString() ?? ''),
+            );
+          }).toList();
+          state = state.copyWith(friends: friends);
+          return;
+        }
+      } catch (_) {
+        // Fall through to mock
+      }
+    }
+
+    // Mock fallback
+    state = state.copyWith(friends: MockGroups.sampleFriends);
+  }
+
+  Future<void> loadGroups() async {
+    if (_isConnected) {
+      try {
+        final api = _getApi();
+        final response = await api.fetchGroups();
+        if (response['success'] == true && response['groups'] != null) {
+          final List<dynamic> rawList = response['groups'];
+          final realGroups = rawList.map((g) {
+            return ZaloGroup(
+              id: g['id']?.toString() ?? '',
+              name: g['name']?.toString() ?? 'Nhóm không tên',
+              memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
+              role: g['role']?.toString() ?? 'Thành viên',
+              avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
+            );
+          }).toList();
+          
+          state = state.copyWith(groups: realGroups);
+          return;
+        }
+      } catch (_) {
+        // Fall through to mock
+      }
+    }
+
+    // Fallback to mock
+    state = state.copyWith(groups: MockGroups.myGroups);
+  }
+
   void startInviteCampaign() {
     if (state.selectedAccountId == null || state.selectedGroupId == null) {
       return;
@@ -153,7 +226,7 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
     _friendIdsToInvite = state.selectedFriendIds.toList();
     _currentFriendIndex = 0;
 
-    final targetGroupName = MockGroups.myGroups
+    final targetGroupName = state.groups
         .firstWhere(
           (g) => g.id == state.selectedGroupId,
           orElse: () => const ZaloGroup(
@@ -188,7 +261,10 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
     }
 
     final friendId = _friendIdsToInvite[_currentFriendIndex];
-    final friend = state.friends.firstWhere((f) => f.id == friendId);
+    final friend = state.friends.firstWhere(
+      (f) => f.id == friendId,
+      orElse: () => FriendRecord(id: friendId, name: friendId, phone: ''),
+    );
     final timeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
     state = state.copyWith(
@@ -203,41 +279,72 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
       ],
     );
 
-    _timer = Timer(const Duration(seconds: 2), () {
-      final success = _currentFriendIndex % 4 != 3;
-      final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+    _timer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final api = _getApi();
+        final response = await api.inviteToGroup(
+          userId: friendId,
+          groupId: state.selectedGroupId ?? '',
+        );
 
-      state = state.copyWith(
-        logs: [
-          ...state.logs,
-          LogItem(
-            timestamp: completionTimeStr,
-            message: success
-                ? 'Đã gửi lời mời thành công đến: ${friend.name}'
-                : 'Gửi lời mời thất bại đến: ${friend.name} (Có thể do thiết lập chặn nhận lời mời)',
-            type: success ? LogType.success : LogType.error,
-          ),
-        ],
-      );
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+
+        if (response['success'] == true) {
+          state = state.copyWith(
+            logs: [
+              ...state.logs,
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Đã gửi lời mời thành công đến: ${friend.name}',
+                type: LogType.success,
+              ),
+            ],
+          );
+        } else {
+          final errorMsg = response['error'] ?? 'Có thể do thiết lập chặn nhận lời mời';
+          state = state.copyWith(
+            logs: [
+              ...state.logs,
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Gửi lời mời thất bại đến: ${friend.name} ($errorMsg)',
+                type: LogType.error,
+              ),
+            ],
+          );
+        }
+      } catch (err) {
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+        state = state.copyWith(
+          logs: [
+            ...state.logs,
+            LogItem(
+              timestamp: completionTimeStr,
+              message: 'Lỗi mạng khi mời ${friend.name}: $err',
+              type: LogType.error,
+            ),
+          ],
+        );
+      }
 
       _currentFriendIndex++;
 
       if (_currentFriendIndex < _friendIdsToInvite.length &&
           _currentFriendIndex < state.maxInviteCount) {
+        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message:
-                  'Đang giãn cách ${state.minDelay}s trước khi mời người tiếp theo...',
+              message: 'Đang giãn cách ${delaySeconds}s trước khi mời người tiếp theo...',
               type: LogType.info,
             ),
           ],
         );
 
-        _timer = Timer(const Duration(seconds: 3), () {
+        _timer = Timer(Duration(seconds: delaySeconds), () {
           _runNextInvite(targetGroupName);
         });
       } else {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_accounts.dart';
 import '../../../mock/mock_campaigns.dart';
@@ -41,13 +43,36 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           settings: MockAccounts.defaultSettings,
           accounts: const [],
         ),
-      );
+      ) {
+    _loadSettings();
+  }
 
-  void updateProxy(String value) {
-    state = state.copyWith(
-      settings: state.settings.copyWith(proxy: value),
-      isSaved: false,
-    );
+  Future<void> _loadSettings() async {
+    try {
+      final file = File('zalo_settings.json');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final Map<String, dynamic> jsonMap = jsonDecode(content);
+        final loadedSettings = SystemSettings.fromJson(jsonMap);
+        state = state.copyWith(settings: loadedSettings);
+        print('[SettingsNotifier] Loaded settings from zalo_settings.json');
+      } else {
+        await _saveSettingsToFile(state.settings);
+      }
+    } catch (e) {
+      print('[SettingsNotifier] Error loading settings: $e');
+    }
+  }
+
+  Future<void> _saveSettingsToFile(SystemSettings settings) async {
+    try {
+      final file = File('zalo_settings.json');
+      final content = const JsonEncoder.withIndent('  ').convert(settings.toJson());
+      await file.writeAsString(content);
+      print('[SettingsNotifier] Saved settings to zalo_settings.json');
+    } catch (e) {
+      print('[SettingsNotifier] Error saving settings: $e');
+    }
   }
 
   void updateMinDelay(int value) {
@@ -303,6 +328,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       isLoading: true,
       errorText: null,
     );
+    await _saveSettingsToFile(enforcedSettings);
     await Future.delayed(const Duration(milliseconds: 600));
     state = state.copyWith(isLoading: false, isSaved: true);
   }

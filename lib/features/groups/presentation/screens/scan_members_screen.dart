@@ -76,7 +76,7 @@ class _ScanMembersScreenState extends ConsumerState<ScanMembersScreen> {
                           'Dán link nhóm Zalo phía trên rồi nhấn "Quét thành viên" để lấy danh sách.\nDùng để tìm khách hàng tiềm năng từ các nhóm chung.',
                       height: 360,
                     )
-                  : _ResultPlaceholder(count: state.members.length),
+                  : _MemberTable(state: state),
             ),
           ],
         ),
@@ -225,19 +225,140 @@ class _ScanFormCard extends StatelessWidget {
   }
 }
 
-class _ResultPlaceholder extends StatelessWidget {
-  final int count;
+class _MemberTable extends StatelessWidget {
+  final ScanMembersState state;
 
-  const _ResultPlaceholder({required this.count});
+  const _MemberTable({required this.state});
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      child: Center(
-        child: Text(
-          'Đã quét được $count thành viên.',
-          style: AppTextStyles.sectionTitle,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  state.scannedGroupName != null
+                      ? 'Thành viên nhóm: ${state.scannedGroupName}'
+                      : 'Kết quả quét thành viên',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: AppSpacing.borderRadiusS,
+                ),
+                child: Text(
+                  '${state.members.length} / ${state.scannedTotalMember ?? state.members.length} thành viên',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              itemCount: state.members.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final member = state.members[index];
+                final isOwner = member.role == 'Trưởng nhóm';
+                final isAdmin = member.role == 'Phó nhóm';
+                
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: member.avatarUrl.isNotEmpty ? NetworkImage(member.avatarUrl) : null,
+                        child: member.avatarUrl.isNotEmpty
+                            ? null
+                            : Text(
+                                member.name.isNotEmpty
+                                    ? member.name.substring(0, 1).toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              member.name,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              member.id,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textMuted,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isOwner || isAdmin)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isOwner
+                                ? AppColors.warningSoft
+                                : AppColors.primarySoft,
+                            borderRadius: AppSpacing.borderRadiusS,
+                            border: Border.all(
+                              color: isOwner
+                                  ? AppColors.warning
+                                  : AppColors.primary,
+                            ),
+                          ),
+                          child: Text(
+                            member.role,
+                            style: AppTextStyles.caption.copyWith(
+                              color: isOwner
+                                  ? AppColors.warning
+                                  : AppColors.primary,
+                              fontSize: 10,
+                            ),
+                          ),
+                        )
+                      else
+                        Text(
+                          member.role,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

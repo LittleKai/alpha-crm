@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../shared/widgets/activity_log_panel.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../zalo_integration/data/zalo_integration_api.dart';
 
 class JoinGroupsState {
   final bool isRunning;
@@ -53,6 +54,11 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
 
   JoinGroupsNotifier(this._ref)
     : super(const JoinGroupsState(isRunning: false, logs: [], groupLinks: ''));
+
+  ZaloIntegrationApi _getApi() {
+    final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+    return ZaloIntegrationApi(baseUrl: baseUrl);
+  }
 
   void setAccount(String? accountId) {
     state = state.copyWith(selectedAccountId: accountId);
@@ -137,40 +143,68 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
       ],
     );
 
-    _timer = Timer(const Duration(seconds: 2), () {
-      final success = _currentLinkIndex % 3 != 2;
-      final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+    _timer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final api = _getApi();
+        final response = await api.joinGroup(link: currentLink);
+        
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
-      state = state.copyWith(
-        logs: [
-          ...state.logs,
-          LogItem(
-            timestamp: completionTimeStr,
-            message: success
-                ? 'Đã tham gia nhóm thành công: $currentLink'
-                : 'Yêu cầu vào nhóm thất bại hoặc bị từ chối: $currentLink',
-            type: success ? LogType.success : LogType.error,
-          ),
-        ],
-      );
+        if (response['success'] == true) {
+          state = state.copyWith(
+            logs: [
+              ...state.logs,
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Đã tham gia nhóm thành công: $currentLink',
+                type: LogType.success,
+              ),
+            ],
+          );
+        } else {
+          final errorMsg = response['error'] ?? 'Yêu cầu vào nhóm thất bại hoặc bị từ chối';
+          state = state.copyWith(
+            logs: [
+              ...state.logs,
+              LogItem(
+                timestamp: completionTimeStr,
+                message: 'Yêu cầu vào nhóm thất bại: $errorMsg ($currentLink)',
+                type: LogType.error,
+              ),
+            ],
+          );
+        }
+      } catch (err) {
+        final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+        state = state.copyWith(
+          logs: [
+            ...state.logs,
+            LogItem(
+              timestamp: completionTimeStr,
+              message: 'Lỗi mạng khi tham gia nhóm: $err ($currentLink)',
+              type: LogType.error,
+            ),
+          ],
+        );
+      }
 
       _currentLinkIndex++;
 
       if (_currentLinkIndex < _linksToJoin.length) {
+        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message:
-                  'Đang giãn cách ${state.minDelay}s trước khi chuyển sang nhóm tiếp theo...',
+              message: 'Đang giãn cách ${delaySeconds}s trước khi chuyển sang nhóm tiếp theo...',
               type: LogType.info,
             ),
           ],
         );
 
-        _timer = Timer(const Duration(seconds: 3), () {
+        _timer = Timer(Duration(seconds: delaySeconds), () {
           _runNextJoin();
         });
       } else {
