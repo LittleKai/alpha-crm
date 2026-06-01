@@ -15,6 +15,8 @@ class ScanMembersState {
   final String? errorText;
   final String? complianceError;
 
+  final List<SavedScannedGroup> savedGroups;
+
   const ScanMembersState({
     required this.members,
     this.selectedGroupId,
@@ -23,6 +25,7 @@ class ScanMembersState {
     this.isScanning = false,
     this.errorText,
     this.complianceError,
+    this.savedGroups = const [],
   });
 
   ScanMembersState copyWith({
@@ -33,6 +36,7 @@ class ScanMembersState {
     bool? isScanning,
     String? errorText,
     String? complianceError,
+    List<SavedScannedGroup>? savedGroups,
   }) {
     return ScanMembersState(
       members: members ?? this.members,
@@ -42,6 +46,7 @@ class ScanMembersState {
       isScanning: isScanning ?? this.isScanning,
       errorText: errorText,
       complianceError: complianceError,
+      savedGroups: savedGroups ?? this.savedGroups,
     );
   }
 }
@@ -49,7 +54,26 @@ class ScanMembersState {
 class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
   final Ref _ref;
 
-  ScanMembersNotifier(this._ref) : super(const ScanMembersState(members: []));
+  ScanMembersNotifier(this._ref)
+      : super(const ScanMembersState(
+          members: [],
+          savedGroups: MockGroups.savedGroups,
+        ));
+
+  void removeSavedGroup(String id) {
+    final newList = state.savedGroups.where((g) => g.id != id).toList();
+    if (state.selectedGroupId == id) {
+      state = state.copyWith(
+        savedGroups: newList,
+        selectedGroupId: null,
+        members: [],
+        scannedGroupName: null,
+        scannedTotalMember: null,
+      );
+    } else {
+      state = state.copyWith(savedGroups: newList);
+    }
+  }
 
   ZaloIntegrationApi _getApi() {
     final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
@@ -122,13 +146,17 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
     if (_isConnected) {
       try {
         final api = _getApi();
-        final response = await api.fetchGroupMembers(groupId: groupId);
+        var response = await api.fetchGroupMembers(groupId: groupId);
+        if (response['success'] != true) {
+          response = await api.fetchGroupLinkMembers(link: 'https://zalo.me/g/$groupId');
+        }
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
           state = state.copyWith(
             members: members,
             isScanning: false,
-            scannedTotalMember: members.length,
+            scannedGroupName: response['groupName']?.toString() ?? state.savedGroups.firstWhere((g) => g.id == groupId).name,
+            scannedTotalMember: response['totalMember'] as int? ?? members.length,
           );
           return;
         }
@@ -139,29 +167,50 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
 
     // Mock fallback
     List<ScannedMember> loadedMembers;
+    String? selectedName;
+    int? selectedCount;
+
     if (groupId == 'g1') {
       loadedMembers = MockGroups.flutterGroupMembers;
+      selectedName = 'Cộng đồng Flutter Việt Nam';
+      selectedCount = loadedMembers.length;
     } else if (groupId == 'g2') {
       loadedMembers = MockGroups.startupGroupMembers;
+      selectedName = 'Hội Khởi nghiệp TPHCM';
+      selectedCount = loadedMembers.length;
     } else {
-      loadedMembers = const [
-        ScannedMember(
-          id: 'sm_gen1',
-          name: 'Nguyễn Văn Hải',
-          phone: '0901112222',
-          role: 'Thành viên',
-          status: 'Chưa kết bạn',
-        ),
-        ScannedMember(
-          id: 'sm_gen2',
-          name: 'Trần Thị Mai',
-          phone: '0903334444',
-          role: 'Thành viên',
-          status: 'Đã kết bạn',
-        ),
-      ];
+      final dynamicGroup = state.savedGroups.cast<SavedScannedGroup?>().firstWhere((g) => g?.id == groupId, orElse: () => null);
+      if (dynamicGroup != null) {
+        loadedMembers = MockGroups.flutterGroupMembers;
+        selectedName = dynamicGroup.name;
+        selectedCount = dynamicGroup.memberCount;
+      } else {
+        loadedMembers = const [
+          ScannedMember(
+            id: 'sm_gen1',
+            name: 'Nguyễn Văn Hải',
+            phone: '0901112222',
+            role: 'Thành viên',
+            status: 'Chưa kết bạn',
+          ),
+          ScannedMember(
+            id: 'sm_gen2',
+            name: 'Trần Thị Mai',
+            phone: '0903334444',
+            role: 'Thành viên',
+            status: 'Đã kết bạn',
+          ),
+        ];
+        selectedName = 'Nhóm demo';
+        selectedCount = loadedMembers.length;
+      }
     }
-    state = state.copyWith(members: loadedMembers, isScanning: false);
+    state = state.copyWith(
+      members: loadedMembers,
+      isScanning: false,
+      scannedGroupName: selectedName,
+      scannedTotalMember: selectedCount,
+    );
   }
 
   Future<void> scanGroupLink(String url) async {
@@ -196,11 +245,34 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
         final response = await api.fetchGroupLinkMembers(link: url.trim());
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
+          final groupName = response['groupName']?.toString() ?? 'Nhóm quét bằng link';
+          final totalMember = response['totalMember'] as int? ?? members.length;
+          final avatarUrl = sanitizeImageUrl(response['avatar']?.toString() ?? response['groupAvatar']?.toString() ?? '');
+          
+          String groupId = 'link_${DateTime.now().millisecondsSinceEpoch}';
+          final regex = RegExp(r'zalo\.me/g/([a-zA-Z0-9_-]+)');
+          final match = regex.firstMatch(url);
+          if (match != null && match.groupCount >= 1) {
+            groupId = match.group(1)!;
+          }
+
+          List<SavedScannedGroup> updatedSaved = List.from(state.savedGroups);
+          if (!updatedSaved.any((g) => g.id == groupId)) {
+            updatedSaved.insert(0, SavedScannedGroup(
+              id: groupId,
+              name: groupName,
+              memberCount: totalMember,
+              avatarUrl: avatarUrl,
+            ));
+          }
+
           state = state.copyWith(
             members: members,
             isScanning: false,
-            scannedGroupName: response['groupName']?.toString(),
-            scannedTotalMember: response['totalMember'] as int? ?? members.length,
+            scannedGroupName: groupName,
+            scannedTotalMember: totalMember,
+            selectedGroupId: groupId,
+            savedGroups: updatedSaved,
           );
           return;
         }
@@ -210,9 +282,33 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
     }
 
     // Mock fallback
+    final mockName = 'Cộng đồng Flutter Việt Nam (Demo Link)';
+    final mockMembers = MockGroups.flutterGroupMembers;
+    
+    String mockGroupId = 'link_${DateTime.now().millisecondsSinceEpoch}';
+    final regex = RegExp(r'zalo\.me/g/([a-zA-Z0-9_-]+)');
+    final match = regex.firstMatch(url);
+    if (match != null && match.groupCount >= 1) {
+      mockGroupId = match.group(1)!;
+    }
+
+    List<SavedScannedGroup> updatedSaved = List.from(state.savedGroups);
+    if (!updatedSaved.any((g) => g.id == mockGroupId)) {
+      updatedSaved.insert(0, SavedScannedGroup(
+        id: mockGroupId,
+        name: mockName,
+        memberCount: mockMembers.length,
+        avatarUrl: '',
+      ));
+    }
+
     state = state.copyWith(
-      members: MockGroups.flutterGroupMembers,
+      members: mockMembers,
       isScanning: false,
+      scannedGroupName: mockName,
+      scannedTotalMember: mockMembers.length,
+      selectedGroupId: mockGroupId,
+      savedGroups: updatedSaved,
     );
   }
 

@@ -16,6 +16,8 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
+import '../../../../auth/providers/crm_auth_provider.dart';
+import '../../../../../shared/api/crm_cloud_api.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
   const ChatbotScreen({super.key});
@@ -29,10 +31,44 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   double _tempValue = 0.7;
   String _selectedModel = 'Gemini 1.5 Flash';
 
+  final TextEditingController _testMessageController = TextEditingController();
+  String? _playgroundResponse;
+  bool _isPlaying = false;
+
   @override
   void dispose() {
     _promptController.dispose();
+    _testMessageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendTestMessage() async {
+    final msg = _testMessageController.text.trim();
+    if (msg.isEmpty) return;
+
+    setState(() {
+      _isPlaying = true;
+      _playgroundResponse = null;
+    });
+
+    final response = await CrmCloudApi.post('/crm/ai/chat', {
+      'message': msg,
+    });
+
+    setState(() {
+      _isPlaying = false;
+    });
+
+    if (response['success'] == true && response['data'] != null) {
+      setState(() {
+        _playgroundResponse = response['data']['text']?.toString();
+      });
+      ref.read(crmAuthProvider.notifier).refreshSubscription();
+    } else {
+      setState(() {
+        _playgroundResponse = 'Lỗi: ${response['message'] ?? "Không nhận được phản hồi từ AI."}';
+      });
+    }
   }
 
   void _showCreatePlaceholder(BuildContext context) {
@@ -257,6 +293,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Widget _buildAiTab(ChatbotState state, ChatbotNotifier notifier) {
+    final authState = ref.watch(crmAuthProvider);
+    final totalRemaining = authState.includedAiRemaining + authState.extraAiRemaining;
+    final isExpired = authState.subscriptionStatus == 'expired';
+    final hasNoQuota = totalRemaining <= 0;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -371,6 +412,143 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               },
             ),
           ),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 24),
+          Text(
+            'THỬ NGHIỆM AI PLAYGROUND',
+            style: AppTextStyles.label.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Thử nghiệm trực tiếp chỉ dẫn prompt và xem kết quả phản hồi của AI Chatbot.',
+            style: AppTextStyles.caption,
+          ),
+          const SizedBox(height: 16),
+          if (isExpired) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.errorSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '⚠️ Gói dịch vụ CRM của bạn đã hết hạn. Vui lòng gia hạn tài khoản để mở khóa sử dụng AI Chatbot.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.errorText,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else if (hasNoQuota) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warningSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '⚠️ Hạn mức AI Quota của bạn đã hết. Vui lòng di chuyển tới mục Đăng ký để mua thêm gói AI Top-up.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.warningText,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          Row(
+            children: [
+              Text('Hạn mức AI khả dụng: ', style: AppTextStyles.caption),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: hasNoQuota ? AppColors.errorSoft : AppColors.successSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$totalRemaining lượt',
+                  style: AppTextStyles.caption.copyWith(
+                    color: hasNoQuota ? AppColors.errorText : AppColors.successText,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _testMessageController,
+                  enabled: !isExpired && !hasNoQuota && !_isPlaying,
+                  style: AppTextStyles.body,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập câu hỏi test chatbot (ví dụ: tư vấn giá sản phẩm)...',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: (isExpired || hasNoQuota || _isPlaying) ? null : _sendTestMessage,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+                child: _isPlaying
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+              ),
+            ],
+          ),
+          if (_playgroundResponse != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI CHATBOT PHẢN HỒI:',
+                    style: AppTextStyles.caption.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _playgroundResponse!,
+                    style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

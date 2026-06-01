@@ -126,6 +126,21 @@ final List<NavGroup> navigationGroups = [
     ],
   ),
   const NavGroup(
+    groupName: 'TÀI KHOẢN & THIẾT BỊ',
+    items: [
+      NavItem(
+        title: 'Đăng ký & Gói AI',
+        icon: Icons.card_membership_outlined,
+        routePath: '/subscription',
+      ),
+      NavItem(
+        title: 'Ghép đôi thiết bị',
+        icon: Icons.sensors_outlined,
+        routePath: '/devices',
+      ),
+    ],
+  ),
+  const NavGroup(
     groupName: 'CÀI ĐẶT',
     items: [
       NavItem(

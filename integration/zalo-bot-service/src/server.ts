@@ -20,6 +20,9 @@ import { projectRoot } from './config.js';
 import { Zalo, LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance } from './channels/personal-zca-channel.js';
+import { startAgentRunner } from './agent/agent-runner.js';
+import { getAgentCredentials } from './agent/agent-identity.js';
+import { startPairingSession } from './agent/cloud-api.js';
 
 const VERSION = '0.2.0';
 
@@ -32,8 +35,23 @@ interface PendingSession {
 }
 const pendingSessions = new Map<string, PendingSession>();
 
-function setCorsHeaders(res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function setCorsHeaders(res: ServerResponse, req?: IncomingMessage): void {
+  let origin = '*';
+  if (req && req.headers.origin) {
+    const reqOrigin = req.headers.origin;
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
+    const isTrustedDomain = [
+      'https://giaiphapsangtao.com',
+      'https://alphastudio.vercel.app'
+    ].includes(reqOrigin);
+    
+    if (reqOrigin === 'null' || isLocalhost || isTrustedDomain) {
+      origin = reqOrigin;
+    } else {
+      origin = 'null';
+    }
+  }
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
@@ -41,8 +59,8 @@ function setCorsHeaders(res: ServerResponse): void {
   );
 }
 
-function json(res: ServerResponse, status: number, data: unknown): void {
-  setCorsHeaders(res);
+function json(res: ServerResponse, status: number, data: unknown, req?: IncomingMessage): void {
+  setCorsHeaders(res, req);
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
@@ -102,7 +120,7 @@ const server = createServer(async (req, res) => {
 
   // Handle CORS preflight
   if (method === 'OPTIONS') {
-    setCorsHeaders(res);
+    setCorsHeaders(res, req);
     res.writeHead(204);
     res.end();
     return;
@@ -110,11 +128,23 @@ const server = createServer(async (req, res) => {
 
   // GET /health
   if (method === 'GET' && url === '/health') {
+    const credentials = getAgentCredentials();
+    const zaloStatus = getZaloStatus();
     json(res, 200, {
       status: 'ok',
       version: VERSION,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
+      agent: {
+        mode: config.crmAgentMode,
+        registered: credentials !== null,
+        deviceId: credentials ? credentials.deviceId : null
+      },
+      zalo: {
+        channel: config.channelMode,
+        status: zaloStatus.connected ? 'online' : 'offline',
+        error: null
+      }
     });
     return;
   }
@@ -126,6 +156,33 @@ const server = createServer(async (req, res) => {
       ...status,
       version: VERSION,
     });
+    return;
+  }
+
+  // GET /api/agent/pairing/start
+  if (method === 'GET' && url === '/api/agent/pairing/start') {
+    try {
+      const credentials = getAgentCredentials();
+      if (!credentials) {
+        json(res, 400, { success: false, error: 'Thiết bị chưa được đăng ký Agent.' });
+        return;
+      }
+      const pairingData = await startPairingSession(credentials.deviceId, credentials.agentSecret);
+      
+      const qrPayload = {
+        type: 'alpha_crm_pairing',
+        apiBaseUrl: config.crmCloudApiUrl,
+        pairingToken: pairingData.qrToken
+      };
+
+      json(res, 200, {
+        success: true,
+        ...pairingData,
+        qrPayload
+      });
+    } catch (err: any) {
+      json(res, 500, { success: false, error: err.message });
+    }
     return;
   }
 
@@ -790,11 +847,11 @@ const server = createServer(async (req, res) => {
   json(res, 404, { error: 'Not found' });
 });
 
-server.listen(config.port, async () => {
+server.listen(config.localBindPort, config.localBindHost, async () => {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║  Alpha CRM — Zalo Bot Service v${VERSION}       ║
-║  Running on http://localhost:${config.port}          ║
+║  Running on http://${config.localBindHost}:${config.localBindPort}          ║
 ║  Channel: ${config.channelMode.padEnd(34)}║
 ║  Environment: ${config.nodeEnv.padEnd(30)}║
 ║  Personal Automation: ${(config.allowPersonalAccountAutomation ? 'ENABLED' : 'DISABLED').padEnd(23)}║
@@ -805,6 +862,8 @@ server.listen(config.port, async () => {
   try {
     await initializeZalo();
     console.log('[server] Zalo integration initialized successfully.');
+    // Start outbound agent connection loops
+    startAgentRunner();
   } catch (err) {
     console.error('[server] Failed to initialize Zalo integration:', err);
   }

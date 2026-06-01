@@ -1,7 +1,7 @@
 # Project Summary
 
 **Last Updated:** 2026-06-01 +07:00
-**Session:** #24 - Resolved Zalo avatar double-slash URI crash and dropdown assertion crashes under API failures
+**Session:** #26 - Reviewed SPEC Phase 2: hardened local Zalo service, Windows machine identity, outbound polling runner, background campaign execution, cancellation polling, and backend campaign command result handling.
 
 ---
 
@@ -38,9 +38,10 @@ windows/                      Native Windows runner and CMake config
 integration/
   zalo-bot-service/            Node.js/TypeScript backend bridge — personal-first via zca-js
     src/channels/              Channel adapter pattern (PersonalZca, OfficialOa, Mock)
+    src/agent/                 Production outbound agent layer (runner, command executor, machine fingerprinting, cloud-api)
     src/compliance.ts          Channel-aware backend compliance guard
-    src/config.ts              Environment config with ZaloChannelMode
-    src/server.ts              HTTP API server
+    src/config.ts              Environment config with ZaloChannelMode and Agent configs
+    src/server.ts              HTTP API server (hardened to bind to 127.0.0.1 and restrict CORS)
     src/personal-login.ts      CLI bootstrap for personal Zalo QR login
     src/zalo.ts                Channel selector/router
 docs/

@@ -1,4 +1,5 @@
 class AppRoutes {
+  static const String login = '/login';
   static const String dashboard = '/dashboard';
   static const String customers = '/customers';
   static const String contentTemplates = '/content/templates';
@@ -21,6 +22,10 @@ class AppRoutes {
   static const String groupsInvite = '/groups/invite';
   static const String groupsCreate = '/groups/create';
   static const String groupsLeave = '/groups/leave';
+
+  // Subscription and Devices
+  static const String subscription = '/subscription';
+  static const String devices = '/devices';
 
   // Settings
   static const String settings = '/settings';

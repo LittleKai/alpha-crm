@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-05-30 22:30:39 +07:00
+**Last Updated:** 2026-06-01 +07:00
 
 ---
 
@@ -14,13 +14,10 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
-No qualifying fixed bugs are recorded yet.
+### 2026-06-01 - Background Campaign Start Must Not Complete Campaigns
 
-When a qualifying bug is fixed, add an entry with:
-
-- Date and short bug title.
-- Symptom observed by users or developers.
-- Root cause.
-- Fix summary.
-- Rule or check that prevents recurrence.
-- Related files.
+- Symptom: A campaign command could start asynchronously on the Windows agent, but the backend treated the initial `{ status: 'running' }` report as a final successful result and could mark the campaign `completed` before messages finished sending.
+- Root cause: The agent runner reports every command result through the same endpoint, while the backend result handler did not distinguish in-progress reports from final campaign results.
+- Fix summary: Backend result handling now stores `{ status: 'running' }` as command status `running` and returns without setting `finishedAt` or changing `CrmCampaign.status`; final background results still complete/cancel the campaign.
+- Rule: Long-running agent commands need an explicit in-progress state and must update campaign status only from final result payloads.
+- Related files: `alpha-studio-backend/server/routes/crm.js`, `tools/alpha-crm/integration/zalo-bot-service/src/agent/agent-runner.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/agent/command-executor.ts`.

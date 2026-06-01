@@ -9,7 +9,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsc && node --watch dist/server.js",
-    "zalo:login-personal": "tsc && node dist/personal-login.js"
+    "zalo:login-personal": "tsc && node dist/personal-login.js",
+    "crm:register-device": "tsc && node dist/agent/register-device.js"
   },
   "dependencies": {
     "zca-js": "^2.1.2"

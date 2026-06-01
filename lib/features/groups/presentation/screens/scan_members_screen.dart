@@ -4,13 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../mock/mock_groups.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
-import '../../../../shared/widgets/app_select_field.dart';
 import '../../providers/scan_members_provider.dart';
 
 class ScanMembersScreen extends ConsumerStatefulWidget {
@@ -54,17 +52,9 @@ class _ScanMembersScreenState extends ConsumerState<ScanMembersScreen> {
             const SizedBox(height: AppSpacing.m),
             _ScanFormCard(
               linkController: _linkController,
-              selectedGroupId: state.selectedGroupId,
-              isScanning: state.isScanning,
+              state: state,
+              notifier: notifier,
               onScan: () => notifier.scanGroupLink(_linkController.text),
-              onSavedGroupChanged: (value) {
-                notifier.selectSavedGroup(value);
-                if (value == null || value == 'none') {
-                  _linkController.clear();
-                  return;
-                }
-                _linkController.text = 'https://zalo.me/g/$value';
-              },
             ),
             const SizedBox(height: AppSpacing.xxl),
             Expanded(
@@ -114,17 +104,15 @@ class _Header extends StatelessWidget {
 
 class _ScanFormCard extends StatelessWidget {
   final TextEditingController linkController;
-  final String? selectedGroupId;
-  final bool isScanning;
+  final ScanMembersState state;
+  final ScanMembersNotifier notifier;
   final VoidCallback onScan;
-  final ValueChanged<String?> onSavedGroupChanged;
 
   const _ScanFormCard({
     required this.linkController,
-    required this.selectedGroupId,
-    required this.isScanning,
+    required this.state,
+    required this.notifier,
     required this.onScan,
-    required this.onSavedGroupChanged,
   });
 
   @override
@@ -167,7 +155,7 @@ class _ScanFormCard extends StatelessWidget {
               final button = AppButton(
                 text: 'Quét thành viên',
                 icon: Icons.search,
-                isLoading: isScanning,
+                isLoading: state.isScanning,
                 onPressed: onScan,
               );
 
@@ -194,31 +182,164 @@ class _ScanFormCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.m),
           const Divider(color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.s),
-          Row(
-            children: [
-              Text('Xem lại nhóm đã quét:', style: AppTextStyles.bodyMedium),
-              const SizedBox(width: AppSpacing.m),
-              SizedBox(
-                width: 220,
-                child: AppSelectField<String>(
-                  value: selectedGroupId ?? 'none',
-                  items: [
-                    const DropdownMenuItem(
-                      value: 'none',
-                      child: Text('-- Chọn nhóm đã lưu --'),
-                    ),
-                    ...MockGroups.savedGroups.map(
-                      (group) => DropdownMenuItem(
-                        value: group.id,
-                        child: Text(group.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: onSavedGroupChanged,
+          if (state.savedGroups.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+              child: Text(
+                'Chưa có nhóm nào được quét hoặc lưu.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textMuted,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
-            ],
-          ),
+            )
+          else ...[
+            Row(
+              children: [
+                const Icon(Icons.history, size: 16, color: AppColors.primary),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  'Nhóm đã quét gần đây (${state.savedGroups.length}):',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s),
+            SizedBox(
+              height: 105,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: state.savedGroups.length,
+                itemBuilder: (context, index) {
+                  final group = state.savedGroups[index];
+                  final isSelected = state.selectedGroupId == group.id;
+
+                  return Container(
+                    width: 220,
+                    margin: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: Stack(
+                      children: [
+                        Material(
+                          color: isSelected
+                              ? AppColors.primarySoft
+                              : AppColors.surface,
+                          borderRadius: AppSpacing.borderRadiusM,
+                          child: InkWell(
+                            onTap: () {
+                              if (isSelected) {
+                                notifier.selectSavedGroup(null);
+                                linkController.clear();
+                              } else {
+                                notifier.selectSavedGroup(group.id);
+                                linkController.text =
+                                    'https://zalo.me/g/${group.id}';
+                              }
+                            },
+                            borderRadius: AppSpacing.borderRadiusM,
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                borderRadius: AppSpacing.borderRadiusM,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.borderSoft,
+                                  width: isSelected ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: AppColors.surfaceMuted,
+                                    backgroundImage: group.avatarUrl.isNotEmpty
+                                        ? NetworkImage(group.avatarUrl)
+                                        : null,
+                                    child: group.avatarUrl.isEmpty
+                                        ? Text(
+                                            group.name.isNotEmpty
+                                                ? group.name
+                                                    .substring(0, 1)
+                                                    .toUpperCase()
+                                                : 'G',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  const SizedBox(width: AppSpacing.s),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          group.name,
+                                          style: AppTextStyles.bodyMedium.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12.5,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${group.memberCount} thành viên',
+                                          style: AppTextStyles.caption.copyWith(
+                                            color: AppColors.textMuted,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: InkWell(
+                            onTap: () {
+                              notifier.removeSavedGroup(group.id);
+                              if (state.selectedGroupId == group.id) {
+                                linkController.clear();
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceMuted,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: AppColors.borderSoft),
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                size: 12,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

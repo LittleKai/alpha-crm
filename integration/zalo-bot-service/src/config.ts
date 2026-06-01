@@ -45,6 +45,13 @@ interface Config {
   allowGroupAutomation: boolean;
   requireHumanApproval: boolean;
   humanApprovalThreshold: number;
+  // Agent configuration
+  localBindHost: string;
+  localBindPort: number;
+  crmCloudApiUrl: string;
+  crmAgentDeviceId: string;
+  crmAgentSecretPath: string;
+  crmAgentMode: 'enabled' | 'disabled';
 }
 
 function loadEnv(): void {
@@ -111,4 +118,11 @@ export const config: Config = {
   allowGroupAutomation: parseBool(process.env['ZALO_ALLOW_GROUP_AUTOMATION'], false),
   requireHumanApproval: parseBool(process.env['ZALO_REQUIRE_HUMAN_APPROVAL'], true),
   humanApprovalThreshold: parseInt(process.env['ZALO_HUMAN_APPROVAL_THRESHOLD'] || '20', 10),
+  // Agent configuration
+  localBindHost: process.env['LOCAL_BIND_HOST'] || '127.0.0.1',
+  localBindPort: parseInt(process.env['LOCAL_BIND_PORT'] || process.env['PORT'] || '8787', 10),
+  crmCloudApiUrl: process.env['CRM_CLOUD_API_URL'] || 'https://alpha-studio-backend.fly.dev/api',
+  crmAgentDeviceId: process.env['CRM_AGENT_DEVICE_ID'] || '',
+  crmAgentSecretPath: process.env['CRM_AGENT_SECRET_PATH'] || '.data/agent/device-secret.json',
+  crmAgentMode: (process.env['CRM_AGENT_MODE'] as 'enabled' | 'disabled') || 'enabled',
 };

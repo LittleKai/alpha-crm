@@ -33,6 +33,24 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- Thêm script lắng nghe SSO Token từ Alpha Studio -->
+  <script>
+    window.addEventListener("message", (event) => {
+      if (event.data) {
+        let parsedData = event.data;
+        if (typeof parsedData === 'string' && parsedData.trim().startsWith('{')) {
+          try {
+            parsedData = JSON.parse(parsedData);
+          } catch (e) {}
+        }
+        if (parsedData.type === 'AUTH_TOKEN' && parsedData.token) {
+          const token = parsedData.token;
+          console.log("Đã nhận Token từ Alpha Studio");
+          window.localStorage.setItem('alpha_studio_token', token);
+        }
+      }
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
