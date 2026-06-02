@@ -68,3 +68,43 @@ export function saveAgentCredentials(deviceId: string, agentSecret: string): boo
     return false;
   }
 }
+
+/**
+ * Resolves the path to the CRM token JSON file created by the Flutter desktop app.
+ * Supports Windows, macOS, and Linux.
+ */
+export function getCrmTokenPath(): string | null {
+  const home = os.homedir();
+  let tokenPath = '';
+  
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || resolve(home, 'AppData', 'Roaming');
+    tokenPath = resolve(appData, 'com.alphastudio.crm', 'alpha_crm', 'crm_token.json');
+  } else if (process.platform === 'darwin') {
+    tokenPath = resolve(home, 'Library/Application Support', 'com.alphastudio.crm', 'alpha_crm', 'crm_token.json');
+  } else {
+    tokenPath = resolve(home, '.config', 'com.alphastudio.crm', 'alpha_crm', 'crm_token.json');
+  }
+
+  if (fs.existsSync(tokenPath)) {
+    return tokenPath;
+  }
+  return null;
+}
+
+/**
+ * Reads and returns the active JWT token from the local Flutter desktop app.
+ */
+export function getCrmToken(): string | null {
+  const tokenPath = getCrmTokenPath();
+  if (!tokenPath) return null;
+  try {
+    const raw = fs.readFileSync(tokenPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed.token || null;
+  } catch (err) {
+    console.error('[agent-identity] Failed to load crm_token.json:', err);
+    return null;
+  }
+}
+

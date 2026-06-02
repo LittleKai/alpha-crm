@@ -39,12 +39,12 @@ class CrmTasksScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Cong viec follow-up',
+                        'Công việc follow-up',
                         style: AppTextStyles.pageTitle,
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'Theo doi viec can lam tu khach hang, nhom va insight CRM.',
+                        'Theo dõi và quản lý công việc cần làm từ khách hàng, nhóm Zalo và insight CRM.',
                         style: AppTextStyles.body.copyWith(
                           color: AppColors.textMuted,
                         ),
@@ -55,11 +55,11 @@ class CrmTasksScreen extends ConsumerWidget {
                 DropdownButton<String>(
                   value: state.statusFilter,
                   items: const [
-                    DropdownMenuItem(value: 'open', child: Text('Open')),
-                    DropdownMenuItem(value: 'done', child: Text('Done')),
+                    DropdownMenuItem(value: 'open', child: Text('Chưa làm')),
+                    DropdownMenuItem(value: 'done', child: Text('Đã hoàn thành')),
                     DropdownMenuItem(
                       value: 'dismissed',
-                      child: Text('Dismissed'),
+                      child: Text('Đã bỏ qua'),
                     ),
                   ],
                   onChanged: (value) {
@@ -68,7 +68,7 @@ class CrmTasksScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: AppSpacing.s),
                 AppButton(
-                  text: 'Tao task',
+                  text: 'Tạo công việc',
                   icon: Icons.add_rounded,
                   onPressed: () => _showCreateTaskDialog(context, notifier),
                 ),
@@ -88,9 +88,9 @@ class CrmTasksScreen extends ConsumerWidget {
                 child: state.tasks.isEmpty
                     ? const AppEmptyState(
                         icon: Icons.task_outlined,
-                        title: 'Chua co task',
+                        title: 'Chưa có công việc nào',
                         description:
-                            'Task follow-up se giup uu tien khach hang va insight can xu ly.',
+                            'Danh sách công việc cần làm giúp bạn chủ động chăm sóc khách hàng và xử lý các phản hồi CRM kịp thời.',
                         height: 420,
                       )
                     : ListView.separated(
@@ -119,7 +119,7 @@ class CrmTasksScreen extends ConsumerWidget {
                                   [
                                     task.relatedType,
                                     if (task.dueAt != null)
-                                      'due ${DateFormat('dd/MM/yyyy HH:mm').format(task.dueAt!)}',
+                                      'Hạn chót: ${DateFormat('dd/MM/yyyy HH:mm').format(task.dueAt!)}',
                                   ].join(' - '),
                                   style: AppTextStyles.caption.copyWith(
                                     color: AppColors.textMuted,
@@ -183,7 +183,7 @@ class CrmTasksScreen extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Tao task follow-up'),
+              title: const Text('Tạo công việc follow-up'),
               content: SizedBox(
                 width: 460,
                 child: Column(
@@ -192,7 +192,7 @@ class CrmTasksScreen extends ConsumerWidget {
                     TextField(
                       controller: titleController,
                       decoration: const InputDecoration(
-                        labelText: 'Tieu de',
+                        labelText: 'Tiêu đề công việc',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -202,7 +202,7 @@ class CrmTasksScreen extends ConsumerWidget {
                       minLines: 3,
                       maxLines: 5,
                       decoration: const InputDecoration(
-                        labelText: 'Mo ta',
+                        labelText: 'Mô tả chi tiết',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -210,16 +210,16 @@ class CrmTasksScreen extends ConsumerWidget {
                     DropdownButtonFormField<String>(
                       initialValue: priority,
                       decoration: const InputDecoration(
-                        labelText: 'Uu tien',
+                        labelText: 'Mức độ ưu tiên',
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'low', child: Text('Low')),
+                        DropdownMenuItem(value: 'low', child: Text('Thấp')),
                         DropdownMenuItem(
                           value: 'medium',
-                          child: Text('Medium'),
+                          child: Text('Trung bình'),
                         ),
-                        DropdownMenuItem(value: 'high', child: Text('High')),
+                        DropdownMenuItem(value: 'high', child: Text('Cao')),
                       ],
                       onChanged: (value) {
                         if (value != null) setState(() => priority = value);
@@ -231,7 +231,7 @@ class CrmTasksScreen extends ConsumerWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Huy'),
+                  child: const Text('Hủy'),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -244,7 +244,7 @@ class CrmTasksScreen extends ConsumerWidget {
                       Navigator.of(dialogContext).pop();
                     }
                   },
-                  child: const Text('Luu'),
+                  child: const Text('Lưu'),
                 ),
               ],
             );
@@ -266,9 +266,9 @@ class _PriorityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (priority) {
-      'high' => const AppBadge(label: 'High', variant: AppBadgeVariant.error),
-      'low' => const AppBadge(label: 'Low', variant: AppBadgeVariant.neutral),
-      _ => const AppBadge(label: 'Medium', variant: AppBadgeVariant.info),
+      'high' => const AppBadge(label: 'Cao', variant: AppBadgeVariant.error),
+      'low' => const AppBadge(label: 'Thấp', variant: AppBadgeVariant.neutral),
+      _ => const AppBadge(label: 'Trung bình', variant: AppBadgeVariant.info),
     };
   }
 }

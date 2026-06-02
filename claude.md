@@ -6,7 +6,7 @@
 
 Read `.claude/PROJECT_SUMMARY.md` first, not the entire codebase.
 Update documentation after every change.
-Use the `flutter-dev` skill.
+Use the skill in `C:\Users\XEON\.gemini\skills\flutter-dev\skill.md`.
 
 ---
 

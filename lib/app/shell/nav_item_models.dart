@@ -44,7 +44,7 @@ final List<NavGroup> navigationGroups = [
         routePath: '/content/templates',
       ),
       NavItem(
-        title: 'Cong viec follow-up',
+        title: 'Công việc follow-up',
         icon: Icons.task_alt_outlined,
         routePath: '/tasks',
       ),
@@ -129,7 +129,7 @@ final List<NavGroup> navigationGroups = [
         routePath: '/groups/leave',
       ),
       NavItem(
-        title: 'Quan ly nhom CRM',
+        title: 'Quản lý nhóm CRM',
         icon: Icons.groups_2_outlined,
         routePath: '/groups/manage',
       ),

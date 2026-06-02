@@ -8,6 +8,7 @@ import '../theme/app_text_styles.dart';
 import 'app_shell_providers.dart';
 import 'nav_item_models.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
+import '../../features/auth/providers/crm_auth_provider.dart';
 
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
@@ -49,6 +50,10 @@ class AppSidebar extends ConsumerWidget {
                   }).toList(),
                 ),
               ),
+
+              // User Footer & Logout Section
+              const Divider(height: 1, color: AppColors.borderSoft),
+              _buildUserFooter(context, ref, isCollapsed),
             ],
           ),
         ),
@@ -311,6 +316,153 @@ class AppSidebar extends ConsumerWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserFooter(BuildContext context, WidgetRef ref, bool isCollapsed) {
+    final authState = ref.watch(crmAuthProvider);
+    final user = authState.user;
+    final displayName = user?.name ?? user?.email ?? 'Người dùng';
+    final role = user?.role ?? 'Thành viên';
+
+    final avatarWidget = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: user?.avatar != null && user!.avatar!.isNotEmpty
+          ? Image.network(
+              user.avatar!,
+              width: 32,
+              height: 32,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  _buildDefaultAvatar(displayName),
+            )
+          : _buildDefaultAvatar(displayName),
+    );
+
+    if (isCollapsed) {
+      return Tooltip(
+        message: 'Đăng xuất ($displayName)',
+        child: Container(
+          margin: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.s,
+            vertical: AppSpacing.m,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+              onTap: () => _showLogoutConfirmDialog(context, ref),
+              child: SizedBox(
+                height: 40,
+                width: 40,
+                child: Center(
+                  child: avatarWidget,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceMuted,
+      ),
+      child: Row(
+        children: [
+          // User Avatar Circle
+          avatarWidget,
+          const SizedBox(width: AppSpacing.s),
+          // User Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  displayName,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  role,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          // Logout Button
+          IconButton(
+            icon: const Icon(Icons.logout, size: 18),
+            color: AppColors.textSecondary,
+            tooltip: 'Đăng xuất',
+            onPressed: () => _showLogoutConfirmDialog(context, ref),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDefaultAvatar(String displayName) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: const BoxDecoration(
+        color: AppColors.primarySoft,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+        style: const TextStyle(
+          color: AppColors.primary,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  void _showLogoutConfirmDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận đăng xuất'),
+        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng Alpha CRM?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Hủy',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(crmAuthProvider.notifier).logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Đăng xuất'),
+          ),
         ],
       ),
     );

@@ -1,6 +1,12 @@
 # Project Summary
 
 **Last Updated:** 2026-06-02 +07:00
+**Session:** #38 - Implemented full manual customer/contact addition modal dialog form to replace mock placeholder toasts, connecting it directly to cloud database APIs with proper validation and loading state representation.
+
+**Session:** #37 - Fully resolved local Zalo bot service auto-registration. Designed an elegant polling mechanism that scans for the active desktop app JWT token inside `crm_token.json` dynamically across Windows/macOS/Linux every 10 seconds. Registered the agent device automatically with Cloud Backend, completely eliminating manual interactive CLI commands. Added a premium "Đăng xuất" (Logout) button and user profile Footer card at the bottom of the Flutter app's sidebar layout, complete with proper Material 3 confirm dialogs and smooth automatic routing redirection back to login screen.
+
+**Session:** #36 - Fixed critical Flutter DropdownButton assertion crash in chatbot AI tab and RenderFlex bottom layout overflow (28px) in Quick Templates. Fully implemented Quick Templates ("Tin mẫu nhanh") CRUD dialog and delete functions, linking them directly to database APIs. Corrected Vietnamese diacritics, status labels, dialog inputs, and priority badges in follow-up tasks ("Công việc follow-up") and sidebar layout. Documented Zalo bot messaging tab inactivity due to missing local agent device registration (`device-secret.json`).
+
 **Session:** #35 - Phase 8-10 CRM production operations completed. Live chat and chatbot screens now use backend conversations/messages/rules/logs. Added managed Zalo group management, AI summaries/insights, saved customer segments, follow-up tasks, dashboard analytics, import/export flows, and agent inbound message reporting with managed-group filtering.
 
 **Session:** #34 - Windows production release packaging now includes the local Zalo backend bundle. The desktop backend manager searches beside the app executable for `zalo-bot-service.cmd`, `zalo-bot-service.exe`, or `zalo-bot-service.bat`; the automated release script stages compiled backend files, dependencies, bundled `node.exe`, `.env.example`, and the launcher beside `alpha_crm.exe`.

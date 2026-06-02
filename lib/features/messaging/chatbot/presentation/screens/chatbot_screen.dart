@@ -370,8 +370,20 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           Text('Mô hình ngôn ngữ AI sử dụng:', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
-            value: _selectedModel,
+            value: const [
+              'gcli-default',
+              'Gemini 1.5 Flash',
+              'Gemini 1.5 Pro',
+              'GPT-4o mini',
+              'Zalo AI Custom',
+            ].contains(_selectedModel)
+                ? _selectedModel
+                : 'gcli-default',
             items: const [
+              DropdownMenuItem(
+                value: 'gcli-default',
+                child: Text('Mặc định hệ thống'),
+              ),
               DropdownMenuItem(
                 value: 'Gemini 1.5 Flash',
                 child: Text('Gemini 1.5 Flash (Nhanh & Tối ưu)'),

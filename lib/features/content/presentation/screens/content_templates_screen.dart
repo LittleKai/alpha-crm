@@ -102,9 +102,7 @@ class _ContentTemplatesScreenState
     final addButton = AppButton(
       text: 'Thêm tin mẫu',
       icon: Icons.add_rounded,
-      onPressed: () => _showPlaceholder(
-        'Modal thêm tin mẫu cần mockup xác nhận trước khi triển khai.',
-      ),
+      onPressed: () => _showAddTemplateDialog(context, notifier),
     );
 
     if (ResponsiveBreakpoints.isMobile(context)) {
@@ -131,6 +129,8 @@ class _ContentTemplatesScreenState
     TemplatesState state,
     List<MessageTemplate> filteredTemplates,
   ) {
+    final notifier = ref.read(templatesProvider.notifier);
+
     if (state.errorMessage != null) {
       return AppCard(
         height: 278,
@@ -146,20 +146,16 @@ class _ContentTemplatesScreenState
 
     if (state.templates.isEmpty) {
       return AppCard(
-        height: 278,
         child: AppEmptyState(
           icon: Icons.content_paste_outlined,
           title: 'Không có tin nhắn mẫu nào',
           description:
               'Hãy tạo tin mẫu đầu tiên để tiết kiệm thời gian soạn tin cho các chiến dịch gửi hàng loạt.',
-          height: 230,
           actions: [
             AppButton(
               text: 'Tạo tin mẫu đầu tiên',
               icon: Icons.add_rounded,
-              onPressed: () => _showPlaceholder(
-                'Modal tạo tin mẫu cần mockup xác nhận trước khi triển khai.',
-              ),
+              onPressed: () => _showAddTemplateDialog(context, notifier),
             ),
           ],
         ),
@@ -185,23 +181,47 @@ class _ContentTemplatesScreenState
           ),
           itemCount: filteredTemplates.length,
           itemBuilder: (context, index) =>
-              _buildTemplateCard(filteredTemplates[index]),
+              _buildTemplateCard(filteredTemplates[index], notifier),
         );
       },
     );
   }
 
-  Widget _buildTemplateCard(MessageTemplate template) {
+  Widget _buildTemplateCard(MessageTemplate template, TemplatesNotifier notifier) {
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.m),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            template.title,
-            style: AppTextStyles.cardTitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  template.title,
+                  style: AppTextStyles.cardTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.error,
+                  size: 18,
+                ),
+                onPressed: () async {
+                  await notifier.deleteTemplate(template.id);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Đã xóa tin mẫu.')),
+                    );
+                  }
+                },
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.s),
           Expanded(
@@ -224,9 +244,71 @@ class _ContentTemplatesScreenState
     );
   }
 
-  void _showPlaceholder(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  Future<void> _showAddTemplateDialog(
+    BuildContext context,
+    TemplatesNotifier notifier,
+  ) async {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Thêm tin mẫu mới'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tiêu đề tin mẫu',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.m),
+                TextField(
+                  controller: contentController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Nội dung tin nhắn',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final title = titleController.text.trim();
+                final content = contentController.text.trim();
+                if (title.isNotEmpty && content.isNotEmpty) {
+                  await notifier.addTemplate(
+                    MessageTemplate(
+                      id: '',
+                      title: title,
+                      content: content,
+                      variables: const [],
+                      createdAt: DateTime.now(),
+                    ),
+                  );
+                }
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        );
+      },
+    );
+    titleController.dispose();
+    contentController.dispose();
   }
 }

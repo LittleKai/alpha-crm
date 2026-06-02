@@ -1,5 +1,6 @@
-import { getAgentCredentials } from './agent-identity.js';
-import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, sendHeartbeat } from './cloud-api.js';
+import os from 'os';
+import { getAgentCredentials, getMachineFingerprint, saveAgentCredentials, getCrmToken } from './agent-identity.js';
+import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, sendHeartbeat, registerDevice } from './cloud-api.js';
 import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
 import { config } from '../config.js';
@@ -8,6 +9,7 @@ import { setInboundMessageHandler, type ZaloInboundMessageEvent } from '../chann
 let running = false;
 let pollingIntervalTimer: NodeJS.Timeout | null = null;
 let heartbeatIntervalTimer: NodeJS.Timeout | null = null;
+let autoRegisterTimeoutTimer: NodeJS.Timeout | null = null;
 
 // Track polling details
 let pollErrorCount = 0;
@@ -35,7 +37,8 @@ export function startAgentRunner(): void {
 
   const credentials = getAgentCredentials();
   if (!credentials) {
-    console.warn('[agent-runner] ⚠️ Không tìm thấy thông tin xác thực thiết bị (.data/agent/device-secret.json). Yêu cầu chạy script đăng ký trước.');
+    console.log('[agent-runner] ⚠️ Không tìm thấy thông tin xác thực thiết bị (.data/agent/device-secret.json). Đang quét crm_token.json...');
+    attemptAutoRegistration();
     return;
   }
 
@@ -60,6 +63,48 @@ export function startAgentRunner(): void {
 }
 
 /**
+ * Attempts to automatically register the device using active CRM token.
+ * Retries every 10 seconds under the hood if token is missing.
+ */
+async function attemptAutoRegistration(): Promise<void> {
+  try {
+    const token = getCrmToken();
+    if (token) {
+      console.log('[agent-runner] Phát hiện token hoạt động từ crm_token.json. Đang tự động đăng ký thiết bị...');
+      const fingerprint = getMachineFingerprint();
+      const hostname = os.hostname() || 'Agent PC';
+      const displayName = `Windows ${process.arch} (${hostname})`;
+      
+      console.log(`[agent-runner] Đang đăng ký với tên hiển thị "${displayName}"...`);
+      const result = await registerDevice(token, displayName, fingerprint);
+      console.log(`[agent-runner] ✅ Tự động đăng ký thành công! Device ID: ${result.deviceId}`);
+      
+      saveAgentCredentials(result.deviceId, result.agentSecret);
+      
+      // Clear auto-register check timer if scheduled
+      if (autoRegisterTimeoutTimer) {
+        clearTimeout(autoRegisterTimeoutTimer);
+        autoRegisterTimeoutTimer = null;
+      }
+      
+      // Start the main loops
+      startAgentRunner();
+      return;
+    }
+  } catch (err: any) {
+    console.error('[agent-runner] ❌ Tự động đăng ký thiết bị thất bại:', err.message);
+  }
+
+  // If we couldn't find a token or registration failed, schedule next check in 10 seconds
+  if (!autoRegisterTimeoutTimer && running === false) {
+    autoRegisterTimeoutTimer = setTimeout(() => {
+      autoRegisterTimeoutTimer = null;
+      attemptAutoRegistration();
+    }, 10000);
+  }
+}
+
+/**
  * Stop background agent runner loops cleanly
  */
 export function stopAgentRunner(): void {
@@ -73,8 +118,13 @@ export function stopAgentRunner(): void {
     clearInterval(heartbeatIntervalTimer);
     heartbeatIntervalTimer = null;
   }
+  if (autoRegisterTimeoutTimer) {
+    clearTimeout(autoRegisterTimeoutTimer);
+    autoRegisterTimeoutTimer = null;
+  }
   console.log('[agent-runner] Outbound Agent Channel stopped.');
 }
+
 
 async function getManagedGroupKeys(deviceId: string, agentSecret: string): Promise<Set<string>> {
   const now = Date.now();

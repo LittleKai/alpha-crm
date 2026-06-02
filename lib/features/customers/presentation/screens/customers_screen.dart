@@ -274,9 +274,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       AppButton(
         text: 'Thêm liên hệ',
         icon: Icons.add_rounded,
-        onPressed: () => _showPlaceholder(
-          'Form thêm liên hệ cần mockup/modal xác nhận trước khi triển khai.',
-        ),
+        onPressed: () => _showAddContactDialog(context, notifier),
       ),
     ];
 
@@ -359,9 +357,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             AppButton(
               text: 'Thêm thủ công',
               icon: Icons.add_rounded,
-              onPressed: () => _showPlaceholder(
-                'Form thêm thủ công cần mockup/modal xác nhận trước khi triển khai.',
-              ),
+              onPressed: () => _showAddContactDialog(context, ref.read(customersProvider.notifier)),
             ),
           ],
         ),
@@ -476,6 +472,225 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       },
     );
     controller.dispose();
+  }
+
+  Future<void> _showAddContactDialog(
+    BuildContext context,
+    CustomersNotifier notifier,
+  ) async {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    
+    String selectedGroup = 'Khách hàng VIP';
+    String selectedTag = 'Bất động sản';
+    bool submitting = false;
+    
+    final groups = ['Khách hàng VIP', 'Khách hàng tiềm năng', 'Đối tác', 'Mặc định'];
+    final tags = ['Bất động sản', 'Tài chính', 'Công nghệ', 'Giáo dục', 'Thời trang', 'Mặc định'];
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_add_outlined, color: AppColors.primary, size: 28),
+                  SizedBox(width: AppSpacing.s),
+                  Text(
+                    'Thêm khách hàng mới',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Thông tin khách hàng',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    TextField(
+                      controller: nameController,
+                      enabled: !submitting,
+                      decoration: const InputDecoration(
+                        labelText: 'Họ và tên',
+                        hintText: 'Nhập họ và tên khách hàng',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person_outline, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      enabled: !submitting,
+                      decoration: const InputDecoration(
+                        labelText: 'Số điện thoại',
+                        hintText: 'Nhập số điện thoại Zalo',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedGroup,
+                            dropdownColor: AppColors.surface,
+                            decoration: const InputDecoration(
+                              labelText: 'Nhóm khách hàng',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                            ),
+                            items: groups.map((g) {
+                              return DropdownMenuItem(value: g, child: Text(g));
+                            }).toList(),
+                            onChanged: submitting ? null : (val) {
+                              if (val != null) {
+                                setState(() {
+                                  selectedGroup = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedTag,
+                            dropdownColor: AppColors.surface,
+                            decoration: const InputDecoration(
+                              labelText: 'Lĩnh vực / Nhãn',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                            ),
+                            items: tags.map((t) {
+                              return DropdownMenuItem(value: t, child: Text(t));
+                            }).toList(),
+                            onChanged: submitting ? null : (val) {
+                              if (val != null) {
+                                setState(() {
+                                  selectedTag = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.only(
+                left: AppSpacing.l,
+                right: AppSpacing.l,
+                bottom: AppSpacing.l,
+              ),
+              actions: [
+                AppButton(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: submitting ? null : () => Navigator.of(dialogContext).pop(),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                AppButton(
+                  text: 'Thêm khách hàng',
+                  isLoading: submitting,
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final phone = phoneController.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Vui lòng nhập họ và tên.')),
+                      );
+                      return;
+                    }
+                    if (phone.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Vui lòng nhập số điện thoại.')),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      submitting = true;
+                    });
+                    
+                    final newContact = Contact(
+                      id: '',
+                      name: name,
+                      phone: phone,
+                      group: selectedGroup,
+                      tag: selectedTag,
+                      source: 'Thêm thủ công',
+                      status: 'Chưa gửi',
+                      createdAt: DateTime.now(),
+                    );
+                    
+                    final success = await notifier.addContact(newContact);
+                    
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle_outline, color: Colors.white),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text('Đã thêm khách hàng "$name" thành công.')),
+                              ],
+                            ),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Row(
+                              children: [
+                                Icon(Icons.error_outline, color: Colors.white),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text('Lỗi khi thêm khách hàng hoặc gói cước đã hết hạn.')),
+                              ],
+                            ),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
+    nameController.dispose();
+    phoneController.dispose();
   }
 
   void _showPlaceholder(String message) {
