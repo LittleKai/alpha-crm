@@ -57,7 +57,7 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
   ScanMembersNotifier(this._ref)
       : super(const ScanMembersState(
           members: [],
-          savedGroups: MockGroups.savedGroups,
+          savedGroups: [],
         ));
 
   void removeSavedGroup(String id) {

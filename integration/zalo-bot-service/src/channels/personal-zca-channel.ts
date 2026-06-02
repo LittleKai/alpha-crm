@@ -312,6 +312,7 @@ export class PersonalZcaChannel implements ZaloChannel {
                   memberCount: info.totalMember || (info.memberIds ? info.memberIds.length : 0) || 0,
                   role,
                   avatar: info.fullAvt || info.avt || '',
+                  accountId: instance.uId,
                 };
               });
             }
@@ -488,7 +489,10 @@ export class PersonalZcaChannel implements ZaloChannel {
           const info = infoData.gridInfoMap?.[groupId];
           if (!info) continue;
 
-          const memberIds: string[] = info.memberIds || [];
+          let memberIds: string[] = info.memberIds || [];
+          if (memberIds.length === 0 && info.memVerList) {
+            memberIds = info.memVerList.map((item: string) => item.split('_')[0]);
+          }
           const adminIds: string[] = info.adminIds || [];
           const creatorId: string = info.creatorId || '';
           const members: ZaloGroupMember[] = [];
@@ -543,8 +547,8 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[] }> {
-    const empty = { groupId: '', groupName: '', totalMember: 0, members: [] as ZaloGroupMember[] };
+  async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }> {
+    const empty = { groupId: '', groupName: '', totalMember: 0, members: [] as ZaloGroupMember[], avatar: '' };
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) return empty;
@@ -569,12 +573,14 @@ export class PersonalZcaChannel implements ZaloChannel {
             };
           });
 
+          const avatarUrl = data.avatar || data.avt || data.avatarUrl || '';
           console.log(`[PersonalZcaChannel - ${instance.label}] Link scan: ${data.name}, ${members.length}/${data.totalMember} members loaded.`);
           return {
             groupId: data.groupId,
             groupName: data.name || '',
             totalMember: data.totalMember || members.length,
             members,
+            avatar: avatarUrl,
           };
         } catch (err) {
           console.error(`[PersonalZcaChannel - ${instance.label}] Failed to fetch group link info:`, err);

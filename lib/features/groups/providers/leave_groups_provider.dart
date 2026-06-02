@@ -125,6 +125,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
               memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
               role: g['role']?.toString() ?? 'Thành viên',
               avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
+              accountId: g['accountId']?.toString(),
             );
           }).toList();
           

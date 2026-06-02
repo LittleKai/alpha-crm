@@ -50,11 +50,11 @@ export class MockZaloChannel implements ZaloChannel {
   async getAllGroups(): Promise<any[]> {
     console.log('[MockZaloChannel] Fetching mock groups');
     return [
-      { id: 'g1', name: 'Nhóm Dự Án Alpha', memberCount: 15, role: 'Trưởng nhóm' },
-      { id: 'g2', name: 'Zalo Marketing Hub', memberCount: 142, role: 'Thành viên' },
-      { id: 'g3', name: 'Gia Đình & Bạn Bè', memberCount: 8, role: 'Phó nhóm' },
-      { id: 'g4', name: 'Khách Hàng Tiềm Năng', memberCount: 250, role: 'Trưởng nhóm' },
-      { id: 'g5', name: 'Cộng Đồng Chia Sẻ Kinh Nghiệm', memberCount: 520, role: 'Thành viên' },
+      { id: 'g1', name: 'Nhóm Dự Án Alpha', memberCount: 15, role: 'Trưởng nhóm', accountId: 'mock_acc_1' },
+      { id: 'g2', name: 'Zalo Marketing Hub', memberCount: 142, role: 'Thành viên', accountId: 'mock_acc_1' },
+      { id: 'g3', name: 'Gia Đình & Bạn Bè', memberCount: 8, role: 'Phó nhóm', accountId: 'mock_acc_2' },
+      { id: 'g4', name: 'Khách Hàng Tiềm Năng', memberCount: 250, role: 'Trưởng nhóm', accountId: 'mock_acc_2' },
+      { id: 'g5', name: 'Cộng Đồng Chia Sẻ Kinh Nghiệm', memberCount: 520, role: 'Thành viên', accountId: 'mock_acc_1' },
     ];
   }
 
@@ -101,7 +101,7 @@ export class MockZaloChannel implements ZaloChannel {
     ];
   }
 
-  async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[] }> {
+  async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }> {
     console.log(`[MockZaloChannel] Fetching mock group link info for: ${link}`);
     const members: ZaloGroupMember[] = [
       { id: 'u10', displayName: 'Nguyễn Văn An', zaloName: 'vanan', avatar: '', role: 'owner' },
@@ -115,6 +115,7 @@ export class MockZaloChannel implements ZaloChannel {
       groupName: 'Nhóm từ link Zalo (mock)',
       totalMember: members.length,
       members,
+      avatar: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=150',
     };
   }
 

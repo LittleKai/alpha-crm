@@ -1,7 +1,7 @@
 # Project Summary
 
 **Last Updated:** 2026-06-02 +07:00
-**Session:** #27 - Continued SPEC Phases 3-5: fixed Alpha Studio /auth/me user parsing, cleaned analyzer warning, and documented native token storage fallback risk.
+**Session:** #31 - Fixed ZaloGroup compilation error in "Kết bạn từ nhóm" screen by importing mock_groups.dart, achieving 100% clean flutter analysis.
 
 ---
 

@@ -29,6 +29,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
   final _maxInviteController = TextEditingController(text: '50');
   final _minDelayController = TextEditingController(text: '5');
   final _maxDelayController = TextEditingController(text: '10');
+  String _phoneFilter = 'all';
 
   @override
   void initState() {
@@ -58,9 +59,18 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
     // Filter friends list
     final filteredFriends = state.friends.where((f) {
       final q = state.searchQuery.toLowerCase();
-      return q.isEmpty ||
+      final matchesSearch = q.isEmpty ||
           f.name.toLowerCase().contains(q) ||
           f.phone.contains(q);
+
+      if (!matchesSearch) return false;
+
+      if (_phoneFilter == 'has_phone') {
+        return f.phone.isNotEmpty;
+      } else if (_phoneFilter == 'no_phone') {
+        return f.phone.isEmpty;
+      }
+      return true;
     }).toList();
 
     final zaloState = ref.watch(zaloIntegrationProvider);
@@ -71,6 +81,16 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
         notifier.setAccount(activeAccounts.first.id);
       });
     }
+
+    final filteredGroups = state.groups.where((g) {
+      if (state.selectedAccountId == null) return true;
+      if (g.accountId != null) {
+        return g.accountId == state.selectedAccountId;
+      }
+      if (state.selectedAccountId!.length < 4) return true;
+      final suffix = state.selectedAccountId!.substring(state.selectedAccountId!.length - 4);
+      return g.name.startsWith('[$suffix]');
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -98,6 +118,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                     notifier,
                     activeAccounts,
                     useColumns,
+                    filteredGroups,
                   );
                   final col2 = _buildFriendsCard(
                     state,
@@ -170,6 +191,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
     InviteToGroupNotifier notifier,
     List<ZaloConnectedAccount> accounts,
     bool useColumns,
+    List<ZaloGroup> filteredGroups,
   ) {
     final hasActiveAccount = accounts.isNotEmpty;
 
@@ -234,9 +256,9 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
            Text('Chọn nhóm Zalo nhận lời mời *', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
-            value: state.groups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : null,
+            value: filteredGroups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : null,
             hintText: 'Chọn nhóm nhận...',
-            items: state.groups
+            items: filteredGroups
                 .map(
                   (g) => DropdownMenuItem(
                     value: g.id,
@@ -402,6 +424,39 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                     onChanged: notifier.setSearchQuery,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.s),
+                SizedBox(
+                  width: 140,
+                  height: 40,
+                  child: DropdownButtonFormField<String>(
+                    value: _phoneFilter,
+                    style: AppTextStyles.bodyMedium,
+                    decoration: const InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.s),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text('Tất cả bạn bè'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'has_phone',
+                        child: Text('Có SĐT'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'no_phone',
+                        child: Text('Không SĐT'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _phoneFilter = val;
+                        });
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -471,15 +526,17 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                             ),
                           ],
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(left: 36.0),
-                          child: Text(
-                            friend.phone.isNotEmpty ? friend.phone : friend.id,
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ),
+                        subtitle: friend.phone.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(left: 36.0),
+                                child: Text(
+                                  friend.phone,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              )
+                            : null,
                         value: isChecked,
                         enabled: !state.isRunning,
                         onChanged: (val) => notifier.toggleFriend(friend.id),

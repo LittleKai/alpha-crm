@@ -13,6 +13,7 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../../../../shared/widgets/activity_log_panel.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../../../../mock/mock_groups.dart';
 import '../../providers/friend_by_group_provider.dart';
 
 class FriendByGroupScreen extends ConsumerStatefulWidget {
@@ -72,6 +73,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
       });
     }
 
+    final filteredGroups = state.groups.where((g) {
+      if (state.selectedAccountId == null) return true;
+      if (g.accountId != null) {
+        return g.accountId == state.selectedAccountId;
+      }
+      if (state.selectedAccountId!.length < 4) return true;
+      final suffix = state.selectedAccountId!.substring(state.selectedAccountId!.length - 4);
+      return g.name.startsWith('[$suffix]');
+    }).toList();
+
     return Scaffold(
       backgroundColor: AppColors.appBackground,
       body: Padding(
@@ -93,7 +104,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1100;
-                  final memberPanel = _buildMemberPanel(state, notifier);
+                  final memberPanel = _buildMemberPanel(state, notifier, filteredGroups);
                   final configPanel = _buildConfigCard(state, notifier, activeAccounts);
 
                   if (!useColumns) {
@@ -147,7 +158,11 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     );
   }
 
-  Widget _buildMemberPanel(FriendByGroupState state, FriendByGroupNotifier notifier) {
+  Widget _buildMemberPanel(
+    FriendByGroupState state,
+    FriendByGroupNotifier notifier,
+    List<ZaloGroup> filteredGroups,
+  ) {
     final allSelected = state.members.isNotEmpty &&
         state.members.every((m) => state.selectedMemberIds.contains(m.id));
 
@@ -207,13 +222,13 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                       const SizedBox(width: AppSpacing.m),
                       Expanded(
                         child: AppSelectField<String>(
-                          value: state.groups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : 'none',
+                          value: filteredGroups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : 'none',
                           items: [
                             const DropdownMenuItem(
                               value: 'none',
                               child: Text('-- Chọn nhóm của bạn --'),
                             ),
-                            ...state.groups.map(
+                            ...filteredGroups.map(
                               (group) => DropdownMenuItem(
                                 value: group.id,
                                 child: Text('${group.name} (${group.memberCount} thành viên)'),

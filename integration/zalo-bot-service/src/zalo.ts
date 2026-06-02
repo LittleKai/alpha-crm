@@ -81,8 +81,8 @@ export async function getGroupMembers(groupId: string): Promise<ZaloGroupMember[
   return channel.getGroupMembers(groupId);
 }
 
-export async function getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[] }> {
-  if (!channel.getGroupLinkMembers) return { groupId: '', groupName: '', totalMember: 0, members: [] };
+export async function getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }> {
+  if (!channel.getGroupLinkMembers) return { groupId: '', groupName: '', totalMember: 0, members: [], avatar: '' };
   return channel.getGroupLinkMembers(link);
 }
 

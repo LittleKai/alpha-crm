@@ -37,6 +37,7 @@ class ZaloGroup {
   final String role; // 'Trưởng nhóm', 'Phó nhóm', 'Thành viên'
   final String status; // 'Hoạt động', 'Đang bảo trì'
   final String avatarUrl;
+  final String? accountId;
 
   const ZaloGroup({
     required this.id,
@@ -45,6 +46,7 @@ class ZaloGroup {
     required this.role,
     this.status = 'Hoạt động',
     this.avatarUrl = '',
+    this.accountId,
   });
 }
 

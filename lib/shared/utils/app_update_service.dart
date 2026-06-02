@@ -94,57 +94,26 @@ class ReleaseAsset {
   }
 }
 
-/// Service kiểm tra và tải bản cập nhật từ GitHub Releases.
+/// Service kiểm tra và tải bản cập nhật từ Backblaze B2.
 class AppUpdateService {
-  static const String _owner = 'LittleKai';
-  static const String _repo = 'alpha-crm-app';
-  static const String _apiBase = 'https://api.github.com';
+  static const String _b2VersionUrl =
+      'https://cdn.giaiphapsangtao.com/file/alpha-studio/crm-app/version.json';
 
-  /// Lấy thông tin bản release mới nhất từ GitHub.
+  /// Lấy thông tin bản release mới nhất từ Backblaze B2.
   static Future<AppReleaseInfo?> getLatestRelease() async {
     try {
-      final url = Uri.parse('$_apiBase/repos/$_owner/$_repo/releases/latest');
-      final response = await http.get(url, headers: {
-        'Accept': 'application/vnd.github.v3+json',
-      }).timeout(const Duration(seconds: 15));
+      final url = Uri.parse(_b2VersionUrl);
+      final response = await http.get(url).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final json = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return AppReleaseInfo.fromJson(json);
       }
 
-      // Nếu chưa có release nào (404), thử lấy từ danh sách releases
-      if (response.statusCode == 404) {
-        return await _getLatestFromList();
-      }
-
-      print('[AppUpdateService] GitHub API returned ${response.statusCode}');
+      print('[AppUpdateService] B2 API returned ${response.statusCode}');
       return null;
     } catch (e) {
-      print('[AppUpdateService] Error checking for updates: $e');
-      return null;
-    }
-  }
-
-  /// Fallback: lấy release đầu tiên từ danh sách.
-  static Future<AppReleaseInfo?> _getLatestFromList() async {
-    try {
-      final url = Uri.parse(
-        '$_apiBase/repos/$_owner/$_repo/releases?per_page=1',
-      );
-      final response = await http.get(url, headers: {
-        'Accept': 'application/vnd.github.v3+json',
-      }).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final list = jsonDecode(response.body) as List<dynamic>;
-        if (list.isNotEmpty) {
-          return AppReleaseInfo.fromJson(list.first as Map<String, dynamic>);
-        }
-      }
-      return null;
-    } catch (e) {
-      print('[AppUpdateService] Error fetching release list: $e');
+      print('[AppUpdateService] Error checking for updates from B2: $e');
       return null;
     }
   }
@@ -254,7 +223,7 @@ class AppUpdateService {
 
   /// Mở trang releases trên trình duyệt.
   static Future<void> openReleasePage() async {
-    final url = Uri.parse('https://github.com/$_owner/$_repo/releases');
+    final url = Uri.parse('https://giaiphapsangtao.com/studio/crm/subscription');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }

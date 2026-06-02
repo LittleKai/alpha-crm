@@ -148,11 +148,12 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         final rawGroups = response['groups'] as List<dynamic>;
         final loadedGroups = rawGroups.map((g) {
           return ZaloGroup(
-            id: g['groupId']?.toString() ?? '',
+            id: g['id']?.toString() ?? '',
             name: g['name']?.toString() ?? '',
-            memberCount: g['totalMember'] as int? ?? 0,
+            memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
             role: g['role']?.toString() ?? 'member',
             avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
+            accountId: g['accountId']?.toString(),
           );
         }).toList();
         state = state.copyWith(groups: loadedGroups);

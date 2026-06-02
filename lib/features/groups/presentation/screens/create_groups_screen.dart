@@ -28,6 +28,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
   final _searchController = TextEditingController();
   final _minDelayController = TextEditingController(text: '5');
   final _maxDelayController = TextEditingController(text: '10');
+  String _phoneFilter = 'all';
 
   @override
   void initState() {
@@ -68,9 +69,18 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
 
     final filteredFriends = state.friends.where((f) {
       final q = state.searchQuery.toLowerCase();
-      return q.isEmpty ||
+      final matchesSearch = q.isEmpty ||
           f.name.toLowerCase().contains(q) ||
           f.phone.contains(q);
+
+      if (!matchesSearch) return false;
+
+      if (_phoneFilter == 'has_phone') {
+        return f.phone.isNotEmpty;
+      } else if (_phoneFilter == 'no_phone') {
+        return f.phone.isEmpty;
+      }
+      return true;
     }).toList();
 
     return Scaffold(
@@ -353,6 +363,39 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                     onChanged: notifier.setSearchQuery,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.s),
+                SizedBox(
+                  width: 140,
+                  height: 40,
+                  child: DropdownButtonFormField<String>(
+                    value: _phoneFilter,
+                    style: AppTextStyles.bodyMedium,
+                    decoration: const InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.s),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text('Tất cả bạn bè'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'has_phone',
+                        child: Text('Có SĐT'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'no_phone',
+                        child: Text('Không SĐT'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _phoneFilter = val;
+                        });
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -422,15 +465,17 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                             ),
                           ],
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(left: 36.0),
-                          child: Text(
-                            friend.phone.isNotEmpty ? friend.phone : friend.id,
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ),
+                        subtitle: friend.phone.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(left: 36.0),
+                                child: Text(
+                                  friend.phone,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              )
+                            : null,
                         value: isChecked,
                         enabled: !state.isRunning,
                         onChanged: (val) => notifier.toggleFriend(friend.id),
