@@ -80,7 +80,7 @@ class ChatbotLogRecord {
           DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
           DateTime.now(),
       status: (json['status'] ?? '').toString() == 'succeeded'
-          ? 'Thanh cong'
+          ? 'Thành công'
           : (json['status'] ?? '').toString(),
     );
   }
@@ -248,7 +248,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       await loadRules();
     } else {
       state = state.copyWith(
-        errorMessage: (result['message'] ?? 'Tao kich ban that bai.')
+        errorMessage: (result['message'] ?? 'Tạo kịch bản thất bại.')
             .toString(),
       );
     }
@@ -284,7 +284,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     });
     if (response['success'] != true) {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Luu cau hinh that bai.')
+        errorMessage: (response['message'] ?? 'Lưu cấu hình thất bại.')
             .toString(),
       );
     }

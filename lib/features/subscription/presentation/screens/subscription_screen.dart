@@ -22,8 +22,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     });
 
     String productId = 'crm_ai_pack_100';
-    if (amount == 500) productId = 'crm_ai_pack_500';
-    if (amount == 1000) productId = 'crm_ai_pack_1000';
+    if (amount == 1000) productId = 'crm_ai_pack_500';
+    if (amount == 2000) productId = 'crm_ai_pack_1000';
 
     // Gọi API nạp thêm gói AI qua cổng thanh toán thực tế của Phase 1
     final response = await CrmCloudApi.post('/crm/billing/checkout', {
@@ -196,7 +196,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 16),
-            _buildPlanDetailRow('Mức Giá:', '200,000 VND / tháng (hoặc 210 credits)'),
+            _buildPlanDetailRow('Mức Giá:', '500,000 VND / tháng (hoặc 525 credits)'),
             _buildPlanDetailRow('Thời Hạn:', 'Hằng tháng (Gia hạn thủ công mặc định)'),
             _buildPlanDetailRow('Trạng Thái Hệ Thống:', isExpired ? 'Chế độ Đọc-Chỉ-Xem (Read-Only) đang kích hoạt' : 'Hoạt động đầy đủ tính năng'),
             const SizedBox(height: 24),
@@ -211,7 +211,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: const Text('Gia Hạn Dịch Vụ'),
-                                content: const Text('Hệ thống sẽ trừ 210 Credits từ số dư tài khoản của bạn để gia hạn gói CRM 1 tháng. Bạn có muốn tiếp tục?'),
+                                content: const Text('Hệ thống sẽ trừ 525 Credits từ số dư tài khoản của bạn để gia hạn gói CRM 1 tháng. Bạn có muốn tiếp tục?'),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context),
@@ -236,7 +236,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     ),
                     child: _isProcessing
                         ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Gia Hạn Bằng Credits (210đ)'),
+                        : const Text('Gia Hạn Bằng Credits (525đ)'),
                   ),
                 ),
               ],
@@ -350,9 +350,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
   Widget _buildAiTopupPackages() {
     final packages = [
-      {'amount': 100, 'price': 50, 'badge': 'Tiết kiệm'},
-      {'amount': 500, 'price': 200, 'badge': 'Phổ biến'},
-      {'amount': 1000, 'price': 350, 'badge': 'Ưu đãi lớn'},
+      {'amount': 200, 'price': 50, 'badge': 'Tiết kiệm'},
+      {'amount': 1000, 'price': 200, 'badge': 'Phổ biến'},
+      {'amount': 2000, 'price': 350, 'badge': 'Ưu đãi lớn'},
     ];
 
     return LayoutBuilder(

@@ -113,7 +113,7 @@ class CrmTasksNotifier extends StateNotifier<CrmTasksState> {
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: (response['message'] ?? 'Khong the tai danh sach task.')
+        errorMessage: (response['message'] ?? 'Không thể tải danh sách công việc.')
             .toString(),
       );
     }
@@ -144,7 +144,7 @@ class CrmTasksNotifier extends StateNotifier<CrmTasksState> {
       await loadTasks();
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Tao task that bai.').toString(),
+        errorMessage: (response['message'] ?? 'Tạo công việc thất bại.').toString(),
       );
     }
   }

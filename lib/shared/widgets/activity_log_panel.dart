@@ -17,7 +17,7 @@ class LogItem {
 
 enum LogType { info, success, warning, error }
 
-class ActivityLogPanel extends StatelessWidget {
+class ActivityLogPanel extends StatefulWidget {
   final List<LogItem> logs;
   final String title;
   final bool isRunning;
@@ -34,9 +34,38 @@ class ActivityLogPanel extends StatelessWidget {
   });
 
   @override
+  State<ActivityLogPanel> createState() => _ActivityLogPanelState();
+}
+
+class _ActivityLogPanelState extends State<ActivityLogPanel> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant ActivityLogPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.logs.length != oldWidget.logs.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
-      height: height,
+      height: widget.height,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: AppSpacing.borderRadiusM,
@@ -53,7 +82,7 @@ class ActivityLogPanel extends StatelessWidget {
             ),
             child: Row(
               children: [
-                if (isRunning) ...[
+                if (widget.isRunning) ...[
                   const SizedBox(
                     width: 14,
                     height: 14,
@@ -67,21 +96,21 @@ class ActivityLogPanel extends StatelessWidget {
                   const SizedBox(width: AppSpacing.s),
                 ],
                 Text(
-                  title,
+                  widget.title,
                   style: AppTextStyles.label.copyWith(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const Spacer(),
-                if (onClear != null && logs.isNotEmpty)
+                if (widget.onClear != null && widget.logs.isNotEmpty)
                   IconButton(
                     icon: const Icon(
                       Icons.delete_outline,
                       size: 16,
                       color: AppColors.textMuted,
                     ),
-                    onPressed: onClear,
+                    onPressed: widget.onClear,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     tooltip: 'Xóa nhật ký',
@@ -92,7 +121,7 @@ class ActivityLogPanel extends StatelessWidget {
           const Divider(height: 1, color: AppColors.borderSoft),
           // Log List
           Expanded(
-            child: logs.isEmpty
+            child: widget.logs.isEmpty
                 ? Center(
                     child: Text(
                       'Chưa có hoạt động nào được ghi nhận.',
@@ -102,11 +131,12 @@ class ActivityLogPanel extends StatelessWidget {
                     ),
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(AppSpacing.m),
-                    itemCount: logs.length,
+                    itemCount: widget.logs.length,
                     itemBuilder: (context, index) {
-                      // Reverse order to show newest logs at the top
-                      final log = logs[logs.length - 1 - index];
+                      // Chronological order (oldest at top, newest at bottom)
+                      final log = widget.logs[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.s),
                         child: Row(

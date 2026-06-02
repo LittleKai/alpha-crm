@@ -33,6 +33,7 @@ class ZaloIntegrationState {
   final String? lastEventAt;
   final String? errorText;
   final List<ZaloConnectedAccount> accounts;
+  final String? agentError;
 
   const ZaloIntegrationState({
     this.isLoading = false,
@@ -46,6 +47,7 @@ class ZaloIntegrationState {
     this.lastEventAt,
     this.errorText,
     this.accounts = const [],
+    this.agentError,
   });
 
   ZaloIntegrationState copyWith({
@@ -60,6 +62,7 @@ class ZaloIntegrationState {
     String? lastEventAt,
     String? errorText,
     List<ZaloConnectedAccount>? accounts,
+    String? agentError,
   }) {
     return ZaloIntegrationState(
       isLoading: isLoading ?? this.isLoading,
@@ -73,6 +76,7 @@ class ZaloIntegrationState {
       lastEventAt: lastEventAt ?? this.lastEventAt,
       errorText: errorText,
       accounts: accounts ?? this.accounts,
+      agentError: agentError,
     );
   }
 }
@@ -124,19 +128,24 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
       if (health['status'] == 'ok') {
         final status = await api.getZaloStatus();
         final accResponse = await api.fetchAccounts();
+        final agentErr = health['agent']?['error']?.toString();
 
         List<ZaloConnectedAccount> activeAccounts = [];
         if (accResponse['success'] == true && accResponse['accounts'] != null) {
           final List<dynamic> rawAccs = accResponse['accounts'];
-          activeAccounts = rawAccs.map((item) {
-            return ZaloConnectedAccount(
-              id: item['id']?.toString() ?? '',
-              label: item['label']?.toString() ?? 'Tài khoản',
-              connected: item['connected'] == true,
-              listenerRunning: item['listenerRunning'] == true,
-              avatarUrl: sanitizeImageUrl(item['avatar']?.toString() ?? ''),
-            );
-          }).toList();
+          final seenIds = <String>{};
+          activeAccounts = rawAccs
+              .map((item) {
+                return ZaloConnectedAccount(
+                  id: item['id']?.toString() ?? '',
+                  label: item['label']?.toString() ?? 'Tài khoản',
+                  connected: item['connected'] == true,
+                  listenerRunning: item['listenerRunning'] == true,
+                  avatarUrl: sanitizeImageUrl(item['avatar']?.toString() ?? ''),
+                );
+              })
+              .where((acc) => seenIds.add(acc.id))
+              .toList();
         }
 
         state = state.copyWith(
@@ -150,6 +159,7 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           listenerRunning: status['listenerRunning'] == true,
           lastEventAt: status['lastEventAt']?.toString(),
           accounts: activeAccounts,
+          agentError: agentErr,
         );
       } else {
         debugPrint('[ZaloIntegrationNotifier] Health check returned non-ok status: $health');
@@ -159,6 +169,7 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           isConnected: false,
           errorText: health['error']?.toString() ?? 'Không thể kết nối tới backend.',
           accounts: const [],
+          agentError: null,
         );
       }
     } catch (e, stack) {
@@ -169,6 +180,7 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
         isConnected: false,
         errorText: 'Lỗi kết nối: ${e.toString()}',
         accounts: const [],
+        agentError: null,
       );
     }
   }

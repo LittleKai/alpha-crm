@@ -208,7 +208,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       state = state.copyWith(groups: groups);
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Khong the tai nhom.').toString(),
+        errorMessage: (response['message'] ?? 'Không thể tải nhóm.').toString(),
       );
     }
   }
@@ -234,7 +234,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       isWorking: false,
       errorMessage: response['success'] == true
           ? null
-          : (response['message'] ?? 'Dong bo nhom that bai.').toString(),
+          : (response['message'] ?? 'Đồng bộ nhóm thất bại.').toString(),
     );
   }
 
@@ -284,7 +284,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       await loadInsights();
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Tom tat nhom that bai.')
+        errorMessage: (response['message'] ?? 'Tóm tắt nhóm thất bại.')
             .toString(),
       );
     }

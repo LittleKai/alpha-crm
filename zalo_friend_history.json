@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fh_1780422630390",
+    "targetName": "Nguyễn Anh Đức",
+    "targetPhone": "Quét từ nhóm",
+    "accountLabel": "Kai (709694992560717870)",
+    "timestamp": "03/06/2026 00:50:30",
+    "status": "Thất bại",
+    "message": "Compliance check failed: Quiet hours active (21:00–08:00). Sending is paused. [Risk: medium]"
+  },
+  {
+    "id": "fh_1780422575435",
+    "targetName": "Nguyễn Anh Đức",
+    "targetPhone": "0933805525",
+    "accountLabel": "Kai (709694992560717870)",
+    "timestamp": "03/06/2026 00:49:35",
+    "status": "Thất bại",
+    "message": "Compliance check failed: Quiet hours active (21:00–08:00). Sending is paused. [Risk: medium]"
+  }
+]

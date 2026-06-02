@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +8,14 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../mock/mock_campaigns.dart';
+import '../../../../shared/auth/crm_auth_token_store.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_tabs.dart';
+import '../../../auth/providers/crm_auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -89,8 +94,80 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildSubscriptionWarning(DashboardState state) {
     final sub = state.overview?['subscription'];
     final isActive = sub != null && sub['active'] == true;
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final hasDeviceLimitError = zaloState.agentError != null &&
+        (zaloState.agentError!.contains('giới hạn thiết bị') ||
+         zaloState.agentError!.contains('thiết bị cũ') ||
+         zaloState.agentError!.contains('thiết bị hoạt động') ||
+         zaloState.agentError!.contains('device limit') ||
+         zaloState.agentError!.contains('limit exceeded'));
 
-    if (isActive) return const SizedBox.shrink();
+    if (isActive && !hasDeviceLimitError) return const SizedBox.shrink();
+
+    final authState = ref.watch(crmAuthProvider);
+
+    if (hasDeviceLimitError) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: AppColors.warningSoft,
+          borderRadius: AppSpacing.borderRadiusM,
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 28),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Phát hiện Zalo Bot đang hoạt động trên một thiết bị khác!',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.warningText,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Gói cước Alpha CRM của bạn đã được gia hạn thành công. Tuy nhiên, hệ thống ghi nhận thiết bị khác đang chiếm quyền hoạt động của tài khoản này.\n'
+                    'Để kích hoạt Zalo bot trên thiết bị này, vui lòng thoát ứng dụng hiện tại, truy cập Bảng quản trị trên Web để hủy liên kết thiết bị cũ, sau đó khởi động lại ứng dụng.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.warningText.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.m),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppButton(
+                  text: 'Thoát ứng dụng',
+                  variant: AppButtonVariant.destructive,
+                  height: 32,
+                  onPressed: () {
+                    exit(0);
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                AppButton(
+                  text: 'Kiểm tra lại',
+                  variant: AppButtonVariant.outline,
+                  height: 32,
+                  onPressed: () async {
+                    await ref.read(zaloIntegrationProvider.notifier).checkConnection();
+                    await ref.read(dashboardProvider.notifier).loadDashboard();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
@@ -104,15 +181,64 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const Icon(Icons.warning_amber_rounded, color: AppColors.error),
           const SizedBox(width: AppSpacing.s),
           Expanded(
-            child: Text(
-              sub == null
-                  ? 'Bạn chưa đăng ký gói dịch vụ Alpha CRM. Vui lòng đăng ký để sử dụng đầy đủ các tính năng.'
-                  : 'Gói đăng ký Alpha CRM của bạn đã hết hạn. Hãy gia hạn gói dịch vụ để tiếp tục gửi tin.',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.errorText,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sub == null
+                      ? 'Bạn chưa đăng ký gói dịch vụ Alpha CRM. Vui lòng đăng ký để sử dụng đầy đủ các tính năng.'
+                      : 'Gói đăng ký Alpha CRM của bạn đã hết hạn. Hãy gia hạn gói dịch vụ để tiếp tục gửi tin.',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.errorText,
+                  ),
+                ),
+                if (sub != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Nếu bạn vừa gia hạn trên thiết bị khác hoặc Web, vui lòng bấm nút "Kiểm tra lại" hoặc khởi động lại ứng dụng để kích hoạt Zalo bot ngay.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.errorText.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
+          if (sub != null) ...[
+            const SizedBox(width: AppSpacing.m),
+            AppButton(
+              text: 'Kiểm tra lại',
+              variant: AppButtonVariant.outline,
+              height: 32,
+              onPressed: () async {
+                final authNotifier = ref.read(crmAuthProvider.notifier);
+                await authNotifier.refreshSubscription();
+
+                // Rewrite local token file to trigger the Zalo bot File Watcher instantly!
+                if (authState.token != null) {
+                  await CrmAuthTokenStore.saveToken(authState.token!);
+                }
+
+                // Reload dashboard data
+                await ref.read(dashboardProvider.notifier).loadDashboard();
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, color: Colors.white),
+                          SizedBox(width: 8),
+                          Expanded(child: Text('Đã cập nhật trạng thái gói cước và đánh thức Zalo Bot thành công!')),
+                        ],
+                      ),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -130,25 +256,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         : 0;
     final metrics = [
       _OperationMetric(
-        label: 'Task qua han',
+        label: 'Công việc quá hạn',
         value: (taskStats['overdue'] ?? 0).toString(),
         icon: Icons.warning_amber_outlined,
         color: AppColors.error,
       ),
       _OperationMetric(
-        label: 'Task hom nay',
+        label: 'Công việc hôm nay',
         value: (taskStats['dueToday'] ?? 0).toString(),
         icon: Icons.today_outlined,
         color: AppColors.warning,
       ),
       _OperationMetric(
-        label: 'Bot replies',
+        label: 'Phản hồi của Bot',
         value: chatbotTotal.toString(),
         icon: Icons.smart_toy_outlined,
         color: AppColors.primary,
       ),
       _OperationMetric(
-        label: 'Nhom managed',
+        label: 'Nhóm quản lý',
         value: (groupStats['managedGroups'] ?? 0).toString(),
         icon: Icons.groups_2_outlined,
         color: AppColors.success,
@@ -657,56 +783,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildGuideStep(GuideStepItem step) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.go(step.route),
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: const BoxDecoration(
-              color: AppColors.primarySoft,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              step.stepNumber,
-              style: AppTextStyles.captionBold.copyWith(
-                color: AppColors.primary,
-                fontSize: 11,
-              ),
-            ),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.m),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            borderRadius: AppSpacing.borderRadiusM,
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  step.title,
-                  style: AppTextStyles.cardTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: AppColors.primarySoft,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  step.description,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
+                alignment: Alignment.center,
+                child: Text(
+                  step.stepNumber,
+                  style: AppTextStyles.captionBold.copyWith(
+                    color: AppColors.primary,
+                    fontSize: 11,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.title,
+                      style: AppTextStyles.cardTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      step.description,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

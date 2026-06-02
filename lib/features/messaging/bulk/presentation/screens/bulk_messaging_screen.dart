@@ -13,6 +13,10 @@ import '../../../../../shared/widgets/app_search_field.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/bulk_messaging_provider.dart';
+import '../../../../groups/manage/providers/managed_groups_provider.dart';
+import '../../../../customers/providers/customers_provider.dart';
+import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../../../../mock/mock_contacts.dart';
 
 class BulkMessagingScreen extends ConsumerStatefulWidget {
   const BulkMessagingScreen({super.key});
@@ -96,6 +100,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
                   final useColumns = constraints.maxWidth >= 1100;
                   final children = [
                     _TargetPanel(
+                      selectedTab: state.selectedTab,
                       searchController: _searchController,
                       recipientsController: _recipientsController,
                       isSending: state.isSending,
@@ -103,6 +108,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
                       onPlaceholder: _showPlaceholder,
                     ),
                     _ConfigPanel(
+                      state: state,
                       campaignNameController: _campaignNameController,
                       messageController: _messageController,
                       minDelayController: _minDelayController,
@@ -163,11 +169,16 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(bulkMessagingProvider);
+    final notifier = ref.read(bulkMessagingProvider.notifier);
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final accounts = state.accounts;
+
     return Row(
       children: [
         const Icon(Icons.near_me_outlined, color: AppColors.primary, size: 32),
@@ -185,6 +196,62 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
+        if (accounts.isNotEmpty)
+          SizedBox(
+            width: 240,
+            child: AppSelectField<String>(
+              value: accounts.any((acc) => acc.id == state.selectedAccount?.id)
+                  ? state.selectedAccount?.id
+                  : (accounts.isNotEmpty ? accounts.first.id : null),
+              hintText: 'Chọn tài khoản Zalo...',
+              items: accounts.map((acc) {
+                final cleanLabel = acc.name.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final matchingConnected = zaloState.accounts.firstWhere(
+                  (a) => a.id == acc.id,
+                  orElse: () => ZaloConnectedAccount(
+                    id: acc.id,
+                    label: acc.name,
+                    connected: acc.isConnected,
+                    listenerRunning: false,
+                  ),
+                );
+                final avatarUrl = matchingConnected.avatarUrl;
+
+                return DropdownMenuItem(
+                  value: acc.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: state.isSending || state.isPolling
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        final acc = state.accounts.firstWhere((a) => a.id == val);
+                        notifier.selectAccount(acc);
+                      }
+                    },
+            ),
+          ),
       ],
     );
   }
@@ -234,7 +301,8 @@ class _CampaignTabs extends StatelessWidget {
   }
 }
 
-class _TargetPanel extends StatelessWidget {
+class _TargetPanel extends ConsumerWidget {
+  final int selectedTab;
   final TextEditingController searchController;
   final TextEditingController recipientsController;
   final bool isSending;
@@ -242,6 +310,7 @@ class _TargetPanel extends StatelessWidget {
   final VoidCallback onPlaceholder;
 
   const _TargetPanel({
+    required this.selectedTab,
     required this.searchController,
     required this.recipientsController,
     required this.isSending,
@@ -250,7 +319,151 @@ class _TargetPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    Widget? filterField;
+    Widget? actionButton;
+
+    if (selectedTab == 0) {
+      filterField = const SizedBox(
+        width: 180,
+        child: Text(
+          'Chế độ: Nhập SĐT thủ công',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+      actionButton = AppButton(
+        text: 'Nhập từ file (.txt)',
+        icon: Icons.description_outlined,
+        variant: AppButtonVariant.outline,
+        onPressed: isSending ? null : onImport,
+      );
+    } else if (selectedTab == 1) {
+      final groupsState = ref.watch(managedGroupsProvider);
+      final groupItems = groupsState.groups
+          .map((g) => DropdownMenuItem<ManagedZaloGroup>(
+                value: g,
+                child: Text(
+                  '${g.name} (${g.memberCount} thành viên)',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ))
+          .toList();
+
+      filterField = SizedBox(
+        width: 200,
+        child: AppSelectField<ManagedZaloGroup>(
+          hintText: 'Chọn nhóm Zalo',
+          items: groupItems,
+          onChanged: (group) {
+            if (group != null) {
+              recipientsController.text = group.groupId;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Đã chọn nhóm: ${group.name}'),
+                ),
+              );
+            }
+          },
+        ),
+      );
+      actionButton = AppButton(
+        text: 'Tải lại nhóm',
+        icon: Icons.sync,
+        variant: AppButtonVariant.outline,
+        onPressed: () => ref.read(managedGroupsProvider.notifier).refresh(),
+      );
+    } else if (selectedTab == 2) {
+      final customersState = ref.watch(customersProvider);
+      final contactItems = customersState.contacts
+          .map((c) => DropdownMenuItem<Contact>(
+                value: c,
+                child: Text(
+                  '${c.name} (${c.phone})',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ))
+          .toList();
+
+      filterField = SizedBox(
+        width: 200,
+        child: AppSelectField<Contact>(
+          hintText: 'Chọn liên hệ',
+          items: contactItems,
+          onChanged: (contact) {
+            if (contact != null) {
+              final current = recipientsController.text.trim();
+              if (current.isEmpty) {
+                recipientsController.text = contact.phone;
+              } else {
+                final lines = current.split('\n').map((l) => l.trim()).toList();
+                if (!lines.contains(contact.phone)) {
+                  recipientsController.text = '$current\n${contact.phone}';
+                }
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Đã thêm liên hệ: ${contact.name}'),
+                ),
+              );
+            }
+          },
+        ),
+      );
+      actionButton = AppButton(
+        text: 'Tải lại danh bạ',
+        icon: Icons.sync,
+        variant: AppButtonVariant.outline,
+        onPressed: () => ref.read(customersProvider.notifier).loadContacts(),
+      );
+    } else if (selectedTab == 3) {
+      final customersState = ref.watch(customersProvider);
+      final uniqueTags = customersState.contacts
+          .map((c) => c.tag)
+          .where((tag) => tag.isNotEmpty && tag != 'Tất cả')
+          .toSet()
+          .toList();
+      final tagItems = uniqueTags
+          .map((tag) => DropdownMenuItem<String>(
+                value: tag,
+                child: Text(tag, overflow: TextOverflow.ellipsis),
+              ))
+          .toList();
+
+      filterField = SizedBox(
+        width: 200,
+        child: AppSelectField<String>(
+          hintText: 'Chọn nhãn Zalo',
+          items: tagItems,
+          onChanged: (tag) {
+            if (tag != null) {
+              final phones = customersState.contacts
+                  .where((c) => c.tag == tag && c.phone.isNotEmpty)
+                  .map((c) => c.phone)
+                  .toList();
+              recipientsController.text = phones.join('\n');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Đã thêm ${phones.length} khách hàng có nhãn "$tag"',
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+      );
+      actionButton = AppButton(
+        text: 'Tải lại danh bạ',
+        icon: Icons.sync,
+        variant: AppButtonVariant.outline,
+        onPressed: () => ref.read(customersProvider.notifier).loadContacts(),
+      );
+    }
+
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -287,21 +500,9 @@ class _TargetPanel extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
               children: [
-                SizedBox(
-                  width: 180,
-                  child: AppSelectField<String>(
-                    hintText: 'Chọn nhóm',
-                    items: const [],
-                    onChanged: null,
-                  ),
-                ),
+                if (filterField != null) filterField,
                 const Spacer(),
-                AppButton(
-                  text: 'Nhập từ file (.txt)',
-                  icon: Icons.description_outlined,
-                  variant: AppButtonVariant.outline,
-                  onPressed: isSending ? null : onImport,
-                ),
+                if (actionButton != null) actionButton,
               ],
             ),
           ),
@@ -401,6 +602,7 @@ class _RecipientPreview extends StatelessWidget {
 }
 
 class _ConfigPanel extends StatelessWidget {
+  final BulkMessagingState state;
   final TextEditingController campaignNameController;
   final TextEditingController messageController;
   final TextEditingController minDelayController;
@@ -409,6 +611,7 @@ class _ConfigPanel extends StatelessWidget {
   final VoidCallback onPlaceholder;
 
   const _ConfigPanel({
+    required this.state,
     required this.campaignNameController,
     required this.messageController,
     required this.minDelayController,
@@ -470,18 +673,17 @@ class _ConfigPanel extends StatelessWidget {
                       hintText: 'VD: Chúc mừng sinh nhật khách hàng tháng 5',
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text(
-                    'Chọn tài khoản Zalo gửi tin nhắn',
-                    style: AppTextStyles.label,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const AppAlert(
-                    message:
-                        'Chưa có tài khoản nào kết nối. Vui lòng vào Cài đặt để đăng nhập.',
-                    variant: AppAlertVariant.error,
-                  ),
-                  const SizedBox(height: AppSpacing.m),
+                  if (state.accounts.isEmpty) ...[
+                    const SizedBox(height: AppSpacing.m),
+                    const AppAlert(
+                      message:
+                          'Chưa có tài khoản nào kết nối. Vui lòng vào Cài đặt để đăng nhập.',
+                      variant: AppAlertVariant.error,
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                  ] else ...[
+                    const SizedBox(height: AppSpacing.m),
+                  ],
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final stack = constraints.maxWidth < 420;

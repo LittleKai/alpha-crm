@@ -1,5 +1,6 @@
 import os from 'os';
-import { getAgentCredentials, getMachineFingerprint, saveAgentCredentials, getCrmToken } from './agent-identity.js';
+import fs from 'fs';
+import { getAgentCredentials, getMachineFingerprint, saveAgentCredentials, getCrmToken, getCrmTokenPath } from './agent-identity.js';
 import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, sendHeartbeat, registerDevice } from './cloud-api.js';
 import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
@@ -10,6 +11,9 @@ let running = false;
 let pollingIntervalTimer: NodeJS.Timeout | null = null;
 let heartbeatIntervalTimer: NodeJS.Timeout | null = null;
 let autoRegisterTimeoutTimer: NodeJS.Timeout | null = null;
+let autoRegisterFailCount = 0;
+let tokenWatcherActive = false;
+export let lastRegistrationError: string | null = null;
 
 // Track polling details
 let pollErrorCount = 0;
@@ -49,6 +53,7 @@ export function startAgentRunner(): void {
   console.log('=========================================\n');
 
   running = true;
+  lastRegistrationError = null; // Clear error if credentials load successfully
   setInboundMessageHandler((event) => handleInboundMessageEvent(credentials.deviceId, credentials.agentSecret, event));
 
   // 1. Start heartbeat loop (every 30s)
@@ -63,10 +68,39 @@ export function startAgentRunner(): void {
 }
 
 /**
+ * Watches the crm_token.json file for changes to wake up from sleep instantly.
+ */
+function watchCrmToken(tokenPath: string): void {
+  if (tokenWatcherActive) return;
+  tokenWatcherActive = true;
+  
+  fs.watchFile(tokenPath, { interval: 5000 }, (curr, prev) => {
+    if (curr.mtimeMs !== prev.mtimeMs) {
+      console.log('[agent-runner] 🔄 Phát hiện file crm_token.json thay đổi (Đăng nhập mới hoặc cập nhật gói cước). Đang kích hoạt kiểm tra đăng ký ngay lập tức...');
+      
+      // If there is an active auto-register timeout timer, cancel it
+      if (autoRegisterTimeoutTimer) {
+        clearTimeout(autoRegisterTimeoutTimer);
+        autoRegisterTimeoutTimer = null;
+      }
+      
+      // Reset fail count and try registering immediately
+      autoRegisterFailCount = 0;
+      attemptAutoRegistration();
+    }
+  });
+}
+
+/**
  * Attempts to automatically register the device using active CRM token.
- * Retries every 10 seconds under the hood if token is missing.
+ * Retries under the hood if token is missing or registration fails.
  */
 async function attemptAutoRegistration(): Promise<void> {
+  const tokenPath = getCrmTokenPath();
+  if (tokenPath) {
+    watchCrmToken(tokenPath);
+  }
+
   try {
     const token = getCrmToken();
     if (token) {
@@ -79,6 +113,8 @@ async function attemptAutoRegistration(): Promise<void> {
       const result = await registerDevice(token, displayName, fingerprint);
       console.log(`[agent-runner] ✅ Tự động đăng ký thành công! Device ID: ${result.deviceId}`);
       
+      lastRegistrationError = null; // Clear on success
+      autoRegisterFailCount = 0;
       saveAgentCredentials(result.deviceId, result.agentSecret);
       
       // Clear auto-register check timer if scheduled
@@ -92,15 +128,34 @@ async function attemptAutoRegistration(): Promise<void> {
       return;
     }
   } catch (err: any) {
+    autoRegisterFailCount++;
+    lastRegistrationError = err.message; // Save registration failure error
     console.error('[agent-runner] ❌ Tự động đăng ký thiết bị thất bại:', err.message);
+
+    // If the error is due to inactive/expired subscription, suspend retries for 30 minutes to prevent spamming
+    if (err.message.includes('Yêu cầu gói đăng ký') || err.message.includes('hết hạn')) {
+      console.log('[agent-runner] ⏸️ Phát hiện tài khoản chưa kích hoạt hoặc đã hết hạn gói cước CRM.');
+      console.log('[agent-runner] Tạm ngưng tự động đăng ký để tránh spam Cloud API. Hệ thống sẽ thử lại sau mỗi 30 phút.');
+
+      if (!autoRegisterTimeoutTimer && running === false) {
+        autoRegisterTimeoutTimer = setTimeout(() => {
+          autoRegisterTimeoutTimer = null;
+          attemptAutoRegistration();
+        }, 30 * 60 * 1000); // 30 minutes
+      }
+      return;
+    }
   }
 
-  // If we couldn't find a token or registration failed, schedule next check in 10 seconds
+  // Calculate exponential backoff retry delay (10s, 20s, 40s, 80s, up to 5 minutes maximum)
+  const backoffDelayMs = Math.min(10000 * Math.pow(2, Math.min(autoRegisterFailCount - 1, 5)), 5 * 60 * 1000);
+
   if (!autoRegisterTimeoutTimer && running === false) {
     autoRegisterTimeoutTimer = setTimeout(() => {
       autoRegisterTimeoutTimer = null;
       attemptAutoRegistration();
-    }, 10000);
+    }, backoffDelayMs);
+    console.log(`[agent-runner] Sẽ thử tự động đăng ký lại sau ${backoffDelayMs / 1000} giây (Số lần thất bại liên tiếp: ${autoRegisterFailCount})`);
   }
 }
 

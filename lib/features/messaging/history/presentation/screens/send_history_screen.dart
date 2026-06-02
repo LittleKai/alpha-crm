@@ -17,6 +17,7 @@ import '../../../../../shared/widgets/app_search_field.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
 import '../../providers/send_history_provider.dart';
+import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class SendHistoryScreen extends ConsumerStatefulWidget {
   const SendHistoryScreen({super.key});
@@ -27,6 +28,7 @@ class SendHistoryScreen extends ConsumerStatefulWidget {
 
 class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
+  String? _selectedAccountId;
 
   @override
   void dispose() {
@@ -40,6 +42,15 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     final notifier = ref.read(sendHistoryProvider.notifier);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
+    // Watch connected accounts
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final connectedAccounts = zaloState.accounts;
+
+    final String selectedId = _selectedAccountId ?? "";
+    final String activeId = (selectedId == "" || connectedAccounts.any((acc) => acc.id == selectedId))
+        ? selectedId
+        : "";
+
     final filteredRecords = _getFilteredRecords(state);
 
     return Scaffold(
@@ -49,7 +60,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
+            _buildHeader(activeId, connectedAccounts),
             const SizedBox(height: AppSpacing.l),
             _buildMetricsGrid(state),
             const SizedBox(height: AppSpacing.l),
@@ -79,7 +90,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     }).toList();
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(String activeId, List<ZaloConnectedAccount> connectedAccounts) {
     return Row(
       children: [
         const Icon(Icons.history_outlined, color: AppColors.primary, size: 32),
@@ -95,6 +106,79 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
               ),
             ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        SizedBox(
+          width: 240,
+          child: AppSelectField<String>(
+            value: activeId,
+            hintText: 'Chọn tài khoản...',
+            items: [
+              DropdownMenuItem(
+                value: "",
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.primarySoft,
+                      child: const Icon(
+                        Icons.group_outlined,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Tất cả tài khoản',
+                        style: AppTextStyles.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...connectedAccounts.map((account) {
+                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final avatarUrl = account.avatarUrl;
+                return DropdownMenuItem(
+                  value: account.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          cleanLabel,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+            onChanged: (val) {
+              setState(() {
+                _selectedAccountId = val;
+              });
+            },
           ),
         ),
       ],

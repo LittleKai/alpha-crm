@@ -212,7 +212,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       AppSelectField<String>(
         value: state.selectedSegmentId,
         items: [
-          const DropdownMenuItem(value: '', child: Text('Tat ca segment')),
+          const DropdownMenuItem(value: '', child: Text('Tất cả segment')),
           ...state.segments.map(
             (segment) =>
                 DropdownMenuItem(value: segment.id, child: Text(segment.name)),
@@ -266,7 +266,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         onPressed: state.contacts.isEmpty ? null : notifier.exportContacts,
       ),
       AppButton(
-        text: 'Luu segment',
+        text: 'Lưu segment',
         icon: Icons.bookmark_add_outlined,
         variant: AppButtonVariant.outline,
         onPressed: () => _showSaveSegmentDialog(notifier),
@@ -435,7 +435,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     await notifier.importContacts(MockContacts.sampleContacts.take(5).toList());
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Da gui batch import len backend.')),
+      const SnackBar(content: Text('Đã gửi loạt nhập khách hàng lên backend.')),
     );
   }
 
@@ -445,18 +445,18 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Luu segment'),
+          title: const Text('Lưu segment'),
           content: TextField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: 'Ten segment',
+              labelText: 'Tên segment',
               border: OutlineInputBorder(),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Huy'),
+              child: const Text('Hủy'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -465,7 +465,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 );
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
               },
-              child: const Text('Luu'),
+              child: const Text('Lưu'),
             ),
           ],
         );

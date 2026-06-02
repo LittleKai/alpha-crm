@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../data/bulk_campaign_repository.dart';
 
 class BulkMessagingState {
@@ -112,7 +113,50 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   Timer? _pollingTimer;
 
   BulkMessagingNotifier(this._ref, this._repository)
-    : super(BulkMessagingState.initial());
+      : super(BulkMessagingState.initial()) {
+    // Listen to changes in zaloIntegrationProvider to update our accounts list
+    _ref.listen<ZaloIntegrationState>(zaloIntegrationProvider, (previous, next) {
+      final seenIds = <String>{};
+      final newAccounts = next.accounts
+          .map((acc) => ZaloAccount(
+                id: acc.id,
+                name: acc.label,
+                phone: acc.id,
+                type: 'Cá nhân',
+                isConnected: acc.connected,
+              ))
+          .where((acc) => seenIds.add(acc.id))
+          .toList();
+
+      state = state.copyWith(
+        accounts: newAccounts,
+        selectedAccount: state.selectedAccount == null && newAccounts.isNotEmpty
+            ? newAccounts.firstWhere((a) => a.isConnected, orElse: () => newAccounts.first)
+            : state.selectedAccount,
+      );
+    });
+
+    // Initialize list immediately if accounts are already populated
+    final integrationState = _ref.read(zaloIntegrationProvider);
+    if (integrationState.accounts.isNotEmpty) {
+      final seenIds = <String>{};
+      final initialAccounts = integrationState.accounts
+          .map((acc) => ZaloAccount(
+                id: acc.id,
+                name: acc.label,
+                phone: acc.id,
+                type: 'Cá nhân',
+                isConnected: acc.connected,
+              ))
+          .where((acc) => seenIds.add(acc.id))
+          .toList();
+
+      state = state.copyWith(
+        accounts: initialAccounts,
+        selectedAccount: initialAccounts.firstWhere((a) => a.isConnected, orElse: () => initialAccounts.first),
+      );
+    }
+  }
 
   @override
   void dispose() {

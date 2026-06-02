@@ -20,7 +20,7 @@ import { projectRoot } from './config.js';
 import { Zalo, LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance } from './channels/personal-zca-channel.js';
-import { startAgentRunner } from './agent/agent-runner.js';
+import { startAgentRunner, lastRegistrationError } from './agent/agent-runner.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
 import { startPairingSession } from './agent/cloud-api.js';
 
@@ -139,7 +139,8 @@ const server = createServer(async (req, res) => {
       agent: {
         mode: config.crmAgentMode,
         registered: credentials !== null,
-        deviceId: credentials ? credentials.deviceId : null
+        deviceId: credentials ? credentials.deviceId : null,
+        error: lastRegistrationError || null
       },
       zalo: {
         channel: config.channelMode,

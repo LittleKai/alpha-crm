@@ -198,7 +198,7 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
       await loadSegments();
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Luu segment that bai.')
+        errorMessage: (response['message'] ?? 'Lưu phân khúc thất bại.')
             .toString(),
       );
     }
@@ -353,7 +353,7 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: (response['message'] ?? 'Import khach hang that bai.')
+        errorMessage: (response['message'] ?? 'Nhập khách hàng thất bại.')
             .toString(),
       );
     }
@@ -368,7 +368,7 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
       state = state.copyWith(exportCsv: (data['csv'] ?? '').toString());
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Export that bai.').toString(),
+        errorMessage: (response['message'] ?? 'Xuất dữ liệu thất bại.').toString(),
       );
     }
   }

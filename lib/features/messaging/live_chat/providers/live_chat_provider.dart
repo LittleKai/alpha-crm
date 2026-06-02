@@ -135,7 +135,7 @@ class Conversation {
       threadId: (json['threadId'] ?? '').toString(),
       threadType: (json['threadType'] ?? 'user').toString(),
       customerName: name,
-      customerAvatar: name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+      customerAvatar: (json['avatarUrl'] ?? '').toString(),
       lastMessage: (json['lastMessagePreview'] ?? '').toString(),
       lastMessageTime: _dateFrom(json['lastMessageAt'] ?? json['updatedAt']),
       unreadCount: int.tryParse((json['unreadCount'] ?? 0).toString()) ?? 0,
@@ -170,8 +170,8 @@ class LiveChatState {
 
   factory LiveChatState.initial() {
     return const LiveChatState(
-      selectedAccount: LiveChatAccount(id: '', label: 'Tat ca tai khoan'),
-      accounts: [LiveChatAccount(id: '', label: 'Tat ca tai khoan')],
+      selectedAccount: LiveChatAccount(id: '', label: 'Tất cả tài khoản'),
+      accounts: [LiveChatAccount(id: '', label: 'Tất cả tài khoản')],
       conversations: [],
       selectedConversation: null,
       isLoading: false,
@@ -222,7 +222,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final data = response['data'];
     final rawAccounts = data is Map ? data['accounts'] : null;
     final accounts = <LiveChatAccount>[
-      const LiveChatAccount(id: '', label: 'Tat ca tai khoan'),
+      const LiveChatAccount(id: '', label: 'Tất cả tài khoản'),
       if (rawAccounts is List)
         ...rawAccounts.map((item) {
           final json = Map<String, dynamic>.from(item as Map);
@@ -268,7 +268,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: (response['message'] ?? 'Khong the tai hoi thoai.')
+        errorMessage: (response['message'] ?? 'Không thể tải hội thoại.')
             .toString(),
       );
     }
@@ -333,7 +333,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     } else {
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['message'] ?? 'Gui tin nhan that bai.')
+        errorMessage: (response['message'] ?? 'Gửi tin nhắn thất bại.')
             .toString(),
       );
     }

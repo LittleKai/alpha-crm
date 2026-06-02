@@ -34,11 +34,13 @@ class GuideStepItem {
   final String stepNumber;
   final String title;
   final String description;
+  final String route;
 
   const GuideStepItem({
     required this.stepNumber,
     required this.title,
     required this.description,
+    required this.route,
   });
 }
 
@@ -125,18 +127,21 @@ class MockCampaigns {
       title: 'Kết nối tài khoản Zalo trước',
       description:
           'Vào Cài đặt -> Nhập Proxy nếu có -> Click "Thêm tài khoản Zalo" và quét mã QR trên điện thoại để liên kết.',
+      route: '/settings',
     ),
     GuideStepItem(
       stepNumber: '2',
       title: 'Chuẩn bị danh sách khách hàng',
       description:
           'Import file Excel/CSV chứa dữ liệu khách hàng hoặc nhập SĐT thủ công trực tiếp khi tạo chiến dịch gửi tin.',
+      route: '/customers',
     ),
     GuideStepItem(
       stepNumber: '3',
       title: 'Thiết lập delay gửi tin hợp lý',
       description:
           'Luôn đặt thời gian delay giãn cách từ 30-60 giây giữa mỗi tin nhắn để giữ tài khoản an toàn, chống spam.',
+      route: '/messaging/bulk',
     ),
   ];
 }
@@ -155,6 +160,16 @@ class ZaloAccount {
     required this.type,
     this.isConnected = true,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ZaloAccount &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class SendHistoryRecord {

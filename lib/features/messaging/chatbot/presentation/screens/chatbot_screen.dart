@@ -18,6 +18,7 @@ import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
+import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
   const ChatbotScreen({super.key});
@@ -34,6 +35,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   final TextEditingController _testMessageController = TextEditingController();
   String? _playgroundResponse;
   bool _isPlaying = false;
+  String? _selectedAccountId;
 
   @override
   void dispose() {
@@ -79,7 +81,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Tao kich ban chatbot'),
+          title: const Text('Tạo kịch bản chatbot'),
           content: SizedBox(
             width: 460,
             child: Column(
@@ -88,7 +90,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 TextField(
                   controller: keywordController,
                   decoration: const InputDecoration(
-                    labelText: 'Tu khoa',
+                    labelText: 'Từ khóa',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -98,7 +100,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   minLines: 3,
                   maxLines: 6,
                   decoration: const InputDecoration(
-                    labelText: 'Noi dung phan hoi',
+                    labelText: 'Nội dung phản hồi',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -108,7 +110,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Huy'),
+              child: const Text('Hủy'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -117,7 +119,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     .addRule(keywordController.text, responseController.text);
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
               },
-              child: const Text('Luu'),
+              child: const Text('Lưu'),
             ),
           ],
         );
@@ -127,11 +129,68 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     responseController.dispose();
   }
 
+  Future<void> _showAddKnowledgeDialog(
+      BuildContext context, ChatbotNotifier notifier) async {
+    final docController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Thêm tài liệu/kiến thức mới'),
+          content: SizedBox(
+            width: 400,
+            child: TextField(
+              controller: docController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Nhập nội dung kiến thức hoặc tên tài liệu',
+                hintText: 'VD: Chính sách bảo hành: 1 đổi 1 trong vòng 30 ngày...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final text = docController.text.trim();
+                if (text.isNotEmpty) {
+                  await notifier.addKnowledgeDocument(text);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Đã thêm kiến thức: $text')),
+                    );
+                  }
+                }
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Thêm'),
+            ),
+          ],
+        );
+      },
+    );
+    docController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatbotProvider);
     final notifier = ref.read(chatbotProvider.notifier);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
+
+    // Watch connected accounts
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final connectedAccounts = zaloState.accounts;
+
+    final String selectedId = _selectedAccountId ?? "";
+    final String activeId = (selectedId == "" || connectedAccounts.any((acc) => acc.id == selectedId))
+        ? selectedId
+        : "";
 
     // Sync prompt value once
     if (_promptController.text.isEmpty && state.systemPrompt.isNotEmpty) {
@@ -161,6 +220,80 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ],
           ),
         ),
+        const SizedBox(width: AppSpacing.s),
+        SizedBox(
+          width: 240,
+          child: AppSelectField<String>(
+            value: activeId,
+            hintText: 'Chọn tài khoản...',
+            items: [
+              DropdownMenuItem(
+                value: "",
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.primarySoft,
+                      child: const Icon(
+                        Icons.group_outlined,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Tất cả tài khoản',
+                        style: AppTextStyles.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...connectedAccounts.map((account) {
+                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final avatarUrl = account.avatarUrl;
+                return DropdownMenuItem(
+                  value: account.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          cleanLabel,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+            onChanged: (val) {
+              setState(() {
+                _selectedAccountId = val;
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
         if (state.activeTab == 0)
           AppButton(
             text: 'Tạo kịch bản mới',
@@ -666,19 +799,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ),
               const SizedBox(width: AppSpacing.m),
               AppButton(
-                text: 'Tải lên tài liệu',
-                icon: Icons.cloud_upload_outlined,
+                text: 'Thêm kiến thức',
+                icon: Icons.add_rounded,
                 variant: AppButtonVariant.outline,
-                onPressed: () {
-                  notifier.addKnowledgeDocument('Báo cáo sản phẩm Q3_2026.pdf');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Đã thêm tài liệu kiến thức: Báo cáo sản phẩm Q3_2026.pdf',
-                      ),
-                    ),
-                  );
-                },
+                onPressed: () => _showAddKnowledgeDialog(context, notifier),
               ),
             ],
           ),
