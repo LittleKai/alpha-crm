@@ -93,6 +93,7 @@ function isAllowedTestRecipient(recipientId: unknown): recipientId is string {
 interface SendPayload {
   recipientId: string;
   message: string;
+  accountId?: string;
   threadType?: 'user' | 'group';
   messageType?: 'text' | 'template';
   // Context for compliance — server reads enforcement flags from env config
@@ -690,6 +691,7 @@ const server = createServer(async (req, res) => {
         {
           recipientId,
           message: payload.message || 'Test message from Alpha CRM',
+          accountId: payload.accountId,
           threadType: payload.threadType,
         },
         true, // isTestMode = true
@@ -744,6 +746,7 @@ const server = createServer(async (req, res) => {
         {
           recipientId: payload.recipientId,
           message: payload.message,
+          accountId: payload.accountId,
           threadType: payload.threadType,
           messageType: payload.messageType,
         },

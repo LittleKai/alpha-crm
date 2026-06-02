@@ -22,6 +22,10 @@ class AppRoutes {
   static const String groupsInvite = '/groups/invite';
   static const String groupsCreate = '/groups/create';
   static const String groupsLeave = '/groups/leave';
+  static const String groupsManage = '/groups/manage';
+
+  // Follow-up tasks
+  static const String tasks = '/tasks';
 
   // Subscription and Devices
   static const String subscription = '/subscription';

@@ -11,8 +11,10 @@ import type {
   ZaloFriend,
   ZaloGroupMember,
 } from './types.js';
+import { emitInboundMessage } from './types.js';
 
 let lastEventAt: string | null = null;
+let mockListenerTimer: NodeJS.Timeout | null = null;
 
 export class MockZaloChannel implements ZaloChannel {
   getStatus(): ZaloChannelStatus {
@@ -21,7 +23,7 @@ export class MockZaloChannel implements ZaloChannel {
       mode: 'mock',
       accountType: 'mock',
       accountLabel: 'Mock Channel',
-      listenerRunning: false,
+      listenerRunning: mockListenerTimer !== null,
       lastEventAt,
     };
   }
@@ -45,6 +47,33 @@ export class MockZaloChannel implements ZaloChannel {
       '[MockZaloChannel] Mock webhook event:',
       JSON.stringify(event).slice(0, 200),
     );
+  }
+
+  async startListener(): Promise<void> {
+    if (mockListenerTimer) return;
+    mockListenerTimer = setInterval(() => {
+      lastEventAt = new Date().toISOString();
+      void emitInboundMessage({
+        accountId: 'mock_acc_1',
+        accountLabel: 'Mock Personal Zalo A',
+        threadId: 'mock_live_customer',
+        threadType: 'user',
+        senderId: 'mock_live_customer',
+        senderName: 'Mock Customer',
+        content: 'Minh can tu van them ve bao gia.',
+        messageType: 'text',
+        providerMessageId: `mock_inbound_${Date.now()}`,
+        timestamp: lastEventAt,
+      });
+    }, 45000);
+    console.log('[MockZaloChannel] Mock realtime listener started.');
+  }
+
+  async stopListener(): Promise<void> {
+    if (!mockListenerTimer) return;
+    clearInterval(mockListenerTimer);
+    mockListenerTimer = null;
+    console.log('[MockZaloChannel] Mock realtime listener stopped.');
   }
 
   async getAllGroups(): Promise<any[]> {

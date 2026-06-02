@@ -7,6 +7,13 @@ export interface CommandResponse {
   idempotencyKey?: string;
 }
 
+export interface ManagedGroupResponse {
+  _id: string;
+  accountId: string;
+  groupId: string;
+  name?: string;
+}
+
 export interface PairingResponse {
   sessionId: string;
   pairingCode: string;
@@ -123,6 +130,66 @@ export async function reportCommandResult(
     method: 'POST',
     headers,
     body: JSON.stringify(body)
+  });
+}
+
+/**
+ * Reports intermediate progress of a running command
+ */
+export async function reportCommandProgress(
+  deviceId: string,
+  agentSecret: string,
+  commandId: string,
+  progressData: any
+): Promise<any> {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-agent-device-id': deviceId,
+    'x-agent-secret': agentSecret
+  };
+  const body = {
+    success: true,
+    result: {
+      status: 'running',
+      ...progressData
+    }
+  };
+  return callCloudApi(`/crm/agent/commands/${commandId}/result`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+}
+
+export async function reportInboundMessage(
+  deviceId: string,
+  agentSecret: string,
+  event: any
+): Promise<any> {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-agent-device-id': deviceId,
+    'x-agent-secret': agentSecret
+  };
+  return callCloudApi('/crm/agent/events/message', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(event)
+  });
+}
+
+export async function fetchManagedGroups(
+  deviceId: string,
+  agentSecret: string
+): Promise<ManagedGroupResponse[]> {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-agent-device-id': deviceId,
+    'x-agent-secret': agentSecret
+  };
+  return callCloudApi('/crm/agent/groups/managed', {
+    method: 'GET',
+    headers
   });
 }
 

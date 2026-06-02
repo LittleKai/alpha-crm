@@ -20,6 +20,8 @@ import '../../features/groups/presentation/screens/join_groups_screen_placeholde
 import '../../features/groups/presentation/screens/invite_to_group_screen_placeholder.dart';
 import '../../features/groups/presentation/screens/create_groups_screen_placeholder.dart';
 import '../../features/groups/presentation/screens/leave_groups_screen_placeholder.dart';
+import '../../features/groups/manage/presentation/screens/managed_groups_screen.dart';
+import '../../features/tasks/presentation/screens/crm_tasks_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/auth/presentation/screens/crm_login_screen.dart';
 import '../../features/subscription/presentation/screens/subscription_screen.dart';
@@ -28,14 +30,16 @@ import '../../features/auth/providers/crm_auth_provider.dart';
 
 // GoRouter Riverpod Provider
 final routerProvider = Provider<GoRouter>((ref) {
-  final isAuthenticated = ref.watch(crmAuthProvider.select((s) => s.isAuthenticated));
+  final isAuthenticated = ref.watch(
+    crmAuthProvider.select((s) => s.isAuthenticated),
+  );
   final isLoading = ref.watch(crmAuthProvider.select((s) => s.isLoading));
 
   return GoRouter(
     initialLocation: AppRoutes.dashboard,
     redirect: (context, state) {
       final isLoggingIn = state.uri.path == AppRoutes.login;
-      
+
       if (isLoading) return null;
 
       if (!isAuthenticated) {
@@ -54,12 +58,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.login,
         builder: (context, state) => const CrmLoginScreen(),
       ),
-      
+
       // Chuyển hướng '/' về '/dashboard'
-      GoRoute(
-        path: '/',
-        redirect: (context, state) => AppRoutes.dashboard,
-      ),
+      GoRoute(path: '/', redirect: (context, state) => AppRoutes.dashboard),
 
       // Shell Route chứa tất cả màn hình giao diện CRM chính kèm Sidebar
       ShellRoute(
@@ -131,6 +132,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.groupsLeave,
             builder: (context, state) => const LeaveGroupsScreenPlaceholder(),
+          ),
+          GoRoute(
+            path: AppRoutes.groupsManage,
+            builder: (context, state) => const ManagedGroupsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.tasks,
+            builder: (context, state) => const CrmTasksScreen(),
           ),
           GoRoute(
             path: AppRoutes.subscription,

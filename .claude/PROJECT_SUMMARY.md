@@ -1,6 +1,14 @@
 # Project Summary
 
 **Last Updated:** 2026-06-02 +07:00
+**Session:** #35 - Phase 8-10 CRM production operations completed. Live chat and chatbot screens now use backend conversations/messages/rules/logs. Added managed Zalo group management, AI summaries/insights, saved customer segments, follow-up tasks, dashboard analytics, import/export flows, and agent inbound message reporting with managed-group filtering.
+
+**Session:** #34 - Windows production release packaging now includes the local Zalo backend bundle. The desktop backend manager searches beside the app executable for `zalo-bot-service.cmd`, `zalo-bot-service.exe`, or `zalo-bot-service.bat`; the automated release script stages compiled backend files, dependencies, bundled `node.exe`, `.env.example`, and the launcher beside `alpha_crm.exe`.
+
+**Session:** #33 - Phase 7 CRM Bulk Messaging review fixes. Bulk campaign submission now creates a real backend template from the entered message before campaign creation, sends optional selected account/device metadata, and uses campaign name state instead of a generated-only name. Send history CSV export now copies generated CSV data to the clipboard with user feedback. Backend/agent fixes make manual recipients, group thread type, cancellation, status polling, and rate limits executable in production paths.
+
+**Session:** #32 - Phase 7 CRM Bulk Messaging completed. Replaced mock bulk messaging simulation with backend-driven execution flow. Added `BulkCampaignRepository`, integrated with `BulkMessagingNotifier` to create campaigns, execute them via agent, and poll for status. Added CSV Export functionality to `SendHistoryScreen` and connected it to the actual execution logs.
+
 **Session:** #31 - Fixed ZaloGroup compilation error in "Kết bạn từ nhóm" screen by importing mock_groups.dart, achieving 100% clean flutter analysis.
 
 ---
@@ -13,7 +21,7 @@
 - **i18n:** No formal localization solution. Vietnamese UI strings are currently inline; `intl` is used for formatting.
 - **State Management:** `flutter_riverpod` with `StateNotifierProvider`, `StateProvider`, and local widget state.
 - **Styling:** Central design tokens in `lib/app/theme/` plus reusable widgets in `lib/shared/widgets/`.
-- **Deployment:** Not configured. Flutter targets exist for web, Android, and Windows.
+- **Deployment:** Automated release is handled by `alpha-studio-backend/scripts/release-to-b2.js` for Android APK, Windows ZIP, and Flutter Web under `/crm/`. The Windows ZIP includes the Flutter runner plus the local Zalo backend bundle required for production desktop use.
 - **Knowledge Graph:** `.understand-anything/` is not present. Recommend running `/understand` before large impact analysis work.
 
 ---
@@ -71,13 +79,14 @@ docs/
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
 | `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, tables, logs, compliance warnings popup, update dialog. |
+| `lib/shared/utils/zalo_backend_manager.dart` | Desktop local backend launcher | Windows production builds search beside `alpha_crm.exe` for `zalo-bot-service.cmd`/`.exe`/`.bat` and start the packaged local Zalo backend. |
 | `lib/features/**/providers/` | Feature state | Riverpod `StateNotifier` classes for mock interactions. |
 | `lib/mock/` | Mock data | Contacts, campaigns, messages, groups, accounts, system settings (with Zalo compliance fields). |
 | `lib/shared/utils/zalo_compliance_guard.dart` | Shared compliance guard | Channel-mode-aware rule engine evaluating risk for all Zalo actions. |
 | `lib/shared/utils/app_update_service.dart` | Auto-update service | Fetches GitHub Releases API, compares semver, downloads assets, installs updates (Windows .exe, Android .apk). |
 | `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
-| `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. |
+| `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. The automated Windows release stages its compiled `dist/`, `node_modules`, `.env.example`, and bundled Node runtime into the ZIP while excluding `.env` and `.data` secrets. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 

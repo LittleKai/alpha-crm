@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../data/bulk_campaign_repository.dart';
 
 class BulkMessagingState {
   final int
   selectedTab; // 0: Theo SĐT, 1: Vào nhóm, 2: Cho bạn bè, 3: Theo nhãn
+  final String campaignName;
   final String recipientsText;
   final int minDelay;
   final int maxDelay;
@@ -17,10 +20,15 @@ class BulkMessagingState {
   final List<String> logs;
   final int successCount;
   final int failureCount;
+  final int cancelledCount;
+  final int totalCount;
   final String? complianceError;
+  final String? activeCampaignId;
+  final bool isPolling;
 
   const BulkMessagingState({
     required this.selectedTab,
+    required this.campaignName,
     required this.recipientsText,
     required this.minDelay,
     required this.maxDelay,
@@ -31,12 +39,17 @@ class BulkMessagingState {
     required this.logs,
     required this.successCount,
     required this.failureCount,
+    required this.cancelledCount,
+    required this.totalCount,
     this.complianceError,
+    this.activeCampaignId,
+    this.isPolling = false,
   });
 
   factory BulkMessagingState.initial() {
     return const BulkMessagingState(
       selectedTab: 0,
+      campaignName: '',
       recipientsText: '',
       minDelay: 30,
       maxDelay: 60,
@@ -47,11 +60,14 @@ class BulkMessagingState {
       logs: [],
       successCount: 0,
       failureCount: 0,
+      cancelledCount: 0,
+      totalCount: 0,
     );
   }
 
   BulkMessagingState copyWith({
     int? selectedTab,
+    String? campaignName,
     String? recipientsText,
     int? minDelay,
     int? maxDelay,
@@ -62,10 +78,15 @@ class BulkMessagingState {
     List<String>? logs,
     int? successCount,
     int? failureCount,
+    int? cancelledCount,
+    int? totalCount,
     String? complianceError,
+    String? activeCampaignId,
+    bool? isPolling,
   }) {
     return BulkMessagingState(
       selectedTab: selectedTab ?? this.selectedTab,
+      campaignName: campaignName ?? this.campaignName,
       recipientsText: recipientsText ?? this.recipientsText,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
@@ -76,18 +97,35 @@ class BulkMessagingState {
       logs: logs ?? this.logs,
       successCount: successCount ?? this.successCount,
       failureCount: failureCount ?? this.failureCount,
-      complianceError: complianceError,
+      cancelledCount: cancelledCount ?? this.cancelledCount,
+      totalCount: totalCount ?? this.totalCount,
+      complianceError: complianceError, // explicitly clear if not provided
+      activeCampaignId: activeCampaignId ?? this.activeCampaignId,
+      isPolling: isPolling ?? this.isPolling,
     );
   }
 }
 
 class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   final Ref _ref;
+  final BulkCampaignRepository _repository;
+  Timer? _pollingTimer;
 
-  BulkMessagingNotifier(this._ref) : super(BulkMessagingState.initial());
+  BulkMessagingNotifier(this._ref, this._repository)
+    : super(BulkMessagingState.initial());
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
 
   void setSelectedTab(int index) {
     state = state.copyWith(selectedTab: index, complianceError: null);
+  }
+
+  void setCampaignName(String name) {
+    state = state.copyWith(campaignName: name);
   }
 
   void setRecipientsText(String text) {
@@ -111,7 +149,13 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   }
 
   void clearLogs() {
-    state = state.copyWith(logs: [], successCount: 0, failureCount: 0);
+    state = state.copyWith(
+      logs: [],
+      successCount: 0,
+      failureCount: 0,
+      cancelledCount: 0,
+      totalCount: 0,
+    );
   }
 
   void addLog(String log) {
@@ -133,13 +177,20 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
   Future<void> startSending() async {
     if (state.isSending) return;
+
     final recipients = state.recipientsText
         .split('\n')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    if (recipients.isEmpty || state.selectedAccount == null) return;
+    if (recipients.isEmpty) return;
+    if (state.messageText.trim().isEmpty) {
+      state = state.copyWith(
+        complianceError: 'Vui lòng nhập nội dung tin nhắn.',
+      );
+      return;
+    }
 
     // Compliance check
     final settings = _ref.read(settingsProvider).settings;
@@ -160,61 +211,160 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       isSending: true,
       successCount: 0,
       failureCount: 0,
+      cancelledCount: 0,
+      totalCount: recipients.length,
       complianceError: null,
       logs: [
-        '[Hệ thống] Bắt đầu chiến dịch gửi tin nhắn hàng loạt...',
-        '[Hệ thống] Tài khoản gửi: ${state.selectedAccount!.name}',
+        '[Hệ thống] Đang khởi tạo chiến dịch trên Cloud...',
+        '[Hệ thống] Thiết bị gửi: Windows/Zalo agent đang hoạt động trên Cloud',
       ],
     );
 
-    // Simulate sending progress with intervals
-    for (int i = 0; i < recipients.length; i++) {
-      if (!state.isSending) break;
-      final target = recipients[i];
-      addLog('[Đang gửi] Gửi tin đến $target...');
+    try {
+      final templateResp = await _repository.createTemplate({
+        'name': state.campaignName.trim().isNotEmpty
+            ? '${state.campaignName.trim()} - Nội dung gửi'
+            : 'Bulk template ${DateTime.now().toIso8601String()}',
+        'body': state.messageText.trim(),
+        'type': 'zalo',
+        'category': 'bulk',
+        'isQuick': false,
+        'status': 'active',
+        'language': 'vi',
+      });
 
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      if (!state.isSending) break;
-
-      final isSuccess = i % 5 != 2; // Simulate some failures for realistic UI
-      if (isSuccess) {
-        state = state.copyWith(
-          successCount: state.successCount + 1,
-          logs: [...state.logs, '[Thành công] Gửi thành công tới $target!'],
-        );
-      } else {
-        state = state.copyWith(
-          failureCount: state.failureCount + 1,
-          logs: [
-            ...state.logs,
-            '[Thất bại] Gửi thất bại tới $target (Lỗi kết nối)',
-          ],
-        );
+      if (templateResp['success'] != true || templateResp['data'] == null) {
+        throw Exception(templateResp['message'] ?? 'Tạo mẫu tin nhắn thất bại');
       }
-    }
+      final templateId =
+          templateResp['data']['_id']?.toString() ??
+          templateResp['data']['id']?.toString();
+      if (templateId == null || templateId.isEmpty) {
+        throw Exception('Máy chủ không trả về templateId hợp lệ.');
+      }
 
-    if (state.isSending) {
+      // 1. Create campaign
+      final createResp = await _repository.createCampaign({
+        'name': state.campaignName.trim().isNotEmpty
+            ? state.campaignName.trim()
+            : 'Bulk Campaign ${DateTime.now().toIso8601String()}',
+        'templateId': templateId,
+        'channel': 'zalo',
+        'audienceType': 'manual',
+        'manualRecipients': recipients
+            .map((r) => {'phone': r, 'name': ''})
+            .toList(),
+        if (state.selectedAccount != null)
+          'selectedAccountId': state.selectedAccount!.id,
+        'rateLimit': {
+          'minDelaySeconds': state.minDelay,
+          'maxDelaySeconds': state.maxDelay,
+        },
+        'requireHumanApproval': decision.requiredActions.contains(
+          'human_approval',
+        ),
+      });
+
+      if (!createResp['success']) {
+        throw Exception(createResp['message'] ?? 'Tạo chiến dịch thất bại');
+      }
+
+      final campaignId = createResp['data']['_id'];
+
+      // 2. Start campaign
+      String? humanApprovedAt;
+      if (decision.requiredActions.contains('human_approval')) {
+        humanApprovedAt = DateTime.now().toIso8601String();
+      }
+
+      final startResp = await _repository.startCampaign(
+        campaignId,
+        humanApprovedAt: humanApprovedAt,
+      );
+      if (!startResp['success']) {
+        throw Exception(startResp['message'] ?? 'Bắt đầu chiến dịch thất bại');
+      }
+
       state = state.copyWith(
-        isSending: false,
+        activeCampaignId: campaignId,
         logs: [
           ...state.logs,
-          '[Hệ thống] Chiến dịch hoàn tất. Thành công: ${state.successCount}, Thất bại: ${state.failureCount}',
+          '[Hệ thống] Đã đưa lệnh vào hàng đợi Cloud. Bắt đầu xử lý...',
         ],
+      );
+
+      // 3. Poll for progress
+      _startPolling(campaignId);
+    } catch (e) {
+      state = state.copyWith(
+        isSending: false,
+        complianceError: 'Lỗi: ${e.toString()}',
       );
     }
   }
 
-  void stopSending() {
-    if (!state.isSending) return;
-    state = state.copyWith(
-      isSending: false,
-      logs: [...state.logs, '[Hệ thống] Người dùng đã dừng chiến dịch.'],
-    );
+  void _startPolling(String campaignId) {
+    _pollingTimer?.cancel();
+    state = state.copyWith(isPolling: true);
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      try {
+        final resp = await _repository.getCampaignStatus(campaignId);
+        if (resp['success']) {
+          final data = resp['data'];
+          final statusCounts = data['statusCounts'] ?? {};
+          final campaignStatus = data['campaign']['status'];
+
+          final success = statusCounts['success'] ?? 0;
+          final failed = statusCounts['failed'] ?? 0;
+          final cancelled = statusCounts['cancelled'] ?? 0;
+
+          state = state.copyWith(
+            successCount: success,
+            failureCount: failed,
+            cancelledCount: cancelled,
+          );
+
+          // If campaign is done or cancelled
+          if (campaignStatus == 'completed' || campaignStatus == 'cancelled') {
+            timer.cancel();
+            state = state.copyWith(
+              isSending: false,
+              isPolling: false,
+              activeCampaignId: null,
+              logs: [
+                ...state.logs,
+                '[Hệ thống] Chiến dịch $campaignStatus. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+              ],
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Lỗi poll trạng thái: $e');
+      }
+    });
+  }
+
+  Future<void> stopSending() async {
+    if (!state.isSending || state.activeCampaignId == null) return;
+
+    final campaignId = state.activeCampaignId!;
+    try {
+      state = state.copyWith(
+        logs: [...state.logs, '[Hệ thống] Đang gửi yêu cầu hủy...'],
+      );
+      await _repository.cancelCampaign(campaignId);
+      // Polling will catch the 'cancelled' state and clean up
+    } catch (e) {
+      state = state.copyWith(
+        complianceError: 'Không thể hủy chiến dịch: ${e.toString()}',
+      );
+    }
   }
 }
 
 final bulkMessagingProvider =
     StateNotifierProvider<BulkMessagingNotifier, BulkMessagingState>((ref) {
-      return BulkMessagingNotifier(ref);
+      final repository = BulkCampaignRepository();
+      return BulkMessagingNotifier(ref, repository);
     });

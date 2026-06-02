@@ -1,8 +1,9 @@
 import { getAgentCredentials } from './agent-identity.js';
-import { fetchNextCommand, reportCommandResult, sendHeartbeat } from './cloud-api.js';
+import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, sendHeartbeat } from './cloud-api.js';
 import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
 import { config } from '../config.js';
+import { setInboundMessageHandler, type ZaloInboundMessageEvent } from '../channels/types.js';
 
 let running = false;
 let pollingIntervalTimer: NodeJS.Timeout | null = null;
@@ -13,6 +14,10 @@ let pollErrorCount = 0;
 const BASE_POLL_DELAY_MS = 5000;
 const MAX_POLL_DELAY_MS = 60000;
 let currentPollDelayMs = BASE_POLL_DELAY_MS;
+let managedGroupCache: { expiresAt: number; keys: Set<string> } = {
+  expiresAt: 0,
+  keys: new Set()
+};
 
 /**
  * Starts the outbound CRM agent background loops
@@ -41,6 +46,7 @@ export function startAgentRunner(): void {
   console.log('=========================================\n');
 
   running = true;
+  setInboundMessageHandler((event) => handleInboundMessageEvent(credentials.deviceId, credentials.agentSecret, event));
 
   // 1. Start heartbeat loop (every 30s)
   runHeartbeatLoop(credentials.deviceId, credentials.agentSecret);
@@ -58,6 +64,7 @@ export function startAgentRunner(): void {
  */
 export function stopAgentRunner(): void {
   running = false;
+  setInboundMessageHandler(null);
   if (pollingIntervalTimer) {
     clearTimeout(pollingIntervalTimer);
     pollingIntervalTimer = null;
@@ -67,6 +74,32 @@ export function stopAgentRunner(): void {
     heartbeatIntervalTimer = null;
   }
   console.log('[agent-runner] Outbound Agent Channel stopped.');
+}
+
+async function getManagedGroupKeys(deviceId: string, agentSecret: string): Promise<Set<string>> {
+  const now = Date.now();
+  if (managedGroupCache.expiresAt > now) return managedGroupCache.keys;
+
+  const groups = await fetchManagedGroups(deviceId, agentSecret);
+  const keys = new Set(groups.map((group) => `${group.accountId}:${group.groupId}`));
+  managedGroupCache = { expiresAt: now + 60000, keys };
+  return keys;
+}
+
+async function handleInboundMessageEvent(
+  deviceId: string,
+  agentSecret: string,
+  event: ZaloInboundMessageEvent
+): Promise<void> {
+  try {
+    if (event.threadType === 'group') {
+      const managedKeys = await getManagedGroupKeys(deviceId, agentSecret);
+      if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) return;
+    }
+    await reportInboundMessage(deviceId, agentSecret, event);
+  } catch (err: any) {
+    console.warn('[agent-runner] Failed to report inbound message:', err.message);
+  }
 }
 
 /**

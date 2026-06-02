@@ -57,6 +57,26 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             _buildToolbar(state, notifier),
             const SizedBox(height: AppSpacing.l),
             _buildMainContent(state, filteredContacts, isEmpty),
+            if (state.exportCsv != null && state.exportCsv!.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.l),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CSV export preview',
+                      style: AppTextStyles.sectionTitle,
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    SelectableText(
+                      state.exportCsv!,
+                      maxLines: 8,
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -190,6 +210,19 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     );
     final filters = [
       AppSelectField<String>(
+        value: state.selectedSegmentId,
+        items: [
+          const DropdownMenuItem(value: '', child: Text('Tat ca segment')),
+          ...state.segments.map(
+            (segment) =>
+                DropdownMenuItem(value: segment.id, child: Text(segment.name)),
+          ),
+        ],
+        onChanged: (value) {
+          if (value != null) notifier.setSelectedSegment(value);
+        },
+      ),
+      AppSelectField<String>(
         value: state.selectedGroup,
         items: groups
             .map((group) => DropdownMenuItem(value: group, child: Text(group)))
@@ -224,19 +257,19 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         text: 'Import Excel/CSV',
         icon: Icons.description_outlined,
         variant: AppButtonVariant.outline,
-        onPressed: () => _showPlaceholder(
-          'Chức năng import sẽ được nối với file picker ở bước sau.',
-        ),
+        onPressed: () => _importDemoContacts(notifier),
       ),
       AppButton(
         text: 'Xuất Excel',
         icon: Icons.description_outlined,
         variant: AppButtonVariant.outline,
-        onPressed: state.contacts.isEmpty
-            ? null
-            : () => _showPlaceholder(
-                'Chức năng xuất Excel sẽ dùng dữ liệu đã lọc.',
-              ),
+        onPressed: state.contacts.isEmpty ? null : notifier.exportContacts,
+      ),
+      AppButton(
+        text: 'Luu segment',
+        icon: Icons.bookmark_add_outlined,
+        variant: AppButtonVariant.outline,
+        onPressed: () => _showSaveSegmentDialog(notifier),
       ),
       AppButton(
         text: 'Thêm liên hệ',
@@ -400,6 +433,49 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       ),
       _ => const AppBadge(label: 'Chưa gửi', variant: AppBadgeVariant.neutral),
     };
+  }
+
+  Future<void> _importDemoContacts(CustomersNotifier notifier) async {
+    await notifier.importContacts(MockContacts.sampleContacts.take(5).toList());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Da gui batch import len backend.')),
+    );
+  }
+
+  Future<void> _showSaveSegmentDialog(CustomersNotifier notifier) async {
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Luu segment'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Ten segment',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Huy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await notifier.saveCurrentFiltersAsSegment(
+                  controller.text.trim(),
+                );
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Luu'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 
   void _showPlaceholder(String message) {

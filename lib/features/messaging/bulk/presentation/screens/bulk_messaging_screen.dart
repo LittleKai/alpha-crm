@@ -33,6 +33,11 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
   @override
   void initState() {
     super.initState();
+    _campaignNameController.addListener(() {
+      ref
+          .read(bulkMessagingProvider.notifier)
+          .setCampaignName(_campaignNameController.text);
+    });
     _recipientsController.addListener(() {
       ref
           .read(bulkMessagingProvider.notifier)
@@ -568,8 +573,154 @@ class _ConfigPanel extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: AppSpacing.m),
+            _Section(
+              title: '3. KIỂM SOÁT VÀ THỰC THI',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final state = ref.watch(bulkMessagingProvider);
+                      final notifier = ref.read(bulkMessagingProvider.notifier);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (state.isSending || state.isPolling)
+                            AppButton(
+                              text: state.isPolling
+                                  ? 'Đang chạy (Hủy)'
+                                  : 'Dừng gửi',
+                              icon: Icons.stop,
+                              variant: AppButtonVariant.primary,
+                              onPressed: notifier.stopSending,
+                            )
+                          else
+                            AppButton(
+                              text: 'Bắt đầu gửi',
+                              icon: Icons.send,
+                              variant: AppButtonVariant.primary,
+                              onPressed: () {
+                                if (state.recipientsText.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Vui lòng nhập danh sách người nhận.',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                notifier.startSending();
+                              },
+                            ),
+
+                          if (state.totalCount > 0 ||
+                              state.successCount > 0 ||
+                              state.failureCount > 0) ...[
+                            const SizedBox(height: AppSpacing.m),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _MetricCard(
+                                    title: 'Thành công',
+                                    value: '${state.successCount}',
+                                    color: Colors.green,
+                                    icon: Icons.check_circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _MetricCard(
+                                    title: 'Thất bại',
+                                    value: '${state.failureCount}',
+                                    color: Colors.red,
+                                    icon: Icons.error,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _MetricCard(
+                                    title: 'Đã hủy',
+                                    value: '${state.cancelledCount}',
+                                    color: Colors.orange,
+                                    icon: Icons.cancel,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (state.totalCount > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: LinearProgressIndicator(
+                                  value:
+                                      (state.successCount +
+                                          state.failureCount +
+                                          state.cancelledCount) /
+                                      state.totalCount,
+                                ),
+                              ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final Color color;
+  final IconData icon;
+
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Text(
+                title,
+                style: AppTextStyles.caption.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }

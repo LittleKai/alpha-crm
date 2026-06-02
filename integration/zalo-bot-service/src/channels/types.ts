@@ -16,6 +16,7 @@ export interface ZaloChannelStatus {
 export interface ZaloSendMessageRequest {
   recipientId: string;
   message: string;
+  accountId?: string;
   threadType?: 'user' | 'group';
   messageType?: 'text' | 'template';
 }
@@ -41,6 +42,32 @@ export interface ZaloGroupMember {
   zaloName: string;
   avatar: string;
   role: 'owner' | 'admin' | 'member';
+}
+
+export interface ZaloInboundMessageEvent {
+  accountId: string;
+  accountLabel?: string;
+  threadId: string;
+  threadType: 'user' | 'group';
+  senderId: string;
+  senderName?: string;
+  content: string;
+  messageType: 'text' | 'image' | 'file' | 'sticker' | 'unknown';
+  providerMessageId: string;
+  timestamp: string;
+}
+
+type InboundMessageHandler = (event: ZaloInboundMessageEvent) => void | Promise<void>;
+
+let inboundMessageHandler: InboundMessageHandler | null = null;
+
+export function setInboundMessageHandler(handler: InboundMessageHandler | null): void {
+  inboundMessageHandler = handler;
+}
+
+export async function emitInboundMessage(event: ZaloInboundMessageEvent): Promise<void> {
+  if (!inboundMessageHandler) return;
+  await inboundMessageHandler(event);
 }
 
 export interface ZaloChannel {

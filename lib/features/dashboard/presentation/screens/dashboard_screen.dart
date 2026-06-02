@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -9,43 +10,63 @@ import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_tabs.dart';
+import '../../providers/dashboard_provider.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   int _selectedTab = 0;
-  String _timeRange = '7 ngày qua';
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(dashboardProvider);
+    final notifier = ref.read(dashboardProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.appBackground,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(
-          ResponsiveBreakpoints.isMobile(context) ? AppSpacing.m : AppSpacing.l,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: AppSpacing.l),
-            _buildPerformanceCard(),
-            const SizedBox(height: AppSpacing.l),
-            _buildQuickActionsSection(),
-            const SizedBox(height: AppSpacing.l),
-            _buildGuideSection(),
-          ],
-        ),
-      ),
+      body: state.isLoading && state.overview == null
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          : RefreshIndicator(
+              onRefresh: notifier.loadDashboard,
+              color: AppColors.primary,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(
+                  ResponsiveBreakpoints.isMobile(context)
+                      ? AppSpacing.m
+                      : AppSpacing.l,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(state),
+                    const SizedBox(height: AppSpacing.l),
+                    if (state.overview != null) ...[
+                      _buildSubscriptionWarning(state),
+                      const SizedBox(height: AppSpacing.l),
+                      _buildOperationsMetrics(state),
+                      const SizedBox(height: AppSpacing.l),
+                    ],
+                    _buildPerformanceCard(state, notifier),
+                    const SizedBox(height: AppSpacing.l),
+                    _buildQuickActionsSection(),
+                    const SizedBox(height: AppSpacing.l),
+                    _buildGuideSection(),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(DashboardState state) {
     return Row(
       children: [
         Expanded(
@@ -65,7 +86,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildPerformanceCard() {
+  Widget _buildSubscriptionWarning(DashboardState state) {
+    final sub = state.overview?['subscription'];
+    final isActive = sub != null && sub['active'] == true;
+
+    if (isActive) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.errorSoft,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+          const SizedBox(width: AppSpacing.s),
+          Expanded(
+            child: Text(
+              sub == null
+                  ? 'Bạn chưa đăng ký gói dịch vụ Alpha CRM. Vui lòng đăng ký để sử dụng đầy đủ các tính năng.'
+                  : 'Gói đăng ký Alpha CRM của bạn đã hết hạn. Hãy gia hạn gói dịch vụ để tiếp tục gửi tin.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.errorText,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationsMetrics(DashboardState state) {
+    final taskStats = state.overview?['taskStats'] ?? const {};
+    final groupStats = state.analytics['groups'] ?? const {};
+    final chatbotStats = state.analytics['chatbot'];
+    final chatbotTotal = chatbotStats is List
+        ? chatbotStats.fold<int>(
+            0,
+            (sum, item) => sum + ((item['count'] ?? 0) as num).toInt(),
+          )
+        : 0;
+    final metrics = [
+      _OperationMetric(
+        label: 'Task qua han',
+        value: (taskStats['overdue'] ?? 0).toString(),
+        icon: Icons.warning_amber_outlined,
+        color: AppColors.error,
+      ),
+      _OperationMetric(
+        label: 'Task hom nay',
+        value: (taskStats['dueToday'] ?? 0).toString(),
+        icon: Icons.today_outlined,
+        color: AppColors.warning,
+      ),
+      _OperationMetric(
+        label: 'Bot replies',
+        value: chatbotTotal.toString(),
+        icon: Icons.smart_toy_outlined,
+        color: AppColors.primary,
+      ),
+      _OperationMetric(
+        label: 'Nhom managed',
+        value: (groupStats['managedGroups'] ?? 0).toString(),
+        icon: Icons.groups_2_outlined,
+        color: AppColors.success,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 4
+            : constraints.maxWidth >= 520
+            ? 2
+            : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: AppSpacing.m,
+            mainAxisSpacing: AppSpacing.m,
+            mainAxisExtent: 74,
+          ),
+          itemCount: metrics.length,
+          itemBuilder: (context, index) => metrics[index],
+        );
+      },
+    );
+  }
+
+  Widget _buildPerformanceCard(
+    DashboardState state,
+    DashboardNotifier notifier,
+  ) {
+    // Extract totals from send stats
+    final timeRangeKey = state.timeRange == '7 ngày qua'
+        ? 'last7Days'
+        : 'last30Days';
+    final sendStats = state.overview?['sendHistoryStats']?[timeRangeKey];
+    final int totalSuccess = sendStats?['success'] ?? 0;
+    final int totalFailure = sendStats?['failed'] ?? 0;
+
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
@@ -85,7 +209,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     title,
                     const SizedBox(height: AppSpacing.m),
-                    _buildChartControls(),
+                    _buildChartControls(
+                      state,
+                      notifier,
+                      totalSuccess,
+                      totalFailure,
+                    ),
                   ],
                 );
               }
@@ -95,7 +224,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(child: title),
                   const SizedBox(width: AppSpacing.m),
-                  _buildChartControls(),
+                  _buildChartControls(
+                    state,
+                    notifier,
+                    totalSuccess,
+                    totalFailure,
+                  ),
                 ],
               );
             },
@@ -103,13 +237,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: AppSpacing.m),
           const Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.l),
-          SizedBox(height: 300, child: _buildZeroChart()),
+          SizedBox(
+            height: 300,
+            child: state.isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _buildPerformanceChart(state.performanceData),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildChartControls() {
+  Widget _buildChartControls(
+    DashboardState state,
+    DashboardNotifier notifier,
+    int success,
+    int failure,
+  ) {
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.s,
@@ -129,13 +275,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             });
           },
         ),
-        _buildRangeButtons(),
-        _buildChartTotals(),
+        _buildRangeButtons(state, notifier),
+        _buildChartTotals(success, failure),
       ],
     );
   }
 
-  Widget _buildRangeButtons() {
+  Widget _buildRangeButtons(DashboardState state, DashboardNotifier notifier) {
     return Container(
       height: 40,
       padding: const EdgeInsets.all(3),
@@ -147,22 +293,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildRangeButton('7 ngày qua'),
-          _buildRangeButton('30 ngày qua'),
+          _buildRangeButton(state, notifier, '7 ngày qua'),
+          _buildRangeButton(state, notifier, '30 ngày qua'),
         ],
       ),
     );
   }
 
-  Widget _buildRangeButton(String label) {
-    final selected = _timeRange == label;
+  Widget _buildRangeButton(
+    DashboardState state,
+    DashboardNotifier notifier,
+    String label,
+  ) {
+    final selected = state.timeRange == label;
 
     return InkWell(
-      onTap: () {
-        setState(() {
-          _timeRange = label;
-        });
-      },
+      onTap: () => notifier.setTimeRange(label),
       borderRadius: BorderRadius.circular(AppSpacing.radiusS),
       child: Container(
         height: 34,
@@ -183,7 +329,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildChartTotals() {
+  Widget _buildChartTotals(int success, int failure) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -192,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         Text(
-          '0',
+          success.toString(),
           style: AppTextStyles.captionBold.copyWith(color: AppColors.primary),
         ),
         const SizedBox(width: AppSpacing.m),
@@ -203,21 +349,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         Text(
-          '0',
+          failure.toString(),
           style: AppTextStyles.captionBold.copyWith(color: AppColors.error),
         ),
       ],
     );
   }
 
-  Widget _buildZeroChart() {
-    final labels = _timeRange == '7 ngày qua'
-        ? MockCampaigns.zeroChart7Days
-        : MockCampaigns.zeroChart30Days;
-    final spots = List<FlSpot>.generate(
-      labels.length,
-      (index) => FlSpot(index.toDouble(), 0),
+  Widget _buildPerformanceChart(List<dynamic> performanceData) {
+    if (performanceData.isEmpty) {
+      return const Center(
+        child: Text('Không có dữ liệu hiệu suất gửi tin từ đám mây.'),
+      );
+    }
+
+    final spotsSuccess = List<FlSpot>.generate(
+      performanceData.length,
+      (index) => FlSpot(
+        index.toDouble(),
+        (performanceData[index]['success'] as num).toDouble(),
+      ),
     );
+
+    final spotsFailure = List<FlSpot>.generate(
+      performanceData.length,
+      (index) => FlSpot(
+        index.toDouble(),
+        (performanceData[index]['failure'] as num).toDouble(),
+      ),
+    );
+
+    // Calculate dynamic Y scaling
+    double maxY = 4;
+    for (final item in performanceData) {
+      final s = (item['success'] as num).toDouble();
+      final f = (item['failure'] as num).toDouble();
+      if (s > maxY) maxY = s;
+      if (f > maxY) maxY = f;
+    }
+    maxY = (maxY * 1.2).ceilToDouble();
+    if (maxY == 0) maxY = 4;
 
     return Column(
       children: [
@@ -225,14 +396,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: LineChart(
             LineChartData(
               minX: 0,
-              maxX: (labels.length - 1).toDouble(),
+              maxX: (performanceData.length - 1).toDouble(),
               minY: 0,
-              maxY: 4,
+              maxY: maxY,
               borderData: FlBorderData(show: false),
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
-                horizontalInterval: 1,
+                horizontalInterval: maxY / 4,
                 getDrawingHorizontalLine: (value) {
                   return const FlLine(
                     color: AppColors.borderSoft,
@@ -251,7 +422,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    interval: 1,
+                    interval: maxY / 4,
                     reservedSize: 40,
                     getTitlesWidget: (value, meta) {
                       return Text(
@@ -264,18 +435,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    interval: 1,
+                    interval: performanceData.length > 10 ? 5 : 1,
                     reservedSize: 28,
                     getTitlesWidget: (value, meta) {
                       final index = value.toInt();
-                      if (index < 0 || index >= labels.length) {
+                      if (index < 0 || index >= performanceData.length) {
                         return const SizedBox.shrink();
                       }
 
                       return Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.s),
                         child: Text(
-                          labels[index],
+                          performanceData[index]['label']?.toString() ?? '',
                           style: AppTextStyles.caption,
                         ),
                       );
@@ -283,21 +454,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
-              lineTouchData: const LineTouchData(enabled: false),
+              lineTouchData: LineTouchData(
+                enabled: true,
+                touchTooltipData: LineTouchTooltipData(
+                  tooltipBgColor: AppColors.surface,
+                  getTooltipItems: (touchedSpots) {
+                    return touchedSpots.map((spot) {
+                      final isSuccessSeries = spot.barIndex == 0;
+                      return LineTooltipItem(
+                        '${isSuccessSeries ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}',
+                        AppTextStyles.captionBold.copyWith(
+                          color: isSuccessSeries
+                              ? AppColors.primary
+                              : AppColors.error,
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
               lineBarsData: [
                 LineChartBarData(
-                  spots: spots,
-                  isCurved: false,
+                  spots: spotsSuccess,
+                  isCurved: true,
                   color: AppColors.primary,
-                  barWidth: 0,
-                  dotData: const FlDotData(show: false),
+                  barWidth: 3,
+                  dotData: const FlDotData(show: true),
                 ),
                 LineChartBarData(
-                  spots: spots,
-                  isCurved: false,
+                  spots: spotsFailure,
+                  isCurved: true,
                   color: AppColors.error,
-                  barWidth: 0,
-                  dotData: const FlDotData(show: false),
+                  barWidth: 3,
+                  dotData: const FlDotData(show: true),
                 ),
               ],
             ),
@@ -526,5 +715,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (width >= 980) return 3;
     if (width >= 680) return 2;
     return 1;
+  }
+}
+
+class _OperationMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _OperationMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: AppSpacing.s),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(value, style: AppTextStyles.sectionTitle.copyWith(color: color)),
+        ],
+      ),
+    );
   }
 }

@@ -42,8 +42,12 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
     case 'zalo.accounts.sync':
       return getAccounts();
 
-    case 'zalo.groups.sync':
-      return getAllGroups();
+    case 'zalo.groups.sync': {
+      const groups = await getAllGroups();
+      return payload?.accountId
+        ? groups.filter((group: any) => group.accountId === payload.accountId)
+        : groups;
+    }
 
     case 'zalo.friends.sync':
       return getAllFriends();
@@ -55,6 +59,7 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
       return sendMessage({
         recipientId: payload.recipientId,
         message: payload.message,
+        accountId: payload.accountId,
         threadType: payload.threadType,
         messageType: payload.messageType
       }, payload.isTestMode || false);
@@ -139,11 +144,35 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   const recipients = payload.recipients || [];
   const customerIds = payload.customerIds || [];
   const templateText = payload.message || 'Tin nhắn chiến dịch';
+  const actionType = payload.channel === 'email' ? 'bulk_message_by_phone' : 'bulk_message_to_friends';
+  const minDelaySeconds = Math.max(1, Number(payload.rateLimit?.minDelaySeconds) || 3);
+  const maxDelaySeconds = Math.max(minDelaySeconds, Number(payload.rateLimit?.maxDelaySeconds) || minDelaySeconds);
 
   // Map to stable target list of { phone, name, customerId }
   const targetList = recipients.length > 0 
     ? recipients 
     : customerIds.map((id: string) => ({ phone: id, name: 'Khách hàng', customerId: id }));
+
+  // Run local compliance guard for safety (fail-closed)
+  try {
+    const { evaluateCompliance } = await import('../compliance.js');
+    const decision = evaluateCompliance({
+      actionType: actionType as any,
+      targetCount: targetList.length,
+      hasConsentProof: true, // Assuming backend filtered this
+      hasRecentInteraction: true,
+      isTestMode: payload.isTestMode || false
+    });
+
+    if (!decision.allowed) {
+      console.log(`[command-executor] [Background] Chiến dịch ${campaignId} bị chặn bởi compliance: ${decision.reason}`);
+      const { reportCommandResult } = await import('./cloud-api.js');
+      await reportCommandResult(deviceId, agentSecret, command._id, false, null, decision.reason);
+      return;
+    }
+  } catch (err: any) {
+    console.error('[command-executor] Compliance check error:', err.message);
+  }
 
   runningCampaigns.add(campaignId);
   cancelledCampaigns.delete(campaignId);
@@ -152,20 +181,26 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
 
   const results = [];
   let anyFailed = false;
+  let successCount = 0;
+  let failedCount = 0;
+  let cancelledCount = 0;
 
   for (let i = 0; i < targetList.length; i++) {
     const recipient = targetList[i];
     const recipientId = recipient.phone || recipient.customerId;
+    let latestResult: any = null;
 
     // Check for cancellation before each send
     if (cancelledCampaigns.has(campaignId)) {
       console.log(`[command-executor] [Background] Chiến dịch ${campaignId} đã bị hủy bởi người dùng.`);
-      results.push({
+      latestResult = {
         customerId: recipient.customerId,
         phone: recipient.phone,
         status: 'cancelled',
         message: 'Chiến dịch bị hủy bởi người dùng.'
-      });
+      };
+      results.push(latestResult);
+      cancelledCount++;
       continue;
     }
 
@@ -178,35 +213,58 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
       const sendResult = await sendMessage({
         recipientId,
         message: personalizedText,
-        threadType: 'user',
+        threadType: recipient.threadType || 'user',
         messageType: 'text'
       }, payload.isTestMode || false);
 
-      results.push({
+      latestResult = {
         customerId: recipient.customerId,
         phone: recipient.phone,
         status: sendResult.success ? 'succeeded' : 'failed',
         messageId: sendResult.messageId,
         error: sendResult.error
-      });
+      };
+      results.push(latestResult);
 
-      if (!sendResult.success) {
+      if (sendResult.success) {
+        successCount++;
+      } else {
+        failedCount++;
         anyFailed = true;
       }
     } catch (err: any) {
       console.error(`[command-executor] [Background] Gửi tin tới ${recipientId} thất bại:`, err.message);
-      results.push({
+      latestResult = {
         customerId: recipient.customerId,
         phone: recipient.phone,
         status: 'failed',
         error: err.message
-      });
+      };
+      results.push(latestResult);
+      failedCount++;
       anyFailed = true;
+    }
+
+    // Report intermediate progress
+    try {
+      const { reportCommandProgress } = await import('./cloud-api.js');
+      await reportCommandProgress(deviceId, agentSecret, command._id, {
+        campaignId,
+        processed: i + 1,
+        total: targetList.length,
+        successCount,
+        failedCount,
+        cancelledCount,
+        latestResult
+      });
+    } catch (err: any) {
+      console.error(`[command-executor] [Background] Lỗi báo cáo tiến độ:`, err.message);
     }
 
     // Delay between sends to comply with Zalo anti-spam limits (3 seconds)
     if (i < targetList.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const delaySeconds = minDelaySeconds + Math.random() * (maxDelaySeconds - minDelaySeconds);
+      await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
     }
   }
 

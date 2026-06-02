@@ -10,7 +10,9 @@ class ZaloBackendManager {
   static Future<bool> startBackend() async {
     // 1. Chỉ thực thi trên môi trường Desktop (Windows, macOS, Linux)
     if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
-      debugPrint("ZaloBackendManager: Chạy trên Web/Mobile, tự động bỏ qua tự chạy backend.");
+      debugPrint(
+        "ZaloBackendManager: Chạy trên Web/Mobile, tự động bỏ qua tự chạy backend.",
+      );
       return false;
     }
 
@@ -20,36 +22,60 @@ class ZaloBackendManager {
     }
 
     try {
-      // 2. Xác định tên file thực thi tương ứng với hệ điều hành
-      String binaryName = 'zalo-bot-service';
-      if (Platform.isWindows) {
-        binaryName = 'zalo-bot-service.exe';
+      // 2. Xác định launcher backend tương ứng với hệ điều hành
+      final candidateNames = Platform.isWindows
+          ? const [
+              'zalo-bot-service.cmd',
+              'zalo-bot-service.exe',
+              'zalo-bot-service.bat',
+            ]
+          : const ['zalo-bot-service'];
+
+      // 3. Ưu tiên thư mục chứa app Flutter, fallback về working directory khi debug
+      final appDir = File(Platform.resolvedExecutable).parent.path;
+      final currentDir = Directory.current.path;
+      final searchDirs = appDir == currentDir ? [appDir] : [appDir, currentDir];
+
+      String? executablePath;
+      for (final dir in searchDirs) {
+        for (final candidateName in candidateNames) {
+          final candidatePath = '$dir${Platform.pathSeparator}$candidateName';
+          if (await File(candidatePath).exists()) {
+            executablePath = candidatePath;
+            break;
+          }
+        }
+        if (executablePath != null) break;
       }
 
-      // 3. Lấy đường dẫn thư mục hiện tại chứa app Flutter
-      String currentDir = Directory.current.path;
-      String exePath = '$currentDir/$binaryName';
-
-      // 4. Kiểm tra file chạy có tồn tại không
-      if (!await File(exePath).exists()) {
+      // 4. Kiểm tra launcher backend có tồn tại không
+      if (executablePath == null) {
         if (kDebugMode) {
-          debugPrint("ZaloBackendManager (Development): Không tìm thấy file chạy zalo-bot-service.exe tại $exePath. "
-              "Điều này là bình thường trong môi trường phát triển (debug). Bạn hãy chạy backend bằng lệnh 'npm run dev' "
-              "trong thư mục 'integration/zalo-bot-service' để phát triển.");
+          debugPrint(
+            "ZaloBackendManager (Development): Không tìm thấy launcher backend (${candidateNames.join(', ')}). "
+            "Điều này là bình thường trong môi trường phát triển (debug). Bạn hãy chạy backend bằng lệnh 'npm run dev' "
+            "trong thư mục 'integration/zalo-bot-service' để phát triển.",
+          );
         } else {
-          debugPrint("ZaloBackendManager (Production): Không tìm thấy file chạy tại $exePath. Vui lòng kiểm tra file đóng gói.");
+          debugPrint(
+            "ZaloBackendManager (Production): Không tìm thấy launcher backend (${candidateNames.join(', ')}). Vui lòng kiểm tra file đóng gói.",
+          );
         }
         return false;
       }
 
-      debugPrint("ZaloBackendManager: Đang khởi động backend tại: $exePath");
+      debugPrint(
+        "ZaloBackendManager: Đang khởi động backend tại: $executablePath",
+      );
 
       // 5. Khởi động tiến trình chạy ngầm không hiển thị cửa sổ console đen (ẩn danh)
       _backendProcess = await Process.start(
-        exePath,
+        executablePath,
         [],
         runInShell: true,
-        mode: ProcessStartMode.normal, // Chạy ẩn danh không hiển thị terminal đen
+        mode:
+            ProcessStartMode.normal, // Chạy ẩn danh không hiển thị terminal đen
+        workingDirectory: File(executablePath).parent.path,
       );
 
       _isRunning = true;
@@ -77,7 +103,9 @@ class ZaloBackendManager {
   /// Tắt tiến trình chạy ngầm khi đóng ứng dụng
   static void stopBackend() {
     if (_backendProcess != null && _isRunning) {
-      debugPrint("ZaloBackendManager: Đang ngắt tiến trình chạy ngầm backend...");
+      debugPrint(
+        "ZaloBackendManager: Đang ngắt tiến trình chạy ngầm backend...",
+      );
       _backendProcess!.kill();
       _backendProcess = null;
       _isRunning = false;

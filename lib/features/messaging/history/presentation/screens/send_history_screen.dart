@@ -55,7 +55,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
             const SizedBox(height: AppSpacing.l),
             _buildToolbar(state, notifier),
             const SizedBox(height: AppSpacing.l),
-            _buildTableCard(state, filteredRecords, notifier),
+            _buildTableCard(state, filteredRecords),
           ],
         ),
       ),
@@ -193,38 +193,22 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
         text: 'Xuất Excel',
         icon: Icons.download_outlined,
         variant: AppButtonVariant.outline,
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Chưa có dữ liệu để xuất Excel.')),
-          );
-        },
+        onPressed: state.records.isEmpty
+            ? null
+            : () async {
+                final exported = await notifier.exportToCsv();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      exported
+                          ? 'Đã copy dữ liệu CSV vào Clipboard! Bạn có thể dán vào Excel.'
+                          : 'Không thể export CSV từ dữ liệu hiện tại.',
+                    ),
+                  ),
+                );
+              },
       ),
-      if (state.selectedIds.isNotEmpty)
-        AppButton(
-          text: 'Xóa đã chọn (${state.selectedIds.length})',
-          icon: Icons.delete_outline,
-          variant: AppButtonVariant.destructive,
-          onPressed: () {
-            notifier.deleteSelected();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Đã xóa lịch sử các dòng được chọn.'),
-              ),
-            );
-          },
-        )
-      else
-        AppButton(
-          text: 'Xóa lịch sử',
-          icon: Icons.delete_outline,
-          variant: AppButtonVariant.destructive,
-          onPressed: () {
-            notifier.clearHistory();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Lịch sử gửi tin đang trống.')),
-            );
-          },
-        ),
     ];
 
     if (isMobile) {
@@ -258,7 +242,6 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
   Widget _buildTableCard(
     SendHistoryState state,
     List<SendHistoryRecord> filteredRecords,
-    SendHistoryNotifier notifier,
   ) {
     if (state.records.isEmpty) {
       return AppCard(
@@ -287,15 +270,9 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
             AppTableColumn(label: 'Nội dung tin nhắn', size: ColumnSize.L),
             AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
             AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
-            AppTableColumn(label: 'Hành động', size: ColumnSize.S),
           ],
           rows: filteredRecords.map((record) {
-            final isSelected = state.selectedIds.contains(record.id);
             return DataRow(
-              selected: isSelected,
-              onSelectChanged: (val) {
-                notifier.toggleRecordSelection(record.id);
-              },
               cells: [
                 DataCell(
                   Text(record.campaignName, style: AppTextStyles.bodyMedium),
@@ -317,22 +294,6 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                   Text(
                     DateFormat('dd/MM HH:mm').format(record.sentAt),
                     style: AppTextStyles.caption,
-                  ),
-                ),
-                DataCell(
-                  IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: AppColors.error,
-                      size: 18,
-                    ),
-                    onPressed: () {
-                      notifier.deleteRecord(record.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã xóa dòng lịch sử.')),
-                      );
-                    },
-                    tooltip: 'Xóa dòng này',
                   ),
                 ),
               ],

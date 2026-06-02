@@ -1,5 +1,24 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_messages.dart';
+import '../../../shared/models/crm_template.dart';
+import '../data/templates_repository.dart';
+
+final templatesRepositoryProvider = Provider<TemplatesRepository>((ref) {
+  return TemplatesRepository();
+});
+
+extension MessageTemplateJson on MessageTemplate {
+  static MessageTemplate fromCrmTemplate(CrmTemplate template) {
+    return MessageTemplate(
+      id: template.id,
+      title: template.name,
+      content: template.body,
+      variables: template.variables,
+      createdAt: template.createdAt,
+    );
+  }
+}
 
 class TemplatesState {
   final List<MessageTemplate> templates;
@@ -39,31 +58,100 @@ class TemplatesState {
 }
 
 class TemplatesNotifier extends StateNotifier<TemplatesState> {
-  TemplatesNotifier() : super(TemplatesState.initial());
+  final TemplatesRepository _repository;
 
-  void loadTemplates() {
-    state = state.copyWith(isLoading: true);
-    // Simulate loading delay
-    Future.delayed(const Duration(milliseconds: 400), () {
-      state = state.copyWith(
-        templates: MockMessages.sampleTemplates,
-        isLoading: false,
-      );
-    });
+  TemplatesNotifier(Ref ref)
+    : _repository = ref.read(templatesRepositoryProvider),
+      super(TemplatesState.initial()) {
+    loadTemplates();
+  }
+
+  Future<void> loadTemplates() async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final response = await _repository.getTemplates(search: state.searchQuery);
+
+    if (response['success'] == true && response['data'] != null) {
+      final List<dynamic> raw = response['data'];
+      final List<MessageTemplate> loaded = raw
+          .map((json) => CrmTemplate.fromJson(json))
+          .map((t) => MessageTemplateJson.fromCrmTemplate(t))
+          .toList();
+      state = state.copyWith(templates: loaded, isLoading: false);
+    } else {
+      if (kDebugMode) {
+        state = state.copyWith(
+          templates: MockMessages.sampleTemplates,
+          isLoading: false,
+          errorMessage:
+              'Lỗi tải đám mây (Dữ liệu mẫu chế độ phát triển): ${response['message']}',
+        );
+      } else {
+        state = state.copyWith(
+          templates: const [],
+          isLoading: false,
+          errorMessage:
+              response['message'] ?? 'Không thể tải mẫu tin từ đám mây.',
+        );
+      }
+    }
   }
 
   void setSearchQuery(String query) {
     state = state.copyWith(searchQuery: query);
+    loadTemplates();
   }
 
-  void addTemplate(MessageTemplate template) {
-    state = state.copyWith(templates: [template, ...state.templates]);
-  }
+  Future<void> addTemplate(MessageTemplate template) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
 
-  void deleteTemplate(String id) {
-    state = state.copyWith(
-      templates: state.templates.where((t) => t.id != id).toList(),
+    final crmTemplate = CrmTemplate(
+      id: '',
+      userId: '',
+      name: template.title,
+      subject: '',
+      body: template.content,
+      type: 'zalo',
+      variables: template.variables,
+      category: 'general',
+      shortcut: '',
+      isQuick: false,
+      status: 'active',
+      language: 'vi',
+      usageCount: 0,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
+
+    final response = await _repository.createTemplate(crmTemplate);
+    if (response['success'] == true && response['data'] != null) {
+      final newCrmTpl = CrmTemplate.fromJson(response['data']);
+      final newTpl = MessageTemplateJson.fromCrmTemplate(newCrmTpl);
+      state = state.copyWith(
+        templates: [newTpl, ...state.templates],
+        isLoading: false,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: response['message'] ?? 'Thêm mẫu tin thất bại.',
+      );
+    }
+  }
+
+  Future<void> deleteTemplate(String id) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final response = await _repository.deleteTemplate(id);
+    if (response['success'] == true) {
+      state = state.copyWith(
+        templates: state.templates.where((t) => t.id != id).toList(),
+        isLoading: false,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: response['message'] ?? 'Xóa mẫu tin thất bại.',
+      );
+    }
   }
 
   void triggerError() {
@@ -84,5 +172,5 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
 
 final templatesProvider =
     StateNotifierProvider<TemplatesNotifier, TemplatesState>((ref) {
-      return TemplatesNotifier();
+      return TemplatesNotifier(ref);
     });

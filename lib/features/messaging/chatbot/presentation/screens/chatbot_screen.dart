@@ -51,7 +51,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       _playgroundResponse = null;
     });
 
-    final response = await CrmCloudApi.post('/crm/ai/chat', {
+    final response = await CrmCloudApi.post('/crm/chatbot/test', {
       'message': msg,
     });
 
@@ -66,15 +66,65 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       ref.read(crmAuthProvider.notifier).refreshSubscription();
     } else {
       setState(() {
-        _playgroundResponse = 'Lỗi: ${response['message'] ?? "Không nhận được phản hồi từ AI."}';
+        _playgroundResponse =
+            'Lỗi: ${response['message'] ?? "Không nhận được phản hồi từ AI."}';
       });
     }
   }
 
-  void _showCreatePlaceholder(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chưa có thiết kế modal tạo kịch bản.')),
+  Future<void> _showCreateRuleDialog(BuildContext context) async {
+    final keywordController = TextEditingController();
+    final responseController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Tao kich ban chatbot'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: keywordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tu khoa',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.m),
+                TextField(
+                  controller: responseController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Noi dung phan hoi',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Huy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await ref
+                    .read(chatbotProvider.notifier)
+                    .addRule(keywordController.text, responseController.text);
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Luu'),
+            ),
+          ],
+        );
+      },
     );
+    keywordController.dispose();
+    responseController.dispose();
   }
 
   @override
@@ -115,7 +165,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           AppButton(
             text: 'Tạo kịch bản mới',
             icon: Icons.add_rounded,
-            onPressed: () => _showCreatePlaceholder(context),
+            onPressed: () => _showCreateRuleDialog(context),
           ),
       ],
     );
@@ -188,7 +238,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             AppButton(
               text: 'Tạo kịch bản đầu tiên',
               icon: Icons.add_rounded,
-              onPressed: () => _showCreatePlaceholder(context),
+              onPressed: () => _showCreateRuleDialog(context),
             ),
           ],
         ),
@@ -294,7 +344,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
   Widget _buildAiTab(ChatbotState state, ChatbotNotifier notifier) {
     final authState = ref.watch(crmAuthProvider);
-    final totalRemaining = authState.includedAiRemaining + authState.extraAiRemaining;
+    final totalRemaining =
+        authState.includedAiRemaining + authState.extraAiRemaining;
     final isExpired = authState.subscriptionStatus == 'expired';
     final hasNoQuota = totalRemaining <= 0;
 
@@ -467,13 +518,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: hasNoQuota ? AppColors.errorSoft : AppColors.successSoft,
+                  color: hasNoQuota
+                      ? AppColors.errorSoft
+                      : AppColors.successSoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '$totalRemaining lượt',
                   style: AppTextStyles.caption.copyWith(
-                    color: hasNoQuota ? AppColors.errorText : AppColors.successText,
+                    color: hasNoQuota
+                        ? AppColors.errorText
+                        : AppColors.successText,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -489,23 +544,38 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   enabled: !isExpired && !hasNoQuota && !_isPlaying,
                   style: AppTextStyles.body,
                   decoration: InputDecoration(
-                    hintText: 'Nhập câu hỏi test chatbot (ví dụ: tư vấn giá sản phẩm)...',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+                    hintText:
+                        'Nhập câu hỏi test chatbot (ví dụ: tư vấn giá sản phẩm)...',
+                    hintStyle: AppTextStyles.body.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                     filled: true,
                     fillColor: AppColors.surface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: (isExpired || hasNoQuota || _isPlaying) ? null : _sendTestMessage,
+                onPressed: (isExpired || hasNoQuota || _isPlaying)
+                    ? null
+                    : _sendTestMessage,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
                 child: _isPlaying
@@ -514,7 +584,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         width: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Icon(Icons.send_rounded, size: 18),
@@ -543,7 +615,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _playgroundResponse!,
-                    style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ],
               ),

@@ -13,7 +13,9 @@ import type {
   ZaloSendMessageResult,
   ZaloFriend,
   ZaloGroupMember,
+  ZaloInboundMessageEvent,
 } from './types.js';
+import { emitInboundMessage } from './types.js';
 
 // zca-js imports
 import { Zalo, ThreadType, FriendEventType } from 'zca-js';
@@ -45,6 +47,61 @@ interface CacheEntry<T> {
 const friendsCache = new Map<string, CacheEntry<ZaloFriend[]>>();
 const groupsCache = new Map<string, CacheEntry<any[]>>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+function toStringValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): ZaloInboundMessageEvent | null {
+  const data = event?.data ?? event ?? {};
+  const threadTypeValue = data.threadType ?? event?.threadType;
+  const isGroup =
+    data.isGroup === true ||
+    Boolean(data.groupId) ||
+    threadTypeValue === ThreadType.Group ||
+    String(threadTypeValue || '').toLowerCase().includes('group');
+  const senderId = toStringValue(
+    data.uidFrom ?? data.fromUid ?? data.senderId ?? data.fromId ?? data.userId ?? data.authorId,
+  );
+  const threadId = toStringValue(
+    data.threadId ?? data.groupId ?? data.idTo ?? data.toId ?? (isGroup ? '' : senderId),
+  );
+  if (!senderId || !threadId) return null;
+
+  const rawContent =
+    data.content ?? data.msg ?? data.message ?? data.text ?? data.body ?? data.attach?.title ?? '';
+  let content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
+  const messageType: ZaloInboundMessageEvent['messageType'] =
+    data.msgType === 'chat.photo' || data.msgType === 'image' || data.type === 'image'
+      ? 'image'
+      : data.msgType === 'chat.file' || data.type === 'file'
+        ? 'file'
+        : data.msgType === 'chat.sticker' || data.type === 'sticker'
+          ? 'sticker'
+          : 'text';
+  if (!content) content = `[${messageType}]`;
+
+  const rawTimestamp = Number(data.ts ?? data.timestamp ?? data.time ?? Date.now());
+  const timestampMs = Number.isFinite(rawTimestamp)
+    ? rawTimestamp > 100000000000 ? rawTimestamp : rawTimestamp * 1000
+    : Date.now();
+
+  return {
+    accountId: instance.uId,
+    accountLabel: instance.label,
+    threadId,
+    threadType: isGroup ? 'group' as const : 'user' as const,
+    senderId,
+    senderName: toStringValue(data.dName ?? data.displayName ?? data.senderName ?? data.fromName),
+    content,
+    messageType,
+    providerMessageId: toStringValue(data.msgId ?? data.cliMsgId ?? data.messageId ?? data.id) ||
+      `zca_${instance.uId}_${threadId}_${timestampMs}`,
+    timestamp: new Date(timestampMs).toISOString(),
+  };
+}
 
 // Export the active account pool loader so server.ts can call it
 export async function ensureLoginPool(): Promise<void> {
@@ -138,6 +195,7 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
     const listener = instance.api.listener;
     if (listener) {
       listener.removeAllListeners("friend_event");
+      listener.removeAllListeners("message");
       listener.on("friend_event", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
         console.log(`[PersonalZcaChannel - ${instance.label}] Event friend_event received:`, JSON.stringify(event));
@@ -160,6 +218,15 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
           }
         }
       });
+      listener.on("message", async (event: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const inbound = normalizeInboundMessage(instance, event);
+        if (!inbound) return;
+        console.log(
+          `[PersonalZcaChannel - ${instance.label}] Message event from ${inbound.senderId} (${inbound.messageType}, ${inbound.content.length} chars).`,
+        );
+        await emitInboundMessage(inbound);
+      });
 
       listener.start();
       instance.listenerRunning = true;
@@ -177,6 +244,7 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
     if (listener) {
       listener.stop();
       listener.removeAllListeners("friend_event");
+      listener.removeAllListeners("message");
       instance.listenerRunning = false;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
     }
@@ -225,12 +293,18 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
 
-      // Dynamic Round-Robin rotation selector
+      // Dynamic Round-Robin rotation selector, unless CRM requested a sender account.
       const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[roundRobinIndex % instances.length];
-      roundRobinIndex++;
+      let selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
+      if (!selectedInstance && req.accountId) {
+        throw new Error(`Requested Zalo account ${req.accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = instances[roundRobinIndex % instances.length];
+        roundRobinIndex++;
+      }
 
-      console.log(`[PersonalZcaChannel] Round-Robin selected sender account: ${selectedInstance.label}`);
+      console.log(`[PersonalZcaChannel] Selected sender account: ${selectedInstance.label}`);
 
       const threadType =
         req.threadType === 'group' ? ThreadType.Group : ThreadType.User;

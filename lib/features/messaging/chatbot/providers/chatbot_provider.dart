@@ -1,5 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/chatbot_repository.dart';
+
+final chatbotRepositoryProvider = Provider<ChatbotRepository>((ref) {
+  return ChatbotRepository();
+});
+
 class ChatbotRule {
   final String id;
   final String keyword;
@@ -26,6 +32,24 @@ class ChatbotRule {
       isActive: isActive ?? this.isActive,
     );
   }
+
+  static ChatbotRule fromJson(Map<String, dynamic> json) {
+    final rawKeywords = json['keywords'];
+    final keywords = rawKeywords is List
+        ? rawKeywords
+              .map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList()
+        : <String>[];
+    return ChatbotRule(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      keyword: keywords.isNotEmpty
+          ? keywords.join(', ')
+          : (json['name'] ?? '').toString(),
+      response: (json['response'] ?? '').toString(),
+      isActive: json['isActive'] != false,
+    );
+  }
 }
 
 class ChatbotLogRecord {
@@ -34,7 +58,7 @@ class ChatbotLogRecord {
   final String keyword;
   final String response;
   final DateTime timestamp;
-  final String status; // 'Thành công', 'Thất bại'
+  final String status;
 
   const ChatbotLogRecord({
     required this.id,
@@ -44,17 +68,35 @@ class ChatbotLogRecord {
     required this.timestamp,
     required this.status,
   });
+
+  static ChatbotLogRecord fromJson(Map<String, dynamic> json) {
+    return ChatbotLogRecord(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      customerName: (json['conversationId'] ?? 'Chatbot').toString(),
+      keyword: (json['mode'] ?? '').toString(),
+      response: (json['responsePreview'] ?? json['errorMessage'] ?? '')
+          .toString(),
+      timestamp:
+          DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+          DateTime.now(),
+      status: (json['status'] ?? '').toString() == 'succeeded'
+          ? 'Thanh cong'
+          : (json['status'] ?? '').toString(),
+    );
+  }
 }
 
 class ChatbotState {
-  final int
-  activeTab; // 0: Kịch bản từ khóa, 1: AI, 2: Tài liệu kiến thức, 3: Nhật ký
+  final int activeTab;
   final List<ChatbotRule> rules;
   final String aiModel;
   final String systemPrompt;
   final double temperature;
+  final bool aiEnabled;
   final List<String> knowledgeDocuments;
   final List<ChatbotLogRecord> logs;
+  final bool isLoading;
+  final String? errorMessage;
 
   const ChatbotState({
     required this.activeTab,
@@ -62,8 +104,11 @@ class ChatbotState {
     required this.aiModel,
     required this.systemPrompt,
     required this.temperature,
+    required this.aiEnabled,
     required this.knowledgeDocuments,
     required this.logs,
+    required this.isLoading,
+    this.errorMessage,
   });
 
   factory ChatbotState.initial() {
@@ -72,10 +117,13 @@ class ChatbotState {
       rules: [],
       aiModel: 'Gemini 1.5 Flash',
       systemPrompt:
-          'Bạn là trợ lý ảo CSKH thông minh của phần mềm marketing CRM Zalo. Hãy trả lời thân thiện, ngắn gọn, và luôn hướng khách hàng sử dụng dịch vụ của chúng tôi.',
+          'Ban la tro ly CSKH cua Alpha CRM. Hay tra loi than thien, ngan gon va huong khach hang den tu van vien khi can.',
       temperature: 0.7,
+      aiEnabled: true,
       knowledgeDocuments: [],
       logs: [],
+      isLoading: false,
+      errorMessage: null,
     );
   }
 
@@ -85,8 +133,11 @@ class ChatbotState {
     String? aiModel,
     String? systemPrompt,
     double? temperature,
+    bool? aiEnabled,
     List<String>? knowledgeDocuments,
     List<ChatbotLogRecord>? logs,
+    bool? isLoading,
+    String? errorMessage,
   }) {
     return ChatbotState(
       activeTab: activeTab ?? this.activeTab,
@@ -94,66 +145,186 @@ class ChatbotState {
       aiModel: aiModel ?? this.aiModel,
       systemPrompt: systemPrompt ?? this.systemPrompt,
       temperature: temperature ?? this.temperature,
+      aiEnabled: aiEnabled ?? this.aiEnabled,
       knowledgeDocuments: knowledgeDocuments ?? this.knowledgeDocuments,
       logs: logs ?? this.logs,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage,
     );
   }
 }
 
 class ChatbotNotifier extends StateNotifier<ChatbotState> {
-  ChatbotNotifier() : super(ChatbotState.initial());
+  final ChatbotRepository _repository;
+
+  ChatbotNotifier(this._repository) : super(ChatbotState.initial()) {
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    await Future.wait([loadSettings(), loadRules(), loadLogs()]);
+    state = state.copyWith(isLoading: false);
+  }
 
   void setActiveTab(int tab) {
     state = state.copyWith(activeTab: tab);
+    if (tab == 3) loadLogs();
   }
 
-  void toggleRuleStatus(String id) {
-    final updatedRules = state.rules.map((rule) {
-      if (rule.id == id) {
-        return rule.copyWith(isActive: !rule.isActive);
-      }
-      return rule;
-    }).toList();
-    state = state.copyWith(rules: updatedRules);
-  }
-
-  void addRule(String keyword, String response) {
-    final newRule = ChatbotRule(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      keyword: keyword,
-      response: response,
+  Future<void> loadSettings() async {
+    final response = await _repository.getSettings();
+    if (response['success'] != true || response['data'] is! Map) return;
+    final json = Map<String, dynamic>.from(response['data'] as Map);
+    final snippets = json['knowledgeSnippets'] is List
+        ? List<String>.from(
+            (json['knowledgeSnippets'] as List).map((item) => item.toString()),
+          )
+        : <String>[];
+    state = state.copyWith(
+      aiModel: (json['aiModel'] ?? state.aiModel).toString(),
+      systemPrompt: (json['systemPrompt'] ?? state.systemPrompt).toString(),
+      temperature:
+          double.tryParse(
+            (json['temperature'] ?? state.temperature).toString(),
+          ) ??
+          state.temperature,
+      aiEnabled: json['aiEnabled'] != false,
+      knowledgeDocuments: snippets,
     );
-    state = state.copyWith(rules: [...state.rules, newRule]);
   }
 
-  void deleteRule(String id) {
-    final updatedRules = state.rules.where((rule) => rule.id != id).toList();
-    state = state.copyWith(rules: updatedRules);
+  Future<void> loadRules() async {
+    final response = await _repository.getRules();
+    if (response['success'] == true && response['data'] is List) {
+      final rules = (response['data'] as List)
+          .whereType<Map>()
+          .map((item) => ChatbotRule.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+      state = state.copyWith(rules: rules);
+    }
   }
 
-  void clearRules() {
-    state = state.copyWith(rules: []);
+  Future<void> loadLogs() async {
+    final response = await _repository.getLogs();
+    if (response['success'] == true && response['data'] is List) {
+      final logs = (response['data'] as List)
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ChatbotLogRecord.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+      state = state.copyWith(logs: logs);
+    }
   }
 
-  void updateAiConfig(String model, String prompt, double temp) {
+  Future<void> toggleRuleStatus(String id) async {
+    ChatbotRule? rule;
+    for (final item in state.rules) {
+      if (item.id == id) {
+        rule = item;
+        break;
+      }
+    }
+    if (rule == null) return;
+    final next = !rule.isActive;
+    state = state.copyWith(
+      rules: state.rules
+          .map((item) => item.id == id ? item.copyWith(isActive: next) : item)
+          .toList(),
+    );
+    final response = await _repository.updateRule(id, {'isActive': next});
+    if (response['success'] != true) await loadRules();
+  }
+
+  Future<void> addRule(String keyword, String response) async {
+    if (keyword.trim().isEmpty || response.trim().isEmpty) return;
+    final result = await _repository.createRule(
+      keyword: keyword.trim(),
+      response: response.trim(),
+    );
+    if (result['success'] == true) {
+      await loadRules();
+    } else {
+      state = state.copyWith(
+        errorMessage: (result['message'] ?? 'Tao kich ban that bai.')
+            .toString(),
+      );
+    }
+  }
+
+  Future<void> deleteRule(String id) async {
+    final response = await _repository.deleteRule(id);
+    if (response['success'] == true) {
+      state = state.copyWith(
+        rules: state.rules.where((rule) => rule.id != id).toList(),
+      );
+    }
+  }
+
+  Future<void> clearRules() async {
+    for (final rule in List<ChatbotRule>.from(state.rules)) {
+      await deleteRule(rule.id);
+    }
+  }
+
+  Future<void> updateAiConfig(String model, String prompt, double temp) async {
     state = state.copyWith(
       aiModel: model,
       systemPrompt: prompt,
       temperature: temp,
     );
+    final response = await _repository.saveSettings({
+      'aiModel': model,
+      'systemPrompt': prompt,
+      'temperature': temp,
+      'aiEnabled': state.aiEnabled,
+      'knowledgeSnippets': state.knowledgeDocuments,
+    });
+    if (response['success'] != true) {
+      state = state.copyWith(
+        errorMessage: (response['message'] ?? 'Luu cau hinh that bai.')
+            .toString(),
+      );
+    }
   }
 
-  void addKnowledgeDocument(String name) {
-    state = state.copyWith(
-      knowledgeDocuments: [...state.knowledgeDocuments, name],
-    );
+  Future<void> setAiEnabled(bool enabled) async {
+    state = state.copyWith(aiEnabled: enabled);
+    await _repository.saveSettings({
+      'aiEnabled': enabled,
+      'aiModel': state.aiModel,
+      'systemPrompt': state.systemPrompt,
+      'temperature': state.temperature,
+      'knowledgeSnippets': state.knowledgeDocuments,
+    });
   }
 
-  void removeKnowledgeDocument(String name) {
-    final updatedDocs = state.knowledgeDocuments
+  Future<void> addKnowledgeDocument(String name) async {
+    final documents = [...state.knowledgeDocuments, name];
+    state = state.copyWith(knowledgeDocuments: documents);
+    await _repository.saveSettings({
+      'aiEnabled': state.aiEnabled,
+      'aiModel': state.aiModel,
+      'systemPrompt': state.systemPrompt,
+      'temperature': state.temperature,
+      'knowledgeSnippets': documents,
+    });
+  }
+
+  Future<void> removeKnowledgeDocument(String name) async {
+    final documents = state.knowledgeDocuments
         .where((doc) => doc != name)
         .toList();
-    state = state.copyWith(knowledgeDocuments: updatedDocs);
+    state = state.copyWith(knowledgeDocuments: documents);
+    await _repository.saveSettings({
+      'aiEnabled': state.aiEnabled,
+      'aiModel': state.aiModel,
+      'systemPrompt': state.systemPrompt,
+      'temperature': state.temperature,
+      'knowledgeSnippets': documents,
+    });
   }
 
   void clearLogs() {
@@ -164,5 +335,5 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 final chatbotProvider = StateNotifierProvider<ChatbotNotifier, ChatbotState>((
   ref,
 ) {
-  return ChatbotNotifier();
+  return ChatbotNotifier(ref.read(chatbotRepositoryProvider));
 });

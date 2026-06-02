@@ -43,6 +43,11 @@ final List<NavGroup> navigationGroups = [
         icon: Icons.quickreply_outlined,
         routePath: '/content/templates',
       ),
+      NavItem(
+        title: 'Cong viec follow-up',
+        icon: Icons.task_alt_outlined,
+        routePath: '/tasks',
+      ),
     ],
   ),
   const NavGroup(
@@ -122,6 +127,11 @@ final List<NavGroup> navigationGroups = [
         title: 'Rời nhóm',
         icon: Icons.logout_outlined,
         routePath: '/groups/leave',
+      ),
+      NavItem(
+        title: 'Quan ly nhom CRM',
+        icon: Icons.groups_2_outlined,
+        routePath: '/groups/manage',
       ),
     ],
   ),
