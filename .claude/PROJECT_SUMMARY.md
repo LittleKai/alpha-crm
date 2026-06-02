@@ -1,7 +1,7 @@
 # Project Summary
 
-**Last Updated:** 2026-06-01 +07:00
-**Session:** #26 - Reviewed SPEC Phase 2: hardened local Zalo service, Windows machine identity, outbound polling runner, background campaign execution, cancellation polling, and backend campaign command result handling.
+**Last Updated:** 2026-06-02 +07:00
+**Session:** #27 - Continued SPEC Phases 3-5: fixed Alpha Studio /auth/me user parsing, cleaned analyzer warning, and documented native token storage fallback risk.
 
 ---
 
@@ -59,6 +59,10 @@ docs/
 | `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. |
+| `lib/shared/api/crm_cloud_api.dart` | Alpha Studio cloud API client | Uses `ALPHA_STUDIO_API_URL` with production fallback and Bearer JWT headers. |
+| `lib/shared/auth/crm_auth_token_store.dart` | CRM JWT storage abstraction | Web uses localStorage; native Android/Windows currently use an app-support JSON file via `path_provider` (fallback, not secure storage). |
+| `lib/shared/auth/web_auth_bridge.dart` | Flutter web iframe SSO bridge | Accepts Alpha Studio `{ type: 'AUTH_TOKEN', token }` postMessage and sends `AUTH_READY`. |
+| `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 17 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |

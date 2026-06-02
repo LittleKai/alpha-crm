@@ -110,7 +110,9 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     // Gọi API lấy thông tin người dùng
     final meResult = await CrmCloudApi.get('/auth/me');
     if (meResult['success'] == true && meResult['data'] != null) {
-      final user = CrmUserState.fromJson(meResult['data']);
+      final meData = meResult['data'];
+      final userJson = meData is Map && meData['user'] is Map ? meData['user'] : meData;
+      final user = CrmUserState.fromJson(Map<String, dynamic>.from(userJson));
       
       // Gọi API lấy trạng thái đăng ký CRM
       final subResult = await CrmCloudApi.get('/crm/subscription/me');
