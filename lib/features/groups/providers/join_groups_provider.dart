@@ -146,7 +146,10 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
     _timer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final api = _getApi();
-        final response = await api.joinGroup(link: currentLink);
+        final response = await api.joinGroup(
+          link: currentLink,
+          accountId: state.selectedAccountId,
+        );
         
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 

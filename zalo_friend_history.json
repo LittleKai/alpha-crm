@@ -1,5 +1,23 @@
 [
   {
+    "id": "fh_1780454989267",
+    "targetName": "Nguyễn Anh Đức",
+    "targetPhone": "0933805525",
+    "accountLabel": "Kai (709694992560717870)",
+    "timestamp": "03/06/2026 09:49:49",
+    "status": "Thất bại",
+    "message": "User không hợp lệ"
+  },
+  {
+    "id": "fh_1780426041275",
+    "targetName": "Nguyễn Anh Đức",
+    "targetPhone": "0933805525",
+    "accountLabel": "Kai (709694992560717870)",
+    "timestamp": "03/06/2026 01:47:21",
+    "status": "Thất bại",
+    "message": "Kiểm tra tuân thủ thất bại: Đang trong khung giờ nghỉ (21:00–08:00). Tạm dừng gửi tin. [Rủi ro: Trung bình]"
+  },
+  {
     "id": "fh_1780422630390",
     "targetName": "Nguyễn Anh Đức",
     "targetPhone": "Quét từ nhóm",

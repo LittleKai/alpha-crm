@@ -267,6 +267,7 @@ class ZaloIntegrationApi {
   Future<Map<String, dynamic>> leaveGroup({
     required String groupId,
     required bool silent,
+    String? accountId,
   }) async {
     try {
       final response = await _client
@@ -276,6 +277,7 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'groupId': groupId,
               'silent': silent,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -352,13 +354,17 @@ class ZaloIntegrationApi {
 
   Future<Map<String, dynamic>> searchUserByPhone({
     required String phone,
+    String? accountId,
   }) async {
     try {
       final response = await _client
           .post(
             Uri.parse('$baseUrl/api/zalo/friends/search'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'phone': phone}),
+            body: jsonEncode({
+              'phone': phone,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+            }),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -372,6 +378,7 @@ class ZaloIntegrationApi {
     required String userId,
     required String message,
     String actionType = 'friend_by_phone',
+    String? accountId,
   }) async {
     try {
       final response = await _client
@@ -382,6 +389,7 @@ class ZaloIntegrationApi {
               'userId': userId,
               'message': message,
               'actionType': actionType,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -394,13 +402,17 @@ class ZaloIntegrationApi {
 
   Future<Map<String, dynamic>> acceptFriendRequest({
     required String senderId,
+    String? accountId,
   }) async {
     try {
       final response = await _client
           .post(
             Uri.parse('$baseUrl/api/zalo/friends/approve'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'senderId': senderId}),
+            body: jsonEncode({
+              'senderId': senderId,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+            }),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -449,6 +461,7 @@ class ZaloIntegrationApi {
   Future<Map<String, dynamic>> createGroup({
     required String name,
     required List<String> members,
+    String? accountId,
   }) async {
     try {
       final response = await _client
@@ -458,6 +471,7 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'name': name,
               'members': members,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -470,6 +484,7 @@ class ZaloIntegrationApi {
 
   Future<Map<String, dynamic>> joinGroup({
     required String link,
+    String? accountId,
   }) async {
     try {
       final response = await _client
@@ -478,6 +493,7 @@ class ZaloIntegrationApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'link': link,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -491,6 +507,7 @@ class ZaloIntegrationApi {
   Future<Map<String, dynamic>> inviteToGroup({
     required String userId,
     required String groupId,
+    String? accountId,
   }) async {
     try {
       final response = await _client
@@ -500,6 +517,7 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'userId': userId,
               'groupId': groupId,
+              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));

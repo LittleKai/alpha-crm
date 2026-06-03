@@ -11,6 +11,7 @@ import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_badge.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
+import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
@@ -18,7 +19,6 @@ import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
-import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
   const ChatbotScreen({super.key});
@@ -30,12 +30,11 @@ class ChatbotScreen extends ConsumerStatefulWidget {
 class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   final TextEditingController _promptController = TextEditingController();
   double _tempValue = 0.7;
-  String _selectedModel = 'Gemini 1.5 Flash';
+  String _selectedModel = chatbotDefaultAiModel;
 
   final TextEditingController _testMessageController = TextEditingController();
   String? _playgroundResponse;
   bool _isPlaying = false;
-  String? _selectedAccountId;
 
   @override
   void dispose() {
@@ -55,6 +54,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
     final response = await CrmCloudApi.post('/crm/chatbot/test', {
       'message': msg,
+      'aiModel': _selectedModel,
+      'systemPrompt': _promptController.text,
+      'temperature': _tempValue,
     });
 
     setState(() {
@@ -75,6 +77,73 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Future<void> _showCreateRuleDialog(BuildContext context) async {
+    final keywordController = TextEditingController();
+    final responseController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AppDialog(
+          title: 'Tạo kịch bản chatbot',
+          subtitle:
+              'Tạo phản hồi cố định cho các câu hỏi lặp lại trước khi dùng AI.',
+          icon: Icons.add_comment_outlined,
+          width: 520,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              icon: Icons.close_rounded,
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            AppDialogAction(
+              text: 'Lưu',
+              icon: Icons.save_outlined,
+              onPressed: () {
+                ref
+                    .read(chatbotProvider.notifier)
+                    .addRule(keywordController.text, responseController.text)
+                    .then((_) {
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                    });
+              },
+            ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: keywordController,
+                decoration: const InputDecoration(
+                  labelText: 'Từ khóa',
+                  hintText: 'VD: bảo hành, bảng giá, địa chỉ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              TextField(
+                controller: responseController,
+                minLines: 4,
+                maxLines: 7,
+                decoration: const InputDecoration(
+                  labelText: 'Nội dung phản hồi',
+                  hintText:
+                      'VD: Sản phẩm được bảo hành 12 tháng. Anh/chị cần em kết nối tư vấn viên không?',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    keywordController.dispose();
+    responseController.dispose();
+  }
+
+  // ignore: unused_element
+  Future<void> _showLegacyCreateRuleDialog(BuildContext context) async {
     final keywordController = TextEditingController();
     final responseController = TextEditingController();
     await showDialog<void>(
@@ -130,7 +199,67 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Future<void> _showAddKnowledgeDialog(
-      BuildContext context, ChatbotNotifier notifier) async {
+    BuildContext context,
+    ChatbotNotifier notifier,
+  ) async {
+    final docController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AppDialog(
+          title: 'Thêm tài liệu/kiến thức',
+          subtitle:
+              'Lưu nội dung, link file hoặc hướng dẫn gửi ảnh/file để AI dùng làm ngữ cảnh nội bộ.',
+          icon: Icons.library_add_outlined,
+          width: 560,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              icon: Icons.close_rounded,
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            AppDialogAction(
+              text: 'Thêm',
+              icon: Icons.add_rounded,
+              onPressed: () {
+                final text = docController.text.trim();
+                if (text.isEmpty) return;
+                notifier.addKnowledgeDocument(text).then((_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Đã thêm kiến thức: $text')),
+                    );
+                  }
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                });
+              },
+            ),
+          ],
+          child: TextField(
+            controller: docController,
+            minLines: 5,
+            maxLines: 9,
+            decoration: const InputDecoration(
+              labelText: 'Nội dung kiến thức hoặc hướng dẫn gửi tài liệu',
+              hintText:
+                  'VD: Khi khách hỏi catalogue, gửi link https://... và nói: Em gửi anh/chị catalogue sản phẩm mới nhất.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        );
+      },
+    );
+    docController.dispose();
+  }
+
+  // ignore: unused_element
+  Future<void> _showLegacyAddKnowledgeDialog(
+    BuildContext context,
+    ChatbotNotifier notifier,
+  ) async {
     final docController = TextEditingController();
     await showDialog<void>(
       context: context,
@@ -145,7 +274,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                 labelText: 'Nhập nội dung kiến thức hoặc tên tài liệu',
-                hintText: 'VD: Chính sách bảo hành: 1 đổi 1 trong vòng 30 ngày...',
+                hintText:
+                    'VD: Chính sách bảo hành: 1 đổi 1 trong vòng 30 ngày...',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -177,26 +307,162 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     docController.dispose();
   }
 
+  Future<void> _showKeywordHelpDialog(BuildContext context) {
+    return _showKeywordGuideDialog(context);
+  }
+
+  Future<void> _showKeywordGuideDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Hướng dẫn kịch bản từ khóa',
+        subtitle:
+            'Ưu tiên kịch bản cố định cho các câu hỏi lặp lại trước khi dùng AI.',
+        icon: Icons.vpn_key_outlined,
+        actions: [
+          AppDialogAction(
+            text: 'Đã hiểu',
+            icon: Icons.check_rounded,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppDialogSection(
+              title: 'Khi nào dùng kịch bản từ khóa',
+              icon: Icons.rule_folder_outlined,
+              items: [
+                'Dùng cho các câu hỏi lặp lại như giá, bảo hành, địa chỉ, giờ làm việc hoặc quy trình mua hàng.',
+                'Mỗi kịch bản nên có từ khóa ngắn, tự nhiên và dễ xuất hiện trong tin nhắn khách.',
+                'Bot luôn kiểm tra kịch bản từ khóa trước; nếu không khớp và AI đang bật thì backend mới gọi GCLI để tạo câu trả lời.',
+              ],
+            ),
+            SizedBox(height: AppSpacing.m),
+            AppDialogSection(
+              title: 'Cách viết an toàn',
+              icon: Icons.verified_user_outlined,
+              items: [
+                'Nội dung phản hồi nên ngắn, rõ hành động tiếp theo và có thể kèm lời mời gặp tư vấn viên.',
+                'Các tình huống nhạy cảm như khiếu nại, hoàn tiền, pháp lý hoặc yêu cầu gặp người thật nên chuyển nhân viên.',
+                'Không đưa token, mật khẩu, cookie hoặc dữ liệu cá nhân nhạy cảm vào câu trả lời cố định.',
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Future<void> _showLegacyKeywordHelpDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hướng dẫn kịch bản từ khóa'),
+        content: const SizedBox(
+          width: 520,
+          child: Text(
+            'Dùng kịch bản từ khóa cho các câu hỏi lặp lại như giá, bảo hành, địa chỉ hoặc giờ làm việc. '
+            'Mỗi kịch bản nên có từ khóa ngắn, dễ xuất hiện trong tin nhắn khách. '
+            'Nếu khách nhắn trùng từ khóa, bot trả lời bằng nội dung cố định trước; nếu không khớp và AI đang bật, backend mới gọi GCLI để AI trả lời. '
+            'Các tình huống nhạy cảm như khiếu nại, hoàn tiền hoặc yêu cầu gặp người thật nên được ghi rõ trong prompt để bot chuyển nhân viên.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Đã hiểu'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showKnowledgeHelpDialog(BuildContext context) {
+    return _showKnowledgeGuideDialog(context);
+  }
+
+  Future<void> _showKnowledgeGuideDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Hướng dẫn tài liệu kiến thức',
+        subtitle:
+            'Kho kiến thức giúp AI trả lời đúng nội dung doanh nghiệp, nhưng agent vẫn là nơi gửi file/ảnh/tin Zalo thật.',
+        icon: Icons.folder_open_outlined,
+        width: 640,
+        actions: [
+          AppDialogAction(
+            text: 'Đã hiểu',
+            icon: Icons.check_rounded,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppDialogSection(
+              title: 'Nên lưu gì vào kho kiến thức',
+              icon: Icons.library_books_outlined,
+              items: [
+                'Lưu chính sách, bảng giá, FAQ, quy trình, điều kiện bảo hành và cách chuyển nhân viên.',
+                'Với file hoặc ảnh, hãy lưu URL/tên tài liệu kèm hướng dẫn rõ: khi khách hỏi catalogue thì gửi link nào, ảnh nào hoặc file nào.',
+                'Không lưu mật khẩu, token, cookie, IMEI, dữ liệu đăng nhập Zalo hoặc dữ liệu khách hàng nhạy cảm.',
+              ],
+            ),
+            SizedBox(height: AppSpacing.m),
+            AppDialogSection(
+              title: 'Luồng đúng khi AI cần gửi file/ảnh',
+              icon: Icons.route_outlined,
+              items: [
+                'Backend chỉ dùng key GCLI để gọi model và tạo nội dung hoặc quyết định gợi ý cần gửi tài liệu nào.',
+                'Việc gửi tin nhắn, file, ảnh hoặc link cho người dùng Zalo phải được agent thực hiện trên máy đã đăng nhập tài khoản Zalo.',
+                'Nếu cần gửi file/ảnh thật, agent cần nhận payload có loại hành động, threadId/người nhận, nội dung, URL hoặc đường dẫn file hợp lệ.',
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Future<void> _showLegacyKnowledgeHelpDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hướng dẫn tài liệu kiến thức'),
+        content: const SizedBox(
+          width: 560,
+          child: Text(
+            'Kho kiến thức lưu các đoạn tri thức ngắn vào backend theo từng tài khoản CRM. '
+            'Hãy nhập nội dung mà AI cần dùng trực tiếp: chính sách, bảng giá, quy trình, FAQ, đường dẫn file hoặc ảnh cần gửi khách. '
+            'Với file/ảnh, hãy upload lên kho lưu trữ của hệ thống hoặc B2/resource trước, sau đó dán URL kèm hướng dẫn rõ như: "khi khách hỏi catalogue, gửi link này". '
+            'AI đọc phần này như ngữ cảnh nội bộ khi không có kịch bản từ khóa khớp. Không đưa mật khẩu, token, cookie hoặc dữ liệu khách hàng nhạy cảm vào kho kiến thức.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Đã hiểu'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatbotProvider);
     final notifier = ref.read(chatbotProvider.notifier);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
-    // Watch connected accounts
-    final zaloState = ref.watch(zaloIntegrationProvider);
-    final connectedAccounts = zaloState.accounts;
-
-    final String selectedId = _selectedAccountId ?? "";
-    final String activeId = (selectedId == "" || connectedAccounts.any((acc) => acc.id == selectedId))
-        ? selectedId
-        : "";
-
     // Sync prompt value once
     if (_promptController.text.isEmpty && state.systemPrompt.isNotEmpty) {
       _promptController.text = state.systemPrompt;
       _tempValue = state.temperature;
-      _selectedModel = state.aiModel;
+      _selectedModel = normalizeChatbotAiModel(state.aiModel);
     }
 
     final header = Row(
@@ -221,78 +487,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.s),
-        SizedBox(
-          width: 240,
-          child: AppSelectField<String>(
-            value: activeId,
-            hintText: 'Chọn tài khoản...',
-            items: [
-              DropdownMenuItem(
-                value: "",
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: AppColors.primarySoft,
-                      child: const Icon(
-                        Icons.group_outlined,
-                        size: 14,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Expanded(
-                      child: Text(
-                        'Tất cả tài khoản',
-                        style: AppTextStyles.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ...connectedAccounts.map((account) {
-                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-                final avatarUrl = account.avatarUrl;
-                return DropdownMenuItem(
-                  value: account.id,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                        child: avatarUrl.isEmpty
-                            ? Text(
-                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textSecondary,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: AppSpacing.s),
-                      Expanded(
-                        child: Text(
-                          cleanLabel,
-                          style: AppTextStyles.bodyMedium,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-            onChanged: (val) {
-              setState(() {
-                _selectedAccountId = val;
-              });
-            },
+        if (state.activeTab == 0 || state.activeTab == 2)
+          IconButton(
+            tooltip: state.activeTab == 0
+                ? 'Hướng dẫn kịch bản từ khóa'
+                : 'Hướng dẫn tài liệu kiến thức',
+            icon: const Icon(Icons.help_outline_rounded),
+            color: AppColors.textSecondary,
+            onPressed: () => state.activeTab == 0
+                ? _showKeywordHelpDialog(context)
+                : _showKnowledgeHelpDialog(context),
           ),
-        ),
         const SizedBox(width: AppSpacing.s),
         if (state.activeTab == 0)
           AppButton(
@@ -503,16 +708,22 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           Text('Mô hình ngôn ngữ AI sử dụng:', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
-            value: const [
-              'gcli-default',
-              'Gemini 1.5 Flash',
-              'Gemini 1.5 Pro',
-              'GPT-4o mini',
-              'Zalo AI Custom',
-            ].contains(_selectedModel)
-                ? _selectedModel
-                : 'gcli-default',
+            value: normalizeChatbotAiModel(_selectedModel),
             items: const [
+              DropdownMenuItem(
+                value: 'gemini-3-flash-preview',
+                child: Text('gemini-3-flash-preview (1 quota/lượt)'),
+              ),
+              DropdownMenuItem(
+                value: 'gemini-2.5-pro',
+                child: Text('gemini-2.5-pro (1 quota/lượt)'),
+              ),
+              DropdownMenuItem(
+                value: 'gemini-3.1-pro-preview',
+                child: Text('gemini-3.1-pro-preview (2 quota/lượt)'),
+              ),
+            ],
+            /*
               DropdownMenuItem(
                 value: 'gcli-default',
                 child: Text('Mặc định hệ thống'),
@@ -534,6 +745,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 child: Text('Zalo AI Custom Model'),
               ),
             ],
+            */
             onChanged: (val) {
               if (val != null) {
                 setState(() {
@@ -543,6 +755,14 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             },
           ),
           const SizedBox(height: AppSpacing.m),
+          if (_selectedModel == 'gemini-3.1-pro-preview') ...[
+            const AppAlert(
+              message:
+                  'Model gemini-3.1-pro-preview dùng quota gấp đôi. Backend sẽ trừ 2 lượt cho mỗi lần AI trả lời thành công và hoàn lại nếu upstream GCLI lỗi.',
+              variant: AppAlertVariant.warning,
+            ),
+            const SizedBox(height: AppSpacing.m),
+          ],
           Text('System Prompt (Chỉ dẫn hệ thống):', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           TextField(

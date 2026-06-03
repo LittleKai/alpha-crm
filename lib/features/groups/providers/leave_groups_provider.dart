@@ -239,6 +239,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
           final result = await apiClient.leaveGroup(
             groupId: groupId,
             silent: state.isSilent,
+            accountId: state.selectedAccountId,
           );
           leaveSuccess = result['success'] == true;
         }

@@ -171,7 +171,10 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
         final api = _getApi();
         
         // Step 1: Search User profile
-        final searchResult = await api.searchUserByPhone(phone: currentPhone);
+        final searchResult = await api.searchUserByPhone(
+          phone: currentPhone,
+          accountId: state.selectedAccountId,
+        );
         final stepTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
         if (searchResult['success'] == true && searchResult['user'] != null) {
@@ -195,6 +198,7 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
             userId: userId,
             message: state.messageText,
             actionType: 'friend_by_phone',
+            accountId: state.selectedAccountId,
           );
 
           final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());

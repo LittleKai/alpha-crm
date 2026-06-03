@@ -49,9 +49,9 @@ export async function getAllGroups(): Promise<any[]> {
   return channel.getAllGroups();
 }
 
-export async function leaveGroup(groupId: string, silent = false): Promise<boolean> {
+export async function leaveGroup(groupId: string, silent = false, accountId?: string): Promise<boolean> {
   if (!channel.leaveGroup) return false;
-  return channel.leaveGroup(groupId, silent);
+  return channel.leaveGroup(groupId, silent, accountId);
 }
 
 export function getAccounts(): any[] {
@@ -86,33 +86,33 @@ export async function getGroupLinkMembers(link: string): Promise<{ groupId: stri
   return channel.getGroupLinkMembers(link);
 }
 
-export async function createGroup(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }> {
+export async function createGroup(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }> {
   if (!channel.createGroup) return { success: false, error: 'Method not supported on current channel.' };
-  return channel.createGroup(name, members);
+  return channel.createGroup(name, members, accountId);
 }
 
-export async function joinGroup(link: string): Promise<{ success: boolean; error?: string }> {
+export async function joinGroup(link: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
   if (!channel.joinGroup) return { success: false, error: 'Method not supported on current channel.' };
-  return channel.joinGroup(link);
+  return channel.joinGroup(link, accountId);
 }
 
-export async function inviteToGroup(userId: string, groupId: string): Promise<{ success: boolean; error?: string }> {
+export async function inviteToGroup(userId: string, groupId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
   if (!channel.inviteToGroup) return { success: false, error: 'Method not supported on current channel.' };
-  return channel.inviteToGroup(userId, groupId);
+  return channel.inviteToGroup(userId, groupId, accountId);
 }
 
-export async function findUser(phoneNumber: string): Promise<any> {
+export async function findUser(phoneNumber: string, accountId?: string): Promise<any> {
   if (!channel.findUser) return null;
-  return channel.findUser(phoneNumber);
+  return channel.findUser(phoneNumber, accountId);
 }
 
-export async function sendFriendRequest(userId: string, message: string): Promise<{ success: boolean; error?: string }> {
+export async function sendFriendRequest(userId: string, message: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
   if (!channel.sendFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
-  return channel.sendFriendRequest(userId, message);
+  return channel.sendFriendRequest(userId, message, accountId);
 }
 
-export async function acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function acceptFriendRequest(userId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
   if (!channel.acceptFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
-  return channel.acceptFriendRequest(userId);
+  return channel.acceptFriendRequest(userId, accountId);
 }
 

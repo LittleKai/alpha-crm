@@ -1,6 +1,10 @@
 # Project Summary
 
 **Last Updated:** 2026-06-03 +07:00
+**Session:** #46 - Added `gemini-2.5-pro` as a 1-quota Auto Chatbot AI model, introduced reusable shared `AppDialog` / `AppDialogSection` widgets for polished project-wide dialog styling, and migrated the Chatbot create-rule, add-knowledge, keyword-help, and knowledge-help dialogs to the new pattern with clearer guidance that backend GCLI generates AI content while the local Zalo agent performs actual message/file/image sending.
+
+**Session:** #45 - Updated the Auto Chatbot tab model selector to only allow `gemini-3-flash-preview` and `gemini-3.1-pro-preview`, sends the current model/prompt/temperature to the backend AI playground, added help dialogs for keyword scripts and knowledge documents, and guarded keyword rule creation against duplicate double-submit requests.
+
 **Session:** #44 - Fixed Live Chat account selector dropdown to list and update selections correctly by binding it directly to `zaloIntegrationProvider.accounts` instead of the empty-prone `/crm/groups/accounts` API. Standardized Vietnamese accents on the default 'Tất cả tài khoản' dropdown label and fixed multiple unaccented strings/error messages across Chatbot, Live Chat, Tasks, Groups, and Customers screens and providers.
 
 **Session:** #43 - Updated the monthly CRM subscription price and credits references in `subscription_screen.dart` to 500,000 VND / 525 credits to align with the new billing plans.

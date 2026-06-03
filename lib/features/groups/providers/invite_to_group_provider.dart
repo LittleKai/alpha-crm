@@ -286,6 +286,7 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
         final response = await api.inviteToGroup(
           userId: friendId,
           groupId: state.selectedGroupId ?? '',
+          accountId: state.selectedAccountId,
         );
 
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());

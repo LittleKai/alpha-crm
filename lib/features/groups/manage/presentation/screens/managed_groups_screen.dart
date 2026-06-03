@@ -10,6 +10,8 @@ import '../../../../../shared/widgets/app_badge.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
+import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/managed_groups_provider.dart';
 
 class ManagedGroupsScreen extends ConsumerWidget {
@@ -71,14 +73,18 @@ class ManagedGroupsScreen extends ConsumerWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   final ManagedGroupsState state;
   final ManagedGroupsNotifier notifier;
 
   const _Header({required this.state, required this.notifier});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final connectedAccounts = zaloState.accounts;
+    final String activeId = state.selectedAccountId;
+
     return Row(
       children: [
         const Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
@@ -87,18 +93,95 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Quan ly nhom Zalo', style: AppTextStyles.pageTitle),
+              Text('Quản lý nhóm Zalo', style: AppTextStyles.pageTitle),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Bat quan ly nhom, tao tom tat AI va theo doi insight van hanh.',
+                'Bật quản lý nhóm, tạo tóm tắt AI và theo dõi insight vận hành.',
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
               ),
             ],
           ),
         ),
+        const SizedBox(width: AppSpacing.s),
+        SizedBox(
+          width: 240,
+          child: AppSelectField<String>(
+            value: activeId,
+            hintText: 'Chọn tài khoản...',
+            items: [
+              DropdownMenuItem(
+                value: '',
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.primarySoft,
+                      child: const Icon(
+                        Icons.group_outlined,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Tất cả tài khoản',
+                        style: AppTextStyles.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...connectedAccounts.map((account) {
+                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final avatarUrl = account.avatarUrl;
+
+                return DropdownMenuItem(
+                  value: account.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
+                            : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          cleanLabel,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                notifier.setSelectedAccountId(val);
+              }
+            },
+          ),
+        ),
+        const SizedBox(width: AppSpacing.m),
         Row(
           children: [
-            Text('Chi managed', style: AppTextStyles.caption),
+            Text('Chỉ nhóm quản lý', style: AppTextStyles.caption),
             Switch(
               value: state.showManagedOnly,
               onChanged: notifier.toggleManagedOnly,
@@ -107,7 +190,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.s),
         AppButton(
-          text: 'Dong bo',
+          text: 'Đồng bộ',
           icon: Icons.sync,
           isLoading: state.isWorking,
           onPressed: state.isWorking ? null : notifier.syncGroups,
@@ -130,10 +213,10 @@ class _GroupsList extends StatelessWidget {
       child: state.groups.isEmpty
           ? AppEmptyState(
               icon: Icons.groups_outlined,
-              title: 'Chua co nhom',
+              title: 'Chưa có nhóm',
               description:
                   state.errorMessage ??
-                  'Bam Dong bo de agent lay danh sach nhom Zalo.',
+                  'Bấm Đồng bộ để hệ thống tải danh sách nhóm Zalo.',
               height: 360,
             )
           : ListView.separated(
@@ -142,11 +225,14 @@ class _GroupsList extends StatelessWidget {
               itemBuilder: (context, index) {
                 final group = state.groups[index];
                 final selected = group.id == state.selectedGroup?.id;
+                final hasAvatar = group.avatarUrl.isNotEmpty && group.avatarUrl.startsWith('http');
                 return ListTile(
                   selected: selected,
                   selectedTileColor: AppColors.primarySoft,
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.groups_outlined),
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.surfaceMuted,
+                    backgroundImage: hasAvatar ? NetworkImage(group.avatarUrl) : null,
+                    child: !hasAvatar ? const Icon(Icons.groups_outlined) : null,
                   ),
                   title: Text(
                     group.name,
@@ -154,7 +240,7 @@ class _GroupsList extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    '${group.memberCount} thanh vien - ${group.accountId}',
+                    '${group.memberCount} thành viên - ${group.accountId}',
                   ),
                   trailing: Switch(
                     value: group.isManaged,
@@ -183,8 +269,8 @@ class _DetailsPanel extends StatelessWidget {
           children: [
             const AppEmptyState(
               icon: Icons.manage_search_outlined,
-              title: 'Chon nhom de quan ly',
-              description: 'Tom tat, insight va export se hien thi tai day.',
+              title: 'Chọn nhóm để quản lý',
+              description: 'Tóm tắt, insight và xuất file sẽ hiển thị tại đây.',
               height: 260,
             ),
             _InsightsList(insights: state.insights),
@@ -210,13 +296,19 @@ class _DetailsPanel extends StatelessWidget {
                       spacing: AppSpacing.s,
                       children: [
                         AppBadge(
-                          label: group.isManaged ? 'Managed' : 'Unmanaged',
+                          label: group.isManaged ? 'Đã quản lý' : 'Chưa quản lý',
                           variant: group.isManaged
                               ? AppBadgeVariant.success
                               : AppBadgeVariant.neutral,
                         ),
                         AppBadge(
-                          label: group.summaryCadence,
+                          label: group.summaryCadence == 'daily'
+                              ? 'Hàng ngày'
+                              : (group.summaryCadence == 'weekly'
+                                  ? 'Hàng tuần'
+                                  : (group.summaryCadence == 'monthly'
+                                      ? 'Hàng tháng'
+                                      : group.summaryCadence)),
                           variant: AppBadgeVariant.info,
                         ),
                       ],
@@ -225,7 +317,7 @@ class _DetailsPanel extends StatelessWidget {
                 ),
               ),
               AppButton(
-                text: 'Tom tat AI',
+                text: 'Tóm tắt AI',
                 icon: Icons.summarize_outlined,
                 isLoading: state.isWorking,
                 onPressed: group.isManaged && !state.isWorking
@@ -234,7 +326,7 @@ class _DetailsPanel extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.s),
               AppButton(
-                text: 'Export',
+                text: 'Xuất CSV',
                 icon: Icons.download_outlined,
                 variant: AppButtonVariant.outline,
                 onPressed: notifier.exportSummaries,
@@ -252,11 +344,11 @@ class _DetailsPanel extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                Text('Tom tat gan day', style: AppTextStyles.bodyMedium),
+                Text('Tóm tắt gần đây', style: AppTextStyles.bodyMedium),
                 const SizedBox(height: AppSpacing.s),
                 if (state.selectedSummaries.isEmpty)
                   Text(
-                    'Chua co tom tat cho nhom nay.',
+                    'Chưa có tóm tắt cho nhóm này.',
                     style: AppTextStyles.body.copyWith(
                       color: AppColors.textMuted,
                     ),
@@ -291,7 +383,7 @@ class _DetailsPanel extends StatelessWidget {
                 _InsightsList(insights: state.insights),
                 if (state.exportCsv != null && state.exportCsv!.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.m),
-                  Text('CSV export preview', style: AppTextStyles.bodyMedium),
+                  Text('Xem trước xuất dữ liệu CSV', style: AppTextStyles.bodyMedium),
                   const SizedBox(height: AppSpacing.s),
                   SelectableText(
                     state.exportCsv!,
@@ -318,11 +410,11 @@ class _InsightsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Insight mo', style: AppTextStyles.bodyMedium),
+        Text('Insight mở', style: AppTextStyles.bodyMedium),
         const SizedBox(height: AppSpacing.s),
         if (insights.isEmpty)
           Text(
-            'Chua co insight can xu ly.',
+            'Chưa có insight cần xử lý.',
             style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
           )
         else

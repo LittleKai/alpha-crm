@@ -88,6 +88,20 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     ? rawTimestamp > 100000000000 ? rawTimestamp : rawTimestamp * 1000
     : Date.now();
 
+  // Try to find the sender's avatar from event data
+  let avatarUrl = toStringValue(data.avatar || data.avt || data.avatarUrl || data.senderAvatar || '');
+
+  // If not found in event, try to find in friendsCache
+  if (!avatarUrl && senderId) {
+    const cached = friendsCache.get(instance.uId);
+    if (cached?.data) {
+      const friend = cached.data.find((f) => f.userId === senderId);
+      if (friend?.avatar) {
+        avatarUrl = friend.avatar;
+      }
+    }
+  }
+
   return {
     accountId: instance.uId,
     accountLabel: instance.label,
@@ -95,6 +109,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     threadType: isGroup ? 'group' as const : 'user' as const,
     senderId,
     senderName: toStringValue(data.dName ?? data.displayName ?? data.senderName ?? data.fromName),
+    avatarUrl,
     content,
     messageType,
     providerMessageId: toStringValue(data.msgId ?? data.cliMsgId ?? data.messageId ?? data.id) ||
@@ -418,10 +433,26 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async leaveGroup(groupId: string, silent = false): Promise<boolean> {
+  async leaveGroup(groupId: string, silent = false, accountId?: string): Promise<boolean> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) return false;
+
+      if (accountId) {
+        const instance = accountPool.get(accountId);
+        if (instance) {
+          try {
+            console.log(`[PersonalZcaChannel - ${instance.label}] Attempting to leave group ${groupId}...`);
+            await instance.api.leaveGroup(groupId, silent);
+            console.log(`[PersonalZcaChannel - ${instance.label}] Successfully left group ${groupId}`);
+            groupsCache.delete(instance.uId);
+            return true;
+          } catch (err) {
+            console.error(`[PersonalZcaChannel - ${instance.label}] Failed to leave group ${groupId}:`, err);
+            return false;
+          }
+        }
+      }
 
       let leftAny = false;
       for (const instance of accountPool.values()) {
@@ -668,15 +699,20 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async createGroup(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }> {
+  async createGroup(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
       
-      const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[0]; // Use the first active account to create the group
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = Array.from(accountPool.values())[0];
+      }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to create group "${name}"`);
       const result = await selectedInstance.api.createGroup({
@@ -700,15 +736,20 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async joinGroup(link: string): Promise<{ success: boolean; error?: string }> {
+  async joinGroup(link: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
 
-      const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[0]; // Use the first active account to join
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = Array.from(accountPool.values())[0];
+      }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to join group from link: ${link}`);
       await selectedInstance.api.joinGroupLink(link);
@@ -728,24 +769,30 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async inviteToGroup(userId: string, groupId: string): Promise<{ success: boolean; error?: string }> {
+  async inviteToGroup(userId: string, groupId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
 
-      // Try to find which account has access to this group, otherwise use the first active account
-      let selectedInstance = Array.from(accountPool.values())[0];
-      for (const instance of accountPool.values()) {
-        try {
-          const infoData = await instance.api.getGroupInfo(groupId);
-          if (infoData?.gridInfoMap?.[groupId]) {
-            selectedInstance = instance;
-            break;
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        // Try to find which account has access to this group, otherwise use the first active account
+        selectedInstance = Array.from(accountPool.values())[0];
+        for (const instance of accountPool.values()) {
+          try {
+            const infoData = await instance.api.getGroupInfo(groupId);
+            if (infoData?.gridInfoMap?.[groupId]) {
+              selectedInstance = instance;
+              break;
+            }
+          } catch {
+            // Ignore and check next account
           }
-        } catch {
-          // Ignore and check next account
         }
       }
 
@@ -764,14 +811,19 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async findUser(phoneNumber: string): Promise<any> {
+  async findUser(phoneNumber: string, accountId?: string): Promise<any> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
-      const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[0];
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = Array.from(accountPool.values())[0];
+      }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to search phone: ${phoneNumber}`);
       const profile = await selectedInstance.api.findUser(phoneNumber);
       return profile;
@@ -781,14 +833,19 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async sendFriendRequest(userId: string, message: string): Promise<{ success: boolean; error?: string }> {
+  async sendFriendRequest(userId: string, message: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
-      const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[0];
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = Array.from(accountPool.values())[0];
+      }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to send friend request to ${userId}`);
       await selectedInstance.api.sendFriendRequest(message, userId);
       return { success: true };
@@ -801,14 +858,19 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }> {
+  async acceptFriendRequest(userId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
-      const instances = Array.from(accountPool.values());
-      const selectedInstance = instances[0];
+      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      if (!selectedInstance && accountId) {
+        throw new Error(`Requested Zalo account ${accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = Array.from(accountPool.values())[0];
+      }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to accept friend request from ${userId}`);
       await selectedInstance.api.acceptFriendRequest(userId);
       

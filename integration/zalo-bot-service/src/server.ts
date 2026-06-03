@@ -454,8 +454,8 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Leaving group ${groupId} (silent: ${silent})`);
-      const success = await leaveGroup(groupId, silent);
+      console.log(`[server] Leaving group ${groupId} (silent: ${silent}, accountId: ${payload.accountId || 'default'})`);
+      const success = await leaveGroup(groupId, silent, payload.accountId);
       json(res, success ? 200 : 500, { success });
     } catch (err) {
       json(res, 400, { error: 'Invalid request body or leave group failed' });
@@ -480,7 +480,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Creating group: "${name}" with ${members.length} members`);
+      console.log(`[server] Creating group: "${name}" with ${members.length} members (accountId: ${payload.accountId || 'default'})`);
       
       // Compliance check
       const complianceReq: ComplianceRequest = {
@@ -502,7 +502,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await createGroup(name, members);
+      const result = await createGroup(name, members, payload.accountId);
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });
@@ -522,7 +522,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Joining group via link: ${link}`);
+      console.log(`[server] Joining group via link: ${link} (accountId: ${payload.accountId || 'default'})`);
 
       // Compliance check
       const complianceReq: ComplianceRequest = {
@@ -544,7 +544,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await joinGroup(link);
+      const result = await joinGroup(link, payload.accountId);
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });
@@ -569,7 +569,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Inviting user ${userId} to group ${groupId}`);
+      console.log(`[server] Inviting user ${userId} to group ${groupId} (accountId: ${payload.accountId || 'default'})`);
 
       // Compliance check
       const complianceReq: ComplianceRequest = {
@@ -591,7 +591,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await inviteToGroup(userId, groupId);
+      const result = await inviteToGroup(userId, groupId, payload.accountId);
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });
@@ -773,8 +773,8 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Searching user by phone: ${phone}`);
-      const result = await findUser(phone);
+      console.log(`[server] Searching user by phone: ${phone} (accountId: ${payload.accountId || 'default'})`);
+      const result = await findUser(phone, payload.accountId);
       json(res, 200, { success: true, user: result });
     } catch (err) {
       json(res, 500, { success: false, error: err instanceof Error ? err.message : String(err) });
@@ -796,7 +796,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Gửi yêu cầu kết bạn đến ${userId}: "${message}"`);
+      console.log(`[server] Gửi yêu cầu kết bạn đến ${userId}: "${message}" (accountId: ${payload.accountId || 'default'})`);
 
       // Compliance check
       const complianceReq: ComplianceRequest = {
@@ -818,7 +818,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await sendFriendRequest(userId, message);
+      const result = await sendFriendRequest(userId, message, payload.accountId);
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });
@@ -838,8 +838,8 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[server] Chấp nhận kết bạn từ: ${senderId}`);
-      const result = await acceptFriendRequest(senderId);
+      console.log(`[server] Chấp nhận kết bạn từ: ${senderId} (accountId: ${payload.accountId || 'default'})`);
+      const result = await acceptFriendRequest(senderId, payload.accountId);
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });

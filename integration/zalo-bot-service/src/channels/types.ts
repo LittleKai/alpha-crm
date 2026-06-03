@@ -51,6 +51,7 @@ export interface ZaloInboundMessageEvent {
   threadType: 'user' | 'group';
   senderId: string;
   senderName?: string;
+  avatarUrl?: string;
   content: string;
   messageType: 'text' | 'image' | 'file' | 'sticker' | 'unknown';
   providerMessageId: string;
@@ -77,16 +78,16 @@ export interface ZaloChannel {
   startListener?(): Promise<void>;
   stopListener?(): Promise<void>;
   getAllGroups?(): Promise<any[]>;
-  leaveGroup?(groupId: string, silent?: boolean): Promise<boolean>;
+  leaveGroup?(groupId: string, silent?: boolean, accountId?: string): Promise<boolean>;
   getAccounts?(): any[];
   deleteAccount?(accountId: string): Promise<boolean>;
   getAllFriends?(): Promise<ZaloFriend[]>;
   getGroupMembers?(groupId: string): Promise<ZaloGroupMember[]>;
   getGroupLinkMembers?(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }>;
-  createGroup?(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }>;
-  joinGroup?(link: string): Promise<{ success: boolean; error?: string }>;
-  inviteToGroup?(userId: string, groupId: string): Promise<{ success: boolean; error?: string }>;
-  findUser?(phoneNumber: string): Promise<any>;
-  sendFriendRequest?(userId: string, message: string): Promise<{ success: boolean; error?: string }>;
-  acceptFriendRequest?(userId: string): Promise<{ success: boolean; error?: string }>;
+  createGroup?(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }>;
+  joinGroup?(link: string, accountId?: string): Promise<{ success: boolean; error?: string }>;
+  inviteToGroup?(userId: string, groupId: string, accountId?: string): Promise<{ success: boolean; error?: string }>;
+  findUser?(phoneNumber: string, accountId?: string): Promise<any>;
+  sendFriendRequest?(userId: string, message: string, accountId?: string): Promise<{ success: boolean; error?: string }>;
+  acceptFriendRequest?(userId: string, accountId?: string): Promise<{ success: boolean; error?: string }>;
 }

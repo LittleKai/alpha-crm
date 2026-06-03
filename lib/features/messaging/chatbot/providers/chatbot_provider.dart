@@ -6,6 +6,17 @@ final chatbotRepositoryProvider = Provider<ChatbotRepository>((ref) {
   return ChatbotRepository();
 });
 
+const chatbotAiModels = [
+  'gemini-3-flash-preview',
+  'gemini-2.5-pro',
+  'gemini-3.1-pro-preview',
+];
+const chatbotDefaultAiModel = 'gemini-3-flash-preview';
+
+String normalizeChatbotAiModel(String value) {
+  return chatbotAiModels.contains(value) ? value : chatbotDefaultAiModel;
+}
+
 class ChatbotRule {
   final String id;
   final String keyword;
@@ -115,9 +126,9 @@ class ChatbotState {
     return const ChatbotState(
       activeTab: 0,
       rules: [],
-      aiModel: 'Gemini 1.5 Flash',
+      aiModel: chatbotDefaultAiModel,
       systemPrompt:
-          'Ban la tro ly CSKH cua Alpha CRM. Hay tra loi than thien, ngan gon va huong khach hang den tu van vien khi can.',
+          'Bạn là trợ lý CSKH của Alpha CRM. Hãy trả lời thân thiện, ngắn gọn và hướng khách hàng đến tư vấn viên khi cần.',
       temperature: 0.7,
       aiEnabled: true,
       knowledgeDocuments: [],
@@ -156,6 +167,7 @@ class ChatbotState {
 
 class ChatbotNotifier extends StateNotifier<ChatbotState> {
   final ChatbotRepository _repository;
+  bool _isCreatingRule = false;
 
   ChatbotNotifier(this._repository) : super(ChatbotState.initial()) {
     refresh();
@@ -182,7 +194,9 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           )
         : <String>[];
     state = state.copyWith(
-      aiModel: (json['aiModel'] ?? state.aiModel).toString(),
+      aiModel: normalizeChatbotAiModel(
+        (json['aiModel'] ?? state.aiModel).toString(),
+      ),
       systemPrompt: (json['systemPrompt'] ?? state.systemPrompt).toString(),
       temperature:
           double.tryParse(
@@ -240,6 +254,8 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
   Future<void> addRule(String keyword, String response) async {
     if (keyword.trim().isEmpty || response.trim().isEmpty) return;
+    if (_isCreatingRule) return;
+    _isCreatingRule = true;
     final result = await _repository.createRule(
       keyword: keyword.trim(),
       response: response.trim(),
@@ -252,6 +268,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
             .toString(),
       );
     }
+    _isCreatingRule = false;
   }
 
   Future<void> deleteRule(String id) async {

@@ -60,6 +60,7 @@ export class MockZaloChannel implements ZaloChannel {
         threadType: 'user',
         senderId: 'mock_live_customer',
         senderName: 'Mock Customer',
+        avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150',
         content: 'Minh can tu van them ve bao gia.',
         messageType: 'text',
         providerMessageId: `mock_inbound_${Date.now()}`,
@@ -87,8 +88,8 @@ export class MockZaloChannel implements ZaloChannel {
     ];
   }
 
-  async leaveGroup(groupId: string, silent = false): Promise<boolean> {
-    console.log(`[MockZaloChannel] Mock leaving group ${groupId} (silent: ${silent})`);
+  async leaveGroup(groupId: string, silent = false, accountId?: string): Promise<boolean> {
+    console.log(`[MockZaloChannel] Mock leaving group ${groupId} (silent: ${silent}) using account: ${accountId || 'default'}`);
     return true;
   }
 
@@ -119,7 +120,7 @@ export class MockZaloChannel implements ZaloChannel {
   }
 
   async getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {
-    console.log(`[MockZaloChannel] Fetching mock members for group ${groupId}`);
+    console.log(`[MockZaloChannel] Fetching mock members for group: ${groupId}`);
     return [
       { id: 'u1', displayName: 'Phạm Minh Đức', zaloName: 'minhduc', avatar: '', role: 'owner' },
       { id: 'u2', displayName: 'Trần Thanh Hằng', zaloName: 'thanhhang', avatar: '', role: 'admin' },
@@ -131,7 +132,7 @@ export class MockZaloChannel implements ZaloChannel {
   }
 
   async getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }> {
-    console.log(`[MockZaloChannel] Fetching mock group link info for: ${link}`);
+    console.log(`[MockZaloChannel] Fetching mock group link members for: ${link}`);
     const members: ZaloGroupMember[] = [
       { id: 'u10', displayName: 'Nguyễn Văn An', zaloName: 'vanan', avatar: '', role: 'owner' },
       { id: 'u11', displayName: 'Trần Thị Bình', zaloName: 'thibinh', avatar: '', role: 'admin' },
@@ -148,26 +149,26 @@ export class MockZaloChannel implements ZaloChannel {
     };
   }
 
-  async createGroup(name: string, members: string[]): Promise<{ success: boolean; groupId?: string; error?: string }> {
-    console.log(`[MockZaloChannel] Creating group: ${name} with members: ${members.join(', ')}`);
+  async createGroup(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }> {
+    console.log(`[MockZaloChannel] Creating group: ${name} with members: ${members.join(', ')} using account: ${accountId || 'default'}`);
     return {
       success: true,
       groupId: `mock_group_${Date.now()}`,
     };
   }
 
-  async joinGroup(link: string): Promise<{ success: boolean; error?: string }> {
-    console.log(`[MockZaloChannel] Joining group via link: ${link}`);
+  async joinGroup(link: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`[MockZaloChannel] Joining group via link: ${link} using account: ${accountId || 'default'}`);
     return { success: true };
   }
 
-  async inviteToGroup(userId: string, groupId: string): Promise<{ success: boolean; error?: string }> {
-    console.log(`[MockZaloChannel] Inviting user ${userId} to group ${groupId}`);
+  async inviteToGroup(userId: string, groupId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`[MockZaloChannel] Inviting user ${userId} to group ${groupId} using account: ${accountId || 'default'}`);
     return { success: true };
   }
 
-  async findUser(phoneNumber: string): Promise<any> {
-    console.log(`[MockZaloChannel] Finding user by phone: ${phoneNumber}`);
+  async findUser(phoneNumber: string, accountId?: string): Promise<any> {
+    console.log(`[MockZaloChannel] Finding user by phone: ${phoneNumber} using account: ${accountId || 'default'}`);
     return {
       uid: `mock_user_${phoneNumber}`,
       zalo_name: `User ${phoneNumber}`,
@@ -176,13 +177,13 @@ export class MockZaloChannel implements ZaloChannel {
     };
   }
 
-  async sendFriendRequest(userId: string, message: string): Promise<{ success: boolean; error?: string }> {
-    console.log(`[MockZaloChannel] Sending friend request to ${userId} with message: ${message}`);
+  async sendFriendRequest(userId: string, message: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`[MockZaloChannel] Sending friend request to ${userId} with message: ${message} using account: ${accountId || 'default'}`);
     return { success: true };
   }
 
-  async acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }> {
-    console.log(`[MockZaloChannel] Accepting friend request from ${userId}`);
+  async acceptFriendRequest(userId: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`[MockZaloChannel] Accepting friend request from ${userId} using account: ${accountId || 'default'}`);
     return { success: true };
   }
 }

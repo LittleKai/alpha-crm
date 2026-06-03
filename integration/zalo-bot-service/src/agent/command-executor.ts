@@ -106,13 +106,13 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
 
     // Additional helper/channel methods
     case 'zalo.friends.search':
-      return findUser(payload.phone);
+      return findUser(payload.phone, payload.accountId);
 
     case 'zalo.friends.add':
-      return sendFriendRequest(payload.userId, payload.message || '');
+      return sendFriendRequest(payload.userId, payload.message || '', payload.accountId);
 
     case 'zalo.friends.approve':
-      return acceptFriendRequest(payload.senderId);
+      return acceptFriendRequest(payload.senderId, payload.accountId);
 
     case 'zalo.groups.create':
       return createGroup(payload.name, payload.members || []);

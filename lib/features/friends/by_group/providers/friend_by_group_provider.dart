@@ -365,6 +365,7 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           userId: currentId,
           message: state.messageText,
           actionType: 'friend_by_group',
+          accountId: state.selectedAccountId,
         );
 
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());

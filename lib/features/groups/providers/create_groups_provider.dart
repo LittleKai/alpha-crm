@@ -232,7 +232,11 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
       try {
         final api = _getApi();
         final membersList = state.selectedFriendIds.toList();
-        final response = await api.createGroup(name: groupName, members: membersList);
+        final response = await api.createGroup(
+          name: groupName,
+          members: membersList,
+          accountId: state.selectedAccountId,
+        );
         
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 

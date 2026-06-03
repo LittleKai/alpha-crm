@@ -13,6 +13,7 @@ class ManagedZaloGroup {
   final String accountId;
   final String groupId;
   final String name;
+  final String avatarUrl;
   final int memberCount;
   final bool isManaged;
   final String summaryCadence;
@@ -24,6 +25,7 @@ class ManagedZaloGroup {
     required this.accountId,
     required this.groupId,
     required this.name,
+    this.avatarUrl = '',
     required this.memberCount,
     required this.isManaged,
     required this.summaryCadence,
@@ -41,6 +43,7 @@ class ManagedZaloGroup {
       accountId: accountId,
       groupId: groupId,
       name: name,
+      avatarUrl: avatarUrl,
       memberCount: memberCount,
       isManaged: isManaged ?? this.isManaged,
       summaryCadence: summaryCadence ?? this.summaryCadence,
@@ -55,6 +58,7 @@ class ManagedZaloGroup {
       accountId: (json['accountId'] ?? '').toString(),
       groupId: (json['groupId'] ?? '').toString(),
       name: (json['name'] ?? json['groupId'] ?? '').toString(),
+      avatarUrl: (json['avatarUrl'] ?? json['avatar'] ?? '').toString(),
       memberCount: int.tryParse((json['memberCount'] ?? 0).toString()) ?? 0,
       isManaged: json['isManaged'] == true,
       summaryCadence: (json['summaryCadence'] ?? 'daily').toString(),
@@ -119,6 +123,7 @@ class ManagedGroupsState {
   final List<GroupInsight> insights;
   final List<GroupSummaryRecord> selectedSummaries;
   final ManagedZaloGroup? selectedGroup;
+  final String selectedAccountId;
   final bool showManagedOnly;
   final bool isLoading;
   final bool isWorking;
@@ -130,6 +135,7 @@ class ManagedGroupsState {
     required this.insights,
     required this.selectedSummaries,
     this.selectedGroup,
+    this.selectedAccountId = '',
     required this.showManagedOnly,
     required this.isLoading,
     required this.isWorking,
@@ -143,6 +149,7 @@ class ManagedGroupsState {
       insights: [],
       selectedSummaries: [],
       selectedGroup: null,
+      selectedAccountId: '',
       showManagedOnly: false,
       isLoading: false,
       isWorking: false,
@@ -157,6 +164,7 @@ class ManagedGroupsState {
     List<GroupSummaryRecord>? selectedSummaries,
     ManagedZaloGroup? selectedGroup,
     bool clearSelectedGroup = false,
+    String? selectedAccountId,
     bool? showManagedOnly,
     bool? isLoading,
     bool? isWorking,
@@ -170,6 +178,7 @@ class ManagedGroupsState {
       selectedGroup: clearSelectedGroup
           ? null
           : selectedGroup ?? this.selectedGroup,
+      selectedAccountId: selectedAccountId ?? this.selectedAccountId,
       showManagedOnly: showManagedOnly ?? this.showManagedOnly,
       isLoading: isLoading ?? this.isLoading,
       isWorking: isWorking ?? this.isWorking,
@@ -195,6 +204,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
 
   Future<void> loadGroups() async {
     final response = await _repository.getGroups(
+      accountId: state.selectedAccountId,
       managed: state.showManagedOnly ? true : null,
     );
     if (response['success'] == true && response['data'] is List) {
@@ -227,15 +237,28 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     }
   }
 
+  Future<void> setSelectedAccountId(String accountId) async {
+    state = state.copyWith(
+      selectedAccountId: accountId,
+      clearSelectedGroup: true,
+    );
+    await loadGroups();
+  }
+
   Future<void> syncGroups() async {
     state = state.copyWith(isWorking: true, errorMessage: null);
-    final response = await _repository.syncGroups();
+    final response = await _repository.syncGroups(
+      accountId: state.selectedAccountId,
+    );
     state = state.copyWith(
       isWorking: false,
       errorMessage: response['success'] == true
           ? null
           : (response['message'] ?? 'Đồng bộ nhóm thất bại.').toString(),
     );
+    if (response['success'] == true) {
+      await loadGroups();
+    }
   }
 
   Future<void> setManaged(ManagedZaloGroup group, bool isManaged) async {
