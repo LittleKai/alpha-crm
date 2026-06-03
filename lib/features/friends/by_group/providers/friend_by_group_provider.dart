@@ -17,11 +17,11 @@ class FriendByGroupState {
   final List<ScannedMember> members;
   final Set<String> selectedMemberIds;
   final List<LogItem> logs;
-  
+
   final String? selectedGroupId;
   final String groupLinkInput;
   final String? selectedAccountId;
-  
+
   final String messageText;
   final int minDelay;
   final int maxDelay;
@@ -77,7 +77,8 @@ class FriendByGroupState {
       messageText: messageText ?? this.messageText,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
-      sendInboxAfterAccepted: sendInboxAfterAccepted ?? this.sendInboxAfterAccepted,
+      sendInboxAfterAccepted:
+          sendInboxAfterAccepted ?? this.sendInboxAfterAccepted,
       complianceError: complianceError,
       errorText: errorText,
     );
@@ -91,7 +92,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
   List<String> _membersToInvite = [];
 
   FriendByGroupNotifier(this._ref)
-      : super(const FriendByGroupState(
+    : super(
+        const FriendByGroupState(
           isScanning: false,
           isRunning: false,
           groups: [],
@@ -99,7 +101,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           selectedMemberIds: {},
           logs: [],
           groupLinkInput: '',
-        )) {
+        ),
+      ) {
     // Initial fetch of groups if connected
     Future.microtask(() => loadGroups());
   }
@@ -164,7 +167,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
   Future<void> scanGroupLink(String link) async {
     if (link.trim().isEmpty || !link.contains('zalo.me/g/')) {
       state = state.copyWith(
-        errorText: 'Link nhóm Zalo không hợp lệ. Định dạng yêu cầu: zalo.me/g/xxxxxx',
+        errorText:
+            'Link nhóm Zalo không hợp lệ. Định dạng yêu cầu: zalo.me/g/xxxxxx',
       );
       return;
     }
@@ -183,10 +187,7 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         final response = await api.fetchGroupLinkMembers(link: link.trim());
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
-          state = state.copyWith(
-            members: members,
-            isScanning: false,
-          );
+          state = state.copyWith(members: members, isScanning: false);
           return;
         }
       } catch (e) {
@@ -224,10 +225,7 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         final response = await api.fetchGroupMembers(groupId: groupId);
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
-          state = state.copyWith(
-            members: members,
-            isScanning: false,
-          );
+          state = state.copyWith(members: members, isScanning: false);
           return;
         }
       } catch (e) {
@@ -336,13 +334,16 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
     }
 
     final currentId = _membersToInvite[_currentIndex];
-    final member = state.members.firstWhere((m) => m.id == currentId,
-        orElse: () => ScannedMember(
-            id: currentId,
-            name: 'Thành viên nhóm',
-            phone: '',
-            role: 'Thành viên',
-            status: 'Chưa kết bạn'));
+    final member = state.members.firstWhere(
+      (m) => m.id == currentId,
+      orElse: () => ScannedMember(
+        id: currentId,
+        name: 'Thành viên nhóm',
+        phone: '',
+        role: 'Thành viên',
+        status: 'Chưa kết bạn',
+      ),
+    );
     final timeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
     state = state.copyWith(
@@ -350,7 +351,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         ...state.logs,
         LogItem(
           timestamp: timeStr,
-          message: '[$_currentIndex] Đang gửi yêu cầu kết bạn đến: "${member.name}"',
+          message:
+              '[$_currentIndex] Đang gửi yêu cầu kết bạn đến: "${member.name}"',
           type: LogType.info,
         ),
       ],
@@ -359,7 +361,7 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
     _timer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final api = _getApi();
-        
+
         // Step: Send friend request directly with uid
         final sendResult = await api.sendFriendRequest(
           userId: currentId,
@@ -372,12 +374,15 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         final accountLabel = _ref
             .read(zaloIntegrationProvider)
             .accounts
-            .firstWhere((acc) => acc.id == state.selectedAccountId,
-                orElse: () => const ZaloConnectedAccount(
-                    id: '',
-                    label: 'Tài khoản nguồn',
-                    connected: false,
-                    listenerRunning: false))
+            .firstWhere(
+              (acc) => acc.id == state.selectedAccountId,
+              orElse: () => const ZaloConnectedAccount(
+                id: '',
+                label: 'Tài khoản nguồn',
+                connected: false,
+                listenerRunning: false,
+              ),
+            )
             .label;
 
         if (sendResult['success'] == true) {
@@ -393,17 +398,21 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           );
 
           // Log to Friend History
-          _ref.read(friendHistoryProvider.notifier).addRecord(
-            FriendHistoryRecord(
-              id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
-              targetName: member.name,
-              targetPhone: 'Quét từ nhóm',
-              accountLabel: accountLabel,
-              timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
-              status: 'Thành công',
-              message: state.messageText,
-            ),
-          );
+          _ref
+              .read(friendHistoryProvider.notifier)
+              .addRecord(
+                FriendHistoryRecord(
+                  id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                  targetName: member.name,
+                  targetPhone: 'Quét từ nhóm',
+                  accountLabel: accountLabel,
+                  timestamp: DateFormat(
+                    'dd/MM/yyyy HH:mm:ss',
+                  ).format(DateTime.now()),
+                  status: 'Thành công',
+                  message: state.messageText,
+                ),
+              );
         } else {
           final errorMsg = sendResult['error'] ?? 'Gửi lời mời thất bại';
           state = state.copyWith(
@@ -417,17 +426,21 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
             ],
           );
 
-          _ref.read(friendHistoryProvider.notifier).addRecord(
-            FriendHistoryRecord(
-              id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
-              targetName: member.name,
-              targetPhone: 'Quét từ nhóm',
-              accountLabel: accountLabel,
-              timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
-              status: 'Thất bại',
-              message: '$errorMsg',
-            ),
-          );
+          _ref
+              .read(friendHistoryProvider.notifier)
+              .addRecord(
+                FriendHistoryRecord(
+                  id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                  targetName: member.name,
+                  targetPhone: 'Quét từ nhóm',
+                  accountLabel: accountLabel,
+                  timestamp: DateFormat(
+                    'dd/MM/yyyy HH:mm:ss',
+                  ).format(DateTime.now()),
+                  status: 'Thất bại',
+                  message: '$errorMsg',
+                ),
+              );
         }
       } catch (err) {
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
@@ -436,7 +449,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
             ...state.logs,
             LogItem(
               timestamp: completionTimeStr,
-              message: 'Lỗi mạng khi thực hiện kết bạn cho ${member.name}: $err',
+              message:
+                  'Lỗi mạng khi thực hiện kết bạn cho ${member.name}: $err',
               type: LogType.error,
             ),
           ],
@@ -446,7 +460,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
       _currentIndex++;
 
       if (_currentIndex < _membersToInvite.length) {
-        final delaySeconds = state.minDelay +
+        final delaySeconds =
+            state.minDelay +
             (state.maxDelay > state.minDelay
                 ? (state.maxDelay - state.minDelay)
                 : 0);
@@ -456,7 +471,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách ${delaySeconds}s trước khi chuyển sang thành viên tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi chuyển sang thành viên tiếp theo...',
               type: LogType.info,
             ),
           ],
@@ -502,5 +518,5 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
 
 final friendByGroupProvider =
     StateNotifierProvider<FriendByGroupNotifier, FriendByGroupState>((ref) {
-  return FriendByGroupNotifier(ref);
-});
+      return FriendByGroupNotifier(ref);
+    });

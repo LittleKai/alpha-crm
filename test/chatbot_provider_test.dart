@@ -25,6 +25,8 @@ class _FakeChatbotRepository extends ChatbotRepository {
 
   @override
   Future<Map<String, dynamic>> createRule({
+    required String name,
+    String? description,
     required String keyword,
     required String response,
   }) async {

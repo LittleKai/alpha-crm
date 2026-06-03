@@ -27,10 +27,7 @@ class _WarningIconButtonState extends State<WarningIconButton>
     );
 
     _pulseAnimation = Tween<double>(begin: 0.0, end: 8.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
     // Chỉ kích hoạt lặp vô hạn nếu không chạy trong môi trường Widget Test (tránh treo pumpAndSettle)
@@ -132,9 +129,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: AppSpacing.borderRadiusM,
-      ),
+      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
       backgroundColor: AppColors.surface,
       elevation: 24,
       clipBehavior: Clip.antiAlias,
@@ -152,10 +147,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
               ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    Color(0xFFF59E0B),
-                    Color(0xFFD97706),
-                  ],
+                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -198,7 +190,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Danh sách cảnh báo cuộn
             Expanded(
               child: ListView(
@@ -251,7 +243,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Footer Dialog
             Container(
               padding: const EdgeInsets.all(AppSpacing.m),
@@ -347,11 +339,7 @@ class _WarningItem extends StatelessWidget {
               color: badgeColor.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: badgeColor,
-              size: 20,
-            ),
+            child: Icon(icon, color: badgeColor, size: 20),
           ),
           const SizedBox(width: AppSpacing.m),
           Expanded(

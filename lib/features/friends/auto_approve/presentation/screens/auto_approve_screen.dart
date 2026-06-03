@@ -57,7 +57,10 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1100;
                   final leftCard = _buildSettingsCard(state, notifier);
-                  final rightCard = _buildRunningAccountsCard(state, activeAccounts);
+                  final rightCard = _buildRunningAccountsCard(
+                    state,
+                    activeAccounts,
+                  );
 
                   if (!useColumns) {
                     return SingleChildScrollView(
@@ -110,7 +113,10 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
     );
   }
 
-  Widget _buildSettingsCard(AutoApproveState state, AutoApproveNotifier notifier) {
+  Widget _buildSettingsCard(
+    AutoApproveState state,
+    AutoApproveNotifier notifier,
+  ) {
     return AppCard(
       child: SingleChildScrollView(
         child: Column(
@@ -120,29 +126,40 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
               children: [
                 Icon(
                   Icons.check_circle_outline,
-                  color: state.autoApprove ? AppColors.success : AppColors.textMuted,
+                  color: state.autoApprove
+                      ? AppColors.success
+                      : AppColors.textMuted,
                   size: 20,
                 ),
                 const SizedBox(width: AppSpacing.s),
-                Text('Tự động duyệt kết bạn', style: AppTextStyles.sectionTitle),
+                Text(
+                  'Tự động duyệt kết bạn',
+                  style: AppTextStyles.sectionTitle,
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.m),
             Text(
               'Tiến trình ngầm sẽ tự động chấp nhận tất cả lời mời kết bạn gửi tới các tài khoản Zalo đang trực tuyến trên ứng dụng.',
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary, height: 1.55),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.55,
+              ),
             ),
             const SizedBox(height: AppSpacing.l),
             _buildSwitchRow(
-              title: 'Tự động duyệt kết bạn: ${state.autoApprove ? "ĐANG BẬT" : "ĐANG TẮT"}',
+              title:
+                  'Tự động duyệt kết bạn: ${state.autoApprove ? "ĐANG BẬT" : "ĐANG TẮT"}',
               subtitle: 'Hệ thống tự động đồng ý kết bạn gửi đến.',
               value: state.autoApprove,
               onChanged: notifier.toggleAutoApprove,
             ),
             const SizedBox(height: AppSpacing.m),
             _buildSwitchRow(
-              title: 'Gửi inbox chào mừng: ${state.sendWelcome ? "ĐANG BẬT" : "ĐANG TẮT"}',
-              subtitle: 'Gửi tin nhắn chào mừng ngay sau khi chấp nhận lời mời.',
+              title:
+                  'Gửi inbox chào mừng: ${state.sendWelcome ? "ĐANG BẬT" : "ĐANG TẮT"}',
+              subtitle:
+                  'Gửi tin nhắn chào mừng ngay sau khi chấp nhận lời mời.',
               value: state.sendWelcome,
               onChanged: notifier.toggleSendWelcome,
             ),
@@ -195,7 +212,9 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitle,
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -210,7 +229,10 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
     );
   }
 
-  Widget _buildRunningAccountsCard(AutoApproveState state, List<ZaloConnectedAccount> accounts) {
+  Widget _buildRunningAccountsCard(
+    AutoApproveState state,
+    List<ZaloConnectedAccount> accounts,
+  ) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,33 +258,62 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
           if (accounts.isEmpty)
             const Expanded(
               child: Center(
-                child: Text('Chưa có tài khoản nào kết nối.', style: TextStyle(color: AppColors.textMuted)),
+                child: Text(
+                  'Chưa có tài khoản nào kết nối.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
               ),
             )
           else
             Expanded(
               child: ListView.separated(
                 itemCount: accounts.length,
-                separatorBuilder: (context, index) => const Divider(color: AppColors.borderSoft),
+                separatorBuilder: (context, index) =>
+                    const Divider(color: AppColors.borderSoft),
                 itemBuilder: (context, index) {
                   final acc = accounts[index];
-                  final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                  final cleanLabel = acc.label.replaceAll(
+                    RegExp(r'\s*\([^)]*\)$'),
+                    '',
+                  );
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                       radius: 16,
                       backgroundColor: AppColors.surfaceMuted,
-                      backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                      backgroundImage: acc.avatarUrl.isNotEmpty
+                          ? NetworkImage(acc.avatarUrl)
+                          : null,
                       child: acc.avatarUrl.isEmpty
                           ? Text(
-                              cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                              cleanLabel.isNotEmpty
+                                  ? cleanLabel[0].toUpperCase()
+                                  : 'A',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textSecondary,
+                              ),
                             )
                           : null,
                     ),
-                    title: Text(cleanLabel, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-                    subtitle: Text('Đang lắng nghe sự kiện kết bạn...', style: AppTextStyles.caption.copyWith(color: AppColors.success)),
-                    trailing: const Icon(Icons.sync, color: AppColors.success, size: 18),
+                    title: Text(
+                      cleanLabel,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Đang lắng nghe sự kiện kết bạn...',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.success,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.sync,
+                      color: AppColors.success,
+                      size: 18,
+                    ),
                   );
                 },
               ),

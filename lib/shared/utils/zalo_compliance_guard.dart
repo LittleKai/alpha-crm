@@ -112,7 +112,6 @@ class ZaloComplianceGuard {
           }
         }
         break;
-
     }
 
     // Block group/friend automation unless allow flag

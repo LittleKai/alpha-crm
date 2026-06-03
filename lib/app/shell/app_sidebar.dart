@@ -9,6 +9,7 @@ import 'app_shell_providers.dart';
 import 'nav_item_models.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
 import '../../features/auth/providers/crm_auth_provider.dart';
+import '../../features/security/providers/app_lock_provider.dart';
 
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
@@ -33,7 +34,9 @@ class AppSidebar extends ConsumerWidget {
           width: isCollapsed ? 72 : 250,
           decoration: const BoxDecoration(
             color: AppColors.surface,
-            border: Border(right: BorderSide(color: AppColors.border, width: 1)),
+            border: Border(
+              right: BorderSide(color: AppColors.border, width: 1),
+            ),
           ),
           child: Column(
             children: [
@@ -61,7 +64,8 @@ class AppSidebar extends ConsumerWidget {
         if (!isMobile && forceCollapsed == null)
           Positioned(
             right: -12, // overlapping the right border (which is 1px wide)
-            top: 52, // centered around y = 64px (since button height is 24px, 64 - 12 = 52px)
+            top:
+                52, // centered around y = 64px (since button height is 24px, 64 - 12 = 52px)
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
@@ -250,9 +254,7 @@ class AppSidebar extends ConsumerWidget {
 
     return Container(
       height: 40,
-      margin: const EdgeInsets.symmetric(
-        vertical: AppSpacing.xs,
-      ),
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -321,7 +323,11 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildUserFooter(BuildContext context, WidgetRef ref, bool isCollapsed) {
+  Widget _buildUserFooter(
+    BuildContext context,
+    WidgetRef ref,
+    bool isCollapsed,
+  ) {
     final authState = ref.watch(crmAuthProvider);
     final user = authState.user;
     final displayName = user?.name ?? user?.email ?? 'Người dùng';
@@ -358,9 +364,7 @@ class AppSidebar extends ConsumerWidget {
               child: SizedBox(
                 height: 40,
                 width: 40,
-                child: Center(
-                  child: avatarWidget,
-                ),
+                child: Center(child: avatarWidget),
               ),
             ),
           ),
@@ -370,9 +374,7 @@ class AppSidebar extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceMuted,
-      ),
+      decoration: const BoxDecoration(color: AppColors.surfaceMuted),
       child: Row(
         children: [
           // User Avatar Circle
@@ -406,6 +408,12 @@ class AppSidebar extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
+          IconButton(
+            icon: const Icon(Icons.lock_outline_rounded, size: 18),
+            color: AppColors.textSecondary,
+            tooltip: 'Khóa ứng dụng',
+            onPressed: () => ref.read(appLockProvider.notifier).lock(),
+          ),
           // Logout Button
           IconButton(
             icon: const Icon(Icons.logout, size: 18),
@@ -443,7 +451,9 @@ class AppSidebar extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xác nhận đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng Alpha CRM?'),
+        content: const Text(
+          'Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng Alpha CRM?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

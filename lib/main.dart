@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
+import 'features/security/presentation/app_lock_overlay.dart';
+import 'features/security/providers/app_lock_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Tự động chạy Zalo Bot backend khi chạy trên máy tính (Desktop)
   await ZaloBackendManager.startBackend();
-  
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -25,6 +27,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appLockProvider.notifier).load();
+    });
   }
 
   @override
@@ -49,6 +54,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: router,
+      builder: (context, child) {
+        return AppLockOverlay(child: child ?? const SizedBox.shrink());
+      },
     );
   }
 }

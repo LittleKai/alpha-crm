@@ -27,11 +27,10 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    final success = await ref.read(crmAuthProvider.notifier).login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+
+    final success = await ref
+        .read(crmAuthProvider.notifier)
+        .login(_emailController.text.trim(), _passwordController.text);
 
     if (success && mounted) {
       context.go('/dashboard');
@@ -41,7 +40,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(crmAuthProvider);
-    
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -107,30 +106,42 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         ],
                       ),
                       const SizedBox(height: 32),
-                      
+
                       Text(
                         'Đăng nhập tài khoản Alpha Studio',
                         style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
-                      
+
                       if (authState.errorText != null) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.errorSoft,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.error.withOpacity(0.2)),
+                            border: Border.all(
+                              color: AppColors.error.withOpacity(0.2),
+                            ),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline_rounded, color: AppColors.errorText, size: 20),
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: AppColors.errorText,
+                                size: 20,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   authState.errorText!,
-                                  style: AppTextStyles.caption.copyWith(color: AppColors.errorText, fontWeight: FontWeight.w600),
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.errorText,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -138,12 +149,9 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      
+
                       // Email
-                      Text(
-                        'Địa chỉ Email',
-                        style: AppTextStyles.label,
-                      ),
+                      Text('Địa chỉ Email', style: AppTextStyles.label),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _emailController,
@@ -151,25 +159,27 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                           hintText: 'name@company.com',
-                          prefixIcon: Icon(Icons.email_outlined, color: AppColors.iconMuted),
+                          prefixIcon: Icon(
+                            Icons.email_outlined,
+                            color: AppColors.iconMuted,
+                          ),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'Vui lòng điền địa chỉ email.';
                           }
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+                          if (!RegExp(
+                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                          ).hasMatch(value.trim())) {
                             return 'Địa chỉ email không hợp lệ.';
                           }
                           return null;
                         },
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // Mật khẩu
-                      Text(
-                        'Mật khẩu',
-                        style: AppTextStyles.label,
-                      ),
+                      Text('Mật khẩu', style: AppTextStyles.label),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _passwordController,
@@ -178,10 +188,15 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         onFieldSubmitted: (_) => _submit(),
                         decoration: InputDecoration(
                           hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_outlined, color: AppColors.iconMuted),
+                          prefixIcon: const Icon(
+                            Icons.lock_outlined,
+                            color: AppColors.iconMuted,
+                          ),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
                               color: AppColors.iconMuted,
                             ),
                             onPressed: () {
@@ -199,7 +214,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         },
                       ),
                       const SizedBox(height: 32),
-                      
+
                       ElevatedButton(
                         onPressed: authState.isLoading ? null : _submit,
                         style: ElevatedButton.styleFrom(
@@ -217,7 +232,9 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               )
                             : Text(

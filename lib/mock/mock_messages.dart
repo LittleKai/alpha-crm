@@ -4,6 +4,8 @@ class MessageTemplate {
   final String content;
   final List<String> variables;
   final DateTime createdAt;
+  final String shortcut;
+  final bool isQuick;
 
   const MessageTemplate({
     required this.id,
@@ -11,6 +13,8 @@ class MessageTemplate {
     required this.content,
     required this.variables,
     required this.createdAt,
+    this.shortcut = '',
+    this.isQuick = false,
   });
 
   MessageTemplate copyWith({
@@ -19,6 +23,8 @@ class MessageTemplate {
     String? content,
     List<String>? variables,
     DateTime? createdAt,
+    String? shortcut,
+    bool? isQuick,
   }) {
     return MessageTemplate(
       id: id ?? this.id,
@@ -26,6 +32,8 @@ class MessageTemplate {
       content: content ?? this.content,
       variables: variables ?? this.variables,
       createdAt: createdAt ?? this.createdAt,
+      shortcut: shortcut ?? this.shortcut,
+      isQuick: isQuick ?? this.isQuick,
     );
   }
 }

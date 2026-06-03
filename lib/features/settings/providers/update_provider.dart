@@ -69,10 +69,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       return;
     }
 
-    state = state.copyWith(
-      status: UpdateStatus.checking,
-      errorText: null,
-    );
+    state = state.copyWith(status: UpdateStatus.checking, errorText: null);
 
     try {
       final currentVersion = await AppUpdateService.getCurrentVersion();
@@ -183,8 +180,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final platform = Platform.isWindows
         ? 'Windows (.exe)'
         : Platform.isAndroid
-            ? 'Android (.apk)'
-            : Platform.operatingSystem;
+        ? 'Android (.apk)'
+        : Platform.operatingSystem;
     return 'Không tìm thấy file cài đặt cho $platform. '
         'Vui lòng tải thủ công từ trang Releases.';
   }

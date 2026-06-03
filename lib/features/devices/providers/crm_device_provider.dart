@@ -53,17 +53,21 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
   Future<void> checkPairingStatus() async {
     state = state.copyWith(isLoading: true, errorText: null);
     final response = await CrmCloudApi.get('/crm/devices');
-    
+
     if (response['success'] == true && response['data'] != null) {
       final List<dynamic> list = response['data'];
-      final active = list.firstWhere((d) => d['status'] == 'active', orElse: () => null);
-      
+      final active = list.firstWhere(
+        (d) => d['status'] == 'active',
+        orElse: () => null,
+      );
+
       if (active != null) {
         state = state.copyWith(
           isLoading: false,
           isPaired: true,
           deviceId: active['_id']?.toString() ?? active['id']?.toString(),
-          pairedDeviceName: active['displayName']?.toString() ?? 'Thiết bị liên kết',
+          pairedDeviceName:
+              active['displayName']?.toString() ?? 'Thiết bị liên kết',
           pairedDeviceOs: active['platform']?.toString() ?? 'Windows',
         );
       } else {
@@ -80,28 +84,32 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
 
   Future<bool> startPairingProcess() async {
     state = state.copyWith(isLoading: true, errorText: null);
-    
+
     // 1. Lấy danh sách thiết bị để xem đã có thiết bị active chưa
     final devicesRes = await CrmCloudApi.get('/crm/devices');
     String? devId;
-    
+
     if (devicesRes['success'] == true && devicesRes['data'] != null) {
       final List<dynamic> list = devicesRes['data'];
-      final active = list.firstWhere((d) => d['status'] == 'active', orElse: () => null);
+      final active = list.firstWhere(
+        (d) => d['status'] == 'active',
+        orElse: () => null,
+      );
       if (active != null) {
         devId = active['_id']?.toString() ?? active['id']?.toString();
       }
     }
-    
+
     // 2. Nếu chưa có thiết bị, thông báo lỗi cho người dùng
     if (devId == null) {
       state = state.copyWith(
         isLoading: false,
-        errorText: 'Chưa tìm thấy thiết bị máy chủ nào. Vui lòng chạy "npm run crm:register-device" trên máy chủ để đăng ký trước khi ghép đôi.',
+        errorText:
+            'Chưa tìm thấy thiết bị máy chủ nào. Vui lòng chạy "npm run crm:register-device" trên máy chủ để đăng ký trước khi ghép đôi.',
       );
       return false;
     }
-    
+
     // 3. Gọi API bắt đầu ghép đôi với deviceId hợp lệ
     final response = await CrmCloudApi.post('/crm/pairing/start', {
       'deviceId': devId,
@@ -113,13 +121,15 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
         isLoading: false,
         deviceId: devId,
         pairingCode: data['pairingCode']?.toString(),
-        qrCodeData: data['qrToken']?.toString() ?? data['pairingCode']?.toString(),
+        qrCodeData:
+            data['qrToken']?.toString() ?? data['pairingCode']?.toString(),
       );
       return true;
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorText: response['message'] ?? 'Không thể bắt đầu ghép đôi thiết bị.',
+        errorText:
+            response['message'] ?? 'Không thể bắt đầu ghép đôi thiết bị.',
       );
       return false;
     }
@@ -137,7 +147,8 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorText: response['message'] ?? 'Mã ghép đôi không hợp lệ hoặc đã hết hạn.',
+        errorText:
+            response['message'] ?? 'Mã ghép đôi không hợp lệ hoặc đã hết hạn.',
       );
       return false;
     }
@@ -145,13 +156,18 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
 
   Future<void> unpairDevice() async {
     if (state.deviceId == null) {
-      state = state.copyWith(errorText: 'Không tìm thấy ID thiết bị để hủy ghép đôi.');
+      state = state.copyWith(
+        errorText: 'Không tìm thấy ID thiết bị để hủy ghép đôi.',
+      );
       return;
     }
 
     state = state.copyWith(isLoading: true, errorText: null);
     // Vô hiệu hóa thiết bị hoạt động qua endpoint disable tương ứng của Phase 1
-    final response = await CrmCloudApi.post('/crm/devices/${state.deviceId}/disable', {});
+    final response = await CrmCloudApi.post(
+      '/crm/devices/${state.deviceId}/disable',
+      {},
+    );
     if (response['success'] == true) {
       state = const CrmDeviceState();
       await checkPairingStatus();
@@ -164,6 +180,7 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
   }
 }
 
-final crmDeviceProvider = StateNotifierProvider<CrmDeviceNotifier, CrmDeviceState>((ref) {
-  return CrmDeviceNotifier();
-});
+final crmDeviceProvider =
+    StateNotifierProvider<CrmDeviceNotifier, CrmDeviceState>((ref) {
+      return CrmDeviceNotifier();
+    });

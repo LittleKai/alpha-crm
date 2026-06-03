@@ -154,7 +154,8 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
           final friends = rawFriends.map((f) {
             return FriendRecord(
               id: f['userId']?.toString() ?? '',
-              name: f['displayName']?.toString() ??
+              name:
+                  f['displayName']?.toString() ??
                   f['zaloName']?.toString() ??
                   '',
               phone: f['phoneNumber']?.toString() ?? '',
@@ -184,13 +185,14 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
             return ZaloGroup(
               id: g['id']?.toString() ?? '',
               name: g['name']?.toString() ?? 'Nhóm không tên',
-              memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
+              memberCount:
+                  int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
               role: g['role']?.toString() ?? 'Thành viên',
               avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
               accountId: g['accountId']?.toString(),
             );
           }).toList();
-          
+
           state = state.copyWith(groups: realGroups);
           return;
         }
@@ -303,7 +305,8 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
             ],
           );
         } else {
-          final errorMsg = response['error'] ?? 'Có thể do thiết lập chặn nhận lời mời';
+          final errorMsg =
+              response['error'] ?? 'Có thể do thiết lập chặn nhận lời mời';
           state = state.copyWith(
             logs: [
               ...state.logs,
@@ -333,14 +336,19 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
 
       if (_currentFriendIndex < _friendIdsToInvite.length &&
           _currentFriendIndex < state.maxInviteCount) {
-        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
+        final delaySeconds =
+            state.minDelay +
+            (state.maxDelay > state.minDelay
+                ? (state.maxDelay - state.minDelay)
+                : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách ${delaySeconds}s trước khi mời người tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi mời người tiếp theo...',
               type: LogType.info,
             ),
           ],

@@ -368,7 +368,8 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
       state = state.copyWith(exportCsv: (data['csv'] ?? '').toString());
     } else {
       state = state.copyWith(
-        errorMessage: (response['message'] ?? 'Xuất dữ liệu thất bại.').toString(),
+        errorMessage: (response['message'] ?? 'Xuất dữ liệu thất bại.')
+            .toString(),
       );
     }
   }

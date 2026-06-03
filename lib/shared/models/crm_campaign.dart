@@ -44,11 +44,19 @@ class CrmCampaign {
   });
 
   factory CrmCampaign.fromJson(Map<String, dynamic> json) {
-    final rawMetrics = json['metrics'] is Map ? Map<String, dynamic>.from(json['metrics']) : const {};
+    final rawMetrics = json['metrics'] is Map
+        ? Map<String, dynamic>.from(json['metrics'])
+        : const {};
     final parsedMetrics = {
-      'totalSent': rawMetrics['totalSent'] is int ? rawMetrics['totalSent'] as int : (int.tryParse(rawMetrics['totalSent']?.toString() ?? '0') ?? 0),
-      'successCount': rawMetrics['successCount'] is int ? rawMetrics['successCount'] as int : (int.tryParse(rawMetrics['successCount']?.toString() ?? '0') ?? 0),
-      'failedCount': rawMetrics['failedCount'] is int ? rawMetrics['failedCount'] as int : (int.tryParse(rawMetrics['failedCount']?.toString() ?? '0') ?? 0),
+      'totalSent': rawMetrics['totalSent'] is int
+          ? rawMetrics['totalSent'] as int
+          : (int.tryParse(rawMetrics['totalSent']?.toString() ?? '0') ?? 0),
+      'successCount': rawMetrics['successCount'] is int
+          ? rawMetrics['successCount'] as int
+          : (int.tryParse(rawMetrics['successCount']?.toString() ?? '0') ?? 0),
+      'failedCount': rawMetrics['failedCount'] is int
+          ? rawMetrics['failedCount'] as int
+          : (int.tryParse(rawMetrics['failedCount']?.toString() ?? '0') ?? 0),
     };
 
     return CrmCampaign(
@@ -57,7 +65,9 @@ class CrmCampaign {
       name: json['name']?.toString() ?? '',
       templateId: json['templateId']?.toString() ?? '',
       targetCustomerIds: json['targetCustomerIds'] != null
-          ? List<String>.from(json['targetCustomerIds'].map((id) => id.toString()))
+          ? List<String>.from(
+              json['targetCustomerIds'].map((id) => id.toString()),
+            )
           : const [],
       channel: json['channel']?.toString() ?? 'zalo',
       status: json['status']?.toString() ?? 'draft',
@@ -74,7 +84,9 @@ class CrmCampaign {
       targetSummary: json['targetSummary']?.toString() ?? '',
       selectedDeviceId: json['selectedDeviceId']?.toString(),
       selectedAccountId: json['selectedAccountId']?.toString(),
-      rateLimit: json['rateLimit'] is int ? json['rateLimit'] : (int.tryParse(json['rateLimit']?.toString() ?? '30') ?? 30),
+      rateLimit: json['rateLimit'] is int
+          ? json['rateLimit']
+          : (int.tryParse(json['rateLimit']?.toString() ?? '30') ?? 30),
       requireHumanApproval: json['requireHumanApproval'] == true,
       metrics: parsedMetrics,
       lastProgressAt: json['lastProgressAt'] != null
@@ -106,7 +118,8 @@ class CrmCampaign {
       'rateLimit': rateLimit,
       'requireHumanApproval': requireHumanApproval,
       'metrics': metrics,
-      if (lastProgressAt != null) 'lastProgressAt': lastProgressAt!.toIso8601String(),
+      if (lastProgressAt != null)
+        'lastProgressAt': lastProgressAt!.toIso8601String(),
     };
   }
 }

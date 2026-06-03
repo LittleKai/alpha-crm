@@ -15,7 +15,8 @@ class FriendHistoryScreen extends ConsumerStatefulWidget {
   const FriendHistoryScreen({super.key});
 
   @override
-  ConsumerState<FriendHistoryScreen> createState() => _FriendHistoryScreenState();
+  ConsumerState<FriendHistoryScreen> createState() =>
+      _FriendHistoryScreenState();
 }
 
 class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
@@ -52,8 +53,12 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
     }).toList();
 
     final totalCount = state.records.length;
-    final successCount = state.records.where((r) => r.status == 'Thành công').length;
-    final failedCount = state.records.where((r) => r.status == 'Thất bại').length;
+    final successCount = state.records
+        .where((r) => r.status == 'Thành công')
+        .length;
+    final failedCount = state.records
+        .where((r) => r.status == 'Thất bại')
+        .length;
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -80,13 +85,16 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
                         height: 320,
                       )
                     : filteredRecords.isEmpty
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(AppSpacing.xl),
-                              child: Text('Không tìm thấy kết quả phù hợp.', style: TextStyle(color: AppColors.textMuted)),
-                            ),
-                          )
-                        : _buildHistoryTable(filteredRecords),
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppSpacing.xl),
+                          child: Text(
+                            'Không tìm thấy kết quả phù hợp.',
+                            style: TextStyle(color: AppColors.textMuted),
+                          ),
+                        ),
+                      )
+                    : _buildHistoryTable(filteredRecords),
               ),
             ),
           ],
@@ -98,13 +106,20 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(Icons.access_time_outlined, color: AppColors.primary, size: 32),
+        const Icon(
+          Icons.access_time_outlined,
+          color: AppColors.primary,
+          size: 32,
+        ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Lịch sử chiến dịch kết bạn', style: AppTextStyles.pageTitle),
+              Text(
+                'Lịch sử chiến dịch kết bạn',
+                style: AppTextStyles.pageTitle,
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Theo dõi và quản lý lịch sử chi tiết của tất cả chiến dịch gửi lời mời kết bạn.',
@@ -119,19 +134,39 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
 
   Widget _buildMetricsGrid(int total, int success, int failed, bool isMobile) {
     final widgets = [
-      _buildMetricCard('Tổng số yêu cầu gửi', total.toString(), AppColors.primary),
+      _buildMetricCard(
+        'Tổng số yêu cầu gửi',
+        total.toString(),
+        AppColors.primary,
+      ),
       _buildMetricCard('Gửi thành công', success.toString(), AppColors.success),
       _buildMetricCard('Gửi thất bại', failed.toString(), AppColors.error),
     ];
 
     if (isMobile) {
       return Column(
-        children: widgets.map((w) => Padding(padding: const EdgeInsets.only(bottom: AppSpacing.s), child: w)).toList(),
+        children: widgets
+            .map(
+              (w) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                child: w,
+              ),
+            )
+            .toList(),
       );
     }
 
     return Row(
-      children: widgets.map((w) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: w))).toList(),
+      children: widgets
+          .map(
+            (w) => Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: w,
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -146,11 +181,18 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             value,
-            style: AppTextStyles.pageTitle.copyWith(color: color, fontSize: 24, fontWeight: FontWeight.bold),
+            style: AppTextStyles.pageTitle.copyWith(
+              color: color,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -180,13 +222,17 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
   Widget _buildHistoryTable(List<FriendHistoryRecord> records) {
     return ListView.separated(
       itemCount: records.length,
-      separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderSoft),
+      separatorBuilder: (context, index) =>
+          const Divider(height: 1, color: AppColors.borderSoft),
       itemBuilder: (context, index) {
         final record = records[index];
         final isSuccess = record.status == 'Thành công';
 
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.s,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -194,9 +240,19 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(record.targetName, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      record.targetName,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(record.targetPhone, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                    Text(
+                      record.targetPhone,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -207,7 +263,12 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
                   children: [
                     Text(record.accountLabel, style: AppTextStyles.bodyMedium),
                     const SizedBox(height: 2),
-                    Text(record.timestamp, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                    Text(
+                      record.timestamp,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -215,7 +276,9 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
                 flex: 4,
                 child: Text(
                   record.message,
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -223,7 +286,9 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isSuccess ? AppColors.successSoft : AppColors.errorSoft,
+                  color: isSuccess
+                      ? AppColors.successSoft
+                      : AppColors.errorSoft,
                   borderRadius: AppSpacing.borderRadiusS,
                 ),
                 child: Text(

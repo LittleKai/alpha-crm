@@ -205,7 +205,10 @@ class _Header extends ConsumerWidget {
                   : (accounts.isNotEmpty ? accounts.first.id : null),
               hintText: 'Chọn tài khoản Zalo...',
               items: accounts.map((acc) {
-                final cleanLabel = acc.name.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final cleanLabel = acc.name.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
                 final matchingConnected = zaloState.accounts.firstWhere(
                   (a) => a.id == acc.id,
                   orElse: () => ZaloConnectedAccount(
@@ -224,10 +227,14 @@ class _Header extends ConsumerWidget {
                       CircleAvatar(
                         radius: 12,
                         backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
+                            : null,
                         child: avatarUrl.isEmpty
                             ? Text(
-                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -246,7 +253,9 @@ class _Header extends ConsumerWidget {
                   ? null
                   : (val) {
                       if (val != null) {
-                        final acc = state.accounts.firstWhere((a) => a.id == val);
+                        final acc = state.accounts.firstWhere(
+                          (a) => a.id == val,
+                        );
                         notifier.selectAccount(acc);
                       }
                     },
@@ -344,13 +353,15 @@ class _TargetPanel extends ConsumerWidget {
     } else if (selectedTab == 1) {
       final groupsState = ref.watch(managedGroupsProvider);
       final groupItems = groupsState.groups
-          .map((g) => DropdownMenuItem<ManagedZaloGroup>(
-                value: g,
-                child: Text(
-                  '${g.name} (${g.memberCount} thành viên)',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ))
+          .map(
+            (g) => DropdownMenuItem<ManagedZaloGroup>(
+              value: g,
+              child: Text(
+                '${g.name} (${g.memberCount} thành viên)',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList();
 
       filterField = SizedBox(
@@ -362,9 +373,7 @@ class _TargetPanel extends ConsumerWidget {
             if (group != null) {
               recipientsController.text = group.groupId;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Đã chọn nhóm: ${group.name}'),
-                ),
+                SnackBar(content: Text('Đã chọn nhóm: ${group.name}')),
               );
             }
           },
@@ -379,13 +388,15 @@ class _TargetPanel extends ConsumerWidget {
     } else if (selectedTab == 2) {
       final customersState = ref.watch(customersProvider);
       final contactItems = customersState.contacts
-          .map((c) => DropdownMenuItem<Contact>(
-                value: c,
-                child: Text(
-                  '${c.name} (${c.phone})',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ))
+          .map(
+            (c) => DropdownMenuItem<Contact>(
+              value: c,
+              child: Text(
+                '${c.name} (${c.phone})',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList();
 
       filterField = SizedBox(
@@ -405,9 +416,7 @@ class _TargetPanel extends ConsumerWidget {
                 }
               }
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Đã thêm liên hệ: ${contact.name}'),
-                ),
+                SnackBar(content: Text('Đã thêm liên hệ: ${contact.name}')),
               );
             }
           },
@@ -427,10 +436,12 @@ class _TargetPanel extends ConsumerWidget {
           .toSet()
           .toList();
       final tagItems = uniqueTags
-          .map((tag) => DropdownMenuItem<String>(
-                value: tag,
-                child: Text(tag, overflow: TextOverflow.ellipsis),
-              ))
+          .map(
+            (tag) => DropdownMenuItem<String>(
+              value: tag,
+              child: Text(tag, overflow: TextOverflow.ellipsis),
+            ),
+          )
           .toList();
 
       filterField = SizedBox(

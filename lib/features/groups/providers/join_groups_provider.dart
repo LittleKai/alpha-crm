@@ -150,7 +150,7 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
           link: currentLink,
           accountId: state.selectedAccountId,
         );
-        
+
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
         if (response['success'] == true) {
@@ -165,7 +165,8 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
             ],
           );
         } else {
-          final errorMsg = response['error'] ?? 'Yêu cầu vào nhóm thất bại hoặc bị từ chối';
+          final errorMsg =
+              response['error'] ?? 'Yêu cầu vào nhóm thất bại hoặc bị từ chối';
           state = state.copyWith(
             logs: [
               ...state.logs,
@@ -194,14 +195,19 @@ class JoinGroupsNotifier extends StateNotifier<JoinGroupsState> {
       _currentLinkIndex++;
 
       if (_currentLinkIndex < _linksToJoin.length) {
-        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
+        final delaySeconds =
+            state.minDelay +
+            (state.maxDelay > state.minDelay
+                ? (state.maxDelay - state.minDelay)
+                : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách ${delaySeconds}s trước khi chuyển sang nhóm tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi chuyển sang nhóm tiếp theo...',
               type: LogType.info,
             ),
           ],

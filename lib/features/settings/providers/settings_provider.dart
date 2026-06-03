@@ -67,7 +67,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<void> _saveSettingsToFile(SystemSettings settings) async {
     try {
       final file = File('zalo_settings.json');
-      final content = const JsonEncoder.withIndent('  ').convert(settings.toJson());
+      final content = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(settings.toJson());
       await file.writeAsString(content);
       print('[SettingsNotifier] Saved settings to zalo_settings.json');
     } catch (e) {
@@ -278,9 +280,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
 
     if (s.maxBatchSize <= 0) {
-      state = state.copyWith(
-        errorText: 'Kích thước batch phải lớn hơn 0.',
-      );
+      state = state.copyWith(errorText: 'Kích thước batch phải lớn hơn 0.');
       return;
     }
 
@@ -307,9 +307,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
 
     if (s.stopOnReportCount < 1) {
-      state = state.copyWith(
-        errorText: 'Số báo cáo dừng phải ít nhất là 1.',
-      );
+      state = state.copyWith(errorText: 'Số báo cáo dừng phải ít nhất là 1.');
       return;
     }
 

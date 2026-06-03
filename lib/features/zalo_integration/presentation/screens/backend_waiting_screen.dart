@@ -11,7 +11,8 @@ class BackendWaitingScreen extends ConsumerStatefulWidget {
   const BackendWaitingScreen({super.key});
 
   @override
-  ConsumerState<BackendWaitingScreen> createState() => _BackendWaitingScreenState();
+  ConsumerState<BackendWaitingScreen> createState() =>
+      _BackendWaitingScreenState();
 }
 
 class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
@@ -57,7 +58,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
       setState(() {
         _isCheckingManually = false;
       });
-      
+
       final state = ref.read(zaloIntegrationProvider);
       if (state.isBackendActive) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -70,7 +71,9 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Vẫn không thể kết nối tới backend. Vui lòng kiểm tra lại.'),
+            content: Text(
+              'Vẫn không thể kết nối tới backend. Vui lòng kiểm tra lại.',
+            ),
             backgroundColor: AppColors.error,
             duration: Duration(seconds: 2),
           ),
@@ -208,7 +211,9 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primary.withOpacity(0.1),
+                                        color: AppColors.primary.withOpacity(
+                                          0.1,
+                                        ),
                                         blurRadius: _glowAnimation.value,
                                         spreadRadius: 2,
                                       ),
@@ -217,7 +222,8 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                 );
                               },
                             ),
-                            if (integrationState.isLoading || _isCheckingManually)
+                            if (integrationState.isLoading ||
+                                _isCheckingManually)
                               const SizedBox(
                                 width: 56,
                                 height: 56,
@@ -306,7 +312,8 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                               _buildStepText(
                                 '2',
                                 'Di chuyển vào thư mục backend:',
-                                codeText: 'cd tools/alpha-crm/integration/zalo-bot-service',
+                                codeText:
+                                    'cd tools/alpha-crm/integration/zalo-bot-service',
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               _buildStepText(
@@ -325,15 +332,18 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                             // Nút thử lại thủ công
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: (_isCheckingManually || integrationState.isLoading)
+                                onPressed:
+                                    (_isCheckingManually ||
+                                        integrationState.isLoading)
                                     ? null
                                     : _handleManualCheck,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      AppColors.primary.withOpacity(0.4),
-                                  disabledForegroundColor: Colors.white.withOpacity(0.6),
+                                  disabledBackgroundColor: AppColors.primary
+                                      .withOpacity(0.4),
+                                  disabledForegroundColor: Colors.white
+                                      .withOpacity(0.6),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: AppSpacing.m,
                                   ),
@@ -345,15 +355,17 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    if (_isCheckingManually || integrationState.isLoading) ...[
+                                    if (_isCheckingManually ||
+                                        integrationState.isLoading) ...[
                                       const SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Colors.white,
-                                          ),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
                                         ),
                                       ),
                                       const SizedBox(width: AppSpacing.s),
@@ -364,7 +376,10 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                         ),
                                       ),
                                     ] else ...[
-                                      const Icon(Icons.refresh_rounded, size: 20),
+                                      const Icon(
+                                        Icons.refresh_rounded,
+                                        size: 20,
+                                      ),
                                       const SizedBox(width: AppSpacing.s),
                                       Text(
                                         'Thử kết nối lại',
@@ -379,9 +394,9 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: AppSpacing.m),
-                        
+
                         // Thông báo đếm ngược / Tự động check
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -416,7 +431,11 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
     );
   }
 
-  Widget _buildStepText(String stepNumber, String instruction, {String? codeText}) {
+  Widget _buildStepText(
+    String stepNumber,
+    String instruction, {
+    String? codeText,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Column(

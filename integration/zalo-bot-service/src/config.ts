@@ -29,6 +29,9 @@ interface Config {
   zaloOaSecret: string;
   zaloOaAccessToken: string;
   zaloOaRefreshToken: string;
+  zaloBotToken: string;
+  zaloBotApiBaseUrl: string;
+  zaloBotApiTimeoutMs: number;
   // Webhook
   zaloWebhookVerifyToken: string;
   zaloWebhookSecret: string;
@@ -103,6 +106,9 @@ export const config: Config = {
   zaloOaSecret: process.env['ZALO_OA_SECRET'] || '',
   zaloOaAccessToken: process.env['ZALO_OA_ACCESS_TOKEN'] || '',
   zaloOaRefreshToken: process.env['ZALO_OA_REFRESH_TOKEN'] || '',
+  zaloBotToken: process.env['ZALO_BOT_TOKEN'] || '',
+  zaloBotApiBaseUrl: process.env['ZALO_BOT_API_BASE_URL'] || 'https://bot-api.zapps.me',
+  zaloBotApiTimeoutMs: parseInt(process.env['ZALO_BOT_API_TIMEOUT_MS'] || '12000', 10),
   zaloWebhookVerifyToken:
     process.env['ZALO_WEBHOOK_VERIFY_TOKEN'] || 'alpha-crm-verify',
   zaloWebhookSecret: process.env['ZALO_WEBHOOK_SECRET'] || '',

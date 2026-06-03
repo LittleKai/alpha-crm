@@ -39,9 +39,4 @@ class ZaloSendRequest {
   }
 }
 
-enum ZaloSendRiskLevel {
-  low,
-  medium,
-  high,
-  critical,
-}
+enum ZaloSendRiskLevel { low, medium, high, critical }

@@ -1,6 +1,10 @@
 # Project Summary
 
-**Last Updated:** 2026-06-03 +07:00
+**Last Updated:** 2026-06-03 16:42:00 +07:00
+**Session:** #48 - Researched the Deplao App reference and integrated suitable CRM features: quick reply shortcuts for Live Chat and quick templates, local app lock overlay with salted password hash, per-account local Zalo bot settings metadata for proxy/blockSeen/blockTyping, and a post-implementation spec for review/fix-bug follow-up. The Deplao Electron BrowserView shell and network interception model were intentionally not ported as-is.
+
+**Session:** #47 - Researched the `zalo-bot-js` reference SDK and integrated the safe Official Bot/OA subset into the local Zalo bridge: added a small `zalo-bot-js`-style Official Bot API transport for text sends, normalized official webhook message payloads into the existing CRM inbound event pipeline, and documented `ZALO_BOT_TOKEN` official mode while keeping personal-only friend/group automation unsupported in official mode.
+
 **Session:** #46 - Added `gemini-2.5-pro` as a 1-quota Auto Chatbot AI model, introduced reusable shared `AppDialog` / `AppDialogSection` widgets for polished project-wide dialog styling, and migrated the Chatbot create-rule, add-knowledge, keyword-help, and knowledge-help dialogs to the new pattern with clearer guidance that backend GCLI generates AI content while the local Zalo agent performs actual message/file/image sending.
 
 **Session:** #45 - Updated the Auto Chatbot tab model selector to only allow `gemini-3-flash-preview` and `gemini-3.1-pro-preview`, sends the current model/prompt/temperature to the backend AI playground, added help dialogs for keyword scripts and knowledge documents, and guarded keyword rule creation against duplicate double-submit requests.
@@ -58,6 +62,7 @@ lib/
   main.dart                   Flutter entry point
   app/                        App shell, routing, theme, responsive scaffold
   features/                   Feature-first CRM screens and providers
+    security/                  Local app lock provider, overlay, and password hashing helpers
   mock/                       Mock domain models and sample/default data (includes ZaloChannelMode enum)
   shared/                     Reusable widgets and responsive utilities
 test/                         Flutter widget tests
@@ -95,6 +100,8 @@ docs/
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
+| `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
+| `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
@@ -107,6 +114,9 @@ docs/
 | `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
 | `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. The automated Windows release stages its compiled `dist/`, `node_modules`, `.env.example`, and bundled Node runtime into the ZIP while excluding `.env` and `.data` secrets. |
+| `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
+| `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
+| `docs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 

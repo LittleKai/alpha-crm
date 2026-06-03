@@ -57,6 +57,23 @@ Quét QR bằng app Zalo. Credentials được lưu tại `.data/zalo-personal/c
 | `official_oa` | Tùy chọn | Dùng Zalo OA/OpenAPI SDK |
 | `mock` | Test | Trả kết quả giả lập |
 
+### Official Bot/OA mode
+
+`official_oa` is the safer production direction for inbound support and chatbot flows. Configure:
+
+```env
+ZALO_CHANNEL_MODE=official_oa
+ZALO_BOT_TOKEN=your_bot_token
+ZALO_BOT_API_BASE_URL=https://bot-api.zapps.me
+ZALO_WEBHOOK_SECRET=shared_secret_for_incoming_webhooks
+```
+
+Current scope:
+
+- `send-message` supports compliant text sends through the Official Bot API token.
+- `/api/zalo/webhook` accepts Bot/OA-shaped message events and emits CRM inbound message events.
+- Personal-only operations such as friend requests, group scans, joins, invites, and group creation remain unsupported in official mode.
+
 ## Scripts
 
 | Script | Mô tả |

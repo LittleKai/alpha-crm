@@ -9,10 +9,7 @@ import 'app_button.dart';
 
 /// Hiển thị dialog thông báo cập nhật mới.
 /// Hỗ trợ tải xuống và cài đặt trực tiếp từ dialog.
-void showUpdateDialog({
-  required BuildContext context,
-  required WidgetRef ref,
-}) {
+void showUpdateDialog({required BuildContext context, required WidgetRef ref}) {
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -29,9 +26,7 @@ class _UpdateDialog extends ConsumerWidget {
     final notifier = ref.read(updateProvider.notifier);
 
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: AppSpacing.borderRadiusM,
-      ),
+      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
       backgroundColor: AppColors.surface,
       clipBehavior: Clip.antiAlias,
       child: Container(
@@ -131,8 +126,11 @@ class _UpdateDialog extends ConsumerWidget {
               const SizedBox(height: AppSpacing.s),
               Row(
                 children: [
-                  const Icon(Icons.file_download_outlined,
-                      size: 14, color: AppColors.textMuted),
+                  const Icon(
+                    Icons.file_download_outlined,
+                    size: 14,
+                    color: AppColors.textMuted,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Text(
                     '${state.targetAsset!.name} (${state.targetAsset!.sizeFormatted})',
@@ -179,14 +177,15 @@ class _UpdateDialog extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.successSoft,
                   borderRadius: AppSpacing.borderRadiusS,
-                  border: Border.all(
-                    color: const Color(0xFFD1FAE5),
-                  ),
+                  border: Border.all(color: const Color(0xFFD1FAE5)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_outline,
-                        size: 18, color: AppColors.successText),
+                    const Icon(
+                      Icons.check_circle_outline,
+                      size: 18,
+                      color: AppColors.successText,
+                    ),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: Text(
@@ -232,8 +231,11 @@ class _UpdateDialog extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 18, color: AppColors.errorText),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 18,
+                      color: AppColors.errorText,
+                    ),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: Text(

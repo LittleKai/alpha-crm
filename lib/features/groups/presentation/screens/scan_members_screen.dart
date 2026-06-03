@@ -261,8 +261,8 @@ class _ScanFormCard extends StatelessWidget {
                                         ? Text(
                                             group.name.isNotEmpty
                                                 ? group.name
-                                                    .substring(0, 1)
-                                                    .toUpperCase()
+                                                      .substring(0, 1)
+                                                      .toUpperCase()
                                                 : 'G',
                                             style: const TextStyle(
                                               fontSize: 14,
@@ -282,10 +282,11 @@ class _ScanFormCard extends StatelessWidget {
                                       children: [
                                         Text(
                                           group.name,
-                                          style: AppTextStyles.bodyMedium.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12.5,
-                                          ),
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12.5,
+                                              ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -322,8 +323,7 @@ class _ScanFormCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceMuted,
                                 shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: AppColors.borderSoft),
+                                border: Border.all(color: AppColors.borderSoft),
                               ),
                               child: const Icon(
                                 Icons.close,
@@ -396,7 +396,7 @@ class _MemberTable extends StatelessWidget {
                 final member = state.members[index];
                 final isOwner = member.role == 'Trưởng nhóm';
                 final isAdmin = member.role == 'Phó nhóm';
-                
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
                   child: Row(
@@ -404,7 +404,9 @@ class _MemberTable extends StatelessWidget {
                       CircleAvatar(
                         radius: 20,
                         backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: member.avatarUrl.isNotEmpty ? NetworkImage(member.avatarUrl) : null,
+                        backgroundImage: member.avatarUrl.isNotEmpty
+                            ? NetworkImage(member.avatarUrl)
+                            : null,
                         child: member.avatarUrl.isNotEmpty
                             ? null
                             : Text(

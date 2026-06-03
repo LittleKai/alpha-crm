@@ -9,7 +9,8 @@ class DevicePairingScreen extends ConsumerStatefulWidget {
   const DevicePairingScreen({super.key});
 
   @override
-  ConsumerState<DevicePairingScreen> createState() => _DevicePairingScreenState();
+  ConsumerState<DevicePairingScreen> createState() =>
+      _DevicePairingScreenState();
 }
 
 class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
@@ -24,9 +25,11 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
   Future<void> _submitPairingCode() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     final cleanCode = _codeController.text.replaceAll(' ', '').trim();
-    final success = await ref.read(crmDeviceProvider.notifier).confirmPairing(cleanCode);
+    final success = await ref
+        .read(crmDeviceProvider.notifier)
+        .confirmPairing(cleanCode);
 
     if (success && mounted) {
       _codeController.clear();
@@ -70,19 +73,27 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: deviceState.isPaired ? AppColors.successSoft : AppColors.primarySoft,
+                          color: deviceState.isPaired
+                              ? AppColors.successSoft
+                              : AppColors.primarySoft,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          deviceState.isPaired ? Icons.phonelink_ring_rounded : Icons.sensors_rounded,
-                          color: deviceState.isPaired ? AppColors.success : AppColors.primary,
+                          deviceState.isPaired
+                              ? Icons.phonelink_ring_rounded
+                              : Icons.sensors_rounded,
+                          color: deviceState.isPaired
+                              ? AppColors.success
+                              : AppColors.primary,
                           size: 48,
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      deviceState.isPaired ? 'Thiết Bị Đã Được Ghép Đôi' : 'Yêu Cầu Ghép Đôi Thiết Bị',
+                      deviceState.isPaired
+                          ? 'Thiết Bị Đã Được Ghép Đôi'
+                          : 'Yêu Cầu Ghép Đôi Thiết Bị',
                       style: AppTextStyles.sectionTitle.copyWith(fontSize: 18),
                       textAlign: TextAlign.center,
                     ),
@@ -104,11 +115,16 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.errorSoft,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                          border: Border.all(
+                            color: AppColors.error.withOpacity(0.3),
+                          ),
                         ),
                         child: Text(
                           deviceState.errorText!,
-                          style: AppTextStyles.caption.copyWith(color: AppColors.errorText, fontWeight: FontWeight.bold),
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.errorText,
+                            fontWeight: FontWeight.bold,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -147,11 +163,21 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ),
           child: Column(
             children: [
-              _buildInfoRow('Tên thiết bị liên kết:', state.pairedDeviceName ?? 'Không rõ'),
+              _buildInfoRow(
+                'Tên thiết bị liên kết:',
+                state.pairedDeviceName ?? 'Không rõ',
+              ),
               const SizedBox(height: 12),
-              _buildInfoRow('Hệ điều hành:', state.pairedDeviceOs ?? 'Không rõ'),
+              _buildInfoRow(
+                'Hệ điều hành:',
+                state.pairedDeviceOs ?? 'Không rõ',
+              ),
               const SizedBox(height: 12),
-              _buildInfoRow('Trạng thái kết nối:', 'Sẵn sàng hoạt động', isStatus: true),
+              _buildInfoRow(
+                'Trạng thái kết nối:',
+                'Sẵn sàng hoạt động',
+                isStatus: true,
+              ),
             ],
           ),
         ),
@@ -177,7 +203,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                             Navigator.pop(context);
                             ref.read(crmDeviceProvider.notifier).unpairDevice();
                           },
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.error,
+                          ),
                           child: const Text('Xác Nhận Hủy'),
                         ),
                       ],
@@ -189,10 +217,19 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             foregroundColor: AppColors.errorText,
             elevation: 0,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           child: state.isLoading
-              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.errorText))
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.errorText,
+                  ),
+                )
               : const Text('Hủy Ghép Đôi Thiết Bị Hiện Tại'),
         ),
       ],
@@ -203,17 +240,39 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+        ),
         if (isStatus)
           Row(
             children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.success,
+                  shape: BoxShape.circle,
+                ),
+              ),
               const SizedBox(width: 6),
-              Text(value, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.successText, fontSize: 13)),
+              Text(
+                value,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.successText,
+                  fontSize: 13,
+                ),
+              ),
             ],
           )
         else
-          Text(value, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary, fontSize: 13)),
+          Text(
+            value,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+            ),
+          ),
       ],
     );
   }
@@ -234,10 +293,18 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             controller: _codeController,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 24, letterSpacing: 8, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 24,
+              letterSpacing: 8,
+              fontWeight: FontWeight.bold,
+            ),
             decoration: const InputDecoration(
               hintText: '123 456',
-              hintStyle: TextStyle(fontSize: 24, letterSpacing: 8, color: Colors.grey),
+              hintStyle: TextStyle(
+                fontSize: 24,
+                letterSpacing: 8,
+                color: Colors.grey,
+              ),
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
@@ -257,10 +324,19 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: state.isLoading
-                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Text('Xác Nhận Kết Nối'),
           ),
           const SizedBox(height: 20),
@@ -272,7 +348,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             ),
             child: Text(
               'ℹ️ Hướng dẫn: Mở ứng dụng Alpha CRM trên máy tính Windows đã cài đặt Zalo cá nhân, điều hướng tới phần Thiết bị để tạo mã code 6 số này.',
-              style: AppTextStyles.caption.copyWith(color: AppColors.warningText),
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.warningText,
+              ),
             ),
           ),
         ],
@@ -295,15 +373,26 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ElevatedButton(
             onPressed: state.isLoading
                 ? null
-                : () => ref.read(crmDeviceProvider.notifier).startPairingProcess(),
+                : () => ref
+                      .read(crmDeviceProvider.notifier)
+                      .startPairingProcess(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: state.isLoading
-                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Text('Bắt Đầu Quy Trình Ghép Đôi'),
           ),
         ] else ...[
@@ -313,11 +402,17 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               children: [
                 Text(
                   'MÃ GHÉP ĐÔI CỦA BẠN',
-                  style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: AppTextStyles.caption.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.slateSoft,
                     borderRadius: BorderRadius.circular(12),
@@ -334,7 +429,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Mock QR Code
                 Container(
                   width: 180,
@@ -358,22 +453,37 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       // Styled Custom QR block grid representation using icons and squares
                       Column(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(4, (index) => Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(4, (subIndex) => Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: (index + subIndex) % 2 == 0 ? AppColors.textPrimary : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
+                        children: List.generate(
+                          4,
+                          (index) => Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: List.generate(
+                              4,
+                              (subIndex) => Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: (index + subIndex) % 2 == 0
+                                      ? AppColors.textPrimary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
                             ),
-                          )),
-                        )),
+                          ),
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        child: const Icon(Icons.rocket_launch_rounded, color: AppColors.primary, size: 24),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.rocket_launch_rounded,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
                       ),
                     ],
                   ),
@@ -391,7 +501,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           TextButton(
             onPressed: state.isLoading
                 ? null
-                : () => ref.read(crmDeviceProvider.notifier).startPairingProcess(),
+                : () => ref
+                      .read(crmDeviceProvider.notifier)
+                      .startPairingProcess(),
             child: const Text('Tạo lại mã ghép đôi mới'),
           ),
         ],
@@ -404,7 +516,10 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ),
           child: Text(
             '⚠️ Cảnh báo giấy phép: Tài khoản Alpha CRM chỉ hỗ trợ ghép đôi liên kết 1 máy tính Windows tại một thời điểm để đảm bảo tính an toàn dữ liệu.',
-            style: AppTextStyles.caption.copyWith(color: AppColors.errorText, fontWeight: FontWeight.w600),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.errorText,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],

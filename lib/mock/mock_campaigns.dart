@@ -210,9 +210,25 @@ class SendHistoryRecord {
 
 class MockCampaignsData {
   static const List<ZaloAccount> sampleAccounts = [
-    ZaloAccount(id: '1', name: 'Zalo Business - Nguyễn Văn A', phone: '0901234567', type: 'Business'),
-    ZaloAccount(id: '2', name: 'Zalo Cá nhân - Trần Thị B', phone: '0911223344', type: 'Cá nhân'),
-    ZaloAccount(id: '3', name: 'Zalo Cá nhân - Lê Hoàng C', phone: '0988776655', type: 'Cá nhân', isConnected: false),
+    ZaloAccount(
+      id: '1',
+      name: 'Zalo Business - Nguyễn Văn A',
+      phone: '0901234567',
+      type: 'Business',
+    ),
+    ZaloAccount(
+      id: '2',
+      name: 'Zalo Cá nhân - Trần Thị B',
+      phone: '0911223344',
+      type: 'Cá nhân',
+    ),
+    ZaloAccount(
+      id: '3',
+      name: 'Zalo Cá nhân - Lê Hoàng C',
+      phone: '0988776655',
+      type: 'Cá nhân',
+      isConnected: false,
+    ),
   ];
 
   static final List<SendHistoryRecord> sampleSendHistory = [
@@ -228,7 +244,8 @@ class MockCampaignsData {
       id: '2',
       campaignName: 'Khuyến mãi hè 2026',
       phone: '0901234567',
-      message: 'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
+      message:
+          'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
       status: 'Thành công',
       sentAt: DateTime.now().subtract(const Duration(hours: 1)),
     ),
@@ -252,10 +269,10 @@ class MockCampaignsData {
       id: '5',
       campaignName: 'Khuyến mãi hè 2026',
       phone: '0977889900',
-      message: 'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
+      message:
+          'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
       status: 'Thành công',
       sentAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
 }
-

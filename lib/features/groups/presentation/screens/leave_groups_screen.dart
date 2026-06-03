@@ -191,7 +191,9 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                  ? state.selectedAccountId
+                  : null,
               hintText: 'Chọn tài khoản...',
               items: accounts
                   .map(
@@ -274,7 +276,10 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
               ),
             ],
           ),
-          if (useColumns) const Spacer() else const SizedBox(height: AppSpacing.xl),
+          if (useColumns)
+            const Spacer()
+          else
+            const SizedBox(height: AppSpacing.xl),
           AppButton(
             text: state.isRunning
                 ? 'Dừng rời nhóm'
@@ -399,11 +404,15 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                             CircleAvatar(
                               radius: 14,
                               backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: group.avatarUrl.isNotEmpty ? NetworkImage(group.avatarUrl) : null,
+                              backgroundImage: group.avatarUrl.isNotEmpty
+                                  ? NetworkImage(group.avatarUrl)
+                                  : null,
                               child: group.avatarUrl.isEmpty
                                   ? Text(
                                       group.name.isNotEmpty
-                                          ? group.name.substring(0, 1).toUpperCase()
+                                          ? group.name
+                                                .substring(0, 1)
+                                                .toUpperCase()
                                           : 'G',
                                       style: const TextStyle(
                                         fontSize: 12,

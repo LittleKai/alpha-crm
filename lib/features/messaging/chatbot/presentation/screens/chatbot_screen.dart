@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:data_table_2/data_table_2.dart';
 
@@ -29,6 +30,8 @@ class ChatbotScreen extends ConsumerStatefulWidget {
 
 class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   final TextEditingController _promptController = TextEditingController();
+  final TextEditingController _soulController = TextEditingController();
+  final TextEditingController _rulesController = TextEditingController();
   double _tempValue = 0.7;
   String _selectedModel = chatbotDefaultAiModel;
 
@@ -39,6 +42,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   @override
   void dispose() {
     _promptController.dispose();
+    _soulController.dispose();
+    _rulesController.dispose();
     _testMessageController.dispose();
     super.dispose();
   }
@@ -56,6 +61,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       'message': msg,
       'aiModel': _selectedModel,
       'systemPrompt': _promptController.text,
+      'soulPrompt': _soulController.text,
+      'responseRules': _rulesController.text,
       'temperature': _tempValue,
     });
 
@@ -77,69 +84,194 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Future<void> _showCreateRuleDialog(BuildContext context) async {
-    final keywordController = TextEditingController();
-    final responseController = TextEditingController();
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final drafts = [_KeywordRuleDraft()];
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AppDialog(
-          title: 'Tạo kịch bản chatbot',
-          subtitle:
-              'Tạo phản hồi cố định cho các câu hỏi lặp lại trước khi dùng AI.',
-          icon: Icons.add_comment_outlined,
-          width: 520,
-          actions: [
-            AppDialogAction(
-              text: 'Hủy',
-              icon: Icons.close_rounded,
-              variant: AppButtonVariant.outline,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            AppDialogAction(
-              text: 'Lưu',
-              icon: Icons.save_outlined,
-              onPressed: () {
-                ref
-                    .read(chatbotProvider.notifier)
-                    .addRule(keywordController.text, responseController.text)
-                    .then((_) {
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop();
-                      }
-                    });
-              },
-            ),
-          ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: keywordController,
-                decoration: const InputDecoration(
-                  labelText: 'Từ khóa',
-                  hintText: 'VD: bảo hành, bảng giá, địa chỉ',
-                  border: OutlineInputBorder(),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AppDialog(
+              title: 'Tạo kịch bản chatbot mới',
+              icon: Icons.smart_toy_outlined,
+              width: 640,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.m),
-              TextField(
-                controller: responseController,
-                minLines: 4,
-                maxLines: 7,
-                decoration: const InputDecoration(
-                  labelText: 'Nội dung phản hồi',
-                  hintText:
-                      'VD: Sản phẩm được bảo hành 12 tháng. Anh/chị cần em kết nối tư vấn viên không?',
-                  border: OutlineInputBorder(),
+                AppDialogAction(
+                  text: 'Tạo kịch bản',
+                  icon: Icons.add_rounded,
+                  onPressed: () async {
+                    final validDrafts = drafts
+                        .where(
+                          (draft) =>
+                              draft.keyword.text.trim().isNotEmpty &&
+                              draft.response.text.trim().isNotEmpty,
+                        )
+                        .toList();
+                    if (validDrafts.isEmpty) return;
+
+                    final notifier = ref.read(chatbotProvider.notifier);
+                    for (var i = 0; i < validDrafts.length; i += 1) {
+                      final ruleName = nameController.text.trim().isEmpty
+                          ? validDrafts[i].keyword.text.trim()
+                          : validDrafts.length == 1
+                          ? nameController.text.trim()
+                          : '${nameController.text.trim()} #${i + 1}';
+                      await notifier.addRule(
+                        validDrafts[i].keyword.text,
+                        validDrafts[i].response.text,
+                        name: ruleName,
+                        description: descriptionController.text,
+                      );
+                    }
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
                 ),
+              ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tên kịch bản *',
+                      hintText: 'VD: Tư vấn sản phẩm',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Mô tả',
+                      hintText: 'Mô tả ngắn về kịch bản này',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft,
+                      borderRadius: AppSpacing.borderRadiusM,
+                      border: Border.all(color: AppColors.borderSoft),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.rule_folder_outlined,
+                              color: AppColors.primary,
+                              size: 18,
+                            ),
+                            const SizedBox(width: AppSpacing.s),
+                            Text(
+                              'Quy tắc trả lời',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.m),
+                        for (var i = 0; i < drafts.length; i += 1) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Quy tắc #${i + 1}',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (drafts.length > 1)
+                                IconButton(
+                                  tooltip: 'Xóa quy tắc',
+                                  icon: const Icon(Icons.close_rounded),
+                                  onPressed: () {
+                                    final removed = drafts.removeAt(i);
+                                    removed.dispose();
+                                    setDialogState(() {});
+                                  },
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.s),
+                          TextField(
+                            controller: drafts[i].keyword,
+                            decoration: const InputDecoration(
+                              labelText: 'Từ khóa kích hoạt',
+                              hintText: 'VD: giá, bao nhiêu, price',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.m),
+                          TextField(
+                            controller: drafts[i].response,
+                            minLines: 4,
+                            maxLines: 8,
+                            decoration: const InputDecoration(
+                              labelText: 'Phản hồi tự động',
+                              hintText:
+                                  'Nội dung trả lời khi phát hiện từ khóa...',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.s),
+                          Text(
+                            'Định dạng: **in đậm** *in nghiêng* __gạch chân__ ~~gạch ngang~~',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          if (i < drafts.length - 1) ...[
+                            const SizedBox(height: AppSpacing.m),
+                            const Divider(
+                              height: 1,
+                              color: AppColors.borderSoft,
+                            ),
+                            const SizedBox(height: AppSpacing.m),
+                          ],
+                        ],
+                        const SizedBox(height: AppSpacing.m),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: AppButton(
+                            text: 'Thêm quy tắc',
+                            icon: Icons.add_rounded,
+                            variant: AppButtonVariant.outline,
+                            onPressed: () {
+                              drafts.add(_KeywordRuleDraft());
+                              setDialogState(() {});
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
-    keywordController.dispose();
-    responseController.dispose();
+    nameController.dispose();
+    descriptionController.dispose();
+    for (final draft in drafts) {
+      draft.dispose();
+    }
   }
 
   // ignore: unused_element
@@ -202,57 +334,265 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     BuildContext context,
     ChatbotNotifier notifier,
   ) async {
-    final docController = TextEditingController();
+    final titleController = TextEditingController();
+    final keywordsController = TextEditingController();
+    final contentController = TextEditingController();
+    PlatformFile? pickedFile;
+    Map<String, dynamic>? uploadedFile;
+    var isUploading = false;
+    String? uploadError;
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AppDialog(
-          title: 'Thêm tài liệu/kiến thức',
-          subtitle:
-              'Lưu nội dung, link file hoặc hướng dẫn gửi ảnh/file để AI dùng làm ngữ cảnh nội bộ.',
-          icon: Icons.library_add_outlined,
-          width: 560,
-          actions: [
-            AppDialogAction(
-              text: 'Hủy',
-              icon: Icons.close_rounded,
-              variant: AppButtonVariant.outline,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            AppDialogAction(
-              text: 'Thêm',
-              icon: Icons.add_rounded,
-              onPressed: () {
-                final text = docController.text.trim();
-                if (text.isEmpty) return;
-                notifier.addKnowledgeDocument(text).then((_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Đã thêm kiến thức: $text')),
-                    );
-                  }
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop();
-                  }
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> pickAndUploadFile() async {
+              final result = await FilePicker.platform.pickFiles(
+                allowMultiple: false,
+                withData: true,
+                type: FileType.any,
+              );
+              if (result == null || result.files.isEmpty) return;
+              final file = result.files.single;
+              if (file.bytes == null) {
+                setDialogState(() {
+                  pickedFile = file;
+                  uploadedFile = null;
+                  uploadError =
+                      'Không đọc được nội dung file. Hãy chọn file có thể truy cập trực tiếp.';
                 });
-              },
-            ),
-          ],
-          child: TextField(
-            controller: docController,
-            minLines: 5,
-            maxLines: 9,
-            decoration: const InputDecoration(
-              labelText: 'Nội dung kiến thức hoặc hướng dẫn gửi tài liệu',
-              hintText:
-                  'VD: Khi khách hỏi catalogue, gửi link https://... và nói: Em gửi anh/chị catalogue sản phẩm mới nhất.',
-              border: OutlineInputBorder(),
-            ),
-          ),
+                return;
+              }
+
+              setDialogState(() {
+                pickedFile = file;
+                uploadedFile = null;
+                uploadError = null;
+                isUploading = true;
+              });
+
+              final response = await notifier.uploadKnowledgeFile(
+                filename: file.name,
+                bytes: file.bytes!,
+                contentType: _guessContentType(file.name),
+              );
+
+              setDialogState(() {
+                isUploading = false;
+                if (response['success'] == true && response['data'] is Map) {
+                  uploadedFile = Map<String, dynamic>.from(
+                    response['data'] as Map,
+                  );
+                } else {
+                  uploadError = (response['message'] ?? 'Upload file thất bại.')
+                      .toString();
+                }
+              });
+            }
+
+            return AppDialog(
+              title: 'Thêm tài liệu kiến thức mới',
+              icon: Icons.description_outlined,
+              width: 640,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+                AppDialogAction(
+                  text: 'Thêm tài liệu',
+                  icon: Icons.add_rounded,
+                  onPressed: isUploading
+                      ? null
+                      : () {
+                          final title = titleController.text.trim();
+                          final keywords = keywordsController.text.trim();
+                          final content = contentController.text.trim();
+                          if (title.isEmpty || content.isEmpty) return;
+
+                          final fileUrl = uploadedFile?['publicUrl']
+                              ?.toString();
+                          final fileName =
+                              uploadedFile?['filename']?.toString() ??
+                              pickedFile?.name;
+                          final text = [
+                            'Tiêu đề tài liệu: $title',
+                            if (keywords.isNotEmpty)
+                              'Từ khóa kích hoạt: $keywords',
+                            'Nội dung kiến thức bắt buộc:\n$content',
+                            if (fileUrl != null && fileUrl.isNotEmpty)
+                              'File/ảnh đính kèm:\n- Tên: $fileName\n- URL: $fileUrl\n- Quy tắc gửi: AI chỉ chọn file/ảnh này khi nội dung khách hỏi khớp từ khóa hoặc nội dung kiến thức; agent Zalo trên máy người dùng sẽ thực hiện gửi file/ảnh thật.',
+                          ].join('\n\n');
+
+                          notifier.addKnowledgeDocument(text).then((_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Đã thêm kiến thức: $title'),
+                                ),
+                              );
+                            }
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          });
+                        },
+                ),
+              ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tiêu đề tài liệu *',
+                      hintText: 'VD: Chính sách giao hàng',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextField(
+                    controller: keywordsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Từ khóa kích hoạt',
+                      hintText:
+                          'VD: ship, phí ship, giao hàng, vận chuyển (cách nhau bằng dấu phẩy)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Từ khóa dùng để AI biết khi nào cần dùng tài liệu này. Nhập * nếu muốn tài liệu này luôn luôn được dùng làm ngữ cảnh mặc định.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextField(
+                    controller: contentController,
+                    minLines: 7,
+                    maxLines: 12,
+                    decoration: const InputDecoration(
+                      labelText: 'Nội dung kiến thức *',
+                      hintText:
+                          'Nhập nội dung kiến thức chi tiết gạch đầu dòng để AI học và trả lời khách hàng...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'File / hình ảnh đính kèm (${uploadedFile == null ? 0 : 1})',
+                        style: AppTextStyles.label,
+                      ),
+                      AppButton(
+                        text: isUploading ? 'Đang upload' : 'Chọn thêm file',
+                        icon: Icons.upload_file_outlined,
+                        variant: AppButtonVariant.outline,
+                        isLoading: isUploading,
+                        onPressed: isUploading ? null : pickAndUploadFile,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: AppSpacing.borderRadiusM,
+                      border: Border.all(color: AppColors.borderSoft),
+                    ),
+                    child: uploadedFile == null
+                        ? Text(
+                            uploadError ??
+                                'Chưa có file hoặc hình ảnh đính kèm nào cho tài liệu này.',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body.copyWith(
+                              color: uploadError == null
+                                  ? AppColors.textMuted
+                                  : AppColors.errorText,
+                            ),
+                          )
+                        : Row(
+                            children: [
+                              const Icon(
+                                Icons.insert_drive_file_outlined,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: AppSpacing.s),
+                              Expanded(
+                                child: Text(
+                                  '${uploadedFile?['filename'] ?? pickedFile?.name} • ${_formatFileSize(uploadedFile?['size'])}',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Bỏ file',
+                                icon: const Icon(Icons.close_rounded),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    pickedFile = null;
+                                    uploadedFile = null;
+                                    uploadError = null;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
-    docController.dispose();
+    titleController.dispose();
+    keywordsController.dispose();
+    contentController.dispose();
+  }
+
+  String _guessContentType(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'txt':
+        return 'text/plain';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  String _formatFileSize(Object? size) {
+    final bytes = int.tryParse(size?.toString() ?? '') ?? 0;
+    if (bytes <= 0) return 'không rõ dung lượng';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   // ignore: unused_element
@@ -461,6 +801,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     // Sync prompt value once
     if (_promptController.text.isEmpty && state.systemPrompt.isNotEmpty) {
       _promptController.text = state.systemPrompt;
+      _soulController.text = state.soulPrompt;
+      _rulesController.text = state.responseRules;
       _tempValue = state.temperature;
       _selectedModel = normalizeChatbotAiModel(state.aiModel);
     }
@@ -680,6 +1022,324 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     );
   }
 
+  Future<void> _showAiSettingsDialog(
+    BuildContext context,
+    ChatbotState state,
+    ChatbotNotifier notifier,
+  ) async {
+    final modelController = ValueNotifier<String>(
+      normalizeChatbotAiModel(state.aiModel),
+    );
+    final promptController = TextEditingController(text: state.systemPrompt);
+    final soulController = TextEditingController(text: state.soulPrompt);
+    final rulesController = TextEditingController(text: state.responseRules);
+    var temperature = state.temperature;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AppDialog(
+              title: 'Cài đặt AI Chatbot',
+              subtitle:
+                  'Backend giữ key GCLI và gọi model; agent Zalo trên máy người dùng vẫn là nơi gửi tin, file và ảnh thật cho khách.',
+              icon: Icons.settings_outlined,
+              width: 720,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+                AppDialogAction(
+                  text: 'Lưu cài đặt',
+                  icon: Icons.save_outlined,
+                  onPressed: () {
+                    final selectedModel = modelController.value;
+                    final messenger = ScaffoldMessenger.of(context);
+                    final navigator = Navigator.of(dialogContext);
+                    notifier
+                        .updateAiConfig(
+                          model: selectedModel,
+                          prompt: promptController.text.trim(),
+                          soulPrompt: soulController.text.trim(),
+                          responseRules: rulesController.text.trim(),
+                          temperature: temperature,
+                        )
+                        .then((_) {
+                          if (mounted) {
+                            setState(() {
+                              _selectedModel = selectedModel;
+                              _promptController.text = promptController.text;
+                              _soulController.text = soulController.text;
+                              _rulesController.text = rulesController.text;
+                              _tempValue = temperature;
+                            });
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã lưu cấu hình AI Chatbot.'),
+                              ),
+                            );
+                          }
+                          if (dialogContext.mounted) {
+                            navigator.pop();
+                          }
+                        });
+                  },
+                ),
+              ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Mô hình ngôn ngữ AI sử dụng',
+                    style: AppTextStyles.label,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  ValueListenableBuilder<String>(
+                    valueListenable: modelController,
+                    builder: (context, selectedModel, _) {
+                      return AppSelectField<String>(
+                        value: selectedModel,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'gemini-3-flash-preview',
+                            child: Text(
+                              'gemini-3-flash-preview (1 quota/lượt)',
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'gemini-2.5-pro',
+                            child: Text('gemini-2.5-pro (1 quota/lượt)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'gemini-3.1-pro-preview',
+                            child: Text(
+                              'gemini-3.1-pro-preview (2 quota/lượt)',
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) modelController.value = value;
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Text('Prompt mặc định', style: AppTextStyles.label),
+                  const SizedBox(height: AppSpacing.xs),
+                  TextField(
+                    controller: promptController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText: 'Chỉ định cách chatbot phản hồi khách hàng...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Text('Soul / đối tượng nhập vai', style: AppTextStyles.label),
+                  const SizedBox(height: AppSpacing.xs),
+                  TextField(
+                    controller: soulController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'VD: Bạn là nhân viên tư vấn Zalo chuyên nghiệp, gần gũi...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Text('Rule ví dụ bắt buộc', style: AppTextStyles.label),
+                  const SizedBox(height: AppSpacing.xs),
+                  TextField(
+                    controller: rulesController,
+                    minLines: 5,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'VD: Không bịa thông tin, không lặp lời chào, thiếu dữ liệu thì chuyển nhân viên...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Độ sáng tạo (Temperature): ${temperature.toStringAsFixed(1)}',
+                        style: AppTextStyles.label,
+                      ),
+                      Text(
+                        temperature < 0.4
+                            ? 'Chính xác/Nhất quán'
+                            : temperature > 0.8
+                            ? 'Sáng tạo/Linh hoạt'
+                            : 'Cân bằng',
+                        style: AppTextStyles.caption.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: temperature,
+                    min: 0.1,
+                    max: 1.0,
+                    divisions: 9,
+                    activeColor: AppColors.primary,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        temperature = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    modelController.dispose();
+    promptController.dispose();
+    soulController.dispose();
+    rulesController.dispose();
+  }
+
+  Widget _buildAudienceTargeting(ChatbotState state, ChatbotNotifier notifier) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.assignment_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cấu hình Đối tượng Nhận Phản hồi (Audience Targeting)',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Thiết lập giới hạn nhóm khách hàng cá nhân hoặc danh sách nhóm Zalo được phép phản hồi tự động.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const Divider(height: 1, color: AppColors.borderSoft),
+          const SizedBox(height: AppSpacing.m),
+          Text(
+            'Trò chuyện cá nhân (1-1)',
+            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
+          ),
+          _buildChoiceTile(
+            selected: state.personalAudience == 'all',
+            title: 'Tất cả khách hàng',
+            onTap: () => notifier.updateAudienceConfig(personalAudience: 'all'),
+          ),
+          _buildChoiceTile(
+            selected: state.personalAudience == 'crmOnly',
+            title: 'Chỉ nhóm nhân CRM khách hàng được chỉ định',
+            onTap: () =>
+                notifier.updateAudienceConfig(personalAudience: 'crmOnly'),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Text(
+            'Trò chuyện Nhóm (Group)',
+            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
+          ),
+          _buildChoiceTile(
+            selected: state.groupAudience == 'none',
+            title: 'Không tự động trả lời trong nhóm',
+            onTap: () => notifier.updateAudienceConfig(groupAudience: 'none'),
+          ),
+          _buildChoiceTile(
+            selected: state.groupAudience == 'tagOnly',
+            title: 'Trả lời ở tất cả các nhóm khi được tag',
+            onTap: () =>
+                notifier.updateAudienceConfig(groupAudience: 'tagOnly'),
+          ),
+          _buildChoiceTile(
+            selected: state.groupAudience == 'selected',
+            title: 'Chỉ trả lời ở các nhóm được chọn',
+            subtitle: 'Danh sách nhóm sẽ được agent Zalo đồng bộ.',
+            onTap: () =>
+                notifier.updateAudienceConfig(groupAudience: 'selected'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceTile({
+    required bool selected,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: AppSpacing.borderRadiusS,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: selected ? AppColors.primary : AppColors.textMuted,
+              size: 18,
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTextStyles.body),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAiTab(ChatbotState state, ChatbotNotifier notifier) {
     final authState = ref.watch(crmAuthProvider);
     final totalRemaining =
@@ -691,143 +1351,144 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'CẤU HÌNH BOT TRÍ TUỆ NHÂN TẠO (AI)',
-            style: AppTextStyles.label.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.psychology_outlined,
+                color: AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cấu hình AI Chatbot tự động',
+                      style: AppTextStyles.sectionTitle,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Phản hồi khách hàng thông minh bằng các mô hình AI ngôn ngữ lớn (LLM) theo ngữ cảnh cuộc trò chuyện.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Tooltip(
+                message: 'Mở cài đặt AI',
+                child: IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  color: AppColors.textSecondary,
+                  onPressed: () =>
+                      _showAiSettingsDialog(context, state, notifier),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Switch(
+                    value: state.aiEnabled,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: notifier.setAiEnabled,
+                  ),
+                  Text(
+                    state.aiEnabled ? 'ĐÃ BẬT' : 'ĐÃ TẮT',
+                    style: AppTextStyles.caption.copyWith(
+                      color: state.aiEnabled
+                          ? AppColors.successText
+                          : AppColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Divider(height: 1, color: AppColors.borderSoft),
+          const SizedBox(height: AppSpacing.m),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.m),
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              borderRadius: AppSpacing.borderRadiusM,
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.alternate_email_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Chỉ phản hồi khi được tag tên (@) trong nhóm',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'AI Chatbot sẽ chỉ phản hồi trong cuộc trò chuyện nhóm Zalo khi tin nhắn chứa tag @tên Zalo của bạn.',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: state.groupAudience == 'tagOnly',
+                  activeThumbColor: AppColors.primary,
+                  onChanged: (enabled) => notifier.updateAudienceConfig(
+                    groupAudience: enabled ? 'tagOnly' : 'none',
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.m),
-          const AppAlert(
-            message:
-                'Khi chế độ AI hoạt động, bot sẽ trả lời tự động dựa trên prompt hệ thống và kho tài liệu kiến thức nếu tin nhắn của khách hàng không khớp với bất kỳ từ khóa cố định nào.',
-            variant: AppAlertVariant.info,
-          ),
+          _buildAudienceTargeting(state, notifier),
           const SizedBox(height: AppSpacing.m),
-          Text('Mô hình ngôn ngữ AI sử dụng:', style: AppTextStyles.label),
-          const SizedBox(height: AppSpacing.xs),
-          AppSelectField<String>(
-            value: normalizeChatbotAiModel(_selectedModel),
-            items: const [
-              DropdownMenuItem(
-                value: 'gemini-3-flash-preview',
-                child: Text('gemini-3-flash-preview (1 quota/lượt)'),
+          Wrap(
+            spacing: AppSpacing.s,
+            runSpacing: AppSpacing.s,
+            children: [
+              AppBadge(
+                label:
+                    '${state.aiModel} (${state.aiModel == 'gemini-3.1-pro-preview' ? '2' : '1'} quota/lượt)',
+                variant: AppBadgeVariant.info,
               ),
-              DropdownMenuItem(
-                value: 'gemini-2.5-pro',
-                child: Text('gemini-2.5-pro (1 quota/lượt)'),
+              AppBadge(
+                label: 'Temperature ${state.temperature.toStringAsFixed(1)}',
+                variant: AppBadgeVariant.neutral,
               ),
-              DropdownMenuItem(
-                value: 'gemini-3.1-pro-preview',
-                child: Text('gemini-3.1-pro-preview (2 quota/lượt)'),
+              AppBadge(
+                label: state.personalAudience == 'crmOnly'
+                    ? 'Chỉ khách CRM chỉ định'
+                    : 'Tất cả khách cá nhân',
+                variant: AppBadgeVariant.neutral,
               ),
             ],
-            /*
-              DropdownMenuItem(
-                value: 'gcli-default',
-                child: Text('Mặc định hệ thống'),
-              ),
-              DropdownMenuItem(
-                value: 'Gemini 1.5 Flash',
-                child: Text('Gemini 1.5 Flash (Nhanh & Tối ưu)'),
-              ),
-              DropdownMenuItem(
-                value: 'Gemini 1.5 Pro',
-                child: Text('Gemini 1.5 Pro (Thông minh & Đa nhiệm)'),
-              ),
-              DropdownMenuItem(
-                value: 'GPT-4o mini',
-                child: Text('GPT-4o mini'),
-              ),
-              DropdownMenuItem(
-                value: 'Zalo AI Custom',
-                child: Text('Zalo AI Custom Model'),
-              ),
-            ],
-            */
-            onChanged: (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedModel = val;
-                });
-              }
-            },
           ),
-          const SizedBox(height: AppSpacing.m),
-          if (_selectedModel == 'gemini-3.1-pro-preview') ...[
+          if (state.aiModel == 'gemini-3.1-pro-preview') ...[
+            const SizedBox(height: AppSpacing.m),
             const AppAlert(
               message:
                   'Model gemini-3.1-pro-preview dùng quota gấp đôi. Backend sẽ trừ 2 lượt cho mỗi lần AI trả lời thành công và hoàn lại nếu upstream GCLI lỗi.',
               variant: AppAlertVariant.warning,
             ),
-            const SizedBox(height: AppSpacing.m),
           ],
-          Text('System Prompt (Chỉ dẫn hệ thống):', style: AppTextStyles.label),
-          const SizedBox(height: AppSpacing.xs),
-          TextField(
-            controller: _promptController,
-            maxLines: 4,
-            style: AppTextStyles.body,
-            decoration: InputDecoration(
-              hintText: 'Chỉ định cách chatbot phản hồi khách hàng...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.m),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Độ sáng tạo (Temperature): ${_tempValue.toStringAsFixed(1)}',
-                style: AppTextStyles.label,
-              ),
-              Text(
-                _tempValue < 0.4
-                    ? 'Chính xác/Nhất quán'
-                    : _tempValue > 0.8
-                    ? 'Sáng tạo/Linh hoạt'
-                    : 'Cân bằng',
-                style: AppTextStyles.caption.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: _tempValue,
-            min: 0.1,
-            max: 1.0,
-            divisions: 9,
-            activeColor: AppColors.primary,
-            onChanged: (val) {
-              setState(() {
-                _tempValue = val;
-              });
-            },
-          ),
-          const SizedBox(height: AppSpacing.l),
-          const Divider(height: 1, color: AppColors.borderSoft),
-          const SizedBox(height: AppSpacing.m),
-          Align(
-            alignment: Alignment.centerRight,
-            child: AppButton(
-              text: 'Lưu cài đặt AI',
-              icon: Icons.save_outlined,
-              onPressed: () {
-                notifier.updateAiConfig(
-                  _selectedModel,
-                  _promptController.text,
-                  _tempValue,
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã lưu cấu hình AI Chatbot.')),
-                );
-              },
-            ),
-          ),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 24),
@@ -1183,5 +1844,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         ],
       ),
     );
+  }
+}
+
+class _KeywordRuleDraft {
+  final TextEditingController keyword = TextEditingController();
+  final TextEditingController response = TextEditingController();
+
+  void dispose() {
+    keyword.dispose();
+    response.dispose();
   }
 }

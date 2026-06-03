@@ -13,7 +13,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { config } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
-import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, deleteAccount, initializeZalo, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
+import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, initializeZalo, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
 import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { projectRoot } from './config.js';
@@ -195,6 +195,30 @@ const server = createServer(async (req, res) => {
       json(res, 200, { success: true, accounts });
     } catch (err) {
       json(res, 500, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // POST /api/zalo/accounts/settings
+  if (method === 'POST' && url === '/api/zalo/accounts/settings') {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      const accountId = payload.accountId;
+
+      if (!accountId || typeof accountId !== 'string') {
+        json(res, 400, { success: false, error: 'accountId is required.' });
+        return;
+      }
+
+      const success = await updateAccountSettings(accountId, {
+        proxy: payload.proxy,
+        blockSeen: payload.blockSeen,
+        blockTyping: payload.blockTyping,
+      });
+      json(res, success ? 200 : 404, { success });
+    } catch (err) {
+      json(res, 400, { success: false, error: 'Invalid request body or account settings update failed.' });
     }
     return;
   }

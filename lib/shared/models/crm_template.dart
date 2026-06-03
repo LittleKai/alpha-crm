@@ -54,7 +54,9 @@ class CrmTemplate {
       lastUsedAt: json['lastUsedAt'] != null
           ? DateTime.tryParse(json['lastUsedAt'].toString())
           : null,
-      usageCount: json['usageCount'] is int ? json['usageCount'] : (int.tryParse(json['usageCount']?.toString() ?? '0') ?? 0),
+      usageCount: json['usageCount'] is int
+          ? json['usageCount']
+          : (int.tryParse(json['usageCount']?.toString() ?? '0') ?? 0),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
           : DateTime.now(),

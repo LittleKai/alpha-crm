@@ -9,9 +9,9 @@ class CrmUserState {
   final String? name;
   final String? role;
   final String? avatar;
-  
+
   CrmUserState({this.email, this.name, this.role, this.avatar});
-  
+
   factory CrmUserState.fromJson(Map<String, dynamic> json) {
     return CrmUserState(
       email: json['email']?.toString(),
@@ -77,11 +77,13 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
     // 1. Đăng ký bộ lắng nghe Web SSO nếu chạy trên môi trường Web
     if (kIsWeb) {
-      setupWebAuthListener(onTokenReceived: (token) async {
-        debugPrint('[CrmAuthNotifier] Nhận SSO token từ postMessage.');
-        receivedWebToken = true;
-        await setTokenAndFetchUser(token);
-      });
+      setupWebAuthListener(
+        onTokenReceived: (token) async {
+          debugPrint('[CrmAuthNotifier] Nhận SSO token từ postMessage.');
+          receivedWebToken = true;
+          await setTokenAndFetchUser(token);
+        },
+      );
 
       // Timeout fallback for Web SSO
       Future.delayed(const Duration(seconds: 3), () async {
@@ -108,18 +110,20 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   Future<void> setTokenAndFetchUser(String token) async {
     state = state.copyWith(isLoading: true, token: token, errorText: null);
     await CrmAuthTokenStore.saveToken(token);
-    
+
     // Gọi API lấy thông tin người dùng
     final meResult = await CrmCloudApi.get('/auth/me');
     if (meResult['success'] == true && meResult['data'] != null) {
       final meData = meResult['data'];
-      final userJson = meData is Map && meData['user'] is Map ? meData['user'] : meData;
+      final userJson = meData is Map && meData['user'] is Map
+          ? meData['user']
+          : meData;
       final user = CrmUserState.fromJson(Map<String, dynamic>.from(userJson));
-      
+
       // Gọi API lấy trạng thái đăng ký CRM
       final subResult = await CrmCloudApi.get('/crm/subscription/me');
       String subStatus = 'none';
-      
+
       if (subResult['success'] == true && subResult['data'] != null) {
         final data = subResult['data'];
         final subscription = data['subscription'];
@@ -135,14 +139,20 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       final quotaResult = await CrmCloudApi.get('/crm/quota');
       int incRemaining = 0;
       int extRemaining = 0;
-      
+
       if (quotaResult['success'] == true && quotaResult['data'] != null) {
         final qData = quotaResult['data'];
-        final int limit = qData['includedAiLimit'] is int ? qData['includedAiLimit'] : (int.tryParse(qData['includedAiLimit']?.toString() ?? '0') ?? 0);
-        final int used = qData['includedAiUsed'] is int ? qData['includedAiUsed'] : (int.tryParse(qData['includedAiUsed']?.toString() ?? '0') ?? 0);
+        final int limit = qData['includedAiLimit'] is int
+            ? qData['includedAiLimit']
+            : (int.tryParse(qData['includedAiLimit']?.toString() ?? '0') ?? 0);
+        final int used = qData['includedAiUsed'] is int
+            ? qData['includedAiUsed']
+            : (int.tryParse(qData['includedAiUsed']?.toString() ?? '0') ?? 0);
         incRemaining = limit - used;
         if (incRemaining < 0) incRemaining = 0;
-        extRemaining = qData['extraAiRemaining'] is int ? qData['extraAiRemaining'] : (int.tryParse(qData['extraAiRemaining']?.toString() ?? '0') ?? 0);
+        extRemaining = qData['extraAiRemaining'] is int
+            ? qData['extraAiRemaining']
+            : (int.tryParse(qData['extraAiRemaining']?.toString() ?? '0') ?? 0);
       }
 
       state = state.copyWith(
@@ -173,7 +183,9 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       'password': password,
     });
 
-    if (response['success'] == true && response['data'] != null && response['data']['token'] != null) {
+    if (response['success'] == true &&
+        response['data'] != null &&
+        response['data']['token'] != null) {
       final token = response['data']['token'].toString();
       await setTokenAndFetchUser(token);
       return true;
@@ -189,10 +201,10 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     await CrmAuthTokenStore.deleteToken();
     state = const CrmAuthState();
   }
-  
+
   Future<void> refreshSubscription() async {
     if (!state.isAuthenticated) return;
-    
+
     final subResult = await CrmCloudApi.get('/crm/subscription/me');
     String subStatus = 'none';
     if (subResult['success'] == true && subResult['data'] != null) {
@@ -211,11 +223,17 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     int extRemaining = 0;
     if (quotaResult['success'] == true && quotaResult['data'] != null) {
       final qData = quotaResult['data'];
-      final int limit = qData['includedAiLimit'] is int ? qData['includedAiLimit'] : (int.tryParse(qData['includedAiLimit']?.toString() ?? '0') ?? 0);
-      final int used = qData['includedAiUsed'] is int ? qData['includedAiUsed'] : (int.tryParse(qData['includedAiUsed']?.toString() ?? '0') ?? 0);
+      final int limit = qData['includedAiLimit'] is int
+          ? qData['includedAiLimit']
+          : (int.tryParse(qData['includedAiLimit']?.toString() ?? '0') ?? 0);
+      final int used = qData['includedAiUsed'] is int
+          ? qData['includedAiUsed']
+          : (int.tryParse(qData['includedAiUsed']?.toString() ?? '0') ?? 0);
       incRemaining = limit - used;
       if (incRemaining < 0) incRemaining = 0;
-      extRemaining = qData['extraAiRemaining'] is int ? qData['extraAiRemaining'] : (int.tryParse(qData['extraAiRemaining']?.toString() ?? '0') ?? 0);
+      extRemaining = qData['extraAiRemaining'] is int
+          ? qData['extraAiRemaining']
+          : (int.tryParse(qData['extraAiRemaining']?.toString() ?? '0') ?? 0);
     }
 
     state = state.copyWith(
@@ -226,6 +244,8 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   }
 }
 
-final crmAuthProvider = StateNotifierProvider<CrmAuthNotifier, CrmAuthState>((ref) {
+final crmAuthProvider = StateNotifierProvider<CrmAuthNotifier, CrmAuthState>((
+  ref,
+) {
   return CrmAuthNotifier();
 });

@@ -56,7 +56,10 @@ class CrmTasksScreen extends ConsumerWidget {
                   value: state.statusFilter,
                   items: const [
                     DropdownMenuItem(value: 'open', child: Text('Chưa làm')),
-                    DropdownMenuItem(value: 'done', child: Text('Đã hoàn thành')),
+                    DropdownMenuItem(
+                      value: 'done',
+                      child: Text('Đã hoàn thành'),
+                    ),
                     DropdownMenuItem(
                       value: 'dismissed',
                       child: Text('Đã bỏ qua'),

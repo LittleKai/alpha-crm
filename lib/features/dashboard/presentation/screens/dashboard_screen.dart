@@ -95,12 +95,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final sub = state.overview?['subscription'];
     final isActive = sub != null && sub['active'] == true;
     final zaloState = ref.watch(zaloIntegrationProvider);
-    final hasDeviceLimitError = zaloState.agentError != null &&
+    final hasDeviceLimitError =
+        zaloState.agentError != null &&
         (zaloState.agentError!.contains('giới hạn thiết bị') ||
-         zaloState.agentError!.contains('thiết bị cũ') ||
-         zaloState.agentError!.contains('thiết bị hoạt động') ||
-         zaloState.agentError!.contains('device limit') ||
-         zaloState.agentError!.contains('limit exceeded'));
+            zaloState.agentError!.contains('thiết bị cũ') ||
+            zaloState.agentError!.contains('thiết bị hoạt động') ||
+            zaloState.agentError!.contains('device limit') ||
+            zaloState.agentError!.contains('limit exceeded'));
 
     if (isActive && !hasDeviceLimitError) return const SizedBox.shrink();
 
@@ -116,7 +117,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 28),
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.warning,
+              size: 28,
+            ),
             const SizedBox(width: AppSpacing.s),
             Expanded(
               child: Column(
@@ -158,7 +163,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   variant: AppButtonVariant.outline,
                   height: 32,
                   onPressed: () async {
-                    await ref.read(zaloIntegrationProvider.notifier).checkConnection();
+                    await ref
+                        .read(zaloIntegrationProvider.notifier)
+                        .checkConnection();
                     await ref.read(dashboardProvider.notifier).loadDashboard();
                   },
                 ),
@@ -229,7 +236,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         children: [
                           Icon(Icons.check_circle_outline, color: Colors.white),
                           SizedBox(width: 8),
-                          Expanded(child: Text('Đã cập nhật trạng thái gói cước và đánh thức Zalo Bot thành công!')),
+                          Expanded(
+                            child: Text(
+                              'Đã cập nhật trạng thái gói cước và đánh thức Zalo Bot thành công!',
+                            ),
+                          ),
                         ],
                       ),
                       backgroundColor: AppColors.success,

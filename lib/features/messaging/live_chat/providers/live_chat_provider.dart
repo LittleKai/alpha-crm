@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/utils/image_helper.dart';
 import '../data/live_chat_repository.dart';
 
 const Object _unset = Object();
@@ -56,7 +57,7 @@ class ChatMessage {
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       senderId: (json['senderId'] ?? '').toString(),
       senderName: (json['senderName'] ?? '').toString(),
-      message: (json['content'] ?? '').toString(),
+      message: _stringFrom(json, const ['content', 'text', 'message', 'body']),
       direction: (json['direction'] ?? 'inbound').toString(),
       status: (json['status'] ?? '').toString(),
       timestamp: _dateFrom(
@@ -135,8 +136,19 @@ class Conversation {
       threadId: (json['threadId'] ?? '').toString(),
       threadType: (json['threadType'] ?? 'user').toString(),
       customerName: name,
-      customerAvatar: (json['avatarUrl'] ?? '').toString(),
-      lastMessage: (json['lastMessagePreview'] ?? '').toString(),
+      customerAvatar: sanitizeImageUrl(
+        _stringFrom(json, const [
+          'avatarUrl',
+          'avatar',
+          'customerAvatar',
+          'senderAvatar',
+        ]),
+      ),
+      lastMessage: _stringFrom(json, const [
+        'lastMessagePreview',
+        'lastMessage',
+        'lastContent',
+      ]),
       lastMessageTime: _dateFrom(json['lastMessageAt'] ?? json['updatedAt']),
       unreadCount: int.tryParse((json['unreadCount'] ?? 0).toString()) ?? 0,
       tag: tags.isEmpty ? '' : tags.first.toString(),
@@ -411,4 +423,14 @@ final _emptyConversation = Conversation(
 DateTime _dateFrom(Object? value) {
   if (value == null) return DateTime.now();
   return DateTime.tryParse(value.toString()) ?? DateTime.now();
+}
+
+String _stringFrom(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    final text = value.toString();
+    if (text.isNotEmpty) return text;
+  }
+  return '';
 }

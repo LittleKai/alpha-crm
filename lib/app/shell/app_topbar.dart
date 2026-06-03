@@ -30,10 +30,7 @@ class AppTopbar extends ConsumerWidget {
           if (onMenuPressed != null) ...[
             IconButton(
               tooltip: 'Mở menu',
-              icon: const Icon(
-                Icons.menu,
-                color: AppColors.textSecondary,
-              ),
+              icon: const Icon(Icons.menu, color: AppColors.textSecondary),
               onPressed: onMenuPressed,
             ),
             const SizedBox(width: AppSpacing.s),

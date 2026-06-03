@@ -68,7 +68,10 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
         final content = await file.readAsString();
         final jsonList = jsonDecode(content) as List<dynamic>;
         final loadedRecords = jsonList
-            .map((item) => FriendHistoryRecord.fromJson(item as Map<String, dynamic>))
+            .map(
+              (item) =>
+                  FriendHistoryRecord.fromJson(item as Map<String, dynamic>),
+            )
             .toList();
         state = state.copyWith(records: loadedRecords);
       }
@@ -80,8 +83,9 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
   Future<void> _saveHistory() async {
     try {
       final file = File('zalo_friend_history.json');
-      final content = const JsonEncoder.withIndent('  ')
-          .convert(state.records.map((r) => r.toJson()).toList());
+      final content = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(state.records.map((r) => r.toJson()).toList());
       await file.writeAsString(content);
     } catch (_) {
       // Ignore
@@ -101,5 +105,5 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
 
 final friendHistoryProvider =
     StateNotifierProvider<FriendHistoryNotifier, FriendHistoryState>((ref) {
-  return FriendHistoryNotifier();
-});
+      return FriendHistoryNotifier();
+    });

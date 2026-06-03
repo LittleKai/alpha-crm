@@ -11,6 +11,9 @@ class ZaloConnectedAccount {
   final bool connected;
   final bool listenerRunning;
   final String avatarUrl;
+  final String proxy;
+  final bool blockSeen;
+  final bool blockTyping;
 
   const ZaloConnectedAccount({
     required this.id,
@@ -18,6 +21,9 @@ class ZaloConnectedAccount {
     required this.connected,
     required this.listenerRunning,
     this.avatarUrl = '',
+    this.proxy = '',
+    this.blockSeen = false,
+    this.blockTyping = false,
   });
 }
 
@@ -86,8 +92,7 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
   ZaloIntegrationApi? _api;
   Timer? _pollingTimer;
 
-  ZaloIntegrationNotifier(this._ref)
-    : super(const ZaloIntegrationState());
+  ZaloIntegrationNotifier(this._ref) : super(const ZaloIntegrationState());
 
   ZaloIntegrationApi _getApi() {
     final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
@@ -99,8 +104,12 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
   }
 
   void startPollingBackend() {
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) {
-      debugPrint('[ZaloIntegrationNotifier] Bỏ qua kiểm tra kết nối local backend trên Web/Mobile.');
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      debugPrint(
+        '[ZaloIntegrationNotifier] Bỏ qua kiểm tra kết nối local backend trên Web/Mobile.',
+      );
       return;
     }
     _pollingTimer?.cancel();
@@ -109,7 +118,9 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       checkConnection();
     });
-    debugPrint('[ZaloIntegrationNotifier] Started backend polling timer (every 5s).');
+    debugPrint(
+      '[ZaloIntegrationNotifier] Started backend polling timer (every 5s).',
+    );
   }
 
   void stopPollingBackend() {
@@ -136,12 +147,18 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           final seenIds = <String>{};
           activeAccounts = rawAccs
               .map((item) {
+                final settings = item['settings'] is Map
+                    ? Map<String, dynamic>.from(item['settings'])
+                    : const <String, dynamic>{};
                 return ZaloConnectedAccount(
                   id: item['id']?.toString() ?? '',
                   label: item['label']?.toString() ?? 'Tài khoản',
                   connected: item['connected'] == true,
                   listenerRunning: item['listenerRunning'] == true,
                   avatarUrl: sanitizeImageUrl(item['avatar']?.toString() ?? ''),
+                  proxy: settings['proxy']?.toString() ?? '',
+                  blockSeen: settings['blockSeen'] == true,
+                  blockTyping: settings['blockTyping'] == true,
                 );
               })
               .where((acc) => seenIds.add(acc.id))
@@ -162,18 +179,23 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           agentError: agentErr,
         );
       } else {
-        debugPrint('[ZaloIntegrationNotifier] Health check returned non-ok status: $health');
+        debugPrint(
+          '[ZaloIntegrationNotifier] Health check returned non-ok status: $health',
+        );
         state = state.copyWith(
           isLoading: false,
           isBackendActive: false,
           isConnected: false,
-          errorText: health['error']?.toString() ?? 'Không thể kết nối tới backend.',
+          errorText:
+              health['error']?.toString() ?? 'Không thể kết nối tới backend.',
           accounts: const [],
           agentError: null,
         );
       }
     } catch (e, stack) {
-      debugPrint('[ZaloIntegrationNotifier] Exception in checkConnection: $e\n$stack');
+      debugPrint(
+        '[ZaloIntegrationNotifier] Exception in checkConnection: $e\n$stack',
+      );
       state = state.copyWith(
         isLoading: false,
         isBackendActive: false,
@@ -189,6 +211,30 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
     try {
       final api = _getApi();
       final response = await api.deleteAccount(accountId);
+      if (response['success'] == true) {
+        await checkConnection();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> updateAccountSettings({
+    required String accountId,
+    required String proxy,
+    required bool blockSeen,
+    required bool blockTyping,
+  }) async {
+    try {
+      final api = _getApi();
+      final response = await api.updateAccountSettings(
+        accountId: accountId,
+        proxy: proxy,
+        blockSeen: blockSeen,
+        blockTyping: blockTyping,
+      );
       if (response['success'] == true) {
         await checkConnection();
         return true;

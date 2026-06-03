@@ -47,7 +47,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(response['message'] ?? 'Mua gói thất bại. Vui lòng thử lại.'),
+            content: Text(
+              response['message'] ?? 'Mua gói thất bại. Vui lòng thử lại.',
+            ),
             backgroundColor: AppColors.errorText,
           ),
         );
@@ -82,7 +84,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(response['message'] ?? 'Gia hạn thất bại. Vui lòng kiểm tra số dư.'),
+            content: Text(
+              response['message'] ??
+                  'Gia hạn thất bại. Vui lòng kiểm tra số dư.',
+            ),
             backgroundColor: AppColors.errorText,
           ),
         );
@@ -95,7 +100,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final authState = ref.watch(crmAuthProvider);
     final isExpired = authState.subscriptionStatus == 'expired';
     final isActive = authState.subscriptionStatus == 'active';
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -121,7 +126,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     // Cột trái: Trạng thái gói
                     Expanded(
                       flex: isWide ? 1 : 0,
-                      child: _buildPlanStatusCard(isActive, isExpired, authState),
+                      child: _buildPlanStatusCard(
+                        isActive,
+                        isExpired,
+                        authState,
+                      ),
                     ),
                     if (isWide) const SizedBox(width: 24),
                     if (!isWide) const SizedBox(height: 24),
@@ -135,7 +144,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               },
             ),
             const SizedBox(height: 32),
-            
+
             // Phần nạp thêm AI & Gia hạn qua Ngân hàng
             Text(
               'Mua Gói Nạp Thêm AI Quota',
@@ -144,11 +153,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             const SizedBox(height: 16),
             _buildAiTopupPackages(),
             const SizedBox(height: 32),
-            
-            Text(
-              'Thanh Toán & Nạp Tiền',
-              style: AppTextStyles.sectionTitle,
-            ),
+
+            Text('Thanh Toán & Nạp Tiền', style: AppTextStyles.sectionTitle),
             const SizedBox(height: 16),
             _buildBillingInstructions(),
           ],
@@ -157,7 +163,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  Widget _buildPlanStatusCard(bool isActive, bool isExpired, CrmAuthState authState) {
+  Widget _buildPlanStatusCard(
+    bool isActive,
+    bool isExpired,
+    CrmAuthState authState,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -172,11 +182,16 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isActive
                         ? AppColors.successSoft
-                        : (isExpired ? AppColors.errorSoft : AppColors.warningSoft),
+                        : (isExpired
+                              ? AppColors.errorSoft
+                              : AppColors.warningSoft),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -186,7 +201,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     style: AppTextStyles.caption.copyWith(
                       color: isActive
                           ? AppColors.successText
-                          : (isExpired ? AppColors.errorText : AppColors.warningText),
+                          : (isExpired
+                                ? AppColors.errorText
+                                : AppColors.warningText),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -196,9 +213,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 16),
-            _buildPlanDetailRow('Mức Giá:', '500,000 VND / tháng (hoặc 525 credits)'),
-            _buildPlanDetailRow('Thời Hạn:', 'Hằng tháng (Gia hạn thủ công mặc định)'),
-            _buildPlanDetailRow('Trạng Thái Hệ Thống:', isExpired ? 'Chế độ Đọc-Chỉ-Xem (Read-Only) đang kích hoạt' : 'Hoạt động đầy đủ tính năng'),
+            _buildPlanDetailRow(
+              'Mức Giá:',
+              '500,000 VND / tháng (hoặc 525 credits)',
+            ),
+            _buildPlanDetailRow(
+              'Thời Hạn:',
+              'Hằng tháng (Gia hạn thủ công mặc định)',
+            ),
+            _buildPlanDetailRow(
+              'Trạng Thái Hệ Thống:',
+              isExpired
+                  ? 'Chế độ Đọc-Chỉ-Xem (Read-Only) đang kích hoạt'
+                  : 'Hoạt động đầy đủ tính năng',
+            ),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -211,7 +239,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: const Text('Gia Hạn Dịch Vụ'),
-                                content: const Text('Hệ thống sẽ trừ 525 Credits từ số dư tài khoản của bạn để gia hạn gói CRM 1 tháng. Bạn có muốn tiếp tục?'),
+                                content: const Text(
+                                  'Hệ thống sẽ trừ 525 Credits từ số dư tài khoản của bạn để gia hạn gói CRM 1 tháng. Bạn có muốn tiếp tục?',
+                                ),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context),
@@ -232,10 +262,19 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     child: _isProcessing
-                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Text('Gia Hạn Bằng Credits (525đ)'),
                   ),
                 ),
@@ -281,7 +320,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           Expanded(
             child: Text(
               value,
-              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary, fontSize: 13),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -290,7 +332,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   Widget _buildAiQuotaCard(CrmAuthState authState) {
-    final totalRemaining = authState.includedAiRemaining + authState.extraAiRemaining;
+    final totalRemaining =
+        authState.includedAiRemaining + authState.extraAiRemaining;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -311,7 +354,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     '$totalRemaining',
                     style: AppTextStyles.pageTitle.copyWith(
                       fontSize: 48,
-                      color: totalRemaining > 0 ? AppColors.successText : AppColors.errorText,
+                      color: totalRemaining > 0
+                          ? AppColors.successText
+                          : AppColors.errorText,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -326,9 +371,15 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildQuotaInfoSub('Bao gồm trong gói:', '${authState.includedAiRemaining}'),
+                _buildQuotaInfoSub(
+                  'Bao gồm trong gói:',
+                  '${authState.includedAiRemaining}',
+                ),
                 Container(width: 1, height: 32, color: AppColors.border),
-                _buildQuotaInfoSub('Nạp thêm ngoài gói:', '${authState.extraAiRemaining}'),
+                _buildQuotaInfoSub(
+                  'Nạp thêm ngoài gói:',
+                  '${authState.extraAiRemaining}',
+                ),
               ],
             ),
           ],
@@ -343,7 +394,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       children: [
         Text(label, style: AppTextStyles.caption.copyWith(fontSize: 11)),
         const SizedBox(height: 4),
-        Text(value, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary, fontSize: 15)),
+        Text(
+          value,
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textPrimary,
+            fontSize: 15,
+          ),
+        ),
       ],
     );
   }
@@ -368,11 +425,17 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 side: BorderSide(color: AppColors.border.withOpacity(0.5)),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 24,
+                ),
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primarySoft,
                         borderRadius: BorderRadius.circular(20),
@@ -403,7 +466,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     ElevatedButton(
                       onPressed: _isProcessing
                           ? null
-                          : () => _purchasePack(pkg['amount'] as int, pkg['price'] as int),
+                          : () => _purchasePack(
+                              pkg['amount'] as int,
+                              pkg['price'] as int,
+                            ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -458,16 +524,27 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.qr_code_2_rounded, size: 64, color: AppColors.textSecondary),
+                        Icon(
+                          Icons.qr_code_2_rounded,
+                          size: 64,
+                          color: AppColors.textSecondary,
+                        ),
                         SizedBox(height: 8),
-                        Text('Quét mã chuyển khoản', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                        Text(
+                          'Quét mã chuyển khoản',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   ),
                 ),
                 if (isWide) const SizedBox(width: 32),
                 if (!isWide) const SizedBox(height: 24),
-                
+
                 // Bank Details
                 Expanded(
                   flex: isWide ? 1 : 0,
@@ -479,10 +556,19 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                         style: AppTextStyles.cardTitle,
                       ),
                       const SizedBox(height: 12),
-                      _buildBankDetail('Ngân hàng:', 'MB Bank (Ngân hàng Quân Đội)'),
+                      _buildBankDetail(
+                        'Ngân hàng:',
+                        'MB Bank (Ngân hàng Quân Đội)',
+                      ),
                       _buildBankDetail('Số tài khoản:', '9999-8888-6666-999'),
-                      _buildBankDetail('Chủ tài khoản:', 'CONG TY COPH AN ALPHA STUDIO'),
-                      _buildBankDetail('Nội dung chuyển khoản:', 'ALPHA CRM <Email của bạn>'),
+                      _buildBankDetail(
+                        'Chủ tài khoản:',
+                        'CONG TY COPH AN ALPHA STUDIO',
+                      ),
+                      _buildBankDetail(
+                        'Nội dung chuyển khoản:',
+                        'ALPHA CRM <Email của bạn>',
+                      ),
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -492,7 +578,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                         ),
                         child: Text(
                           '⚠️ Lưu ý: Tỷ giá nạp Credits là 1,000 VND = 1 Credit. Hệ thống sẽ tự động duyệt giao dịch chuyển khoản trong vòng 2-5 phút.',
-                          style: AppTextStyles.caption.copyWith(color: AppColors.warningText, fontWeight: FontWeight.w600),
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.warningText,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -512,8 +601,19 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$label ', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700)),
-          Expanded(child: Text(val, style: AppTextStyles.body.copyWith(color: AppColors.textPrimary, fontSize: 13))),
+          Text(
+            '$label ',
+            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+          ),
+          Expanded(
+            child: Text(
+              val,
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+              ),
+            ),
+          ),
         ],
       ),
     );

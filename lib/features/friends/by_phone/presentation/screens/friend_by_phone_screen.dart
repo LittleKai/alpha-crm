@@ -18,7 +18,8 @@ class FriendByPhoneScreen extends ConsumerStatefulWidget {
   const FriendByPhoneScreen({super.key});
 
   @override
-  ConsumerState<FriendByPhoneScreen> createState() => _FriendByPhoneScreenState();
+  ConsumerState<FriendByPhoneScreen> createState() =>
+      _FriendByPhoneScreenState();
 }
 
 class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
@@ -31,7 +32,7 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
   void initState() {
     super.initState();
     final notifier = ref.read(friendByPhoneProvider.notifier);
-    
+
     // Wire controllers to provider
     _phoneController.addListener(() {
       notifier.setPhones(_phoneController.text);
@@ -39,7 +40,7 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
     _messageController.addListener(() {
       notifier.setMessage(_messageController.text);
     });
-    
+
     // Load initial values
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(zaloIntegrationProvider.notifier).checkConnection();
@@ -95,7 +96,11 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1024;
-                  final leftCard = _buildConfigCard(state, notifier, activeAccounts);
+                  final leftCard = _buildConfigCard(
+                    state,
+                    notifier,
+                    activeAccounts,
+                  );
                   final rightCard = _buildLogCard(state, notifier);
 
                   if (!useColumns) {
@@ -130,13 +135,20 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(Icons.phone_in_talk_outlined, color: AppColors.primary, size: 32),
+        const Icon(
+          Icons.phone_in_talk_outlined,
+          color: AppColors.primary,
+          size: 32,
+        ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Kết bạn theo Số điện thoại', style: AppTextStyles.pageTitle),
+              Text(
+                'Kết bạn theo Số điện thoại',
+                style: AppTextStyles.pageTitle,
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Tự động tìm kiếm và gửi lời mời kết bạn an toàn theo danh sách SĐT.',
@@ -161,7 +173,10 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('CẤU HÌNH CHIẾN DỊCH KẾT BẠN', style: AppTextStyles.sectionTitle),
+            Text(
+              'CẤU HÌNH CHIẾN DỊCH KẾT BẠN',
+              style: AppTextStyles.sectionTitle,
+            ),
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Chọn tài khoản nguồn, dán SĐT và chỉnh giãn cách an toàn',
@@ -172,16 +187,22 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
             const SizedBox(height: AppSpacing.xs),
             if (!hasActiveAccount) ...[
               const AppAlert(
-                message: 'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
+                message:
+                    'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
                 variant: AppAlertVariant.error,
               ),
               const SizedBox(height: AppSpacing.m),
             ] else ...[
               AppSelectField<String>(
-                value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+                value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                    ? state.selectedAccountId
+                    : null,
                 hintText: 'Chọn tài khoản Zalo...',
                 items: accounts.map((acc) {
-                  final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                  final cleanLabel = acc.label.replaceAll(
+                    RegExp(r'\s*\([^)]*\)$'),
+                    '',
+                  );
                   return DropdownMenuItem(
                     value: acc.id,
                     child: Row(
@@ -189,11 +210,19 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                         CircleAvatar(
                           radius: 12,
                           backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                          backgroundImage: acc.avatarUrl.isNotEmpty
+                              ? NetworkImage(acc.avatarUrl)
+                              : null,
                           child: acc.avatarUrl.isEmpty
                               ? Text(
-                                  cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                  cleanLabel.isNotEmpty
+                                      ? cleanLabel[0].toUpperCase()
+                                      : 'A',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 )
                               : null,
                         ),
@@ -207,7 +236,10 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
               ),
               const SizedBox(height: AppSpacing.m),
             ],
-            Text('Danh sách số điện thoại (mỗi dòng một số) *', style: AppTextStyles.label),
+            Text(
+              'Danh sách số điện thoại (mỗi dòng một số) *',
+              style: AppTextStyles.label,
+            ),
             const SizedBox(height: AppSpacing.xs),
             TextField(
               controller: _phoneController,
@@ -248,11 +280,16 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                           controller: _minDelayController,
                           enabled: !state.isRunning,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: AppTextStyles.body,
-                          onChanged: (val) => notifier.setMinDelay(int.tryParse(val) ?? 30),
+                          onChanged: (val) =>
+                              notifier.setMinDelay(int.tryParse(val) ?? 30),
                           decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.m,
+                            ),
                           ),
                         ),
                       ),
@@ -272,11 +309,16 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                           controller: _maxDelayController,
                           enabled: !state.isRunning,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: AppTextStyles.body,
-                          onChanged: (val) => notifier.setMaxDelay(int.tryParse(val) ?? 60),
+                          onChanged: (val) =>
+                              notifier.setMaxDelay(int.tryParse(val) ?? 60),
                           decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.m,
+                            ),
                           ),
                         ),
                       ),
@@ -296,7 +338,8 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                     onPressed: state.isRunning
                         ? null
                         : () {
-                            _phoneController.text = '0901112222\n0903334444\n0905556666';
+                            _phoneController.text =
+                                '0901112222\n0903334444\n0905556666';
                           },
                   ),
                 ),
@@ -304,9 +347,16 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                 Expanded(
                   child: AppButton(
                     text: state.isRunning ? 'Dừng chạy' : 'Bắt đầu chạy',
-                    icon: state.isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                    variant: state.isRunning ? AppButtonVariant.destructive : AppButtonVariant.primary,
-                    onPressed: !hasActiveAccount || (state.phoneListText.trim().isEmpty && !state.isRunning)
+                    icon: state.isRunning
+                        ? Icons.stop_rounded
+                        : Icons.play_arrow_rounded,
+                    variant: state.isRunning
+                        ? AppButtonVariant.destructive
+                        : AppButtonVariant.primary,
+                    onPressed:
+                        !hasActiveAccount ||
+                            (state.phoneListText.trim().isEmpty &&
+                                !state.isRunning)
                         ? null
                         : () {
                             if (state.isRunning) {
@@ -325,7 +375,10 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
     );
   }
 
-  Widget _buildLogCard(FriendByPhoneState state, FriendByPhoneNotifier notifier) {
+  Widget _buildLogCard(
+    FriendByPhoneState state,
+    FriendByPhoneNotifier notifier,
+  ) {
     return ActivityLogPanel(
       logs: state.logs,
       isRunning: state.isRunning,

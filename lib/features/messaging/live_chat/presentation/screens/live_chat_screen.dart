@@ -7,13 +7,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
+import '../../../../../mock/mock_messages.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../content/providers/templates_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/live_chat_provider.dart';
+import '../../utils/quick_reply_shortcuts.dart';
 
 class LiveChatScreen extends ConsumerStatefulWidget {
   const LiveChatScreen({super.key});
@@ -149,7 +152,10 @@ class _Header extends ConsumerWidget {
         SizedBox(
           width: 240,
           child: AppSelectField<String>(
-            value: zaloState.accounts.any((acc) => acc.id == state.selectedAccount?.id)
+            value:
+                zaloState.accounts.any(
+                  (acc) => acc.id == state.selectedAccount?.id,
+                )
                 ? state.selectedAccount?.id
                 : '',
             hintText: 'Chọn tài khoản...',
@@ -179,7 +185,10 @@ class _Header extends ConsumerWidget {
                 ),
               ),
               ...zaloState.accounts.map((account) {
-                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final cleanLabel = account.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
                 final avatarUrl = account.avatarUrl;
 
                 return DropdownMenuItem(
@@ -189,12 +198,12 @@ class _Header extends ConsumerWidget {
                       CircleAvatar(
                         radius: 12,
                         backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: avatarUrl.isNotEmpty
-                            ? NetworkImage(avatarUrl)
-                            : null,
-                        child: avatarUrl.isEmpty
+                        backgroundImage: _networkAvatar(avatarUrl),
+                        child: _networkAvatar(avatarUrl) == null
                             ? Text(
-                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -335,7 +344,7 @@ class _ConversationList extends ConsumerWidget {
                       final conversation = state.conversations[index];
                       final selected =
                           conversation.id == state.selectedConversation?.id;
-                      
+
                       final matchingAccount = zaloState.accounts.firstWhere(
                         (a) => a.id == conversation.accountId,
                         orElse: () => ZaloConnectedAccount(
@@ -345,7 +354,10 @@ class _ConversationList extends ConsumerWidget {
                           listenerRunning: false,
                         ),
                       );
-                      final accountLabel = matchingAccount.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                      final accountLabel = matchingAccount.label.replaceAll(
+                        RegExp(r'\s*\([^)]*\)$'),
+                        '',
+                      );
                       final accountAvatar = matchingAccount.avatarUrl;
 
                       return ListTile(
@@ -354,13 +366,20 @@ class _ConversationList extends ConsumerWidget {
                         isThreeLine: true,
                         leading: CircleAvatar(
                           backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: conversation.customerAvatar.isNotEmpty && conversation.customerAvatar.startsWith('http')
-                              ? NetworkImage(conversation.customerAvatar)
-                              : null,
-                          child: conversation.customerAvatar.isEmpty || !conversation.customerAvatar.startsWith('http')
+                          backgroundImage: _networkAvatar(
+                            conversation.customerAvatar,
+                          ),
+                          child:
+                              _networkAvatar(conversation.customerAvatar) ==
+                                  null
                               ? Text(
-                                  conversation.customerName.isNotEmpty ? conversation.customerName[0].toUpperCase() : '?',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  conversation.customerName.isNotEmpty
+                                      ? conversation.customerName[0]
+                                            .toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 )
                               : null,
                         ),
@@ -414,10 +433,10 @@ class _ConversationList extends ConsumerWidget {
                                 CircleAvatar(
                                   radius: 7,
                                   backgroundColor: AppColors.surfaceMuted,
-                                  backgroundImage: accountAvatar.isNotEmpty
-                                      ? NetworkImage(accountAvatar)
-                                      : null,
-                                  child: accountAvatar.isEmpty
+                                  backgroundImage: _networkAvatar(
+                                    accountAvatar,
+                                  ),
+                                  child: _networkAvatar(accountAvatar) == null
                                       ? const Text(
                                           'A',
                                           style: TextStyle(
@@ -503,6 +522,10 @@ class _ConversationPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversation = state.selectedConversation;
+    final templates = ref.watch(templatesProvider).templates;
+    final quickTemplates = templates
+        .where((template) => template.isQuick)
+        .toList();
     if (conversation == null) {
       return const AppCard(
         child: AppEmptyState(
@@ -524,7 +547,10 @@ class _ConversationPanel extends ConsumerWidget {
         listenerRunning: false,
       ),
     );
-    final accountLabel = matchingAccount.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+    final accountLabel = matchingAccount.label.replaceAll(
+      RegExp(r'\s*\([^)]*\)$'),
+      '',
+    );
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -536,12 +562,12 @@ class _ConversationPanel extends ConsumerWidget {
               children: [
                 CircleAvatar(
                   backgroundColor: AppColors.surfaceMuted,
-                  backgroundImage: conversation.customerAvatar.isNotEmpty && conversation.customerAvatar.startsWith('http')
-                      ? NetworkImage(conversation.customerAvatar)
-                      : null,
-                  child: conversation.customerAvatar.isEmpty || !conversation.customerAvatar.startsWith('http')
+                  backgroundImage: _networkAvatar(conversation.customerAvatar),
+                  child: _networkAvatar(conversation.customerAvatar) == null
                       ? Text(
-                          conversation.customerName.isNotEmpty ? conversation.customerName[0].toUpperCase() : '?',
+                          conversation.customerName.isNotEmpty
+                              ? conversation.customerName[0].toUpperCase()
+                              : '?',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         )
                       : null,
@@ -640,21 +666,41 @@ class _ConversationPanel extends ConsumerWidget {
                     minLines: 1,
                     maxLines: 4,
                     decoration: const InputDecoration(
-                      hintText: 'Nhập tin nhắn...',
+                      hintText: 'Nhập tin nhắn hoặc /1, /hello...',
                       border: OutlineInputBorder(),
                     ),
-                    onSubmitted: (_) => _send(),
+                    onSubmitted: (_) => _send(quickTemplates),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s),
                 AppButton(
                   text: 'Gửi',
                   icon: Icons.send_rounded,
-                  onPressed: state.isSending ? null : _send,
+                  onPressed: state.isSending
+                      ? null
+                      : () => _send(quickTemplates),
                 ),
               ],
             ),
           ),
+          if (quickTemplates.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.m,
+                0,
+                AppSpacing.m,
+                AppSpacing.m,
+              ),
+              child: _QuickReplyStrip(
+                templates: quickTemplates,
+                onPick: (content) {
+                  messageController.text = content;
+                  messageController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: content.length),
+                  );
+                },
+              ),
+            ),
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
@@ -692,11 +738,59 @@ class _ConversationPanel extends ConsumerWidget {
     );
   }
 
-  void _send() {
+  void _send(List<MessageTemplate> quickTemplates) {
     final text = messageController.text.trim();
     if (text.isEmpty) return;
+    final resolved = resolveQuickReplyShortcut(text, quickTemplates);
     messageController.clear();
-    notifier.sendMessage(text);
+    notifier.sendMessage(resolved ?? text);
+  }
+}
+
+class _QuickReplyStrip extends StatelessWidget {
+  final List<MessageTemplate> templates;
+  final ValueChanged<String> onPick;
+
+  const _QuickReplyStrip({required this.templates, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = templates.length > 8
+        ? templates.take(8).toList()
+        : templates;
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: visible.length,
+        separatorBuilder: (context, index) =>
+            const SizedBox(width: AppSpacing.s),
+        itemBuilder: (context, index) {
+          final template = visible[index];
+          final label = template.shortcut.isNotEmpty
+              ? template.shortcut
+              : '/${index + 1}';
+          return OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+              minimumSize: const Size(0, 32),
+              side: const BorderSide(color: AppColors.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+              ),
+            ),
+            onPressed: () => onPick(template.content),
+            child: Text(
+              '$label ${template.title}',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -704,10 +798,7 @@ class _MessageBubble extends ConsumerWidget {
   final ChatMessage message;
   final Conversation conversation;
 
-  const _MessageBubble({
-    required this.message,
-    required this.conversation,
-  });
+  const _MessageBubble({required this.message, required this.conversation});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -717,14 +808,16 @@ class _MessageBubble extends ConsumerWidget {
 
     Widget avatarWidget;
     if (!isMine) {
-      final hasImg = conversation.customerAvatar.isNotEmpty && conversation.customerAvatar.startsWith('http');
+      final avatar = _networkAvatar(conversation.customerAvatar);
       avatarWidget = CircleAvatar(
         radius: 13,
         backgroundColor: AppColors.surfaceMuted,
-        backgroundImage: hasImg ? NetworkImage(conversation.customerAvatar) : null,
-        child: !hasImg
+        backgroundImage: avatar,
+        child: avatar == null
             ? Text(
-                conversation.customerName.isNotEmpty ? conversation.customerName[0].toUpperCase() : '?',
+                conversation.customerName.isNotEmpty
+                    ? conversation.customerName[0].toUpperCase()
+                    : '?',
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -746,12 +839,12 @@ class _MessageBubble extends ConsumerWidget {
       );
       final avatarUrl = matching.avatarUrl;
       final label = matching.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-      final hasImg = avatarUrl.isNotEmpty;
+      final avatar = _networkAvatar(avatarUrl);
       avatarWidget = CircleAvatar(
         radius: 13,
         backgroundColor: AppColors.surfaceMuted,
-        backgroundImage: hasImg ? NetworkImage(avatarUrl) : null,
-        child: !hasImg
+        backgroundImage: avatar,
+        child: avatar == null
             ? Text(
                 label.isNotEmpty ? label[0].toUpperCase() : 'A',
                 style: const TextStyle(
@@ -767,13 +860,12 @@ class _MessageBubble extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.s),
       child: Row(
-        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMine) ...[
-            avatarWidget,
-            const SizedBox(width: AppSpacing.s),
-          ],
+          if (!isMine) ...[avatarWidget, const SizedBox(width: AppSpacing.s)],
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Container(
@@ -800,10 +892,7 @@ class _MessageBubble extends ConsumerWidget {
               ),
             ),
           ),
-          if (isMine) ...[
-            const SizedBox(width: AppSpacing.s),
-            avatarWidget,
-          ],
+          if (isMine) ...[const SizedBox(width: AppSpacing.s), avatarWidget],
         ],
       ),
     );
@@ -817,8 +906,10 @@ class _MessageBubble extends ConsumerWidget {
         if (data is Map<String, dynamic>) {
           final title = data['title']?.toString() ?? '';
           final description = data['description']?.toString() ?? '';
-          final href = data['href']?.toString() ?? data['url']?.toString() ?? '';
-          final thumb = data['thumb']?.toString() ?? data['thumbnail']?.toString() ?? '';
+          final href =
+              data['href']?.toString() ?? data['url']?.toString() ?? '';
+          final thumb =
+              data['thumb']?.toString() ?? data['thumbnail']?.toString() ?? '';
 
           if (title.isNotEmpty || description.isNotEmpty || href.isNotEmpty) {
             return InkWell(
@@ -826,14 +917,17 @@ class _MessageBubble extends ConsumerWidget {
                   ? () async {
                       final uri = Uri.tryParse(href);
                       if (uri != null && await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
                       }
                     }
                   : null,
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -841,13 +935,16 @@ class _MessageBubble extends ConsumerWidget {
                   children: [
                     if (thumb.isNotEmpty)
                       ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(8),
+                        ),
                         child: Image.network(
                           thumb,
                           width: double.infinity,
                           height: 150,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const SizedBox(),
                         ),
                       ),
                     Padding(
@@ -870,7 +967,7 @@ class _MessageBubble extends ConsumerWidget {
                             Text(
                               description,
                               style: AppTextStyles.caption.copyWith(
-                                color: textColor.withOpacity(0.8),
+                                color: textColor.withValues(alpha: 0.8),
                               ),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
@@ -913,7 +1010,9 @@ String _formatLastMessage(String rawMessage) {
   final trimmed = rawMessage.trim();
 
   // Try to parse using regex if it contains JSON keys representing a link card
-  if (trimmed.contains('"title":') || trimmed.contains('"href":') || trimmed.contains('"url":')) {
+  if (trimmed.contains('"title":') ||
+      trimmed.contains('"href":') ||
+      trimmed.contains('"url":')) {
     // 1. Try to extract "title" value
     final titleRegExp = RegExp(r'"title"\s*:\s*"([^"]+)"');
     final titleMatch = titleRegExp.firstMatch(trimmed);
@@ -936,7 +1035,7 @@ String _formatLastMessage(String rawMessage) {
         return '[Liên kết] ${Uri.tryParse(href)?.host ?? href}';
       }
     }
-    
+
     // 3. Fallback to general URL pattern
     final urlRegExp = RegExp(r'(https?://[^\s"]+)');
     final urlMatch = urlRegExp.firstMatch(trimmed);
@@ -947,11 +1046,19 @@ String _formatLastMessage(String rawMessage) {
 
     return '[Liên kết]';
   }
-  
+
   // If the raw message is just a raw URL, format it nicely
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return '[Liên kết] ${Uri.tryParse(trimmed)?.host ?? trimmed}';
   }
 
   return rawMessage;
+}
+
+ImageProvider<Object>? _networkAvatar(String url) {
+  final trimmed = url.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return NetworkImage(trimmed);
+  }
+  return null;
 }

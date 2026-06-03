@@ -48,15 +48,6 @@ class ZaloRecipient {
   }
 }
 
-enum ZaloRecipientChannel {
-  officialAccount,
-  personalAccount,
-  mockLocal,
-}
+enum ZaloRecipientChannel { officialAccount, personalAccount, mockLocal }
 
-enum ZaloConsentStatus {
-  optedIn,
-  optedOut,
-  unknown,
-  blocked,
-}
+enum ZaloConsentStatus { optedIn, optedOut, unknown, blocked }

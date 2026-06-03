@@ -177,38 +177,44 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                  ? state.selectedAccountId
+                  : null,
               hintText: 'Chọn tài khoản Zalo...',
-              items: accounts
-                  .map(
-                    (acc) {
-                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-                      return DropdownMenuItem(
-                        value: acc.id,
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
-                              child: acc.avatarUrl.isEmpty
-                                  ? Text(
-                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Text(
-                              cleanLabel,
-                              style: AppTextStyles.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                  .toList(),
+              items: accounts.map((acc) {
+                final cleanLabel = acc.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
+                return DropdownMenuItem(
+                  value: acc.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: acc.avatarUrl.isNotEmpty
+                            ? NetworkImage(acc.avatarUrl)
+                            : null,
+                        child: acc.avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
             ),
             const SizedBox(height: AppSpacing.m),

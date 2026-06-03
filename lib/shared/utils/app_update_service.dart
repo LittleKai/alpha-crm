@@ -29,7 +29,8 @@ class AppReleaseInfo {
 
   factory AppReleaseInfo.fromJson(Map<String, dynamic> json) {
     final tag = json['tag_name'] as String? ?? '';
-    final assetsList = (json['assets'] as List<dynamic>?)
+    final assetsList =
+        (json['assets'] as List<dynamic>?)
             ?.map((a) => ReleaseAsset.fromJson(a as Map<String, dynamic>))
             .toList() ??
         [];
@@ -40,7 +41,8 @@ class AppReleaseInfo {
       name: json['name'] as String? ?? tag,
       body: json['body'] as String? ?? '',
       htmlUrl: json['html_url'] as String? ?? '',
-      publishedAt: DateTime.tryParse(json['published_at'] as String? ?? '') ??
+      publishedAt:
+          DateTime.tryParse(json['published_at'] as String? ?? '') ??
           DateTime.now(),
       assets: assetsList,
     );
@@ -59,9 +61,7 @@ class AppReleaseInfo {
 
   ReleaseAsset? _findAsset(List<String> extensions) {
     for (final ext in extensions) {
-      final match = assets.where(
-        (a) => a.name.toLowerCase().endsWith(ext),
-      );
+      final match = assets.where((a) => a.name.toLowerCase().endsWith(ext));
       if (match.isNotEmpty) return match.first;
     }
     return null;
@@ -106,7 +106,8 @@ class AppUpdateService {
       final response = await http.get(url).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final json =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return AppReleaseInfo.fromJson(json);
       }
 
@@ -171,8 +172,8 @@ class AppUpdateService {
 
       final request = http.Request('GET', Uri.parse(asset.browserDownloadUrl));
       final streamedResponse = await request.send().timeout(
-            const Duration(minutes: 10),
-          );
+        const Duration(minutes: 10),
+      );
 
       if (streamedResponse.statusCode != 200) {
         print(
@@ -223,7 +224,9 @@ class AppUpdateService {
 
   /// Mở trang releases trên trình duyệt.
   static Future<void> openReleasePage() async {
-    final url = Uri.parse('https://giaiphapsangtao.com/studio/crm/subscription');
+    final url = Uri.parse(
+      'https://giaiphapsangtao.com/studio/crm/subscription',
+    );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }

@@ -59,7 +59,9 @@ class CrmExecutionLog {
       customerId: json['customerId']?.toString() ?? '',
       channel: json['channel']?.toString() ?? 'zalo',
       status: json['status']?.toString() ?? 'queued',
-      details: json['details'] is Map ? Map<String, dynamic>.from(json['details']) : const {},
+      details: json['details'] is Map
+          ? Map<String, dynamic>.from(json['details'])
+          : const {},
       errorMessage: json['errorMessage']?.toString() ?? '',
       deviceId: json['deviceId']?.toString(),
       accountId: json['accountId']?.toString(),
@@ -70,11 +72,21 @@ class CrmExecutionLog {
       threadType: json['threadType']?.toString() ?? 'zalo',
       messagePreview: json['messagePreview']?.toString() ?? '',
       providerMessageId: json['providerMessageId']?.toString() ?? '',
-      attemptedAt: json['attemptedAt'] != null ? DateTime.tryParse(json['attemptedAt'].toString()) : null,
-      sentAt: json['sentAt'] != null ? DateTime.tryParse(json['sentAt'].toString()) : null,
-      deliveredAt: json['deliveredAt'] != null ? DateTime.tryParse(json['deliveredAt'].toString()) : null,
-      failedAt: json['failedAt'] != null ? DateTime.tryParse(json['failedAt'].toString()) : null,
-      campaignSnapshot: json['campaignSnapshot'] is Map ? Map<String, dynamic>.from(json['campaignSnapshot']) : null,
+      attemptedAt: json['attemptedAt'] != null
+          ? DateTime.tryParse(json['attemptedAt'].toString())
+          : null,
+      sentAt: json['sentAt'] != null
+          ? DateTime.tryParse(json['sentAt'].toString())
+          : null,
+      deliveredAt: json['deliveredAt'] != null
+          ? DateTime.tryParse(json['deliveredAt'].toString())
+          : null,
+      failedAt: json['failedAt'] != null
+          ? DateTime.tryParse(json['failedAt'].toString())
+          : null,
+      campaignSnapshot: json['campaignSnapshot'] is Map
+          ? Map<String, dynamic>.from(json['campaignSnapshot'])
+          : null,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
           : DateTime.now(),

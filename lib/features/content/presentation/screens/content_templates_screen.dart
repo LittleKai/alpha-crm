@@ -187,7 +187,10 @@ class _ContentTemplatesScreenState
     );
   }
 
-  Widget _buildTemplateCard(MessageTemplate template, TemplatesNotifier notifier) {
+  Widget _buildTemplateCard(
+    MessageTemplate template,
+    TemplatesNotifier notifier,
+  ) {
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.m),
       child: Column(
@@ -213,12 +216,11 @@ class _ContentTemplatesScreenState
                   size: 18,
                 ),
                 onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
                   await notifier.deleteTemplate(template.id);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Đã xóa tin mẫu.')),
-                    );
-                  }
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Đã xóa tin mẫu.')),
+                  );
                 },
               ),
             ],
@@ -235,9 +237,33 @@ class _ContentTemplatesScreenState
           const SizedBox(height: AppSpacing.s),
           const Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.s),
-          Text(
-            'Ngày tạo: ${DateFormat('dd/MM/yyyy').format(template.createdAt)}',
-            style: AppTextStyles.caption,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Ngày tạo: ${DateFormat('dd/MM/yyyy').format(template.createdAt)}',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              if (template.isQuick)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.s,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusXs),
+                  ),
+                  child: Text(
+                    template.shortcut.isEmpty ? 'Quick' : template.shortcut,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -250,6 +276,8 @@ class _ContentTemplatesScreenState
   ) async {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
+    final shortcutController = TextEditingController();
+    var isQuick = true;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -277,6 +305,15 @@ class _ContentTemplatesScreenState
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.m),
+                TextField(
+                  controller: shortcutController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phím tắt',
+                    hintText: '/1 hoặc /hello',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -287,8 +324,15 @@ class _ContentTemplatesScreenState
             ),
             ElevatedButton(
               onPressed: () async {
+                final navigator = Navigator.of(dialogContext);
                 final title = titleController.text.trim();
                 final content = contentController.text.trim();
+                final rawShortcut = shortcutController.text.trim();
+                final shortcut = rawShortcut.isEmpty
+                    ? ''
+                    : (rawShortcut.startsWith('/')
+                          ? rawShortcut
+                          : '/$rawShortcut');
                 if (title.isNotEmpty && content.isNotEmpty) {
                   await notifier.addTemplate(
                     MessageTemplate(
@@ -297,10 +341,12 @@ class _ContentTemplatesScreenState
                       content: content,
                       variables: const [],
                       createdAt: DateTime.now(),
+                      shortcut: shortcut,
+                      isQuick: isQuick,
                     ),
                   );
                 }
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                navigator.pop();
               },
               child: const Text('Lưu'),
             ),
@@ -310,5 +356,6 @@ class _ContentTemplatesScreenState
     );
     titleController.dispose();
     contentController.dispose();
+    shortcutController.dispose();
   }
 }

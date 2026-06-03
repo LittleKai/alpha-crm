@@ -20,7 +20,8 @@ class FriendByGroupScreen extends ConsumerStatefulWidget {
   const FriendByGroupScreen({super.key});
 
   @override
-  ConsumerState<FriendByGroupScreen> createState() => _FriendByGroupScreenState();
+  ConsumerState<FriendByGroupScreen> createState() =>
+      _FriendByGroupScreenState();
 }
 
 class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
@@ -34,7 +35,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
   void initState() {
     super.initState();
     final notifier = ref.read(friendByGroupProvider.notifier);
-    
+
     _messageController.addListener(() {
       notifier.setMessage(_messageController.text);
     });
@@ -42,7 +43,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(zaloIntegrationProvider.notifier).checkConnection();
       notifier.loadGroups();
-      
+
       final state = ref.read(friendByGroupProvider);
       _messageController.text = state.messageText;
       _minDelayController.text = state.minDelay.toString();
@@ -79,7 +80,9 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
         return g.accountId == state.selectedAccountId;
       }
       if (state.selectedAccountId!.length < 4) return true;
-      final suffix = state.selectedAccountId!.substring(state.selectedAccountId!.length - 4);
+      final suffix = state.selectedAccountId!.substring(
+        state.selectedAccountId!.length - 4,
+      );
       return g.name.startsWith('[$suffix]');
     }).toList();
 
@@ -104,8 +107,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1100;
-                  final memberPanel = _buildMemberPanel(state, notifier, filteredGroups);
-                  final configPanel = _buildConfigCard(state, notifier, activeAccounts);
+                  final memberPanel = _buildMemberPanel(
+                    state,
+                    notifier,
+                    filteredGroups,
+                  );
+                  final configPanel = _buildConfigCard(
+                    state,
+                    notifier,
+                    activeAccounts,
+                  );
 
                   if (!useColumns) {
                     return SingleChildScrollView(
@@ -163,7 +174,8 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     FriendByGroupNotifier notifier,
     List<ZaloGroup> filteredGroups,
   ) {
-    final allSelected = state.members.isNotEmpty &&
+    final allSelected =
+        state.members.isNotEmpty &&
         state.members.every((m) => state.selectedMemberIds.contains(m.id));
 
     return AppCard(
@@ -211,18 +223,27 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                         text: 'Quét nhóm',
                         icon: Icons.search,
                         isLoading: state.isScanning,
-                        onPressed: () => notifier.scanGroupLink(_linkController.text),
+                        onPressed: () =>
+                            notifier.scanGroupLink(_linkController.text),
                       ),
                     ],
                   )
                 else
                   Row(
                     children: [
-                      Text('Chọn nhóm đã quét:', style: AppTextStyles.bodyMedium),
+                      Text(
+                        'Chọn nhóm đã quét:',
+                        style: AppTextStyles.bodyMedium,
+                      ),
                       const SizedBox(width: AppSpacing.m),
                       Expanded(
                         child: AppSelectField<String>(
-                          value: filteredGroups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : 'none',
+                          value:
+                              filteredGroups.any(
+                                (g) => g.id == state.selectedGroupId,
+                              )
+                              ? state.selectedGroupId
+                              : 'none',
                           items: [
                             const DropdownMenuItem(
                               value: 'none',
@@ -231,11 +252,15 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                             ...filteredGroups.map(
                               (group) => DropdownMenuItem(
                                 value: group.id,
-                                child: Text('${group.name} (${group.memberCount} thành viên)'),
+                                child: Text(
+                                  '${group.name} (${group.memberCount} thành viên)',
+                                ),
                               ),
                             ),
                           ],
-                          onChanged: state.isRunning ? null : notifier.selectSavedGroup,
+                          onChanged: state.isRunning
+                              ? null
+                              : notifier.selectSavedGroup,
                         ),
                       ),
                     ],
@@ -248,14 +273,18 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
             CheckboxListTile(
               title: Text(
                 'Chọn tất cả thành viên (${state.members.length})',
-                style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               value: allSelected,
               enabled: !state.isRunning,
               onChanged: (val) => notifier.toggleAllMembers(state.members),
               activeColor: AppColors.primary,
               controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+              ),
             ),
             const Divider(height: 1, color: AppColors.borderSoft),
           ],
@@ -263,75 +292,100 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
             child: state.isScanning
                 ? const Center(child: CircularProgressIndicator())
                 : state.members.isEmpty
-                    ? Center(
-                        child: Text(
-                          _sourceTab == 0
-                              ? 'Vui lòng nhập link nhóm và nhấn "Quét nhóm".'
-                              : 'Vui lòng chọn nhóm Zalo để hiện thành viên.',
-                          style: const TextStyle(color: AppColors.textMuted),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: state.members.length,
-                        separatorBuilder: (context, index) =>
-                            const Divider(height: 1, color: AppColors.borderSoft),
-                        itemBuilder: (context, index) {
-                          final member = state.members[index];
-                          final isChecked = state.selectedMemberIds.contains(member.id);
-                          final isOwner = member.role == 'Trưởng nhóm';
-                          final isAdmin = member.role == 'Phó nhóm';
+                ? Center(
+                    child: Text(
+                      _sourceTab == 0
+                          ? 'Vui lòng nhập link nhóm và nhấn "Quét nhóm".'
+                          : 'Vui lòng chọn nhóm Zalo để hiện thành viên.',
+                      style: const TextStyle(color: AppColors.textMuted),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: state.members.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, color: AppColors.borderSoft),
+                    itemBuilder: (context, index) {
+                      final member = state.members[index];
+                      final isChecked = state.selectedMemberIds.contains(
+                        member.id,
+                      );
+                      final isOwner = member.role == 'Trưởng nhóm';
+                      final isAdmin = member.role == 'Phó nhóm';
 
-                          return CheckboxListTile(
-                            value: isChecked,
-                            enabled: !state.isRunning,
-                            onChanged: (val) => notifier.toggleMember(member.id),
-                            activeColor: AppColors.primary,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
-                            title: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: AppColors.surfaceMuted,
-                                  backgroundImage: member.avatarUrl.isNotEmpty ? NetworkImage(member.avatarUrl) : null,
-                                  child: member.avatarUrl.isEmpty
-                                      ? Text(
-                                          member.name.isNotEmpty ? member.name[0].toUpperCase() : 'M',
-                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                                        )
-                                      : null,
-                                ),
-                                const SizedBox(width: AppSpacing.s),
-                                Expanded(
-                                  child: Text(member.name, style: AppTextStyles.bodyMedium),
-                                ),
-                                if (isOwner || isAdmin)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isOwner ? AppColors.warningSoft : AppColors.primarySoft,
-                                      borderRadius: AppSpacing.borderRadiusS,
-                                    ),
-                                    child: Text(
-                                      member.role,
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: isOwner ? AppColors.warning : AppColors.primary,
-                                        fontSize: 9,
+                      return CheckboxListTile(
+                        value: isChecked,
+                        enabled: !state.isRunning,
+                        onChanged: (val) => notifier.toggleMember(member.id),
+                        activeColor: AppColors.primary,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.m,
+                        ),
+                        title: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.surfaceMuted,
+                              backgroundImage: member.avatarUrl.isNotEmpty
+                                  ? NetworkImage(member.avatarUrl)
+                                  : null,
+                              child: member.avatarUrl.isEmpty
+                                  ? Text(
+                                      member.name.isNotEmpty
+                                          ? member.name[0].toUpperCase()
+                                          : 'M',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
                                       ),
-                                    ),
-                                  ),
-                              ],
+                                    )
+                                  : null,
                             ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(left: 36.0),
+                            const SizedBox(width: AppSpacing.s),
+                            Expanded(
                               child: Text(
-                                member.id,
-                                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted, fontFamily: 'monospace'),
+                                member.name,
+                                style: AppTextStyles.bodyMedium,
                               ),
                             ),
-                          );
-                        },
-                      ),
+                            if (isOwner || isAdmin)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isOwner
+                                      ? AppColors.warningSoft
+                                      : AppColors.primarySoft,
+                                  borderRadius: AppSpacing.borderRadiusS,
+                                ),
+                                child: Text(
+                                  member.role,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: isOwner
+                                        ? AppColors.warning
+                                        : AppColors.primary,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(left: 36.0),
+                          child: Text(
+                            member.id,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textMuted,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -362,16 +416,22 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
             const SizedBox(height: AppSpacing.xs),
             if (!hasActiveAccount) ...[
               const AppAlert(
-                message: 'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
+                message:
+                    'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
                 variant: AppAlertVariant.error,
               ),
               const SizedBox(height: AppSpacing.m),
             ] else ...[
               AppSelectField<String>(
-                value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+                value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                    ? state.selectedAccountId
+                    : null,
                 hintText: 'Chọn tài khoản Zalo...',
                 items: accounts.map((acc) {
-                  final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                  final cleanLabel = acc.label.replaceAll(
+                    RegExp(r'\s*\([^)]*\)$'),
+                    '',
+                  );
                   return DropdownMenuItem(
                     value: acc.id,
                     child: Row(
@@ -379,11 +439,19 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                         CircleAvatar(
                           radius: 12,
                           backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
+                          backgroundImage: acc.avatarUrl.isNotEmpty
+                              ? NetworkImage(acc.avatarUrl)
+                              : null,
                           child: acc.avatarUrl.isEmpty
                               ? Text(
-                                  cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                  cleanLabel.isNotEmpty
+                                      ? cleanLabel[0].toUpperCase()
+                                      : 'A',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 )
                               : null,
                         ),
@@ -423,11 +491,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                           controller: _minDelayController,
                           enabled: !state.isRunning,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: AppTextStyles.body,
-                          onChanged: (val) => notifier.setMinDelay(int.tryParse(val) ?? 30),
+                          onChanged: (val) =>
+                              notifier.setMinDelay(int.tryParse(val) ?? 30),
                           decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.m,
+                            ),
                           ),
                         ),
                       ),
@@ -447,11 +520,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                           controller: _maxDelayController,
                           enabled: !state.isRunning,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: AppTextStyles.body,
-                          onChanged: (val) => notifier.setMaxDelay(int.tryParse(val) ?? 60),
+                          onChanged: (val) =>
+                              notifier.setMaxDelay(int.tryParse(val) ?? 60),
                           decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.m,
+                            ),
                           ),
                         ),
                       ),
@@ -462,10 +540,18 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
             ),
             const SizedBox(height: AppSpacing.m),
             AppButton(
-              text: state.isRunning ? 'Dừng chạy' : 'Bắt đầu chạy (${state.selectedMemberIds.length})',
-              icon: state.isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
-              variant: state.isRunning ? AppButtonVariant.destructive : AppButtonVariant.primary,
-              onPressed: !hasActiveAccount || (state.selectedMemberIds.isEmpty && !state.isRunning)
+              text: state.isRunning
+                  ? 'Dừng chạy'
+                  : 'Bắt đầu chạy (${state.selectedMemberIds.length})',
+              icon: state.isRunning
+                  ? Icons.stop_rounded
+                  : Icons.play_arrow_rounded,
+              variant: state.isRunning
+                  ? AppButtonVariant.destructive
+                  : AppButtonVariant.primary,
+              onPressed:
+                  !hasActiveAccount ||
+                      (state.selectedMemberIds.isEmpty && !state.isRunning)
                   ? null
                   : () {
                       if (state.isRunning) {

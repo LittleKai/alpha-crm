@@ -6,8 +6,8 @@ class ZaloIntegrationApi {
   final http.Client _client;
 
   ZaloIntegrationApi({required String baseUrl, http.Client? client})
-      : baseUrl = _normalizeUrl(baseUrl),
-        _client = client ?? http.Client();
+    : baseUrl = _normalizeUrl(baseUrl),
+      _client = client ?? http.Client();
 
   static String _normalizeUrl(String url) {
     var cleaned = url.trim();
@@ -32,7 +32,9 @@ class ZaloIntegrationApi {
     // Translate reasons using regex or simple match
     final t = text.trim();
     if (t.contains('Quiet hours active')) {
-      final reg = RegExp(r'Quiet hours active \((.*?)\)\. Sending is paused\.?');
+      final reg = RegExp(
+        r'Quiet hours active \((.*?)\)\. Sending is paused\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 1) {
         return 'Đang trong khung giờ nghỉ (${match.group(1)}). Tạm dừng gửi tin.';
@@ -41,7 +43,9 @@ class ZaloIntegrationApi {
     }
 
     if (t.contains('Daily send limit reached')) {
-      final reg = RegExp(r'Daily send limit reached \((.*?)\)\. Wait until tomorrow\.?');
+      final reg = RegExp(
+        r'Daily send limit reached \((.*?)\)\. Wait until tomorrow\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 1) {
         return 'Đã đạt giới hạn gửi trong ngày (${match.group(1)}). Vui lòng đợi đến ngày mai.';
@@ -50,7 +54,9 @@ class ZaloIntegrationApi {
     }
 
     if (t.contains('Stopped: ') && t.contains('report(s) received')) {
-      final reg = RegExp(r'Stopped: (\d+) report\(s\) received\. Threshold is (\d+)\. Resolve reports before continuing\.?');
+      final reg = RegExp(
+        r'Stopped: (\d+) report\(s\) received\. Threshold is (\d+)\. Resolve reports before continuing\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 2) {
         return 'Đã tạm dừng: Nhận được ${match.group(1)} báo cáo xấu (Ngưỡng giới hạn là ${match.group(2)}). Vui lòng xử lý các báo cáo trước khi tiếp tục.';
@@ -59,7 +65,9 @@ class ZaloIntegrationApi {
     }
 
     if (t.contains('Stopped: failure rate') && t.contains('exceeds maximum')) {
-      final reg = RegExp(r'Stopped: failure rate (\d+)% exceeds maximum (\d+)%\. Investigate errors before continuing\.?');
+      final reg = RegExp(
+        r'Stopped: failure rate (\d+)% exceeds maximum (\d+)%\. Investigate errors before continuing\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 2) {
         return 'Đã tạm dừng: Tỷ lệ gửi lỗi (${match.group(1)}%) vượt quá mức cho phép (${match.group(2)}%). Vui lòng kiểm tra nguyên nhân lỗi trước khi tiếp tục.';
@@ -77,8 +85,11 @@ class ZaloIntegrationApi {
       return 'Tính năng tự động hóa nhóm hiện đã bị tắt trên máy chủ.';
     }
 
-    if (t.contains('Batch of') && t.contains('exceeds human approval threshold')) {
-      final reg = RegExp(r'Batch of (\d+) exceeds human approval threshold \((\d+)\)\. Server-side approval required\.?');
+    if (t.contains('Batch of') &&
+        t.contains('exceeds human approval threshold')) {
+      final reg = RegExp(
+        r'Batch of (\d+) exceeds human approval threshold \((\d+)\)\. Server-side approval required\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 2) {
         return 'Số lượng gửi hàng loạt (${match.group(1)}) vượt quá giới hạn cần phê duyệt thủ công (${match.group(2)}). Cần phê duyệt trên máy chủ.';
@@ -86,7 +97,9 @@ class ZaloIntegrationApi {
       return 'Số lượng gửi vượt quá giới hạn phê duyệt trên máy chủ.';
     }
 
-    if (t.contains('Personal account automation is not available in Official OA mode')) {
+    if (t.contains(
+      'Personal account automation is not available in Official OA mode',
+    )) {
       return 'Tính năng tự động hóa tài khoản cá nhân không khả dụng ở chế độ Official OA. Vui lòng chuyển sang kênh cá nhân.';
     }
 
@@ -98,7 +111,9 @@ class ZaloIntegrationApi {
     }
 
     if (t.contains('Batch size') && t.contains('exceeds server maximum')) {
-      final reg = RegExp(r'Batch size (\d+) exceeds server maximum of (\d+)\.?');
+      final reg = RegExp(
+        r'Batch size (\d+) exceeds server maximum of (\d+)\.?',
+      );
       final match = reg.firstMatch(t);
       if (match != null && match.groupCount >= 2) {
         return 'Số lượng gửi (${match.group(1)}) vượt quá giới hạn tối đa cho phép của máy chủ (${match.group(2)}).';
@@ -111,7 +126,9 @@ class ZaloIntegrationApi {
     }
 
     if (t == 'Forbidden') return 'Bị từ chối truy cập (403)';
-    if (t == 'Unauthorized') return 'Chưa được ủy quyền hoặc hết hạn phiên làm việc';
+    if (t == 'Unauthorized') {
+      return 'Chưa được ủy quyền hoặc hết hạn phiên làm việc';
+    }
     if (t == 'Internal Server Error') return 'Lỗi máy chủ nội bộ';
 
     return text;
@@ -149,8 +166,12 @@ class ZaloIntegrationApi {
         final risk = bodyData['riskLevel'] ?? bodyData['risk'];
 
         final translatedErr = _translateToVietnamese(err.toString());
-        final translatedReason = reason != null ? _translateToVietnamese(reason.toString()) : null;
-        final riskLabel = risk != null ? _translateRiskLevel(risk.toString()) : null;
+        final translatedReason = reason != null
+            ? _translateToVietnamese(reason.toString())
+            : null;
+        final riskLabel = risk != null
+            ? _translateRiskLevel(risk.toString())
+            : null;
 
         String errorMsg = translatedErr;
         if (translatedReason != null) {
@@ -168,10 +189,7 @@ class ZaloIntegrationApi {
       }
     } catch (_) {}
 
-    return {
-      'success': false,
-      'error': 'Lỗi HTTP ${response.statusCode}',
-    };
+    return {'success': false, 'error': 'Lỗi HTTP ${response.statusCode}'};
   }
 
   Future<Map<String, dynamic>> healthCheck() async {
@@ -186,8 +204,14 @@ class ZaloIntegrationApi {
       try {
         final bodyData = jsonDecode(response.body);
         if (bodyData is Map) {
-          final err = bodyData['error'] ?? bodyData['message'] ?? 'HTTP ${response.statusCode}';
-          return {'status': 'error', 'error': _translateToVietnamese(err.toString())};
+          final err =
+              bodyData['error'] ??
+              bodyData['message'] ??
+              'HTTP ${response.statusCode}';
+          return {
+            'status': 'error',
+            'error': _translateToVietnamese(err.toString()),
+          };
         }
       } catch (_) {}
       return {'status': 'error', 'error': 'Lỗi HTTP ${response.statusCode}'};
@@ -208,7 +232,10 @@ class ZaloIntegrationApi {
       try {
         final bodyData = jsonDecode(response.body);
         if (bodyData is Map) {
-          final err = bodyData['error'] ?? bodyData['message'] ?? 'HTTP ${response.statusCode}';
+          final err =
+              bodyData['error'] ??
+              bodyData['message'] ??
+              'HTTP ${response.statusCode}';
           return {
             'connected': false,
             'mode': 'disconnected',
@@ -239,10 +266,7 @@ class ZaloIntegrationApi {
           .post(
             Uri.parse('$baseUrl/api/zalo/test-send'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'recipientId': recipientId,
-              'message': message,
-            }),
+            body: jsonEncode({'recipientId': recipientId, 'message': message}),
           )
           .timeout(const Duration(seconds: 10));
 
@@ -277,7 +301,8 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'groupId': groupId,
               'silent': silent,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -316,6 +341,32 @@ class ZaloIntegrationApi {
     }
   }
 
+  Future<Map<String, dynamic>> updateAccountSettings({
+    required String accountId,
+    required String proxy,
+    required bool blockSeen,
+    required bool blockTyping,
+  }) async {
+    try {
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/api/zalo/accounts/settings'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'accountId': accountId,
+              'proxy': proxy,
+              'blockSeen': blockSeen,
+              'blockTyping': blockTyping,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      return _processResponse(response);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>> createQrSession() async {
     try {
       final response = await _client
@@ -331,7 +382,9 @@ class ZaloIntegrationApi {
   Future<Map<String, dynamic>> checkSessionStatus(String sessionId) async {
     try {
       final response = await _client
-          .get(Uri.parse('$baseUrl/api/zalo/accounts/check-session?id=$sessionId'))
+          .get(
+            Uri.parse('$baseUrl/api/zalo/accounts/check-session?id=$sessionId'),
+          )
           .timeout(const Duration(seconds: 10));
 
       return _processResponse(response);
@@ -363,7 +416,8 @@ class ZaloIntegrationApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'phone': phone,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -389,7 +443,8 @@ class ZaloIntegrationApi {
               'userId': userId,
               'message': message,
               'actionType': actionType,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -411,7 +466,8 @@ class ZaloIntegrationApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'senderId': senderId,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -471,7 +527,8 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'name': name,
               'members': members,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -493,7 +550,8 @@ class ZaloIntegrationApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'link': link,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -517,7 +575,8 @@ class ZaloIntegrationApi {
             body: jsonEncode({
               'userId': userId,
               'groupId': groupId,
-              if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+              if (accountId != null && accountId.isNotEmpty)
+                'accountId': accountId,
             }),
           )
           .timeout(const Duration(seconds: 15));

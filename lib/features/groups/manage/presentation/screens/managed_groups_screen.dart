@@ -134,7 +134,10 @@ class _Header extends ConsumerWidget {
                 ),
               ),
               ...connectedAccounts.map((account) {
-                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final cleanLabel = account.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
                 final avatarUrl = account.avatarUrl;
 
                 return DropdownMenuItem(
@@ -149,7 +152,9 @@ class _Header extends ConsumerWidget {
                             : null,
                         child: avatarUrl.isEmpty
                             ? Text(
-                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -225,14 +230,20 @@ class _GroupsList extends StatelessWidget {
               itemBuilder: (context, index) {
                 final group = state.groups[index];
                 final selected = group.id == state.selectedGroup?.id;
-                final hasAvatar = group.avatarUrl.isNotEmpty && group.avatarUrl.startsWith('http');
+                final hasAvatar =
+                    group.avatarUrl.isNotEmpty &&
+                    group.avatarUrl.startsWith('http');
                 return ListTile(
                   selected: selected,
                   selectedTileColor: AppColors.primarySoft,
                   leading: CircleAvatar(
                     backgroundColor: AppColors.surfaceMuted,
-                    backgroundImage: hasAvatar ? NetworkImage(group.avatarUrl) : null,
-                    child: !hasAvatar ? const Icon(Icons.groups_outlined) : null,
+                    backgroundImage: hasAvatar
+                        ? NetworkImage(group.avatarUrl)
+                        : null,
+                    child: !hasAvatar
+                        ? const Icon(Icons.groups_outlined)
+                        : null,
                   ),
                   title: Text(
                     group.name,
@@ -296,7 +307,9 @@ class _DetailsPanel extends StatelessWidget {
                       spacing: AppSpacing.s,
                       children: [
                         AppBadge(
-                          label: group.isManaged ? 'Đã quản lý' : 'Chưa quản lý',
+                          label: group.isManaged
+                              ? 'Đã quản lý'
+                              : 'Chưa quản lý',
                           variant: group.isManaged
                               ? AppBadgeVariant.success
                               : AppBadgeVariant.neutral,
@@ -305,10 +318,10 @@ class _DetailsPanel extends StatelessWidget {
                           label: group.summaryCadence == 'daily'
                               ? 'Hàng ngày'
                               : (group.summaryCadence == 'weekly'
-                                  ? 'Hàng tuần'
-                                  : (group.summaryCadence == 'monthly'
-                                      ? 'Hàng tháng'
-                                      : group.summaryCadence)),
+                                    ? 'Hàng tuần'
+                                    : (group.summaryCadence == 'monthly'
+                                          ? 'Hàng tháng'
+                                          : group.summaryCadence)),
                           variant: AppBadgeVariant.info,
                         ),
                       ],
@@ -383,7 +396,10 @@ class _DetailsPanel extends StatelessWidget {
                 _InsightsList(insights: state.insights),
                 if (state.exportCsv != null && state.exportCsv!.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.m),
-                  Text('Xem trước xuất dữ liệu CSV', style: AppTextStyles.bodyMedium),
+                  Text(
+                    'Xem trước xuất dữ liệu CSV',
+                    style: AppTextStyles.bodyMedium,
+                  ),
                   const SizedBox(height: AppSpacing.s),
                   SelectableText(
                     state.exportCsv!,

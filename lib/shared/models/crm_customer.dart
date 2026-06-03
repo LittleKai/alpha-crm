@@ -69,7 +69,11 @@ class CrmCustomer {
           ? DateTime.tryParse(json['lastMessageAt'].toString())
           : null,
       customFields: json['customFields'] != null
-          ? Map<String, String>.from(json['customFields'].map((k, v) => MapEntry(k.toString(), v.toString())))
+          ? Map<String, String>.from(
+              json['customFields'].map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              ),
+            )
           : const {},
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
@@ -95,8 +99,10 @@ class CrmCustomer {
       'lifecycleStage': lifecycleStage,
       'consentStatus': consentStatus,
       'consentEvidence': consentEvidence,
-      if (lastInteractionAt != null) 'lastInteractionAt': lastInteractionAt!.toIso8601String(),
-      if (lastMessageAt != null) 'lastMessageAt': lastMessageAt!.toIso8601String(),
+      if (lastInteractionAt != null)
+        'lastInteractionAt': lastInteractionAt!.toIso8601String(),
+      if (lastMessageAt != null)
+        'lastMessageAt': lastMessageAt!.toIso8601String(),
       'customFields': customFields,
     };
   }

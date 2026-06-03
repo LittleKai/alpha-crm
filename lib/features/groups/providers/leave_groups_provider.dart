@@ -106,15 +106,15 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
   Future<void> reloadGroups() async {
     state = state.copyWith(isLoadingGroups: true, selectedGroupIds: {});
-    
+
     try {
       await _ref.read(zaloIntegrationProvider.notifier).checkConnection();
       final integrationState = _ref.read(zaloIntegrationProvider);
-      
+
       if (integrationState.isConnected) {
         final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
         final apiClient = ZaloIntegrationApi(baseUrl: baseUrl);
-        
+
         final result = await apiClient.fetchGroups();
         if (result['success'] == true && result['groups'] != null) {
           final List<dynamic> rawList = result['groups'];
@@ -122,32 +122,44 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
             return ZaloGroup(
               id: g['id']?.toString() ?? '',
               name: g['name']?.toString() ?? 'Nhóm không tên',
-              memberCount: int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
+              memberCount:
+                  int.tryParse(g['memberCount']?.toString() ?? '0') ?? 0,
               role: g['role']?.toString() ?? 'Thành viên',
               avatarUrl: sanitizeImageUrl(g['avatar']?.toString() ?? ''),
               accountId: g['accountId']?.toString(),
             );
           }).toList();
-          
+
           String? autoAccountId = state.selectedAccountId;
-          if ((autoAccountId == null || !integrationState.accounts.any((acc) => acc.id == autoAccountId)) && 
+          if ((autoAccountId == null ||
+                  !integrationState.accounts.any(
+                    (acc) => acc.id == autoAccountId,
+                  )) &&
               integrationState.accounts.isNotEmpty) {
             autoAccountId = integrationState.accounts.first.id;
-            print('[LeaveGroupsNotifier] Auto-selected account ID: $autoAccountId');
+            print(
+              '[LeaveGroupsNotifier] Auto-selected account ID: $autoAccountId',
+            );
           }
-          
+
           state = state.copyWith(
             isLoadingGroups: false,
             groups: realGroups,
             selectedAccountId: autoAccountId,
           );
-          print('[LeaveGroupsNotifier] Successfully reloaded ${realGroups.length} groups from backend.');
+          print(
+            '[LeaveGroupsNotifier] Successfully reloaded ${realGroups.length} groups from backend.',
+          );
           return;
         } else {
-          print('[LeaveGroupsNotifier] Failed to load groups from API: $result');
+          print(
+            '[LeaveGroupsNotifier] Failed to load groups from API: $result',
+          );
         }
       } else {
-        print('[LeaveGroupsNotifier] Zalo backend is not connected: mode=${integrationState.mode}, error=${integrationState.errorText}');
+        print(
+          '[LeaveGroupsNotifier] Zalo backend is not connected: mode=${integrationState.mode}, error=${integrationState.errorText}',
+        );
       }
     } catch (e, stack) {
       print('[LeaveGroupsNotifier] Exception in reloadGroups: $e\n$stack');
@@ -155,13 +167,13 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
     // Fallback to mock groups if backend is not connected
     await Future.delayed(const Duration(milliseconds: 800));
-    
+
     final integrationState = _ref.read(zaloIntegrationProvider);
     String? autoAccountId = state.selectedAccountId;
     if (autoAccountId == null && integrationState.accounts.isNotEmpty) {
       autoAccountId = integrationState.accounts.first.id;
     }
-    
+
     state = state.copyWith(
       isLoadingGroups: false,
       groups: MockGroups.myGroups,
@@ -233,9 +245,12 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
       try {
         final integrationState = _ref.read(zaloIntegrationProvider);
         if (integrationState.isConnected) {
-          final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+          final baseUrl = _ref
+              .read(settingsProvider)
+              .settings
+              .zaloBackendBaseUrl;
           final apiClient = ZaloIntegrationApi(baseUrl: baseUrl);
-          
+
           final result = await apiClient.leaveGroup(
             groupId: groupId,
             silent: state.isSilent,
@@ -249,7 +264,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
       final logTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       List<LogItem> updatedLogs;
-      
+
       // If left successfully or we are in local offline fallback mock mode
       if (leaveSuccess || !_ref.read(zaloIntegrationProvider).isConnected) {
         updatedLogs = [

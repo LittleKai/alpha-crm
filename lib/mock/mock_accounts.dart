@@ -128,7 +128,8 @@ class SystemSettings {
       stopOnReportCount: stopOnReportCount ?? this.stopOnReportCount,
       quietHoursStart: quietHoursStart ?? this.quietHoursStart,
       quietHoursEnd: quietHoursEnd ?? this.quietHoursEnd,
-      allowTestModeOnlyForRiskyActions: allowTestModeOnlyForRiskyActions ??
+      allowTestModeOnlyForRiskyActions:
+          allowTestModeOnlyForRiskyActions ??
           this.allowTestModeOnlyForRiskyActions,
       zaloBackendBaseUrl: zaloBackendBaseUrl ?? this.zaloBackendBaseUrl,
       zaloWebhookPath: zaloWebhookPath ?? this.zaloWebhookPath,
@@ -181,11 +182,13 @@ class SystemSettings {
       maxDelay: json['maxDelay'] ?? 60,
       autoApproveFriend: json['autoApproveFriend'] ?? true,
       autoSendWelcomeMessage: json['autoSendWelcomeMessage'] ?? true,
-      welcomeMessageText: json['welcomeMessageText'] ?? 'Chào bạn! Rất vui được kết nối.',
+      welcomeMessageText:
+          json['welcomeMessageText'] ?? 'Chào bạn! Rất vui được kết nối.',
       autoAddFriendGroup: json['autoAddFriendGroup'] ?? true,
       zaloChannelMode: mode,
       officialApiOnly: json['officialApiOnly'] ?? false,
-      allowPersonalAccountAutomation: json['allowPersonalAccountAutomation'] ?? true,
+      allowPersonalAccountAutomation:
+          json['allowPersonalAccountAutomation'] ?? true,
       allowProxyUsage: json['allowProxyUsage'] ?? true,
       allowFriendAutomation: json['allowFriendAutomation'] ?? true,
       allowGroupAutomation: json['allowGroupAutomation'] ?? true,
@@ -201,7 +204,8 @@ class SystemSettings {
       stopOnReportCount: json['stopOnReportCount'] ?? 1,
       quietHoursStart: json['quietHoursStart'] ?? '21:00',
       quietHoursEnd: json['quietHoursEnd'] ?? '08:00',
-      allowTestModeOnlyForRiskyActions: json['allowTestModeOnlyForRiskyActions'] ?? true,
+      allowTestModeOnlyForRiskyActions:
+          json['allowTestModeOnlyForRiskyActions'] ?? true,
       zaloBackendBaseUrl: json['zaloBackendBaseUrl'] ?? 'http://localhost:8787',
       zaloWebhookPath: json['zaloWebhookPath'] ?? '/api/zalo/webhook',
     );

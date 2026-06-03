@@ -101,7 +101,8 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
           final friends = rawFriends.map((f) {
             return FriendRecord(
               id: f['userId']?.toString() ?? '',
-              name: f['displayName']?.toString() ??
+              name:
+                  f['displayName']?.toString() ??
                   f['zaloName']?.toString() ??
                   '',
               phone: f['phoneNumber']?.toString() ?? '',
@@ -237,18 +238,19 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
           members: membersList,
           accountId: state.selectedAccountId,
         );
-        
+
         final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
 
         if (response['success'] == true) {
           _successCount++;
           final String newGroupId = response['groupId'] ?? '';
-          
+
           List<LogItem> updatedLogs = [
             ...state.logs,
             LogItem(
               timestamp: completionTimeStr,
-              message: 'Tạo nhóm "$groupName" thành công. ID nhóm: $newGroupId.',
+              message:
+                  'Tạo nhóm "$groupName" thành công. ID nhóm: $newGroupId.',
               type: LogType.success,
             ),
           ];
@@ -257,7 +259,8 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
           for (final friendId in state.selectedFriendIds) {
             final friend = state.friends.firstWhere(
               (f) => f.id == friendId,
-              orElse: () => FriendRecord(id: friendId, name: friendId, phone: ''),
+              orElse: () =>
+                  FriendRecord(id: friendId, name: friendId, phone: ''),
             );
             updatedLogs.add(
               LogItem(
@@ -301,14 +304,19 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
       _currentGroupIndex++;
 
       if (_currentGroupIndex < _groupNames.length) {
-        final delaySeconds = state.minDelay + (state.maxDelay > state.minDelay ? (state.maxDelay - state.minDelay) : 0);
+        final delaySeconds =
+            state.minDelay +
+            (state.maxDelay > state.minDelay
+                ? (state.maxDelay - state.minDelay)
+                : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách ${delaySeconds}s trước khi tạo nhóm tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi tạo nhóm tiếp theo...',
               type: LogType.info,
             ),
           ],
@@ -336,37 +344,35 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
       if (_successCount > 0 && _failCount == 0) {
         finalLog = LogItem(
           timestamp: timeStr,
-          message: 'Chiến dịch tự động tạo nhóm hoàn tất thành công. Đã tạo $_successCount nhóm.',
+          message:
+              'Chiến dịch tự động tạo nhóm hoàn tất thành công. Đã tạo $_successCount nhóm.',
           type: LogType.success,
         );
       } else if (_successCount > 0 && _failCount > 0) {
         finalLog = LogItem(
           timestamp: timeStr,
-          message: 'Chiến dịch hoàn tất với lỗi. Thành công: $_successCount, Thất bại: $_failCount.',
+          message:
+              'Chiến dịch hoàn tất với lỗi. Thành công: $_successCount, Thất bại: $_failCount.',
           type: LogType.warning,
         );
       } else {
         finalLog = LogItem(
           timestamp: timeStr,
-          message: 'Chiến dịch tự động tạo nhóm thất bại. Thất bại: $_failCount nhóm.',
+          message:
+              'Chiến dịch tự động tạo nhóm thất bại. Thất bại: $_failCount nhóm.',
           type: LogType.error,
         );
       }
     } else {
       finalLog = LogItem(
         timestamp: timeStr,
-        message: 'Chiến dịch đã bị dừng bởi người dùng. Thành công: $_successCount, Thất bại: $_failCount.',
+        message:
+            'Chiến dịch đã bị dừng bởi người dùng. Thành công: $_successCount, Thất bại: $_failCount.',
         type: LogType.warning,
       );
     }
 
-    state = state.copyWith(
-      isRunning: false,
-      logs: [
-        ...state.logs,
-        finalLog,
-      ],
-    );
+    state = state.copyWith(isRunning: false, logs: [...state.logs, finalLog]);
   }
 
   @override

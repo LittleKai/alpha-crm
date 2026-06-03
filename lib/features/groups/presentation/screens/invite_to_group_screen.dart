@@ -59,9 +59,8 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
     // Filter friends list
     final filteredFriends = state.friends.where((f) {
       final q = state.searchQuery.toLowerCase();
-      final matchesSearch = q.isEmpty ||
-          f.name.toLowerCase().contains(q) ||
-          f.phone.contains(q);
+      final matchesSearch =
+          q.isEmpty || f.name.toLowerCase().contains(q) || f.phone.contains(q);
 
       if (!matchesSearch) return false;
 
@@ -88,7 +87,9 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
         return g.accountId == state.selectedAccountId;
       }
       if (state.selectedAccountId!.length < 4) return true;
-      final suffix = state.selectedAccountId!.substring(state.selectedAccountId!.length - 4);
+      final suffix = state.selectedAccountId!.substring(
+        state.selectedAccountId!.length - 4,
+      );
       return g.name.startsWith('[$suffix]');
     }).toList();
 
@@ -217,46 +218,54 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                  ? state.selectedAccountId
+                  : null,
               hintText: 'Chọn tài khoản gửi...',
-              items: accounts
-                  .map(
-                    (acc) {
-                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-                      return DropdownMenuItem(
-                        value: acc.id,
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
-                              child: acc.avatarUrl.isEmpty
-                                  ? Text(
-                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Text(
-                              cleanLabel,
-                              style: AppTextStyles.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                  .toList(),
+              items: accounts.map((acc) {
+                final cleanLabel = acc.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
+                return DropdownMenuItem(
+                  value: acc.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: acc.avatarUrl.isNotEmpty
+                            ? NetworkImage(acc.avatarUrl)
+                            : null,
+                        child: acc.avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
             ),
             const SizedBox(height: AppSpacing.m),
           ],
-           Text('Chọn nhóm Zalo nhận lời mời *', style: AppTextStyles.label),
+          Text('Chọn nhóm Zalo nhận lời mời *', style: AppTextStyles.label),
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
-            value: filteredGroups.any((g) => g.id == state.selectedGroupId) ? state.selectedGroupId : null,
+            value: filteredGroups.any((g) => g.id == state.selectedGroupId)
+                ? state.selectedGroupId
+                : null,
             hintText: 'Chọn nhóm nhận...',
             items: filteredGroups
                 .map(
@@ -267,11 +276,19 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                         CircleAvatar(
                           radius: 12,
                           backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: g.avatarUrl.isNotEmpty ? NetworkImage(g.avatarUrl) : null,
+                          backgroundImage: g.avatarUrl.isNotEmpty
+                              ? NetworkImage(g.avatarUrl)
+                              : null,
                           child: g.avatarUrl.isEmpty
                               ? Text(
-                                  g.name.isNotEmpty ? g.name[0].toUpperCase() : 'G',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                  g.name.isNotEmpty
+                                      ? g.name[0].toUpperCase()
+                                      : 'G',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 )
                               : null,
                         ),
@@ -370,7 +387,10 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
               ),
             ],
           ),
-          if (useColumns) const Spacer() else const SizedBox(height: AppSpacing.xl),
+          if (useColumns)
+            const Spacer()
+          else
+            const SizedBox(height: AppSpacing.xl),
           AppButton(
             text: state.isRunning
                 ? 'Dừng mời bạn bè'
@@ -432,7 +452,9 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                     value: _phoneFilter,
                     style: AppTextStyles.bodyMedium,
                     decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.s),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s,
+                      ),
                     ),
                     items: const [
                       DropdownMenuItem(
@@ -503,11 +525,15 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                             CircleAvatar(
                               radius: 14,
                               backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: friend.avatarUrl.isNotEmpty ? NetworkImage(friend.avatarUrl) : null,
+                              backgroundImage: friend.avatarUrl.isNotEmpty
+                                  ? NetworkImage(friend.avatarUrl)
+                                  : null,
                               child: friend.avatarUrl.isEmpty
                                   ? Text(
                                       friend.name.isNotEmpty
-                                          ? friend.name.substring(0, 1).toUpperCase()
+                                          ? friend.name
+                                                .substring(0, 1)
+                                                .toUpperCase()
                                           : 'F',
                                       style: const TextStyle(
                                         fontSize: 12,

@@ -30,6 +30,12 @@ interface ZaloAccountInstance {
   avatar?: string;
 }
 
+interface AccountSettings {
+  proxy?: string;
+  blockSeen?: boolean;
+  blockTyping?: boolean;
+}
+
 // Global active accounts pool
 export const accountPool = new Map<string, ZaloAccountInstance>();
 let loginError: string | null = null;
@@ -48,9 +54,94 @@ const friendsCache = new Map<string, CacheEntry<ZaloFriend[]>>();
 const groupsCache = new Map<string, CacheEntry<any[]>>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
+function accountSettingsPath(): string {
+  const credPath = resolve(projectRoot, config.personalCredentialsPath);
+  return resolve(dirname(credPath), 'account-settings.json');
+}
+
+function readAccountSettings(): Record<string, AccountSettings> {
+  const filePath = accountSettingsPath();
+  if (!existsSync(filePath)) return {};
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeAccountSettings(settings: Record<string, AccountSettings>): void {
+  const filePath = accountSettingsPath();
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
 function toStringValue(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function normalizeImageUrl(value: unknown): string {
+  const url = toStringValue(value).trim();
+  if (url.startsWith('//')) return `https:${url}`;
+  return url;
+}
+
+function hasRichPreviewKeys(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const data = value as Record<string, unknown>;
+  return Boolean(data.href || data.url || data.thumb || data.thumbnail || data.fileUrl || data.fileName);
+}
+
+function extractStringFromRecord(value: unknown, keys: string[]): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const data = value as Record<string, unknown>;
+  for (const key of keys) {
+    const text = toStringValue(data[key]).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function stringifyRecord(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function extractInboundContent(data: Record<string, any>, messageType: ZaloInboundMessageEvent['messageType']): string {
+  for (const key of ['content', 'msg', 'message', 'text', 'body']) {
+    const direct = toStringValue(data[key]).trim();
+    if (direct) return direct;
+  }
+
+  for (const key of ['content', 'msg', 'message', 'body', 'attach', 'attachments']) {
+    const value = data[key];
+    if (!value) continue;
+    if (hasRichPreviewKeys(value)) return stringifyRecord(value);
+
+    const nested = extractStringFromRecord(value, [
+      'msg',
+      'text',
+      'message',
+      'body',
+      'content',
+      'title',
+      'description',
+      'fileName',
+      'name',
+    ]);
+    if (nested) return nested;
+
+    if (messageType !== 'text') {
+      const serialized = stringifyRecord(value);
+      if (serialized) return serialized;
+    }
+  }
+
   return '';
 }
 
@@ -70,9 +161,6 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
   );
   if (!senderId || !threadId) return null;
 
-  const rawContent =
-    data.content ?? data.msg ?? data.message ?? data.text ?? data.body ?? data.attach?.title ?? '';
-  let content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
   const messageType: ZaloInboundMessageEvent['messageType'] =
     data.msgType === 'chat.photo' || data.msgType === 'image' || data.type === 'image'
       ? 'image'
@@ -81,6 +169,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
         : data.msgType === 'chat.sticker' || data.type === 'sticker'
           ? 'sticker'
           : 'text';
+  let content = extractInboundContent(data, messageType);
   if (!content) content = `[${messageType}]`;
 
   const rawTimestamp = Number(data.ts ?? data.timestamp ?? data.time ?? Date.now());
@@ -89,7 +178,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     : Date.now();
 
   // Try to find the sender's avatar from event data
-  let avatarUrl = toStringValue(data.avatar || data.avt || data.avatarUrl || data.senderAvatar || '');
+  let avatarUrl = normalizeImageUrl(data.avatar || data.avt || data.avatarUrl || data.senderAvatar || '');
 
   // If not found in event, try to find in friendsCache
   if (!avatarUrl && senderId) {
@@ -97,7 +186,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     if (cached?.data) {
       const friend = cached.data.find((f) => f.userId === senderId);
       if (friend?.avatar) {
-        avatarUrl = friend.avatar;
+        avatarUrl = normalizeImageUrl(friend.avatar);
       }
     }
   }
@@ -116,6 +205,21 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
       `zca_${instance.uId}_${threadId}_${timestampMs}`,
     timestamp: new Date(timestampMs).toISOString(),
   };
+}
+
+export function normalizeInboundMessageForTest(
+  instance: Pick<ZaloAccountInstance, 'uId' | 'label'>,
+  event: any,
+): ZaloInboundMessageEvent | null {
+  return normalizeInboundMessage(
+    {
+      api: {} as API,
+      listenerRunning: false,
+      lastEventAt: null,
+      ...instance,
+    },
+    event,
+  );
 }
 
 // Export the active account pool loader so server.ts can call it
@@ -475,13 +579,28 @@ export class PersonalZcaChannel implements ZaloChannel {
   }
 
   getAccounts(): any[] {
+    const settingsByAccount = readAccountSettings();
     return Array.from(accountPool.values()).map(acc => ({
       id: acc.uId,
       label: acc.label,
       connected: true,
       listenerRunning: acc.listenerRunning,
       avatar: acc.avatar || '',
+      settings: settingsByAccount[acc.uId] || {},
     }));
+  }
+
+  async updateAccountSettings(accountId: string, settings: Record<string, unknown>): Promise<boolean> {
+    if (!accountPool.has(accountId)) return false;
+    const current = readAccountSettings();
+    current[accountId] = {
+      proxy: typeof settings.proxy === 'string' ? settings.proxy.trim() : '',
+      blockSeen: settings.blockSeen === true,
+      blockTyping: settings.blockTyping === true,
+    };
+    writeAccountSettings(current);
+    console.log(`[PersonalZcaChannel] Updated local settings for account ${accountId}.`);
+    return true;
   }
 
   async deleteAccount(accountId: string): Promise<boolean> {
@@ -509,6 +628,10 @@ export class PersonalZcaChannel implements ZaloChannel {
           unlinkSync(filePath);
         }
       }
+
+      const settingsByAccount = readAccountSettings();
+      delete settingsByAccount[accountId];
+      writeAccountSettings(settingsByAccount);
 
       console.log(`[PersonalZcaChannel] Successfully unlinked Zalo account: ${accountId}`);
       return true;

@@ -16,6 +16,8 @@ extension MessageTemplateJson on MessageTemplate {
       content: template.body,
       variables: template.variables,
       createdAt: template.createdAt,
+      shortcut: template.shortcut,
+      isQuick: template.isQuick,
     );
   }
 }
@@ -113,8 +115,8 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
       type: 'zalo',
       variables: template.variables,
       category: 'general',
-      shortcut: '',
-      isQuick: false,
+      shortcut: template.shortcut,
+      isQuick: template.isQuick,
       status: 'active',
       language: 'vi',
       usageCount: 0,

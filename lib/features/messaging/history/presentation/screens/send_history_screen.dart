@@ -47,7 +47,9 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     final connectedAccounts = zaloState.accounts;
 
     final String selectedId = _selectedAccountId ?? "";
-    final String activeId = (selectedId == "" || connectedAccounts.any((acc) => acc.id == selectedId))
+    final String activeId =
+        (selectedId == "" ||
+            connectedAccounts.any((acc) => acc.id == selectedId))
         ? selectedId
         : "";
 
@@ -90,7 +92,10 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     }).toList();
   }
 
-  Widget _buildHeader(String activeId, List<ZaloConnectedAccount> connectedAccounts) {
+  Widget _buildHeader(
+    String activeId,
+    List<ZaloConnectedAccount> connectedAccounts,
+  ) {
     return Row(
       children: [
         const Icon(Icons.history_outlined, color: AppColors.primary, size: 32),
@@ -140,7 +145,10 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                 ),
               ),
               ...connectedAccounts.map((account) {
-                final cleanLabel = account.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                final cleanLabel = account.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
                 final avatarUrl = account.avatarUrl;
                 return DropdownMenuItem(
                   value: account.id,
@@ -149,10 +157,14 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                       CircleAvatar(
                         radius: 12,
                         backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
+                            : null,
                         child: avatarUrl.isEmpty
                             ? Text(
-                                cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,

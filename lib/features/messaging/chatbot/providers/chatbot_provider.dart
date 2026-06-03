@@ -12,6 +12,15 @@ const chatbotAiModels = [
   'gemini-3.1-pro-preview',
 ];
 const chatbotDefaultAiModel = 'gemini-3-flash-preview';
+const chatbotDefaultSystemPrompt =
+    'Bạn là một người hỗ trợ tư vấn khách hàng Zalo. Hãy phản hồi tự nhiên, ngắn gọn và đời thường như một người thật, tránh viết quá dài (dưới 40 từ). Đặc biệt: CHỈ gửi lời chào (như Chào bạn, Dạ chào anh/chị) ở câu đầu tiên của cuộc hội thoại, từ các câu tiếp theo tuyệt đối không lặp lại câu chào hỏi nữa mà trả lời thẳng vào vấn đề.';
+const chatbotDefaultSoul =
+    'Bạn là nhân viên tư vấn Zalo của doanh nghiệp: chuyên nghiệp, gần gũi, hiểu sản phẩm/dịch vụ, không tiết lộ mình là AI, không nói về hệ thống nội bộ.';
+const chatbotDefaultResponseRules =
+    '- Trả lời bằng tiếng Việt theo ngôn ngữ của khách.\n'
+    '- Không bịa thông tin ngoài kho kiến thức; nếu thiếu dữ liệu thì đề nghị chuyển nhân viên.\n'
+    '- Không gửi mật khẩu, token, cookie hoặc dữ liệu nhạy cảm.\n'
+    '- Khi cần gửi file/ảnh, chỉ nêu đúng tài liệu phù hợp trong kho kiến thức để agent Zalo gửi.';
 
 String normalizeChatbotAiModel(String value) {
   return chatbotAiModels.contains(value) ? value : chatbotDefaultAiModel;
@@ -19,12 +28,16 @@ String normalizeChatbotAiModel(String value) {
 
 class ChatbotRule {
   final String id;
+  final String name;
+  final String description;
   final String keyword;
   final String response;
   final bool isActive;
 
   const ChatbotRule({
     required this.id,
+    required this.name,
+    required this.description,
     required this.keyword,
     required this.response,
     this.isActive = true,
@@ -32,12 +45,16 @@ class ChatbotRule {
 
   ChatbotRule copyWith({
     String? id,
+    String? name,
+    String? description,
     String? keyword,
     String? response,
     bool? isActive,
   }) {
     return ChatbotRule(
       id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
       keyword: keyword ?? this.keyword,
       response: response ?? this.response,
       isActive: isActive ?? this.isActive,
@@ -54,6 +71,8 @@ class ChatbotRule {
         : <String>[];
     return ChatbotRule(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
       keyword: keywords.isNotEmpty
           ? keywords.join(', ')
           : (json['name'] ?? '').toString(),
@@ -102,8 +121,12 @@ class ChatbotState {
   final List<ChatbotRule> rules;
   final String aiModel;
   final String systemPrompt;
+  final String soulPrompt;
+  final String responseRules;
   final double temperature;
   final bool aiEnabled;
+  final String personalAudience;
+  final String groupAudience;
   final List<String> knowledgeDocuments;
   final List<ChatbotLogRecord> logs;
   final bool isLoading;
@@ -114,8 +137,12 @@ class ChatbotState {
     required this.rules,
     required this.aiModel,
     required this.systemPrompt,
+    required this.soulPrompt,
+    required this.responseRules,
     required this.temperature,
     required this.aiEnabled,
+    required this.personalAudience,
+    required this.groupAudience,
     required this.knowledgeDocuments,
     required this.logs,
     required this.isLoading,
@@ -127,10 +154,13 @@ class ChatbotState {
       activeTab: 0,
       rules: [],
       aiModel: chatbotDefaultAiModel,
-      systemPrompt:
-          'Bạn là trợ lý CSKH của Alpha CRM. Hãy trả lời thân thiện, ngắn gọn và hướng khách hàng đến tư vấn viên khi cần.',
+      systemPrompt: chatbotDefaultSystemPrompt,
+      soulPrompt: chatbotDefaultSoul,
+      responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
       aiEnabled: true,
+      personalAudience: 'all',
+      groupAudience: 'none',
       knowledgeDocuments: [],
       logs: [],
       isLoading: false,
@@ -143,8 +173,12 @@ class ChatbotState {
     List<ChatbotRule>? rules,
     String? aiModel,
     String? systemPrompt,
+    String? soulPrompt,
+    String? responseRules,
     double? temperature,
     bool? aiEnabled,
+    String? personalAudience,
+    String? groupAudience,
     List<String>? knowledgeDocuments,
     List<ChatbotLogRecord>? logs,
     bool? isLoading,
@@ -155,8 +189,12 @@ class ChatbotState {
       rules: rules ?? this.rules,
       aiModel: aiModel ?? this.aiModel,
       systemPrompt: systemPrompt ?? this.systemPrompt,
+      soulPrompt: soulPrompt ?? this.soulPrompt,
+      responseRules: responseRules ?? this.responseRules,
       temperature: temperature ?? this.temperature,
       aiEnabled: aiEnabled ?? this.aiEnabled,
+      personalAudience: personalAudience ?? this.personalAudience,
+      groupAudience: groupAudience ?? this.groupAudience,
       knowledgeDocuments: knowledgeDocuments ?? this.knowledgeDocuments,
       logs: logs ?? this.logs,
       isLoading: isLoading ?? this.isLoading,
@@ -198,12 +236,17 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         (json['aiModel'] ?? state.aiModel).toString(),
       ),
       systemPrompt: (json['systemPrompt'] ?? state.systemPrompt).toString(),
+      soulPrompt: (json['soulPrompt'] ?? state.soulPrompt).toString(),
+      responseRules: (json['responseRules'] ?? state.responseRules).toString(),
       temperature:
           double.tryParse(
             (json['temperature'] ?? state.temperature).toString(),
           ) ??
           state.temperature,
       aiEnabled: json['aiEnabled'] != false,
+      personalAudience: (json['personalAudience'] ?? state.personalAudience)
+          .toString(),
+      groupAudience: (json['groupAudience'] ?? state.groupAudience).toString(),
       knowledgeDocuments: snippets,
     );
   }
@@ -252,11 +295,18 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     if (response['success'] != true) await loadRules();
   }
 
-  Future<void> addRule(String keyword, String response) async {
+  Future<void> addRule(
+    String keyword,
+    String response, {
+    String? name,
+    String? description,
+  }) async {
     if (keyword.trim().isEmpty || response.trim().isEmpty) return;
     if (_isCreatingRule) return;
     _isCreatingRule = true;
     final result = await _repository.createRule(
+      name: name?.trim().isNotEmpty == true ? name!.trim() : keyword.trim(),
+      description: description?.trim(),
       keyword: keyword.trim(),
       response: response.trim(),
     );
@@ -286,19 +336,45 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     }
   }
 
-  Future<void> updateAiConfig(String model, String prompt, double temp) async {
+  Map<String, dynamic> _settingsPayload({
+    String? aiModel,
+    String? systemPrompt,
+    String? soulPrompt,
+    String? responseRules,
+    double? temperature,
+    bool? aiEnabled,
+    String? personalAudience,
+    String? groupAudience,
+    List<String>? knowledgeDocuments,
+  }) {
+    return {
+      'aiEnabled': aiEnabled ?? state.aiEnabled,
+      'aiModel': aiModel ?? state.aiModel,
+      'systemPrompt': systemPrompt ?? state.systemPrompt,
+      'soulPrompt': soulPrompt ?? state.soulPrompt,
+      'responseRules': responseRules ?? state.responseRules,
+      'temperature': temperature ?? state.temperature,
+      'personalAudience': personalAudience ?? state.personalAudience,
+      'groupAudience': groupAudience ?? state.groupAudience,
+      'knowledgeSnippets': knowledgeDocuments ?? state.knowledgeDocuments,
+    };
+  }
+
+  Future<void> updateAiConfig({
+    required String model,
+    required String prompt,
+    required String soulPrompt,
+    required String responseRules,
+    required double temperature,
+  }) async {
     state = state.copyWith(
-      aiModel: model,
+      aiModel: normalizeChatbotAiModel(model),
       systemPrompt: prompt,
-      temperature: temp,
+      soulPrompt: soulPrompt,
+      responseRules: responseRules,
+      temperature: temperature,
     );
-    final response = await _repository.saveSettings({
-      'aiModel': model,
-      'systemPrompt': prompt,
-      'temperature': temp,
-      'aiEnabled': state.aiEnabled,
-      'knowledgeSnippets': state.knowledgeDocuments,
-    });
+    final response = await _repository.saveSettings(_settingsPayload());
     if (response['success'] != true) {
       state = state.copyWith(
         errorMessage: (response['message'] ?? 'Lưu cấu hình thất bại.')
@@ -309,25 +385,26 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
   Future<void> setAiEnabled(bool enabled) async {
     state = state.copyWith(aiEnabled: enabled);
-    await _repository.saveSettings({
-      'aiEnabled': enabled,
-      'aiModel': state.aiModel,
-      'systemPrompt': state.systemPrompt,
-      'temperature': state.temperature,
-      'knowledgeSnippets': state.knowledgeDocuments,
-    });
+    await _repository.saveSettings(_settingsPayload());
+  }
+
+  Future<void> updateAudienceConfig({
+    String? personalAudience,
+    String? groupAudience,
+  }) async {
+    state = state.copyWith(
+      personalAudience: personalAudience,
+      groupAudience: groupAudience,
+    );
+    await _repository.saveSettings(_settingsPayload());
   }
 
   Future<void> addKnowledgeDocument(String name) async {
     final documents = [...state.knowledgeDocuments, name];
     state = state.copyWith(knowledgeDocuments: documents);
-    await _repository.saveSettings({
-      'aiEnabled': state.aiEnabled,
-      'aiModel': state.aiModel,
-      'systemPrompt': state.systemPrompt,
-      'temperature': state.temperature,
-      'knowledgeSnippets': documents,
-    });
+    await _repository.saveSettings(
+      _settingsPayload(knowledgeDocuments: documents),
+    );
   }
 
   Future<void> removeKnowledgeDocument(String name) async {
@@ -335,13 +412,21 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         .where((doc) => doc != name)
         .toList();
     state = state.copyWith(knowledgeDocuments: documents);
-    await _repository.saveSettings({
-      'aiEnabled': state.aiEnabled,
-      'aiModel': state.aiModel,
-      'systemPrompt': state.systemPrompt,
-      'temperature': state.temperature,
-      'knowledgeSnippets': documents,
-    });
+    await _repository.saveSettings(
+      _settingsPayload(knowledgeDocuments: documents),
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadKnowledgeFile({
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  }) {
+    return _repository.uploadKnowledgeFile(
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
   }
 
   void clearLogs() {

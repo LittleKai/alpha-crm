@@ -5,13 +5,13 @@ import '../auth/crm_auth_token_store.dart';
 
 class CrmCloudApi {
   static const String fallbackUrl = 'https://alpha-studio-backend.fly.dev/api';
-  
+
   static String get baseUrl {
     const fromEnv = String.fromEnvironment('ALPHA_STUDIO_API_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
     return fallbackUrl;
   }
-  
+
   static Future<Map<String, String>> _headers() async {
     final token = await CrmAuthTokenStore.getToken();
     final headers = {
@@ -23,7 +23,7 @@ class CrmCloudApi {
     }
     return headers;
   }
-  
+
   // Generic helper for GET
   static Future<Map<String, dynamic>> get(String path) async {
     try {
@@ -38,12 +38,19 @@ class CrmCloudApi {
   }
 
   // Generic helper for POST
-  static Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  static Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     try {
       final url = Uri.parse('$baseUrl$path');
       final headers = await _headers();
       debugPrint('[CrmCloudApi] POST $url');
-      final response = await http.post(url, headers: headers, body: jsonEncode(body));
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode(body),
+      );
       return _parseResponse(response);
     } catch (e) {
       return {'success': false, 'message': e.toString()};
@@ -51,12 +58,19 @@ class CrmCloudApi {
   }
 
   // Generic helper for PUT
-  static Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) async {
+  static Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     try {
       final url = Uri.parse('$baseUrl$path');
       final headers = await _headers();
       debugPrint('[CrmCloudApi] PUT $url');
-      final response = await http.put(url, headers: headers, body: jsonEncode(body));
+      final response = await http.put(
+        url,
+        headers: headers,
+        body: jsonEncode(body),
+      );
       return _parseResponse(response);
     } catch (e) {
       return {'success': false, 'message': e.toString()};
@@ -81,10 +95,10 @@ class CrmCloudApi {
     if (response.body.isEmpty) {
       return {
         'success': response.statusCode >= 200 && response.statusCode < 300,
-        'message': 'Empty response from backend'
+        'message': 'Empty response from backend',
       };
     }
-    
+
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map) {
@@ -92,7 +106,11 @@ class CrmCloudApi {
       }
       return {'success': true, 'data': decoded};
     } catch (e) {
-      return {'success': false, 'message': 'HTTP ${response.statusCode}: JSON Parse Error: ${e.toString()}'};
+      return {
+        'success': false,
+        'message':
+            'HTTP ${response.statusCode}: JSON Parse Error: ${e.toString()}',
+      };
     }
   }
 }

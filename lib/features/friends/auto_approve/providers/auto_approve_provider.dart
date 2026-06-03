@@ -20,27 +20,47 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
   final Ref _ref;
 
   AutoApproveNotifier(this._ref)
-      : super(AutoApproveState(
+    : super(
+        AutoApproveState(
           autoApprove: _ref.read(settingsProvider).settings.autoApproveFriend,
-          sendWelcome: _ref.read(settingsProvider).settings.autoSendWelcomeMessage,
-          welcomeMessage: _ref.read(settingsProvider).settings.welcomeMessageText,
-          runningAccountsCount: _ref.read(zaloIntegrationProvider).accounts.length,
-        )) {
+          sendWelcome: _ref
+              .read(settingsProvider)
+              .settings
+              .autoSendWelcomeMessage,
+          welcomeMessage: _ref
+              .read(settingsProvider)
+              .settings
+              .welcomeMessageText,
+          runningAccountsCount: _ref
+              .read(zaloIntegrationProvider)
+              .accounts
+              .length,
+        ),
+      ) {
     // Listen to settings changes to keep this state in sync
     _ref.listen<SettingsState>(settingsProvider, (previous, next) {
       state = AutoApproveState(
         autoApprove: next.settings.autoApproveFriend,
         sendWelcome: next.settings.autoSendWelcomeMessage,
         welcomeMessage: next.settings.welcomeMessageText,
-        runningAccountsCount: _ref.read(zaloIntegrationProvider).accounts.length,
+        runningAccountsCount: _ref
+            .read(zaloIntegrationProvider)
+            .accounts
+            .length,
       );
     });
 
     // Listen to account changes
-    _ref.listen<ZaloIntegrationState>(zaloIntegrationProvider, (previous, next) {
+    _ref.listen<ZaloIntegrationState>(zaloIntegrationProvider, (
+      previous,
+      next,
+    ) {
       state = AutoApproveState(
         autoApprove: _ref.read(settingsProvider).settings.autoApproveFriend,
-        sendWelcome: _ref.read(settingsProvider).settings.autoSendWelcomeMessage,
+        sendWelcome: _ref
+            .read(settingsProvider)
+            .settings
+            .autoSendWelcomeMessage,
         welcomeMessage: _ref.read(settingsProvider).settings.welcomeMessageText,
         runningAccountsCount: next.accounts.length,
       );
@@ -62,5 +82,5 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
 
 final autoApproveProvider =
     StateNotifierProvider<AutoApproveNotifier, AutoApproveState>((ref) {
-  return AutoApproveNotifier(ref);
-});
+      return AutoApproveNotifier(ref);
+    });

@@ -59,6 +59,11 @@ export function getAccounts(): any[] {
   return channel.getAccounts();
 }
 
+export async function updateAccountSettings(accountId: string, settings: Record<string, unknown>): Promise<boolean> {
+  if (!channel.updateAccountSettings) return false;
+  return channel.updateAccountSettings(accountId, settings);
+}
+
 export async function deleteAccount(accountId: string): Promise<boolean> {
   if (!channel.deleteAccount) return false;
   return channel.deleteAccount(accountId);
@@ -115,4 +120,3 @@ export async function acceptFriendRequest(userId: string, accountId?: string): P
   if (!channel.acceptFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
   return channel.acceptFriendRequest(userId, accountId);
 }
-

@@ -357,7 +357,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             AppButton(
               text: 'Thêm thủ công',
               icon: Icons.add_rounded,
-              onPressed: () => _showAddContactDialog(context, ref.read(customersProvider.notifier)),
+              onPressed: () => _showAddContactDialog(
+                context,
+                ref.read(customersProvider.notifier),
+              ),
             ),
           ],
         ),
@@ -480,13 +483,25 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   ) async {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
-    
+
     String selectedGroup = 'Khách hàng VIP';
     String selectedTag = 'Bất động sản';
     bool submitting = false;
-    
-    final groups = ['Khách hàng VIP', 'Khách hàng tiềm năng', 'Đối tác', 'Mặc định'];
-    final tags = ['Bất động sản', 'Tài chính', 'Công nghệ', 'Giáo dục', 'Thời trang', 'Mặc định'];
+
+    final groups = [
+      'Khách hàng VIP',
+      'Khách hàng tiềm năng',
+      'Đối tác',
+      'Mặc định',
+    ];
+    final tags = [
+      'Bất động sản',
+      'Tài chính',
+      'Công nghệ',
+      'Giáo dục',
+      'Thời trang',
+      'Mặc định',
+    ];
 
     await showDialog<void>(
       context: context,
@@ -502,7 +517,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ),
               title: const Row(
                 children: [
-                  Icon(Icons.person_add_outlined, color: AppColors.primary, size: 28),
+                  Icon(
+                    Icons.person_add_outlined,
+                    color: AppColors.primary,
+                    size: 28,
+                  ),
                   SizedBox(width: AppSpacing.s),
                   Text(
                     'Thêm khách hàng mới',
@@ -536,7 +555,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         hintText: 'Nhập họ và tên khách hàng',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person_outline, size: 20),
-                        contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: AppSpacing.m,
+                          vertical: AppSpacing.s,
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.m),
@@ -549,7 +571,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         hintText: 'Nhập số điện thoại Zalo',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.phone_outlined, size: 20),
-                        contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: AppSpacing.m,
+                          vertical: AppSpacing.s,
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.m),
@@ -562,18 +587,23 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Nhóm khách hàng',
                               border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: AppSpacing.m,
+                                vertical: AppSpacing.s,
+                              ),
                             ),
                             items: groups.map((g) {
                               return DropdownMenuItem(value: g, child: Text(g));
                             }).toList(),
-                            onChanged: submitting ? null : (val) {
-                              if (val != null) {
-                                setState(() {
-                                  selectedGroup = val;
-                                });
-                              }
-                            },
+                            onChanged: submitting
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        selectedGroup = val;
+                                      });
+                                    }
+                                  },
                           ),
                         ),
                         const SizedBox(width: AppSpacing.m),
@@ -584,18 +614,23 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Lĩnh vực / Nhãn',
                               border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: AppSpacing.m,
+                                vertical: AppSpacing.s,
+                              ),
                             ),
                             items: tags.map((t) {
                               return DropdownMenuItem(value: t, child: Text(t));
                             }).toList(),
-                            onChanged: submitting ? null : (val) {
-                              if (val != null) {
-                                setState(() {
-                                  selectedTag = val;
-                                });
-                              }
-                            },
+                            onChanged: submitting
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        selectedTag = val;
+                                      });
+                                    }
+                                  },
                           ),
                         ),
                       ],
@@ -612,7 +647,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 AppButton(
                   text: 'Hủy',
                   variant: AppButtonVariant.outline,
-                  onPressed: submitting ? null : () => Navigator.of(dialogContext).pop(),
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                 ),
                 const SizedBox(width: AppSpacing.xs),
                 AppButton(
@@ -623,13 +660,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     final phone = phoneController.text.trim();
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng nhập họ và tên.')),
+                        const SnackBar(
+                          content: Text('Vui lòng nhập họ và tên.'),
+                        ),
                       );
                       return;
                     }
                     if (phone.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng nhập số điện thoại.')),
+                        const SnackBar(
+                          content: Text('Vui lòng nhập số điện thoại.'),
+                        ),
                       );
                       return;
                     }
@@ -637,7 +678,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     setState(() {
                       submitting = true;
                     });
-                    
+
                     final newContact = Contact(
                       id: '',
                       name: name,
@@ -648,9 +689,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       status: 'Chưa gửi',
                       createdAt: DateTime.now(),
                     );
-                    
+
                     final success = await notifier.addContact(newContact);
-                    
+
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                       if (success) {
@@ -658,9 +699,16 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           SnackBar(
                             content: Row(
                               children: [
-                                const Icon(Icons.check_circle_outline, color: Colors.white),
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  color: Colors.white,
+                                ),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text('Đã thêm khách hàng "$name" thành công.')),
+                                Expanded(
+                                  child: Text(
+                                    'Đã thêm khách hàng "$name" thành công.',
+                                  ),
+                                ),
                               ],
                             ),
                             backgroundColor: AppColors.success,
@@ -673,7 +721,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                               children: [
                                 Icon(Icons.error_outline, color: Colors.white),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text('Lỗi khi thêm khách hàng hoặc gói cước đã hết hạn.')),
+                                Expanded(
+                                  child: Text(
+                                    'Lỗi khi thêm khách hàng hoặc gói cước đã hết hạn.',
+                                  ),
+                                ),
                               ],
                             ),
                             backgroundColor: AppColors.error,
@@ -685,7 +737,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 ),
               ],
             );
-          }
+          },
         );
       },
     );

@@ -50,7 +50,8 @@ class FriendByPhoneState {
       messageText: messageText ?? this.messageText,
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
-      sendInboxAfterAccepted: sendInboxAfterAccepted ?? this.sendInboxAfterAccepted,
+      sendInboxAfterAccepted:
+          sendInboxAfterAccepted ?? this.sendInboxAfterAccepted,
       complianceError: complianceError,
     );
   }
@@ -63,11 +64,9 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
   List<String> _phones = [];
 
   FriendByPhoneNotifier(this._ref)
-      : super(const FriendByPhoneState(
-          isRunning: false,
-          logs: [],
-          phoneListText: '',
-        ));
+    : super(
+        const FriendByPhoneState(isRunning: false, logs: [], phoneListText: ''),
+      );
 
   ZaloIntegrationApi _getApi() {
     final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
@@ -159,7 +158,8 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
         ...state.logs,
         LogItem(
           timestamp: timeStr,
-          message: '[$_currentIndex] Đang tìm kiếm tài khoản Zalo cho SĐT: $currentPhone',
+          message:
+              '[$_currentIndex] Đang tìm kiếm tài khoản Zalo cho SĐT: $currentPhone',
           type: LogType.info,
         ),
       ],
@@ -169,7 +169,7 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
     _timer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final api = _getApi();
-        
+
         // Step 1: Search User profile
         final searchResult = await api.searchUserByPhone(
           phone: currentPhone,
@@ -180,14 +180,18 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
         if (searchResult['success'] == true && searchResult['user'] != null) {
           final user = searchResult['user'];
           final userId = user['uid']?.toString() ?? '';
-          final displayName = user['display_name']?.toString() ?? user['zalo_name']?.toString() ?? 'Khách Hàng';
-          
+          final displayName =
+              user['display_name']?.toString() ??
+              user['zalo_name']?.toString() ??
+              'Khách Hàng';
+
           state = state.copyWith(
             logs: [
               ...state.logs,
               LogItem(
                 timestamp: stepTimeStr,
-                message: 'Tìm thấy Zalo: "$displayName" (ID: $userId). Đang gửi lời mời kết bạn...',
+                message:
+                    'Tìm thấy Zalo: "$displayName" (ID: $userId). Đang gửi lời mời kết bạn...',
                 type: LogType.info,
               ),
             ],
@@ -201,17 +205,22 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
             accountId: state.selectedAccountId,
           );
 
-          final completionTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+          final completionTimeStr = DateFormat(
+            'HH:mm:ss',
+          ).format(DateTime.now());
           final accountLabel = _ref
-                  .read(zaloIntegrationProvider)
-                  .accounts
-                  .firstWhere((acc) => acc.id == state.selectedAccountId,
-                      orElse: () => const ZaloConnectedAccount(
-                          id: '',
-                          label: 'Tài khoản nguồn',
-                          connected: false,
-                          listenerRunning: false))
-                  .label;
+              .read(zaloIntegrationProvider)
+              .accounts
+              .firstWhere(
+                (acc) => acc.id == state.selectedAccountId,
+                orElse: () => const ZaloConnectedAccount(
+                  id: '',
+                  label: 'Tài khoản nguồn',
+                  connected: false,
+                  listenerRunning: false,
+                ),
+              )
+              .label;
 
           if (sendResult['success'] == true) {
             state = state.copyWith(
@@ -219,24 +228,29 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
                 ...state.logs,
                 LogItem(
                   timestamp: completionTimeStr,
-                  message: 'Gửi yêu cầu kết bạn THÀNH CÔNG đến: "$displayName" ($currentPhone)',
+                  message:
+                      'Gửi yêu cầu kết bạn THÀNH CÔNG đến: "$displayName" ($currentPhone)',
                   type: LogType.success,
                 ),
               ],
             );
 
             // Log to Friend History
-            _ref.read(friendHistoryProvider.notifier).addRecord(
-              FriendHistoryRecord(
-                id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
-                targetName: displayName,
-                targetPhone: currentPhone,
-                accountLabel: accountLabel,
-                timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
-                status: 'Thành công',
-                message: state.messageText,
-              ),
-            );
+            _ref
+                .read(friendHistoryProvider.notifier)
+                .addRecord(
+                  FriendHistoryRecord(
+                    id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                    targetName: displayName,
+                    targetPhone: currentPhone,
+                    accountLabel: accountLabel,
+                    timestamp: DateFormat(
+                      'dd/MM/yyyy HH:mm:ss',
+                    ).format(DateTime.now()),
+                    status: 'Thành công',
+                    message: state.messageText,
+                  ),
+                );
           } else {
             final errorMsg = sendResult['error'] ?? 'Gửi lời mời thất bại';
             state = state.copyWith(
@@ -250,26 +264,32 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
               ],
             );
 
-            _ref.read(friendHistoryProvider.notifier).addRecord(
-              FriendHistoryRecord(
-                id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
-                targetName: displayName,
-                targetPhone: currentPhone,
-                accountLabel: accountLabel,
-                timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
-                status: 'Thất bại',
-                message: '$errorMsg',
-              ),
-            );
+            _ref
+                .read(friendHistoryProvider.notifier)
+                .addRecord(
+                  FriendHistoryRecord(
+                    id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                    targetName: displayName,
+                    targetPhone: currentPhone,
+                    accountLabel: accountLabel,
+                    timestamp: DateFormat(
+                      'dd/MM/yyyy HH:mm:ss',
+                    ).format(DateTime.now()),
+                    status: 'Thất bại',
+                    message: '$errorMsg',
+                  ),
+                );
           }
         } else {
-          final errorMsg = searchResult['error'] ?? 'Không tìm thấy tài khoản Zalo liên kết';
+          final errorMsg =
+              searchResult['error'] ?? 'Không tìm thấy tài khoản Zalo liên kết';
           state = state.copyWith(
             logs: [
               ...state.logs,
               LogItem(
                 timestamp: stepTimeStr,
-                message: 'Không tìm thấy tài khoản Zalo cho SĐT: $currentPhone ($errorMsg)',
+                message:
+                    'Không tìm thấy tài khoản Zalo cho SĐT: $currentPhone ($errorMsg)',
                 type: LogType.warning,
               ),
             ],
@@ -292,7 +312,8 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
       _currentIndex++;
 
       if (_currentIndex < _phones.length) {
-        final delaySeconds = state.minDelay +
+        final delaySeconds =
+            state.minDelay +
             (state.maxDelay > state.minDelay
                 ? (state.maxDelay - state.minDelay)
                 : 0);
@@ -302,7 +323,8 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách ${delaySeconds}s trước khi xử lý SĐT tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi xử lý SĐT tiếp theo...',
               type: LogType.info,
             ),
           ],
@@ -348,5 +370,5 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
 
 final friendByPhoneProvider =
     StateNotifierProvider<FriendByPhoneNotifier, FriendByPhoneState>((ref) {
-  return FriendByPhoneNotifier(ref);
-});
+      return FriendByPhoneNotifier(ref);
+    });

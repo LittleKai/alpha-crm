@@ -69,9 +69,8 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
 
     final filteredFriends = state.friends.where((f) {
       final q = state.searchQuery.toLowerCase();
-      final matchesSearch = q.isEmpty ||
-          f.name.toLowerCase().contains(q) ||
-          f.phone.contains(q);
+      final matchesSearch =
+          q.isEmpty || f.name.toLowerCase().contains(q) || f.phone.contains(q);
 
       if (!matchesSearch) return false;
 
@@ -104,7 +103,12 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final useColumns = constraints.maxWidth >= 1100;
-                  final col1 = _buildConfigCard(state, notifier, activeAccounts, useColumns);
+                  final col1 = _buildConfigCard(
+                    state,
+                    notifier,
+                    activeAccounts,
+                    useColumns,
+                  );
                   final col2 = _buildFriendsCard(
                     state,
                     notifier,
@@ -190,44 +194,51 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
           const SizedBox(height: AppSpacing.xs),
           if (!hasActiveAccount) ...[
             const AppAlert(
-              message: 'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
+              message:
+                  'Chưa có tài khoản kết nối. Vui lòng vào Cài đặt để kết nối.',
               variant: AppAlertVariant.error,
             ),
             const SizedBox(height: AppSpacing.m),
           ] else ...[
             AppSelectField<String>(
-              value: accounts.any((acc) => acc.id == state.selectedAccountId) ? state.selectedAccountId : null,
+              value: accounts.any((acc) => acc.id == state.selectedAccountId)
+                  ? state.selectedAccountId
+                  : null,
               hintText: 'Chọn tài khoản...',
-              items: accounts
-                  .map(
-                    (acc) {
-                      final cleanLabel = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-                      return DropdownMenuItem(
-                        value: acc.id,
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: acc.avatarUrl.isNotEmpty ? NetworkImage(acc.avatarUrl) : null,
-                              child: acc.avatarUrl.isEmpty
-                                  ? Text(
-                                      cleanLabel.isNotEmpty ? cleanLabel[0].toUpperCase() : 'A',
-                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Text(
-                              cleanLabel,
-                              style: AppTextStyles.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                  .toList(),
+              items: accounts.map((acc) {
+                final cleanLabel = acc.label.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                );
+                return DropdownMenuItem(
+                  value: acc.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: acc.avatarUrl.isNotEmpty
+                            ? NetworkImage(acc.avatarUrl)
+                            : null,
+                        child: acc.avatarUrl.isEmpty
+                            ? Text(
+                                cleanLabel.isNotEmpty
+                                    ? cleanLabel[0].toUpperCase()
+                                    : 'A',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
             ),
             const SizedBox(height: AppSpacing.m),
@@ -371,7 +382,9 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                     value: _phoneFilter,
                     style: AppTextStyles.bodyMedium,
                     decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.s),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s,
+                      ),
                     ),
                     items: const [
                       DropdownMenuItem(
@@ -442,11 +455,15 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                             CircleAvatar(
                               radius: 14,
                               backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: friend.avatarUrl.isNotEmpty ? NetworkImage(friend.avatarUrl) : null,
+                              backgroundImage: friend.avatarUrl.isNotEmpty
+                                  ? NetworkImage(friend.avatarUrl)
+                                  : null,
                               child: friend.avatarUrl.isEmpty
                                   ? Text(
                                       friend.name.isNotEmpty
-                                          ? friend.name.substring(0, 1).toUpperCase()
+                                          ? friend.name
+                                                .substring(0, 1)
+                                                .toUpperCase()
                                           : 'F',
                                       style: const TextStyle(
                                         fontSize: 12,
