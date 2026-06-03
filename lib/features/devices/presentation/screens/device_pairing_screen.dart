@@ -42,10 +42,91 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     }
   }
 
+  Future<void> _confirmUnpairDevice(PairedDevice dev) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hủy Ghép Đôi Thiết Bị'),
+        content: Text(
+          'Bạn có chắc chắn muốn hủy ghép đôi thiết bị "${dev.displayName}" không? Điện thoại này sẽ không thể đồng bộ chiến dịch tự động qua PC này nữa.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Bỏ qua'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+            ),
+            child: const Text('Xác Nhận Hủy'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      ref.read(crmDeviceProvider.notifier).unpairDevice(dev.id);
+    }
+  }
+
+  void _simulateQrScanner() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final tokenController = TextEditingController();
+        return AlertDialog(
+          title: const Text('Mô phỏng Quét QR Code'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Trên điện thoại thật, camera sẽ mở để quét mã QR trên PC. \n\nĐể thử nghiệm, bạn hãy nhập mã ghép đôi (6 chữ số) hoặc paste chuỗi token ghép đôi từ PC vào đây:',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: tokenController,
+                decoration: const InputDecoration(
+                  labelText: 'Mã hoặc Token ghép đôi',
+                  hintText: 'Ví dụ: 123456',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final input = tokenController.text.trim();
+                Navigator.pop(context);
+                if (input.isNotEmpty) {
+                  _codeController.text = input;
+                  _submitPairingCode();
+                }
+              },
+              child: const Text('Xác nhận quét'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final deviceState = ref.watch(crmDeviceProvider);
     final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+
+    final bool showPairedState = isClient
+        ? deviceState.isPaired
+        : deviceState.pairedDevices.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -73,16 +154,16 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: deviceState.isPaired
+                          color: showPairedState
                               ? AppColors.successSoft
                               : AppColors.primarySoft,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          deviceState.isPaired
+                          showPairedState
                               ? Icons.phonelink_ring_rounded
                               : Icons.sensors_rounded,
-                          color: deviceState.isPaired
+                          color: showPairedState
                               ? AppColors.success
                               : AppColors.primary,
                           size: 48,
@@ -91,17 +172,23 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      deviceState.isPaired
-                          ? 'Thiết Bị Đã Được Ghép Đôi'
-                          : 'Yêu Cầu Ghép Đôi Thiết Bị',
+                      isClient
+                          ? (deviceState.isPaired ? 'Thiết Bị Đã Được Ghép Đôi' : 'Yêu Cầu Ghép Đôi Thiết Bị')
+                          : (deviceState.pairedDevices.isNotEmpty
+                              ? 'Thiết Bị Di Động Đã Kết Nối'
+                              : 'Chưa Có Thiết Bị Di Động Kết Nối'),
                       style: AppTextStyles.sectionTitle.copyWith(fontSize: 18),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      deviceState.isPaired
-                          ? 'Tài khoản của bạn đã được liên kết với một thiết bị. Hệ thống đã sẵn sàng điều phối lệnh chiến dịch.'
-                          : 'Để đồng bộ dữ liệu Zalo cá nhân từ máy tính sang điện thoại di động hoặc web, bạn cần ghép đôi thiết bị.',
+                      isClient
+                          ? (deviceState.isPaired
+                              ? 'Thiết bị di động của bạn đã liên kết thành công với máy chủ PC.'
+                              : 'Để đồng bộ dữ liệu Zalo cá nhân từ máy tính sang điện thoại di động, bạn cần ghép đôi thiết bị.')
+                          : (deviceState.pairedDevices.isNotEmpty
+                              ? 'Danh sách các thiết bị di động đang đồng bộ dữ liệu chiến dịch và Live Chat qua máy chủ này (Tối đa 3 thiết bị).'
+                              : 'Vui lòng sử dụng điện thoại di động quét mã QR hoặc nhập mã code bên dưới để liên kết thiết bị.'),
                       style: AppTextStyles.body,
                       textAlign: TextAlign.center,
                     ),
@@ -131,13 +218,51 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       const SizedBox(height: 24),
                     ],
 
-                    if (deviceState.isPaired) ...[
-                      _buildPairedState(deviceState),
-                    ] else ...[
-                      if (isClient) ...[
-                        _buildAndroidPairingInput(deviceState),
+                    if (isClient) ...[
+                      // Giao diện trên điện thoại di động
+                      if (deviceState.isPaired) ...[
+                        _buildPairedState(deviceState),
                       ] else ...[
+                        _buildAndroidPairingInput(deviceState),
+                      ],
+                    ] else ...[
+                      // Giao diện trên máy tính Windows
+                      if (deviceState.pairedDevices.isNotEmpty) ...[
+                        _buildPairedState(deviceState),
+                        const SizedBox(height: 24),
+                        const Divider(),
+                        const SizedBox(height: 24),
+                      ],
+                      if (deviceState.pairedDevices.length < 3) ...[
                         _buildWindowsHostPairing(deviceState),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.amberSoft,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.warning.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline_rounded,
+                                color: AppColors.warningText,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Đã kết nối đủ số lượng tối đa 3 thiết bị di động. Vui lòng hủy ghép đôi thiết bị cũ trước khi liên kết thêm thiết bị mới.',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    color: AppColors.warningText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ],
@@ -151,86 +276,186 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   }
 
   Widget _buildPairedState(CrmDeviceState state) {
+    final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+
+    if (isClient) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow(
+                  'Thiết bị di động của bạn:',
+                  'Đã liên kết thành công',
+                ),
+                const SizedBox(height: 12),
+                _buildInfoRow(
+                  'Trạng thái kết nối:',
+                  'Sẵn sàng hoạt động',
+                  isStatus: true,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: state.isLoading
+                ? null
+                : () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Hủy Ghép Đôi Thiết Bị'),
+                        content: const Text(
+                          'Cảnh báo: Nếu hủy ghép đôi thiết bị này, bạn sẽ không thể đồng bộ dữ liệu chiến dịch tự động qua Zalo cá nhân được nữa.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Đóng'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              ref
+                                  .read(crmDeviceProvider.notifier)
+                                  .unpairDevice();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error,
+                            ),
+                            child: const Text('Xác Nhận Hủy'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorSoft,
+              foregroundColor: AppColors.errorText,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: state.isLoading
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.errorText,
+                    ),
+                  )
+                : const Text('Hủy Ghép Đôi Thiết Bị Hiện Tại'),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            children: [
-              _buildInfoRow(
-                'Tên thiết bị liên kết:',
-                state.pairedDeviceName ?? 'Không rõ',
-              ),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                'Hệ điều hành:',
-                state.pairedDeviceOs ?? 'Không rõ',
-              ),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                'Trạng thái kết nối:',
-                'Sẵn sàng hoạt động',
-                isStatus: true,
-              ),
-            ],
+        Text(
+          'THIẾT BỊ DI ĐỘNG ĐANG LIÊN KẾT (${state.pairedDevices.length}/3)',
+          style: AppTextStyles.caption.copyWith(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: AppColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: state.isLoading
-              ? null
-              : () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Hủy Ghép Đôi Thiết Bị'),
-                      content: const Text(
-                        'Cảnh báo: Nếu hủy ghép đôi thiết bị này, bạn sẽ không thể đồng bộ chiến dịch tự động qua Zalo cá nhân được nữa cho đến khi thực hiện ghép đôi lại.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Đóng'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            ref.read(crmDeviceProvider.notifier).unpairDevice();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.error,
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: state.pairedDevices.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final dev = state.pairedDevices[index];
+            final devIcon = dev.platform.toLowerCase().contains('ios') ||
+                    dev.platform.toLowerCase().contains('apple')
+                ? Icons.phone_iphone_rounded
+                : Icons.phone_android_rounded;
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: AppColors.primarySoft,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      devIcon,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dev.displayName,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
-                          child: const Text('Xác Nhận Hủy'),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: AppColors.success,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Đang kết nối (${dev.platform})',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.successText,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  );
-                },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.errorSoft,
-            foregroundColor: AppColors.errorText,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          child: state.isLoading
-              ? const SizedBox(
-                  height: 16,
-                  width: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.errorText,
                   ),
-                )
-              : const Text('Hủy Ghép Đôi Thiết Bị Hiện Tại'),
+                  IconButton(
+                    tooltip: 'Hủy kết nối thiết bị này',
+                    icon: const Icon(
+                      Icons.link_off_rounded,
+                      color: AppColors.error,
+                      size: 20,
+                    ),
+                    onPressed: state.isLoading
+                        ? null
+                        : () => _confirmUnpairDevice(dev),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
@@ -339,6 +564,27 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                   )
                 : const Text('Xác Nhận Kết Nối'),
           ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'HOẶC',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+            ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => _simulateQrScanner(),
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            label: const Text('Quét mã QR từ màn hình PC'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: const BorderSide(color: AppColors.primary),
+              foregroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(12),
@@ -374,8 +620,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading
                 ? null
                 : () => ref
-                      .read(crmDeviceProvider.notifier)
-                      .startPairingProcess(),
+                    .read(crmDeviceProvider.notifier)
+                    .startPairingProcess(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -502,8 +748,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading
                 ? null
                 : () => ref
-                      .read(crmDeviceProvider.notifier)
-                      .startPairingProcess(),
+                    .read(crmDeviceProvider.notifier)
+                    .startPairingProcess(),
             child: const Text('Tạo lại mã ghép đôi mới'),
           ),
         ],

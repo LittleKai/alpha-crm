@@ -165,7 +165,7 @@ npm start
 npm run dev
 ```
 
-Dịch vụ mặc định sẽ lắng nghe tại cổng `http://localhost:8787`.
+Dịch vụ mặc định sẽ lắng nghe tại cổng `http://127.0.0.1:8787`.
 
 ---
 
@@ -203,7 +203,7 @@ Backend cung cấp các API endpoints chuẩn hóa sau để Flutter CRM UI và 
 
 Operator đăng nhập ứng dụng Alpha CRM và điều hướng đến màn hình **Settings (Cài đặt hệ thống) → Kiểm soát rủi ro Zalo**:
 
-*   **Zalo Backend Base URL:** Địa chỉ chạy của Node.js service (Ví dụ: `http://localhost:8787`). Hệ thống sẽ tự động gửi request `/health` để kiểm tra độ trễ kết nối.
+*   **Zalo Backend Base URL:** Địa chỉ chạy của Node.js service (Ví dụ: `http://127.0.0.1:8787`). Hệ thống sẽ tự động gửi request `/health` để kiểm tra độ trễ kết nối.
 *   **Preferred Channel:** Chọn lựa chế độ muốn áp dụng (Personal Zca, Official OA, Mock).
 *   **Tham số rủi ro:** Bật/tắt và cấu hình các giá trị số lượng batch tối đa, trần gửi hàng ngày, giờ yên lặng tương ứng với cài đặt backend.
 

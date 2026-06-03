@@ -213,6 +213,12 @@ Container(
 ```
 
 ### UI Rules
+### Dialogs
+- Do not use the default `AlertDialog` for complex forms or selections.
+- Use `Dialog` widget with a custom `Container`, using `AppColors.surface` and `AppSpacing.borderRadiusL`.
+- Provide a clear header with an icon, a title (e.g. `AppTextStyles.h2`), optional action buttons (like Add), and a close button `IconButton(icon: Icon(Icons.close))`.
+- Separate header and content with a `Divider`.
+
 
 - Desktop CRM layout should be dense, structured, and work-focused.
 - Cards use white surface, `AppColors.border`, and radius near 8px.

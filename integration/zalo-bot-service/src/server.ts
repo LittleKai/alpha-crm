@@ -14,7 +14,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { config } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
 import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, initializeZalo, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
-import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync } from 'fs';
+import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync, mkdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { projectRoot } from './config.js';
 import { Zalo, LoginQRCallbackEventType } from 'zca-js';
@@ -624,9 +624,13 @@ const server = createServer(async (req, res) => {
   }
 
   // GET /api/zalo/friends
-  if (method === 'GET' && url === '/api/zalo/friends') {
+  if (method === 'GET' && url.startsWith('/api/zalo/friends')) {
     try {
-      const friends = await getAllFriends();
+      const query = url.split('?')[1] || '';
+      const params = new URLSearchParams(query);
+      const accountId = params.get('accountId') || undefined;
+
+      const friends = await getAllFriends(accountId);
       json(res, 200, { success: true, friends });
     } catch (err) {
       json(res, 500, { success: false, error: err instanceof Error ? err.message : String(err) });
@@ -875,24 +879,51 @@ const server = createServer(async (req, res) => {
   json(res, 404, { error: 'Not found' });
 });
 
-server.listen(config.localBindPort, config.localBindHost, async () => {
-  console.log(`
+function listenOnPort(port: number): void {
+  server.listen(port, config.localBindHost, async () => {
+    console.log(`
 ╔══════════════════════════════════════════════╗
 ║  Alpha CRM — Zalo Bot Service v${VERSION}       ║
-║  Running on http://${config.localBindHost}:${config.localBindPort}          ║
+║  Running on http://${config.localBindHost}:${port}          ║
 ║  Channel: ${config.channelMode.padEnd(34)}║
 ║  Environment: ${config.nodeEnv.padEnd(30)}║
 ║  Personal Automation: ${(config.allowPersonalAccountAutomation ? 'ENABLED' : 'DISABLED').padEnd(23)}║
 ║  Friend Automation: ${(config.allowFriendAutomation ? 'ENABLED' : 'DISABLED').padEnd(25)}║
 ║  Group Automation: ${(config.allowGroupAutomation ? 'ENABLED' : 'DISABLED').padEnd(26)}║
 ╚══════════════════════════════════════════════╝
-  `);
-  try {
-    await initializeZalo();
-    console.log('[server] Zalo integration initialized successfully.');
-    // Start outbound agent connection loops
-    startAgentRunner();
-  } catch (err) {
-    console.error('[server] Failed to initialize Zalo integration:', err);
-  }
-});
+    `);
+
+    // Write the active port to .data/active-port.json
+    try {
+      const dataDir = join(projectRoot, '.data');
+      if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+      }
+      writeFileSync(join(dataDir, 'active-port.json'), JSON.stringify({ port }));
+      console.log(`[server] Wrote active port ${port} to .data/active-port.json`);
+    } catch (writeErr) {
+      console.error('[server] Failed to write active-port.json:', writeErr);
+    }
+
+    try {
+      await initializeZalo();
+      console.log('[server] Zalo integration initialized successfully.');
+      // Start outbound agent connection loops
+      startAgentRunner();
+    } catch (err) {
+      console.error('[server] Failed to initialize Zalo integration:', err);
+    }
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`[server] Port ${port} is in use, trying next port ${port + 1}...`);
+      server.removeAllListeners('error');
+      listenOnPort(port + 1);
+    } else {
+      console.error('[server] Server error:', err);
+    }
+  });
+}
+
+listenOnPort(config.localBindPort);

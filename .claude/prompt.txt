@@ -1,0 +1,76 @@
+
+
+lib/features/settings/presentation/screens/settings_screen.dart:507:14: Error: The final variable 'showAddButton' must be
+initialized.
+Try adding an initializer ('= expression') to the declaration.
+  final bool showAddButton;
+             ^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:509:3: Error: Can't have modifier 'const' here.
+Try removing 'const'.
+  const _AccountCard({
+  ^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:516:5: Error: Expected a function body or '=>'.
+Try adding {}.
+  });
+    ^
+lib/features/settings/presentation/screens/settings_screen.dart:676:1: Error: Expected a declaration, but got '}'.
+}
+^
+lib/features/settings/presentation/screens/settings_screen.dart:507:14: Error: Field 'showAddButton' should be initialized
+because its type 'bool' doesn't allow null.
+  final bool showAddButton;
+             ^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:510:14: Error: Field formal parameters can only be used in a
+constructor.
+Try removing 'this.'.
+    required this.connectedCount,
+             ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:511:14: Error: Field formal parameters can only be used in a  
+constructor.
+Try removing 'this.'.
+    required this.accounts,
+             ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:512:14: Error: Field formal parameters can only be used in a  
+constructor.
+Try removing 'this.'.
+    required this.onAddAccount,
+             ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:513:14: Error: Field formal parameters can only be used in a  
+constructor.
+Try removing 'this.'.
+    required this.onConfigureAccount,
+             ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:514:14: Error: Field formal parameters can only be used in a  
+constructor.
+Try removing 'this.'.
+    required this.onDeleteAccount,
+             ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:515:5: Error: Field formal parameters can only be used in a   
+constructor.
+Try removing 'this.'.
+    this.showAddButton = true,
+    ^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:535:26: Error: Undefined name 'connectedCount'.
+                label: '$connectedCount đang kết nối',
+                         ^^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:536:26: Error: Undefined name 'connectedCount'.
+                variant: connectedCount > 0
+                         ^^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:548:15: Error: Undefined name 'accounts'.
+          if (accounts.isNotEmpty) ...[
+              ^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:560:26: Error: Undefined name 'accounts'.
+              itemCount: accounts.length,
+                         ^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:564:29: Error: Undefined name 'accounts'.
+                final acc = accounts[index];
+                            ^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:643:42: Error: Method not found: 'onConfigureAccount'.        
+                        onPressed: () => onConfigureAccount(acc),
+                                         ^^^^^^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:652:42: Error: Method not found: 'onDeleteAccount'.
+                        onPressed: () => onDeleteAccount(acc),
+                                         ^^^^^^^^^^^^^^^
+lib/features/settings/presentation/screens/settings_screen.dart:668:28: Error: Undefined name 'onAddAccount'.
+                onPressed: onAddAccount,
+                           ^^^^^^^^^^^^

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'dart:convert';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
@@ -14,9 +17,12 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/bulk_messaging_provider.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
+import '../../../../groups/providers/invite_to_group_provider.dart';
+import '../../../../groups/providers/scan_members_provider.dart';
 import '../../../../customers/providers/customers_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../../../mock/mock_contacts.dart';
+import '../../../../../mock/mock_campaigns.dart';
 
 class BulkMessagingScreen extends ConsumerStatefulWidget {
   const BulkMessagingScreen({super.key});
@@ -109,6 +115,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
                     ),
                     _ConfigPanel(
                       state: state,
+                      onSelectTemplate: _showTemplateDialog,
                       campaignNameController: _campaignNameController,
                       messageController: _messageController,
                       minDelayController: _minDelayController,
@@ -153,11 +160,38 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
     );
   }
 
-  void _importDemoRecipients() {
-    _recipientsController.text = '0901234567\n0987654321\n0912345678';
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã nhập 3 SĐT mẫu vào danh sách.')),
+
+  void _showTemplateDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AppTemplateDialog(
+        onSelect: (title, content) {
+          _campaignNameController.text = title;
+          _messageController.text = content;
+        },
+      ),
     );
+  }
+
+  Future<void> _importDemoRecipients() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final contents = await file.readAsString();
+        _recipientsController.text = contents;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã nhập danh sách từ file: ${result.files.single.name}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi khi đọc file: $e')),
+      );
+    }
   }
 
   void _showPlaceholder() {
@@ -200,11 +234,28 @@ class _Header extends ConsumerWidget {
           SizedBox(
             width: 240,
             child: AppSelectField<String>(
-              value: accounts.any((acc) => acc.id == state.selectedAccount?.id)
+              value: state.selectedAccount?.id == 'all_accounts'
+                  ? 'all_accounts'
+                  : accounts.any((acc) => acc.id == state.selectedAccount?.id)
                   ? state.selectedAccount?.id
                   : (accounts.isNotEmpty ? accounts.first.id : null),
               hintText: 'Chọn tài khoản Zalo...',
-              items: accounts.map((acc) {
+              items: [
+                DropdownMenuItem(
+                  value: 'all_accounts',
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.primarySoft,
+                        child: Icon(Icons.people, size: 14, color: AppColors.primary),
+                      ),
+                      SizedBox(width: AppSpacing.s),
+                      Text('Toàn bộ tài khoản', style: AppTextStyles.bodyMedium),
+                    ],
+                  ),
+                ),
+                ...accounts.map((acc) {
                 final cleanLabel = acc.name.replaceAll(
                   RegExp(r'\s*\([^)]*\)$'),
                   '',
@@ -249,10 +300,21 @@ class _Header extends ConsumerWidget {
                   ),
                 );
               }).toList(),
+              ],
               onChanged: state.isSending || state.isPolling
                   ? null
                   : (val) {
-                      if (val != null) {
+                      if (val == 'all_accounts') {
+                        notifier.selectAccount(
+                          const ZaloAccount(
+                            id: 'all_accounts',
+                            name: 'Toàn bộ tài khoản',
+                            phone: '',
+                            type: 'all',
+                            isConnected: true,
+                          ),
+                        );
+                      } else if (val != null) {
                         final acc = state.accounts.firstWhere(
                           (a) => a.id == val,
                         );
@@ -352,26 +414,48 @@ class _TargetPanel extends ConsumerWidget {
       );
     } else if (selectedTab == 1) {
       final groupsState = ref.watch(managedGroupsProvider);
+      final accountId = ref.watch(bulkMessagingProvider).selectedAccount?.id;
+      // Synchronize account selection
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (accountId != null && accountId != 'all_accounts' && groupsState.selectedAccountId != accountId) {
+          ref.read(managedGroupsProvider.notifier).setSelectedAccountId(accountId);
+        }
+      });
+
       final groupItems = groupsState.groups
+          .where((g) => accountId == null || accountId == 'all_accounts' || g.accountId == accountId || (accountId.length >= 4 && g.name.startsWith('[${accountId.substring(accountId.length - 4)}]')))
           .map(
             (g) => DropdownMenuItem<ManagedZaloGroup>(
               value: g,
-              child: Text(
-                '${g.name} (${g.memberCount} thành viên)',
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: AppColors.surfaceMuted,
+                    backgroundImage: g.avatarUrl.isNotEmpty ? NetworkImage(g.avatarUrl) : null,
+                    child: g.avatarUrl.isEmpty ? Text(g.name.isNotEmpty ? g.name[0] : 'G', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)) : null,
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text(
+                      '${g.name} (${g.memberCount} thành viên)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           )
           .toList();
 
-      filterField = SizedBox(
-        width: 200,
+      filterField = Expanded(
         child: AppSelectField<ManagedZaloGroup>(
           hintText: 'Chọn nhóm Zalo',
           items: groupItems,
           onChanged: (group) {
             if (group != null) {
               recipientsController.text = group.groupId;
+              ref.read(scanMembersProvider.notifier).selectSavedGroup(group.id);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Đã chọn nhóm: ${group.name}')),
               );
@@ -386,47 +470,132 @@ class _TargetPanel extends ConsumerWidget {
         onPressed: () => ref.read(managedGroupsProvider.notifier).refresh(),
       );
     } else if (selectedTab == 2) {
-      final customersState = ref.watch(customersProvider);
-      final contactItems = customersState.contacts
-          .map(
-            (c) => DropdownMenuItem<Contact>(
-              value: c,
-              child: Text(
-                '${c.name} (${c.phone})',
-                overflow: TextOverflow.ellipsis,
+      final friendsState = ref.watch(inviteToGroupProvider);
+      final visibleContacts = friendsState.friends.where((c) {
+        final q = searchController.text.toLowerCase();
+        return q.isEmpty || c.name.toLowerCase().contains(q) || c.phone.contains(q);
+      }).toList();
+      
+      // Synchronize account selection and load friends
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final currentAccount = ref.read(bulkMessagingProvider).selectedAccount?.id;
+        final inviteNotifier = ref.read(inviteToGroupProvider.notifier);
+        
+        if (currentAccount != null && currentAccount != 'all_accounts' && friendsState.selectedAccountId != currentAccount) {
+           inviteNotifier.setAccount(currentAccount);
+           inviteNotifier.loadFriends();
+        } else if (friendsState.friends.isEmpty && !friendsState.isRunning) {
+           inviteNotifier.loadFriends();
+        }
+      });
+      
+      final currentPhones = recipientsController.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+      // Assume friend ID or phone. Since friends might not have phone, use ID for recipientsController in this tab.
+      final allSelected = visibleContacts.isNotEmpty && visibleContacts.every((c) => currentPhones.contains(c.id));
+
+      return AppCard(
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppSearchField(
+                      controller: searchController,
+                      hintText: 'Tìm kiếm bạn bè...',
+                      onChanged: (val) {
+                        // trigger rebuild
+                        (context as Element).markNeedsBuild();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  AppButton(
+                    text: 'Tải lại danh bạ',
+                    icon: Icons.sync,
+                    variant: AppButtonVariant.outline,
+                    onPressed: () => ref.read(inviteToGroupProvider.notifier).loadFriends(),
+                  ),
+                ],
               ),
             ),
-          )
-          .toList();
-
-      filterField = SizedBox(
-        width: 200,
-        child: AppSelectField<Contact>(
-          hintText: 'Chọn liên hệ',
-          items: contactItems,
-          onChanged: (contact) {
-            if (contact != null) {
-              final current = recipientsController.text.trim();
-              if (current.isEmpty) {
-                recipientsController.text = contact.phone;
-              } else {
-                final lines = current.split('\n').map((l) => l.trim()).toList();
-                if (!lines.contains(contact.phone)) {
-                  recipientsController.text = '$current\n${contact.phone}';
+            const Divider(height: 1, color: AppColors.borderSoft),
+            CheckboxListTile(
+              title: Text(
+                'Chọn tất cả bạn bè (${visibleContacts.length})',
+                style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+              ),
+              value: allSelected,
+              enabled: !isSending,
+              onChanged: (val) {
+                if (val == true) {
+                  final newPhones = currentPhones.union(visibleContacts.map((c) => c.id).where((p) => p.isNotEmpty).toSet());
+                  recipientsController.text = newPhones.join('\n');
+                } else {
+                  final newPhones = currentPhones.difference(visibleContacts.map((c) => c.id).toSet());
+                  recipientsController.text = newPhones.join('\n');
                 }
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Đã thêm liên hệ: ${contact.name}')),
-              );
-            }
-          },
+                (context as Element).markNeedsBuild();
+              },
+              activeColor: AppColors.primary,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+            ),
+            const Divider(height: 1, color: AppColors.borderSoft),
+            Expanded(
+              child: ListView.separated(
+                itemCount: visibleContacts.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderSoft),
+                itemBuilder: (context, index) {
+                  final contact = visibleContacts[index];
+                  final isChecked = currentPhones.contains(contact.id);
+                  return CheckboxListTile(
+                    title: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: AppColors.surfaceMuted,
+                          backgroundImage: contact.avatarUrl.isNotEmpty ? NetworkImage(contact.avatarUrl) : null,
+                          child: contact.avatarUrl.isEmpty ? Text(
+                            contact.name.isNotEmpty ? contact.name.substring(0, 1).toUpperCase() : 'F',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                          ) : null,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: Text(contact.name, style: AppTextStyles.bodyMedium),
+                        ),
+                      ],
+                    ),
+                    subtitle: contact.phone.isNotEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 36.0),
+                            child: Text(contact.phone, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                          )
+                        : null,
+                    value: isChecked,
+                    enabled: !isSending,
+                    onChanged: (val) {
+                      if (val == true) {
+                        currentPhones.add(contact.id);
+                      } else {
+                        currentPhones.remove(contact.id);
+                      }
+                      recipientsController.text = currentPhones.join('\n');
+                      (context as Element).markNeedsBuild();
+                    },
+                    activeColor: AppColors.primary,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-      );
-      actionButton = AppButton(
-        text: 'Tải lại danh bạ',
-        icon: Icons.sync,
-        variant: AppButtonVariant.outline,
-        onPressed: () => ref.read(customersProvider.notifier).loadContacts(),
       );
     } else if (selectedTab == 3) {
       final customersState = ref.watch(customersProvider);
@@ -491,11 +660,33 @@ class _TargetPanel extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s),
-                AppButton(
-                  text: 'Lọc',
-                  icon: Icons.filter_alt_outlined,
-                  variant: AppButtonVariant.outline,
-                  onPressed: onPlaceholder,
+                PopupMenuButton<String>(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: AppSpacing.borderRadiusS,
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.filter_alt_outlined, size: 18),
+                        SizedBox(width: 8),
+                        Text('Lọc'),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'all', child: Text('Tất cả')),
+                    const PopupMenuItem(value: 'unsent', child: Text('Chưa nhắn tin')),
+                    const PopupMenuItem(value: 'success', child: Text('Thành công')),
+                    const PopupMenuItem(value: 'failure', child: Text('Thất bại')),
+                  ],
+                  onSelected: (value) {
+                    // Filter action
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Đã chọn lọc: $value')),
+                    );
+                  },
                 ),
                 const SizedBox(width: AppSpacing.s),
                 AppButton(
@@ -521,10 +712,71 @@ class _TargetPanel extends ConsumerWidget {
           Expanded(
             child: recipientsController.text.trim().isEmpty
                 ? const _ManualPhoneEmpty()
-                : _RecipientPreview(controller: recipientsController),
+                : (selectedTab == 1 
+                     ? _GroupMembersPreview(groupId: recipientsController.text.trim()) 
+                     : _RecipientPreview(controller: recipientsController)),
           ),
         ],
       ),
+    );
+  }
+}
+
+
+class _GroupMembersPreview extends ConsumerWidget {
+  final String groupId;
+
+  const _GroupMembersPreview({required this.groupId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(scanMembersProvider);
+    
+    if (state.isScanning) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (state.members.isEmpty) {
+      return Center(
+        child: Text('Không tìm thấy thành viên (hoặc đang chờ tải).', 
+          style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+          child: Text('Thành viên nhóm (${state.members.length}):', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+        ),
+        const Divider(height: 1, color: AppColors.borderSoft),
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            itemCount: state.members.length,
+            separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderSoft),
+            itemBuilder: (context, index) {
+              final member = state.members[index];
+              return ListTile(
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppColors.surfaceMuted,
+                  backgroundImage: member.avatarUrl.isNotEmpty ? NetworkImage(member.avatarUrl) : null,
+                  child: member.avatarUrl.isEmpty ? Text(
+                    member.name.isNotEmpty ? member.name.substring(0, 1).toUpperCase() : 'M',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                  ) : null,
+                ),
+                title: Text(member.name, style: AppTextStyles.bodyMedium),
+                subtitle: member.role != 'Thành viên' ? Text(member.role, style: AppTextStyles.caption.copyWith(color: AppColors.primary)) : null,
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -620,6 +872,7 @@ class _ConfigPanel extends StatelessWidget {
   final TextEditingController maxDelayController;
   final BulkMessagingNotifier notifier;
   final VoidCallback onPlaceholder;
+  final VoidCallback onSelectTemplate;
 
   const _ConfigPanel({
     required this.state,
@@ -629,6 +882,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.maxDelayController,
     required this.notifier,
     required this.onPlaceholder,
+    required this.onSelectTemplate,
   });
 
   @override
@@ -751,12 +1005,12 @@ class _ConfigPanel extends StatelessWidget {
                         text: 'Chọn tin mẫu',
                         icon: Icons.inventory_2_outlined,
                         variant: AppButtonVariant.outline,
-                        onPressed: onPlaceholder,
+                        onPressed: onSelectTemplate,
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s),
-                  const _EditorToolbar(),
+                  _EditorToolbar(controller: messageController),
                   TextField(
                     controller: messageController,
                     maxLines: 7,
@@ -773,26 +1027,31 @@ class _ConfigPanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: const [
-                      _TokenChip('{{tên}}'),
-                      _TokenChip('{{sdt}}'),
-                      _TokenChip('{{nhóm}}'),
-                      _TokenChip('Spintax xoay vòng'),
+                  Row(
+                    children: [
+                      AppButton(
+                        text: 'Chọn hình ảnh/file',
+                        icon: Icons.attach_file,
+                        variant: AppButtonVariant.outline,
+                        onPressed: () async {
+                          final result = await FilePicker.platform.pickFiles();
+                          if (result != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Đã chọn: ${result.files.single.name}')),
+                            );
+                          }
+                        },
+                      ),
                     ],
                   ),
+
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.m),
-            _Section(
-              title: '3. KIỂM SOÁT VÀ THỰC THI',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Consumer(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              child: Consumer(
                     builder: (context, ref, child) {
                       final state = ref.watch(bulkMessagingProvider);
                       final notifier = ref.read(bulkMessagingProvider.notifier);
@@ -880,9 +1139,8 @@ class _ConfigPanel extends StatelessWidget {
                       );
                     },
                   ),
-                ],
-              ),
             ),
+            const SizedBox(height: AppSpacing.m),
           ],
         ),
       ),
@@ -1005,7 +1263,40 @@ class _NumberField extends StatelessWidget {
 }
 
 class _EditorToolbar extends StatelessWidget {
-  const _EditorToolbar();
+  final TextEditingController controller;
+
+  const _EditorToolbar({required this.controller});
+
+  void _insertText(String text) {
+    final textLength = controller.text.length;
+    final selection = controller.selection;
+    final start = selection.start != -1 ? selection.start : textLength;
+    final end = selection.end != -1 ? selection.end : textLength;
+    
+    final newText = controller.text.replaceRange(start, end, text);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+  }
+
+  void _wrapText(BuildContext context, String wrapStr) {
+    final selection = controller.selection;
+    if (selection.start == -1 || selection.end == -1 || selection.start == selection.end) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng bôi đen chữ cần định dạng.')),
+      );
+      return;
+    }
+    final start = selection.start;
+    final end = selection.end;
+    final selectedText = controller.text.substring(start, end);
+    final newText = controller.text.replaceRange(start, end, wrapStr + selectedText + wrapStr);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: end + wrapStr.length * 2),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1027,33 +1318,57 @@ class _EditorToolbar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            onPressed: null,
+            onPressed: () => _wrapText(context, '**'),
             icon: const Icon(Icons.format_bold, size: 16),
             tooltip: 'Đậm',
           ),
           IconButton(
-            onPressed: null,
+            onPressed: () => _wrapText(context, '*'),
             icon: const Icon(Icons.format_italic, size: 16),
             tooltip: 'Nghiêng',
           ),
           IconButton(
-            onPressed: null,
+            onPressed: () => _wrapText(context, '__'),
             icon: const Icon(Icons.format_underlined, size: 16),
             tooltip: 'Gạch chân',
           ),
           IconButton(
-            onPressed: null,
+            onPressed: () => _wrapText(context, '~~'),
             icon: const Icon(Icons.strikethrough_s, size: 16),
             tooltip: 'Gạch ngang',
           ),
           const VerticalDivider(width: AppSpacing.m),
-          const _MiniChip(icon: Icons.person, label: 'Tên'),
+          _MiniChip(
+            icon: Icons.person, 
+            label: 'Tên', 
+            tooltip: 'Chèn tên người nhận',
+            color: Colors.blue,
+            onTap: () => _insertText('{{tên}}'),
+          ),
           const SizedBox(width: AppSpacing.xs),
-          const _MiniChip(icon: Icons.phone, label: 'SĐT'),
+          _MiniChip(
+            icon: Icons.phone, 
+            label: 'SĐT', 
+            tooltip: 'Chèn số điện thoại người nhận',
+            color: Colors.green,
+            onTap: () => _insertText('{{sdt}}'),
+          ),
           const SizedBox(width: AppSpacing.xs),
-          const _MiniChip(icon: Icons.group, label: 'Nhóm'),
+          _MiniChip(
+            icon: Icons.group, 
+            label: 'Nhóm', 
+            tooltip: 'Chèn tên nhóm',
+            color: Colors.orange,
+            onTap: () => _insertText('{{nhóm}}'),
+          ),
           const SizedBox(width: AppSpacing.xs),
-          const _MiniChip(icon: Icons.shuffle, label: 'Spintax'),
+          _MiniChip(
+            icon: Icons.shuffle, 
+            label: 'Spintax', 
+            tooltip: 'Trộn văn bản ngẫu nhiên (VD: {Chào|Hi} bạn)',
+            color: Colors.purple,
+            onTap: () => _insertText('{A|B|C}'),
+          ),
         ],
       ),
     );
@@ -1063,66 +1378,100 @@ class _EditorToolbar extends StatelessWidget {
 class _MiniChip extends StatelessWidget {
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
+  final String tooltip;
+  final Color color;
 
-  const _MiniChip({required this.icon, required this.label});
+  const _MiniChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.tooltip,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        border: Border.all(color: AppColors.primaryBorder),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: AppSpacing.borderRadiusS,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppColors.primary),
-          const SizedBox(width: 2),
-          Text(
-            label,
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.primary,
-              fontSize: 11,
-            ),
+        child: Container(
+          height: 22,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+            borderRadius: AppSpacing.borderRadiusS,
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 2),
+              Text(
+                label,
+                style: AppTextStyles.caption.copyWith(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _TokenChip extends StatelessWidget {
-  final String label;
-
-  const _TokenChip(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        border: Border.all(color: AppColors.primaryBorder),
-        borderRadius: AppSpacing.borderRadiusS,
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.caption.copyWith(color: AppColors.primary),
-      ),
-    );
-  }
-}
 
 class _ZaloPreview extends StatelessWidget {
   final String message;
 
   const _ZaloPreview({required this.message});
+
+  List<TextSpan> _parseFormattedText(String text) {
+    String processed = text
+      .replaceAll('{{tên}}', 'Anh/Chị Khách Hàng')
+      .replaceAll('{{sdt}}', '0901234567')
+      .replaceAll('{{nhóm}}', 'Nhóm Zalo Demo')
+      .replaceAll('{A|B|C}', 'Chào');
+      
+    final List<TextSpan> spans = [];
+    final pattern = RegExp(r'(\*\*(.*?)\*\*|\*(.*?)\*|__(.*?)__|~~(.*?)~~)');
+    int lastMatchEnd = 0;
+
+    for (final match in pattern.allMatches(processed)) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: processed.substring(lastMatchEnd, match.start)));
+      }
+
+      final bold = match.group(2);
+      final italic = match.group(3);
+      final underline = match.group(4);
+      final strike = match.group(5);
+
+      if (bold != null) {
+        spans.add(TextSpan(text: bold, style: const TextStyle(fontWeight: FontWeight.bold)));
+      } else if (italic != null) {
+        spans.add(TextSpan(text: italic, style: const TextStyle(fontStyle: FontStyle.italic)));
+      } else if (underline != null) {
+        spans.add(TextSpan(text: underline, style: const TextStyle(decoration: TextDecoration.underline)));
+      } else if (strike != null) {
+        spans.add(TextSpan(text: strike, style: const TextStyle(decoration: TextDecoration.lineThrough)));
+      }
+
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < processed.length) {
+      spans.add(TextSpan(text: processed.substring(lastMatchEnd)));
+    }
+
+    return spans;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1225,7 +1574,12 @@ class _ZaloPreview extends StatelessWidget {
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(AppSpacing.s),
-                                child: Text(message, style: AppTextStyles.body),
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: AppTextStyles.body,
+                                    children: _parseFormattedText(message),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -1254,6 +1608,208 @@ class _ZaloPreview extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class AppTemplateDialog extends StatefulWidget {
+  final void Function(String title, String content) onSelect;
+
+  const AppTemplateDialog({super.key, required this.onSelect});
+
+  @override
+  State<AppTemplateDialog> createState() => _AppTemplateDialogState();
+}
+
+class _AppTemplateDialogState extends State<AppTemplateDialog> {
+  void _showAddTemplateDialog() {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 500,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: AppSpacing.borderRadiusM,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add_box_outlined, color: AppColors.primary, size: 28),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text('Thêm tin mẫu mới', style: AppTextStyles.pageTitle),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Tên chiến dịch / Tên mẫu *', style: AppTextStyles.label),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextField(
+                        controller: titleController,
+                        style: AppTextStyles.body,
+                        decoration: const InputDecoration(
+                          hintText: 'VD: Khuyến mãi ngày lễ',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Text('Nội dung tin nhắn *', style: AppTextStyles.label),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextField(
+                        controller: contentController,
+                        style: AppTextStyles.body,
+                        maxLines: 5,
+                        minLines: 3,
+                        decoration: const InputDecoration(
+                          hintText: 'Nhập nội dung mẫu...',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text('Hủy', style: AppTextStyles.bodyMedium),
+                          ),
+                          const SizedBox(width: AppSpacing.s),
+                          AppButton(
+                            text: 'Lưu tin mẫu',
+                            icon: Icons.save,
+                            variant: AppButtonVariant.primary,
+                            onPressed: () {
+                              final t = titleController.text.trim();
+                              final c = contentController.text.trim();
+                              if (t.isNotEmpty && c.isNotEmpty) {
+                                setState(() {
+                                  templates.insert(0, {'title': t, 'content': c});
+                                });
+                                Navigator.pop(ctx);
+                              } else {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(content: Text('Vui lòng nhập đầy đủ Tên và Nội dung')),
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  final List<Map<String, String>> templates = [
+    {'title': 'Chúc mừng sinh nhật', 'content': 'Chào {{tên}}, chúc bạn một ngày sinh nhật thật vui vẻ và hạnh phúc!'},
+    {'title': 'Tri ân khách hàng', 'content': 'Cảm ơn {{tên}} đã đồng hành cùng chúng tôi trong thời gian qua. Tặng bạn mã giảm giá 20%.'},
+    {'title': 'Thông báo offline', 'content': 'Thông báo: Nhóm {{nhóm}} sẽ có buổi offline vào cuối tuần này. Mọi người sắp xếp thời gian nhé!'},
+    {'title': 'Giới thiệu sản phẩm', 'content': '{Chào|Hi|Hello} {{tên}}, bạn có quan tâm đến sản phẩm mới của bên mình không?'}
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 600,
+        height: 500,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppSpacing.borderRadiusM,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.l),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2, color: AppColors.primary, size: 28),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text('Quản lý tin mẫu', style: AppTextStyles.pageTitle),
+                  ),
+                  AppButton(
+                    text: 'Thêm tin mẫu',
+                    icon: Icons.add,
+                    variant: AppButtonVariant.primary,
+                    onPressed: _showAddTemplateDialog,
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                itemCount: templates.length,
+                separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.m),
+                itemBuilder: (context, index) {
+                  final tpl = templates[index];
+                  return InkWell(
+                    onTap: () {
+                      widget.onSelect(tpl['title']!, tpl['content']!);
+                      Navigator.pop(context);
+                    },
+                    borderRadius: AppSpacing.borderRadiusM,
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.borderSoft),
+                        borderRadius: AppSpacing.borderRadiusM,
+                        color: AppColors.appBackground,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.bookmark_outline, size: 18, color: AppColors.primary),
+                              const SizedBox(width: AppSpacing.xs),
+                              Text(tpl['title']!, style: AppTextStyles.cardTitle),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(tpl['content']!, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -641,7 +641,7 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async getAllFriends(): Promise<ZaloFriend[]> {
+  async getAllFriends(accountId?: string): Promise<ZaloFriend[]> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) return [];
@@ -649,8 +649,12 @@ export class PersonalZcaChannel implements ZaloChannel {
       const allFriends: ZaloFriend[] = [];
       const seenIds = new Set<string>();
       const now = Date.now();
+      
+      const targetInstances = accountId && accountPool.has(accountId) 
+        ? [accountPool.get(accountId)!] 
+        : Array.from(accountPool.values());
 
-      for (const instance of accountPool.values()) {
+      for (const instance of targetInstances) {
         try {
           const cached = friendsCache.get(instance.uId);
           let friends: ZaloFriend[];

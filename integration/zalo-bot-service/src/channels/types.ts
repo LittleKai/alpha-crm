@@ -82,7 +82,7 @@ export interface ZaloChannel {
   getAccounts?(): any[];
   updateAccountSettings?(accountId: string, settings: Record<string, unknown>): Promise<boolean>;
   deleteAccount?(accountId: string): Promise<boolean>;
-  getAllFriends?(): Promise<ZaloFriend[]>;
+  getAllFriends?(accountId?: string): Promise<ZaloFriend[]>;
   getGroupMembers?(groupId: string): Promise<ZaloGroupMember[]>;
   getGroupLinkMembers?(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }>;
   createGroup?(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }>;

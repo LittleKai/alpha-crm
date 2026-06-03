@@ -1,10 +1,10 @@
 import 'dart:io' show Platform;
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -90,6 +90,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final notifier = ref.read(settingsProvider.notifier);
     final zaloState = ref.watch(zaloIntegrationProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
+    final isClient = kIsWeb || Platform.isAndroid || Platform.isIOS;
     final connectedCount = zaloState.accounts.length;
 
     if (state.isSaved) {
@@ -113,76 +114,79 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _AccountCard(
               connectedCount: connectedCount,
               accounts: zaloState.accounts,
+              showAddButton: !isClient,
               onAddAccount: () => _showAddAccountQrDialog(context),
               onConfigureAccount: (account) =>
                   _showAccountSettingsDialog(context, account),
               onDeleteAccount: (account) =>
                   _confirmDeleteAccount(context, ref, account),
             ),
-            const SizedBox(height: AppSpacing.m),
-            _TimeSettingsCard(
-              minDelayController: _minDelayController,
-              maxDelayController: _maxDelayController,
-              chatbotDelayController: _chatbotDelayController,
-              isLoading: state.isLoading,
-              errorText: state.errorText,
-              onMinDelayChanged: (value) =>
-                  notifier.updateMinDelay(int.tryParse(value) ?? 0),
-              onMaxDelayChanged: (value) =>
-                  notifier.updateMaxDelay(int.tryParse(value) ?? 0),
-              onSave: notifier.saveSettings,
-            ),
-            const SizedBox(height: AppSpacing.m),
-            _ZaloIntegrationCard(
-              backendUrlController: _backendUrlController,
-              webhookPath: state.settings.zaloWebhookPath,
-              onBackendUrlChanged: notifier.updateZaloBackendBaseUrl,
-            ),
-            const SizedBox(height: AppSpacing.m),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.security_outlined,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: AppSpacing.s),
-                      Text(
-                        'Kiểm soát rủi ro Zalo',
-                        style: AppTextStyles.sectionTitle,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text(
-                    'Cấu hình các cài đặt rủi ro, ngưỡng kiểm tra, quy tắc tuân thủ (consent, tương tác gần đây, spintax) và tự động hóa tài khoản để tránh bị khóa tài khoản Zalo.',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.l),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: AppButton(
-                      text: 'Cấu hình kiểm soát rủi ro Zalo',
-                      icon: Icons.admin_panel_settings_outlined,
-                      onPressed: () => _showRiskControlsDialog(context),
-                    ),
-                  ),
-                ],
+            if (!isClient) ...[
+              const SizedBox(height: AppSpacing.m),
+              _TimeSettingsCard(
+                minDelayController: _minDelayController,
+                maxDelayController: _maxDelayController,
+                chatbotDelayController: _chatbotDelayController,
+                isLoading: state.isLoading,
+                errorText: state.errorText,
+                onMinDelayChanged: (value) =>
+                    notifier.updateMinDelay(int.tryParse(value) ?? 0),
+                onMaxDelayChanged: (value) =>
+                    notifier.updateMaxDelay(int.tryParse(value) ?? 0),
+                onSave: notifier.saveSettings,
               ),
-            ),
-            const SizedBox(height: AppSpacing.m),
-            _AdvancedCard(
-              enabled: state.settings.autoApproveFriend,
-              isLoading: state.isLoading,
-              onChanged: notifier.updateAutoApproveFriend,
-              onSave: notifier.saveSettings,
-            ),
+              const SizedBox(height: AppSpacing.m),
+              _ZaloIntegrationCard(
+                backendUrlController: _backendUrlController,
+                webhookPath: state.settings.zaloWebhookPath,
+                onBackendUrlChanged: notifier.updateZaloBackendBaseUrl,
+              ),
+              const SizedBox(height: AppSpacing.m),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.security_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        Text(
+                          'Kiểm soát rủi ro Zalo',
+                          style: AppTextStyles.sectionTitle,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    Text(
+                      'Cấu hình các cài đặt rủi ro, ngưỡng kiểm tra, quy tắc tuân thủ (consent, tương tác gần đây, spintax) và tự động hóa tài khoản để tránh bị khóa tài khoản Zalo.',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: AppButton(
+                        text: 'Cấu hình kiểm soát rủi ro Zalo',
+                        icon: Icons.admin_panel_settings_outlined,
+                        onPressed: () => _showRiskControlsDialog(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              _AdvancedCard(
+                enabled: state.settings.autoApproveFriend,
+                isLoading: state.isLoading,
+                onChanged: notifier.updateAutoApproveFriend,
+                onSave: notifier.saveSettings,
+              ),
+            ],
             if (Platform.isWindows || Platform.isAndroid) ...[
               const SizedBox(height: AppSpacing.m),
               const _UpdateCard(),
@@ -505,6 +509,7 @@ class _AccountCard extends StatelessWidget {
   final VoidCallback onAddAccount;
   final ValueChanged<ZaloConnectedAccount> onConfigureAccount;
   final ValueChanged<ZaloConnectedAccount> onDeleteAccount;
+  final bool showAddButton;
 
   const _AccountCard({
     required this.connectedCount,
@@ -512,6 +517,7 @@ class _AccountCard extends StatelessWidget {
     required this.onAddAccount,
     required this.onConfigureAccount,
     required this.onDeleteAccount,
+    this.showAddButton = true,
   });
 
   @override
@@ -657,15 +663,17 @@ class _AccountCard extends StatelessWidget {
             ),
           ],
 
-          const SizedBox(height: AppSpacing.m),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppButton(
-              text: 'Thêm tài khoản Zalo',
-              icon: Icons.add,
-              onPressed: onAddAccount,
+          if (showAddButton) ...[
+            const SizedBox(height: AppSpacing.m),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppButton(
+                text: 'Thêm tài khoản Zalo',
+                icon: Icons.add,
+                onPressed: onAddAccount,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -790,133 +798,7 @@ class _ZaloIntegrationCard extends ConsumerWidget {
     required this.onBackendUrlChanged,
   });
 
-  void _showShareQrDialog(BuildContext context, String backendUrl) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final url = backendUrl.isEmpty ? 'http://localhost:8787' : backendUrl;
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-          backgroundColor: Colors.white,
-          child: Container(
-            padding: const EdgeInsets.all(AppSpacing.l),
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Chia Sẻ QR Kết Nối',
-                      style: AppTextStyles.sectionTitle.copyWith(fontSize: 18),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                const SizedBox(height: AppSpacing.m),
-                Text(
-                  'Mở app Alpha CRM trên điện thoại di động, vào phần Cài đặt và chọn quét mã QR này để ghép đôi máy chủ nội bộ.',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textMuted,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.l),
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.m),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: AppSpacing.borderRadiusM,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: SizedBox(
-                    width: 200,
-                    height: 200,
-                    child: CustomPaint(painter: QrCodePainter(url)),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.m),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.m,
-                    vertical: AppSpacing.s,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.appBackground,
-                    borderRadius: AppSpacing.borderRadiusS,
-                  ),
-                  child: Text(
-                    url,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.primary,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.l),
-                const AppAlert(
-                  message:
-                      'Đảm bảo điện thoại của bạn kết nối cùng mạng Wi-Fi hoặc sử dụng đường hầm tunnel công cộng.',
-                  variant: AppAlertVariant.info,
-                ),
-                const SizedBox(height: AppSpacing.m),
-                AppButton(
-                  text: 'Đóng',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
-  void _showScanQrDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return _QrScannerDialog(
-          onScanSuccess: (scannedUrl) {
-            onBackendUrlChanged(scannedUrl);
-            backendUrlController.text = scannedUrl;
-
-            // Trigger connection check automatically after scanning
-            ref.read(zaloIntegrationProvider.notifier).checkConnection();
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: AppSpacing.s),
-                    Expanded(
-                      child: Text('Ghép đôi máy chủ thành công: $scannedUrl'),
-                    ),
-                  ],
-                ),
-                backgroundColor: AppColors.success,
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -975,29 +857,7 @@ class _ZaloIntegrationCard extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.m),
-          Row(
-            children: [
-              Expanded(
-                child: AppButton(
-                  text: 'Chia sẻ QR kết nối',
-                  icon: Icons.qr_code_2_outlined,
-                  variant: AppButtonVariant.outline,
-                  onPressed: () =>
-                      _showShareQrDialog(context, backendUrlController.text),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: AppButton(
-                  text: 'Quét mã QR kết nối',
-                  icon: Icons.qr_code_scanner_outlined,
-                  variant: AppButtonVariant.outline,
-                  onPressed: () => _showScanQrDialog(context, ref),
-                ),
-              ),
-            ],
-          ),
+
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
@@ -1097,300 +957,7 @@ class _ZaloIntegrationCard extends ConsumerWidget {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// 🎨 Custom Painter để vẽ Mã QR động chân thực không cần package ngoài
-// ────────────────────────────────────────────────────────────────────────
-class QrCodePainter extends CustomPainter {
-  final String data;
-  QrCodePainter(this.data);
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.textPrimary
-      ..style = PaintingStyle.fill;
-
-    final w = size.width;
-    const gridCount = 29;
-    final cellSize = w / gridCount;
-
-    // Bộ sinh ngẫu nhiên với seed dựa trên dữ liệu URL để mã QR thống nhất và tĩnh
-    final random = Random(data.hashCode);
-
-    for (int r = 0; r < gridCount; r++) {
-      for (int c = 0; c < gridCount; c++) {
-        // Bỏ qua khu vực có Finder Patterns (mục tiêu ở 3 góc)
-        if ((r < 8 && c < 8) ||
-            (r < 8 && c >= gridCount - 8) ||
-            (r >= gridCount - 8 && c < 8)) {
-          continue;
-        }
-
-        // Vẽ các khối dữ liệu ngẫu nhiên của mã QR
-        if (random.nextBool()) {
-          canvas.drawRect(
-            Rect.fromLTWH(
-              c * cellSize,
-              r * cellSize,
-              cellSize + 0.2,
-              cellSize + 0.2,
-            ),
-            paint,
-          );
-        }
-      }
-    }
-
-    // Vẽ 3 Bộ Định Vị (Finder Patterns) ở góc
-    void drawFinder(double x, double y) {
-      final outerSize = cellSize * 7;
-      final innerSize = cellSize * 5;
-      final centerSize = cellSize * 3;
-
-      // Khối đen ngoài cùng
-      canvas.drawRect(Rect.fromLTWH(x, y, outerSize, outerSize), paint);
-      // Khối trắng trống ở giữa
-      canvas.drawRect(
-        Rect.fromLTWH(x + cellSize, y + cellSize, innerSize, innerSize),
-        Paint()..color = Colors.white,
-      );
-      // Khối đen trong cùng
-      canvas.drawRect(
-        Rect.fromLTWH(
-          x + cellSize * 2,
-          y + cellSize * 2,
-          centerSize,
-          centerSize,
-        ),
-        paint,
-      );
-    }
-
-    drawFinder(0, 0);
-    drawFinder((gridCount - 7) * cellSize, 0);
-    drawFinder(0, (gridCount - 7) * cellSize);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// 📱 Giao diện Trình mô phỏng Quét Mã QR động với hiệu ứng Laser
-// ────────────────────────────────────────────────────────────────────────
-class _QrScannerDialog extends StatefulWidget {
-  final ValueChanged<String> onScanSuccess;
-  const _QrScannerDialog({required this.onScanSuccess});
-
-  @override
-  State<_QrScannerDialog> createState() => _QrScannerDialogState();
-}
-
-class _QrScannerDialogState extends State<_QrScannerDialog>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      backgroundColor: Colors.black87,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.l),
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Quét QR Ghép Đôi',
-                  style: AppTextStyles.sectionTitle.copyWith(
-                    color: Colors.white,
-                    fontSize: 18,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-            const Divider(color: Colors.white24),
-            const SizedBox(height: AppSpacing.m),
-            Text(
-              'Hướng camera điện thoại vào mã QR hiển thị trên màn hình Desktop CRM.',
-              style: AppTextStyles.body.copyWith(color: Colors.white70),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.l),
-
-            // Khung camera giả lập sống động
-            Center(
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white30, width: 2),
-                  borderRadius: AppSpacing.borderRadiusM,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusM - 2),
-                  child: Stack(
-                    children: [
-                      // Nền lưới điện tử
-                      Positioned.fill(
-                        child: GridPaper(
-                          color: AppColors.primary.withOpacity(0.15),
-                          divisions: 1,
-                          subdivisions: 1,
-                          interval: 20,
-                        ),
-                      ),
-                      // 4 góc của khung quét
-                      ..._buildCornerBrackets(),
-                      // Tia laser quét quét lên xuống
-                      AnimatedBuilder(
-                        animation: _animationController,
-                        builder: (context, child) {
-                          return Positioned(
-                            top: _animationController.value * 210,
-                            left: 10,
-                            right: 10,
-                            child: Container(
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withOpacity(0.8),
-                                    blurRadius: 8,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.l),
-            AppButton(
-              text: 'Giả lập quét QR thành công',
-              icon: Icons.flash_on,
-              onPressed: () {
-                final mockUrls = [
-                  'https://alpha-crm-zalo-tunnel.trycloudflare.com',
-                  'http://192.168.1.15:8787',
-                  'https://crm-bot-local.9meta-link.net',
-                ];
-                final scannedUrl = mockUrls[Random().nextInt(mockUrls.length)];
-                widget.onScanSuccess(scannedUrl);
-                Navigator.of(context).pop();
-              },
-            ),
-            const SizedBox(height: AppSpacing.s),
-            AppButton(
-              text: 'Hủy bỏ',
-              variant: AppButtonVariant.outline,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildCornerBrackets() {
-    const size = 20.0;
-    const thickness = 3.0;
-    const color = AppColors.primary;
-
-    return [
-      // Góp Top Left
-      Positioned(
-        top: 10,
-        left: 10,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            border: Border(
-              top: BorderSide(color: color, width: thickness),
-              left: BorderSide(color: color, width: thickness),
-            ),
-          ),
-        ),
-      ),
-      // Góc Top Right
-      Positioned(
-        top: 10,
-        right: 10,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            border: Border(
-              top: BorderSide(color: color, width: thickness),
-              right: BorderSide(color: color, width: thickness),
-            ),
-          ),
-        ),
-      ),
-      // Góc Bottom Left
-      Positioned(
-        bottom: 10,
-        left: 10,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: color, width: thickness),
-              left: BorderSide(color: color, width: thickness),
-            ),
-          ),
-        ),
-      ),
-      // Góc Bottom Right
-      Positioned(
-        bottom: 10,
-        right: 10,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: color, width: thickness),
-              right: BorderSide(color: color, width: thickness),
-            ),
-          ),
-        ),
-      ),
-    ];
-  }
-}
 
 class _RiskControlsCard extends StatelessWidget {
   final SystemSettings settings;

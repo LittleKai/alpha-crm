@@ -76,9 +76,9 @@ export async function initializeZalo(): Promise<void> {
   }
 }
 
-export async function getAllFriends(): Promise<ZaloFriend[]> {
+export async function getAllFriends(accountId?: string): Promise<ZaloFriend[]> {
   if (!channel.getAllFriends) return [];
-  return channel.getAllFriends();
+  return channel.getAllFriends(accountId);
 }
 
 export async function getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {

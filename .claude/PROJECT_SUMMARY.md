@@ -1,6 +1,10 @@
 # Project Summary
 
-**Last Updated:** 2026-06-03 16:42:00 +07:00
+**Last Updated:** 2026-06-03 18:30:00 +07:00
+**Session:** #50 - Fixed Windows local Zalo integration loopback refusal by switching `localhost` to explicit IPv4 `127.0.0.1:8787`. Refactored device pairing screen to support up to 3 paired mobile devices simultaneously, displaying them in a list with individual revoke buttons on PC. Streamlined Settings screen on mobile clients by automatically hiding redundant PC-only settings (Zalo backend integration card, add accounts, delays, risk controls, and auto-approve).
+
+**Session:** #49 - Fixed Live Chat inbound message normalization and avatar rendering: the local Zalo agent now extracts plain text from nested zca-js payload shapes while preserving rich preview JSON for link/file messages, normalizes protocol-relative avatar URLs, and the Flutter Live Chat model accepts text/message/avatar aliases with regression tests for normal text and avatar fallback.
+
 **Session:** #48 - Researched the Deplao App reference and integrated suitable CRM features: quick reply shortcuts for Live Chat and quick templates, local app lock overlay with salted password hash, per-account local Zalo bot settings metadata for proxy/blockSeen/blockTyping, and a post-implementation spec for review/fix-bug follow-up. The Deplao Electron BrowserView shell and network interception model were intentionally not ported as-is.
 
 **Session:** #47 - Researched the `zalo-bot-js` reference SDK and integrated the safe Official Bot/OA subset into the local Zalo bridge: added a small `zalo-bot-js`-style Official Bot API transport for text sends, normalized official webhook message payloads into the existing CRM inbound event pipeline, and documented `ZALO_BOT_TOKEN` official mode while keeping personal-only friend/group automation unsupported in official mode.

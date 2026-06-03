@@ -1,12 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/api/crm_cloud_api.dart';
 
+class PairedDevice {
+  final String id;
+  final String displayName;
+  final String platform;
+  final String status;
+
+  const PairedDevice({
+    required this.id,
+    required this.displayName,
+    required this.platform,
+    required this.status,
+  });
+}
+
 class CrmDeviceState {
   final bool isLoading;
   final bool isPaired;
   final String? deviceId;
-  final String? pairedDeviceName;
-  final String? pairedDeviceOs;
+  final List<PairedDevice> pairedDevices;
   final String? pairingCode;
   final String? qrCodeData;
   final String? errorText;
@@ -15,8 +28,7 @@ class CrmDeviceState {
     this.isLoading = false,
     this.isPaired = false,
     this.deviceId,
-    this.pairedDeviceName,
-    this.pairedDeviceOs,
+    this.pairedDevices = const [],
     this.pairingCode,
     this.qrCodeData,
     this.errorText,
@@ -26,8 +38,7 @@ class CrmDeviceState {
     bool? isLoading,
     bool? isPaired,
     String? deviceId,
-    String? pairedDeviceName,
-    String? pairedDeviceOs,
+    List<PairedDevice>? pairedDevices,
     String? pairingCode,
     String? qrCodeData,
     String? errorText,
@@ -36,8 +47,7 @@ class CrmDeviceState {
       isLoading: isLoading ?? this.isLoading,
       isPaired: isPaired ?? this.isPaired,
       deviceId: deviceId ?? this.deviceId,
-      pairedDeviceName: pairedDeviceName ?? this.pairedDeviceName,
-      pairedDeviceOs: pairedDeviceOs ?? this.pairedDeviceOs,
+      pairedDevices: pairedDevices ?? this.pairedDevices,
       pairingCode: pairingCode ?? this.pairingCode,
       qrCodeData: qrCodeData ?? this.qrCodeData,
       errorText: errorText,
@@ -56,27 +66,35 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
 
     if (response['success'] == true && response['data'] != null) {
       final List<dynamic> list = response['data'];
-      final active = list.firstWhere(
-        (d) => d['status'] == 'active',
-        orElse: () => null,
+      
+      // Tìm thiết bị PC hiện tại (active và platform là Windows)
+      final pcDevice = list.firstWhere(
+        (d) => d['platform']?.toString().toLowerCase().contains('windows') == true && d['status'] == 'active',
+        orElse: () => list.firstWhere(
+          (d) => d['status'] == 'active',
+          orElse: () => null,
+        ),
       );
 
-      if (active != null) {
-        state = state.copyWith(
-          isLoading: false,
-          isPaired: true,
-          deviceId: active['_id']?.toString() ?? active['id']?.toString(),
-          pairedDeviceName:
-              active['displayName']?.toString() ?? 'Thiết bị liên kết',
-          pairedDeviceOs: active['platform']?.toString() ?? 'Windows',
-        );
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          isPaired: false,
-          deviceId: null,
-        );
-      }
+      // Tìm tất cả các thiết bị di động đã ghép đôi hoạt động (active và platform không phải Windows)
+      final List<PairedDevice> mobileDevices = list
+          .where((d) =>
+              d['platform']?.toString().toLowerCase().contains('windows') != true &&
+              d['status'] == 'active')
+          .map((d) => PairedDevice(
+                id: d['_id']?.toString() ?? d['id']?.toString() ?? '',
+                displayName: d['displayName']?.toString() ?? 'Thiết bị di động',
+                platform: d['platform']?.toString() ?? 'Android',
+                status: d['status']?.toString() ?? 'active',
+              ))
+          .toList();
+
+      state = state.copyWith(
+        isLoading: false,
+        isPaired: mobileDevices.isNotEmpty,
+        deviceId: pcDevice != null ? (pcDevice['_id']?.toString() ?? pcDevice['id']?.toString()) : null,
+        pairedDevices: mobileDevices,
+      );
     } else {
       state = state.copyWith(isLoading: false);
     }
@@ -85,22 +103,25 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
   Future<bool> startPairingProcess() async {
     state = state.copyWith(isLoading: true, errorText: null);
 
-    // 1. Lấy danh sách thiết bị để xem đã có thiết bị active chưa
+    // 1. Lấy danh sách thiết bị để tìm thiết bị PC máy chủ
     final devicesRes = await CrmCloudApi.get('/crm/devices');
     String? devId;
 
     if (devicesRes['success'] == true && devicesRes['data'] != null) {
       final List<dynamic> list = devicesRes['data'];
-      final active = list.firstWhere(
-        (d) => d['status'] == 'active',
-        orElse: () => null,
+      final pcDevice = list.firstWhere(
+        (d) => d['platform']?.toString().toLowerCase().contains('windows') == true && d['status'] == 'active',
+        orElse: () => list.firstWhere(
+          (d) => d['status'] == 'active',
+          orElse: () => null,
+        ),
       );
-      if (active != null) {
-        devId = active['_id']?.toString() ?? active['id']?.toString();
+      if (pcDevice != null) {
+        devId = pcDevice['_id']?.toString() ?? pcDevice['id']?.toString();
       }
     }
 
-    // 2. Nếu chưa có thiết bị, thông báo lỗi cho người dùng
+    // 2. Nếu chưa có thiết bị máy chủ, thông báo lỗi cho người dùng
     if (devId == null) {
       state = state.copyWith(
         isLoading: false,
@@ -154,8 +175,9 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     }
   }
 
-  Future<void> unpairDevice() async {
-    if (state.deviceId == null) {
+  Future<void> unpairDevice([String? targetDeviceId]) async {
+    final idToUnpair = targetDeviceId ?? state.deviceId;
+    if (idToUnpair == null) {
       state = state.copyWith(
         errorText: 'Không tìm thấy ID thiết bị để hủy ghép đôi.',
       );
@@ -163,13 +185,14 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     }
 
     state = state.copyWith(isLoading: true, errorText: null);
-    // Vô hiệu hóa thiết bị hoạt động qua endpoint disable tương ứng của Phase 1
     final response = await CrmCloudApi.post(
-      '/crm/devices/${state.deviceId}/disable',
+      '/crm/devices/$idToUnpair/disable',
       {},
     );
     if (response['success'] == true) {
-      state = const CrmDeviceState();
+      if (idToUnpair == state.deviceId) {
+        state = const CrmDeviceState();
+      }
       await checkPairingStatus();
     } else {
       state = state.copyWith(

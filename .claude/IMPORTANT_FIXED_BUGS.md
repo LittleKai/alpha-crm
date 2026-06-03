@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-01 +07:00
+**Last Updated:** 2026-06-03 +07:00
 
 ---
 
@@ -13,6 +13,22 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-03 - Windows Localhost vs 127.0.0.1 Loopback Refusal Error
+
+- Symptom: Linking Zalo account or performing health check in the Windows build fails with SocketException (OS Error: The remote computer refused the network connection, errno = 1225).
+- Root cause: The local Node.js server binds to `127.0.0.1` (IPv4 loopback), but the Flutter app was configured with `http://localhost:8787` by default. On Windows, `localhost` resolves to `::1` (IPv6 loopback) first. Since the Node.js server was not listening on `::1`, the connection was refused.
+- Fix summary: Changed default Zalo Backend Base URL from `http://localhost:8787` to `http://127.0.0.1:8787` in settings config schema, mock defaults, UI fallbacks, and the existing `zalo_settings.json` file.
+- Rule: Always use explicit IPv4 `127.0.0.1` instead of `localhost` for local/loopback backend server connections on Windows to avoid IPv6 name resolution issues.
+- Related files: `tools/alpha-crm/zalo_settings.json`, `tools/alpha-crm/lib/mock/mock_accounts.dart`, `tools/alpha-crm/lib/features/zalo_integration/data/zalo_integration_api.dart`, `tools/alpha-crm/lib/features/settings/presentation/screens/settings_screen.dart`, `tools/alpha-crm/docs/zalo-integration-installation-and-usage.md`.
+
+### 2026-06-03 - Live Chat Must Preserve Plain Text Inbound Payloads
+
+- Symptom: Live Chat appeared to load only messages that had links/files/rich attachments, while plain text inbound messages were missing or blank; sender avatars also fell back to initials even when Zalo provided an avatar.
+- Root cause: The local `PersonalZcaChannel` normalizer only read a narrow set of top-level content/avatar fields. Some zca-js plain text events can carry text in nested objects such as `content.msg`, while avatar URLs may be protocol-relative (`//...`). Flutter Live Chat also only read `content` and `avatarUrl`.
+- Fix summary: Added robust inbound content extraction for nested text fields while preserving rich preview JSON for link/file messages, normalized protocol-relative avatars, and extended Flutter Live Chat model parsing to accept `text`, `message`, `avatar`, `customerAvatar`, and related aliases.
+- Rule: Zalo inbound payload handling must normalize both top-level and nested message fields, and UI model parsing should accept backend/agent aliases rather than assuming a single field name.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `tools/alpha-crm/lib/features/messaging/live_chat/providers/live_chat_provider.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`.
 
 ### 2026-06-01 - Background Campaign Start Must Not Complete Campaigns
 

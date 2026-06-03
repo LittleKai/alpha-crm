@@ -11,7 +11,7 @@ class ZaloIntegrationApi {
 
   static String _normalizeUrl(String url) {
     var cleaned = url.trim();
-    if (cleaned.isEmpty) return 'http://localhost:8787';
+    if (cleaned.isEmpty) return 'http://127.0.0.1:8787';
     if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
       cleaned = 'http://$cleaned';
     }
@@ -393,10 +393,11 @@ class ZaloIntegrationApi {
     }
   }
 
-  Future<Map<String, dynamic>> fetchFriends() async {
+  Future<Map<String, dynamic>> fetchFriends({String? accountId}) async {
     try {
+      final query = accountId != null && accountId.isNotEmpty ? '?accountId=$accountId' : '';
       final response = await _client
-          .get(Uri.parse('$baseUrl/api/zalo/friends'))
+          .get(Uri.parse('$baseUrl/api/zalo/friends$query'))
           .timeout(const Duration(seconds: 15));
 
       return _processResponse(response);

@@ -185,7 +185,7 @@ Examples:
 
 ## Zalo Integration Direction
 
-- Current product direction is personal Zalo first. The Node backend uses the official NPM package `zca-js@^2.1.2` for dependency portability, but developers should reference, study, and research the API mechanics in the local repository at `D:\Dev\2.reference_pj\Zalo-ref\zca-js`.
+- Current product direction is personal Zalo first. The Node backend uses the official NPM package `zca-js@^2.1.2` for dependency portability. Khi muốn tìm hiểu thêm về các API hoặc tìm kiếm xem còn API nào khác, nhà phát triển/AI có thể tham khảo mã nguồn tại local repository [zca-js/claude.md](file:///d:/Dev/2.reference_pj/Zalo-ref/zca-js/claude.md) và chạy công cụ CodeGraph tại thư mục đó để tra cứu/phân tích chi tiết.
 - Zalo Official Account / OA remains supported as an optional secondary adapter, not the default direction unless the user explicitly asks for official-only mode.
 - Backend service owns all Zalo credentials, cookies, IMEI, user-agent values, QR artifacts, access tokens, and listener sessions. Flutter must never store or display these secrets.
 - Preferred backend channel names are `personal_zca` for the `zca-js` personal-account adapter, `official_oa` for OA/OpenAPI, and `mock` for local test mode.

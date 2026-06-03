@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
@@ -53,9 +54,22 @@ class ZaloBackendManager {
         if (kDebugMode) {
           debugPrint(
             "ZaloBackendManager (Development): Không tìm thấy launcher backend (${candidateNames.join(', ')}). "
-            "Điều này là bình thường trong môi trường phát triển (debug). Bạn hãy chạy backend bằng lệnh 'npm run dev' "
-            "trong thư mục 'integration/zalo-bot-service' để phát triển.",
+            "Dò tìm file active-port.json để đồng bộ cổng tự động...",
           );
+          final portFile = _getActivePortFile(null);
+          if (await portFile.exists()) {
+            try {
+              final content = await portFile.readAsString();
+              final data = jsonDecode(content);
+              if (data is Map && data['port'] is int) {
+                final activePort = data['port'] as int;
+                debugPrint("ZaloBackendManager (Development): Phát hiện cổng active manually: $activePort");
+                await _updateSettingsPort(activePort);
+              }
+            } catch (e) {
+              debugPrint("ZaloBackendManager (Development): Lỗi đọc active-port.json: $e");
+            }
+          }
         } else {
           debugPrint(
             "ZaloBackendManager (Production): Không tìm thấy launcher backend (${candidateNames.join(', ')}). Vui lòng kiểm tra file đóng gói.",
@@ -79,7 +93,34 @@ class ZaloBackendManager {
       );
 
       _isRunning = true;
-      debugPrint("ZaloBackendManager: Backend đã khởi động thành công.");
+      debugPrint("ZaloBackendManager: Backend đã khởi động thành công. Đang dò tìm cổng active...");
+
+      // Dò tìm cổng active từ file port sinh ra bởi Node.js backend
+      final portFile = _getActivePortFile(executablePath);
+      int? activePort;
+      
+      for (int i = 0; i < 25; i++) { // Chờ tối đa 5 giây (25 * 200ms)
+        if (await portFile.exists()) {
+          try {
+            final content = await portFile.readAsString();
+            final data = jsonDecode(content);
+            if (data is Map && data['port'] is int) {
+              activePort = data['port'] as int;
+              break;
+            }
+          } catch (_) {
+            // Đang ghi dở, đợi vòng lặp kế tiếp
+          }
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      if (activePort != null) {
+        debugPrint("ZaloBackendManager: Phát hiện cổng active của Backend: $activePort");
+        await _updateSettingsPort(activePort);
+      } else {
+        debugPrint("ZaloBackendManager: Không tìm thấy cổng active của Backend. Sử dụng cổng mặc định.");
+      }
 
       // Lắng nghe dữ liệu đầu ra từ backend để tiện debug trong quá trình phát triển
       _backendProcess!.stdout.listen((data) {
@@ -97,6 +138,37 @@ class ZaloBackendManager {
       debugPrint("ZaloBackendManager: Lỗi khi chạy backend: $e");
       _isRunning = false;
       return false;
+    }
+  }
+
+  /// Xác định file lưu trữ cổng của Backend
+  static File _getActivePortFile(String? executablePath) {
+    if (executablePath != null) {
+      final workingDir = File(executablePath).parent.path;
+      return File('$workingDir${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json');
+    } else {
+      final currentDir = Directory.current.path;
+      return File('$currentDir${Platform.pathSeparator}integration${Platform.pathSeparator}zalo-bot-service${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json');
+    }
+  }
+
+  /// Cập nhật cổng Backend vào file zalo_settings.json
+  static Future<void> _updateSettingsPort(int port) async {
+    try {
+      final settingsFile = File('zalo_settings.json');
+      Map<String, dynamic> jsonMap = {};
+      if (await settingsFile.exists()) {
+        final content = await settingsFile.readAsString();
+        jsonMap = jsonDecode(content) as Map<String, dynamic>;
+      }
+
+      jsonMap['zaloBackendBaseUrl'] = 'http://127.0.0.1:$port';
+
+      final content = const JsonEncoder.withIndent('  ').convert(jsonMap);
+      await settingsFile.writeAsString(content);
+      debugPrint("ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend: http://127.0.0.1:$port");
+    } catch (e) {
+      debugPrint("ZaloBackendManager: Lỗi cập nhật cổng vào zalo_settings.json: $e");
     }
   }
 

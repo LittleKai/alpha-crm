@@ -61,7 +61,7 @@ class SystemSettings {
     this.quietHoursStart = '21:00',
     this.quietHoursEnd = '08:00',
     this.allowTestModeOnlyForRiskyActions = true,
-    this.zaloBackendBaseUrl = 'http://localhost:8787',
+    this.zaloBackendBaseUrl = 'http://127.0.0.1:8787',
     this.zaloWebhookPath = '/api/zalo/webhook',
   });
 
@@ -240,7 +240,7 @@ class MockAccounts {
     quietHoursStart: '21:00',
     quietHoursEnd: '08:00',
     allowTestModeOnlyForRiskyActions: true,
-    zaloBackendBaseUrl: 'http://localhost:8787',
+    zaloBackendBaseUrl: 'http://127.0.0.1:8787',
     zaloWebhookPath: '/api/zalo/webhook',
   );
 }
