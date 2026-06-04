@@ -218,6 +218,7 @@ Container(
 - Use `Dialog` widget with a custom `Container`, using `AppColors.surface` and `AppSpacing.borderRadiusL`.
 - Provide a clear header with an icon, a title (e.g. `AppTextStyles.h2`), optional action buttons (like Add), and a close button `IconButton(icon: Icon(Icons.close))`.
 - Separate header and content with a `Divider`.
+- **Zalo Compliance Warnings:** Never use Flutter's default `AlertDialog` or `showDialog` to display compliance warnings or safety recommendations. Instead, always import and use `showComplianceWarningsDialog` from `lib/shared/widgets/compliance_warnings_popup.dart`.
 
 
 - Desktop CRM layout should be dense, structured, and work-focused.

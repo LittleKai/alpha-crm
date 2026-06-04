@@ -42,9 +42,18 @@ class ZaloComplianceGuard {
     bool isOfficialChannel = false,
     bool isTestMode = false,
   }) {
-    // Live chat and chatbot replies are generally safe in any channel mode
-    if (actionType == ZaloActionType.liveChatReply ||
-        actionType == ZaloActionType.chatbotReply) {
+    // Live chat is always allowed to let agents respond
+    if (actionType == ZaloActionType.liveChatReply) {
+      return const ComplianceDecision(
+        allowed: true,
+        riskLevel: ZaloRiskLevel.low,
+        title: 'Hành động an toàn',
+        message: 'Trả lời tin nhắn trực tiếp từ operator.',
+      );
+    }
+
+    // Chatbot replies are allowed with warning if no recent interaction
+    if (actionType == ZaloActionType.chatbotReply) {
       if (hasRecentInteraction || !settings.requireRecentInteraction) {
         return const ComplianceDecision(
           allowed: true,
@@ -54,11 +63,11 @@ class ZaloComplianceGuard {
         );
       }
       return const ComplianceDecision(
-        allowed: false,
+        allowed: true,
         riskLevel: ZaloRiskLevel.medium,
-        title: 'Cần tương tác gần đây',
+        title: 'Khuyến cáo: Người nhận chưa chat gần đây',
         message:
-            'Người nhận chưa có tương tác gần đây. Bật tương tác gần đây hoặc tắt yêu cầu trong Cài đặt.',
+            'Người nhận chưa nhắn tin với bạn gần đây. Trả lời tự động lúc này có thể bị hệ thống Zalo nghi ngờ spam nếu khách hàng báo xấu.',
         requiredActions: ['Xác nhận tương tác gần đây từ người nhận'],
       );
     }
@@ -86,7 +95,7 @@ class ZaloComplianceGuard {
                   'Hành động này yêu cầu tài khoản cá nhân và không khả dụng khi '
                   'chế độ Official OA đang bật. Chuyển sang Personal Zalo hoặc Mock.',
               requiredActions: [
-                'Chuyển channel sang Personal Zalo (zca-js)',
+                'Chuyển channel sang Personal Zalo',
                 'Hoặc bật chế độ thử nghiệm',
               ],
             );
@@ -171,17 +180,16 @@ class ZaloComplianceGuard {
       );
     }
 
-    // Block phone-list bulk messaging without consent proof
+    // Warn phone-list bulk messaging without consent proof instead of blocking
     if (actionType == ZaloActionType.bulkMessageByPhone) {
       if (settings.requireConsentProof && !hasConsentProof) {
         return const ComplianceDecision(
-          allowed: false,
+          allowed: true,
           riskLevel: ZaloRiskLevel.high,
-          title: 'Thiếu bằng chứng đồng ý',
+          title: 'Khuyến cáo: Khách hàng chưa xác nhận nhận tin',
           message:
-              'Gửi tin nhắn hàng loạt theo SĐT yêu cầu consent proof từ người nhận. '
-              'Nhập danh sách từ nguồn có opt-in rõ ràng hoặc tắt yêu cầu consent.',
-          requiredActions: ['Cung cấp consent proof cho người nhận'],
+              'Danh sách gửi chứa các số điện thoại chưa xác nhận đồng ý nhận tin nhắn từ bạn. Gửi tin nhắn hàng loạt lúc này có rủi ro bị báo cáo spam cao. Hãy tăng thời gian chờ (delay) giữa mỗi tin nhắn để an toàn hơn cho tài khoản Zalo.',
+          requiredActions: ['Cung cấp consent proof'],
         );
       }
     }
@@ -204,17 +212,16 @@ class ZaloComplianceGuard {
       }
     }
 
-    // Warn for delay-only mitigation on bulk sends
+    // Warn for delay-only mitigation on bulk sends instead of blocking
     if (actionType == ZaloActionType.bulkMessageToGroup ||
         actionType == ZaloActionType.bulkMessageToFriends) {
       if (!hasConsentProof && settings.requireConsentProof) {
         return const ComplianceDecision(
-          allowed: false,
+          allowed: true,
           riskLevel: ZaloRiskLevel.medium,
-          title: 'Cảnh báo — Chưa có consent',
+          title: 'Khuyến cáo: Chưa có tương tác gần đây',
           message:
-              'Gửi tin nhắn hàng loạt mà không có consent chỉ dựa vào delay/batch '
-              'để giảm rủi ro tần suất. Consent và tương tác gần đây là kiểm soát mạnh hơn.',
+              'Danh sách gửi chứa những người chưa từng trò chuyện hoặc tương tác với bạn gần đây. Việc gửi tin nhắn tự động hàng loạt có thể bị hệ thống Zalo quét đánh dấu spam. Hãy cài đặt thời gian chờ (delay) hợp lý để bảo vệ tài khoản.',
           requiredActions: ['Cung cấp consent proof'],
         );
       }

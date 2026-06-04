@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'dart:convert';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
+import '../../../../../shared/utils/zalo_text_formatter.dart';
+import '../../../../../shared/widgets/compliance_warnings_popup.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_button.dart';
@@ -21,7 +22,6 @@ import '../../../../groups/providers/invite_to_group_provider.dart';
 import '../../../../groups/providers/scan_members_provider.dart';
 import '../../../../customers/providers/customers_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
-import '../../../../../mock/mock_contacts.dart';
 import '../../../../../mock/mock_campaigns.dart';
 
 class BulkMessagingScreen extends ConsumerStatefulWidget {
@@ -230,6 +230,36 @@ class _Header extends ConsumerWidget {
             ],
           ),
         ),
+        IconButton(
+          icon: Icon(
+            state.complianceWarning != null || state.complianceError != null
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
+            color: state.complianceWarning != null || state.complianceError != null
+                ? AppColors.warning
+                : AppColors.textMuted,
+            size: 28,
+          ),
+          tooltip: state.complianceWarning != null || state.complianceError != null
+              ? 'Có khuyến cáo an toàn (Nhấn để xem)'
+              : 'Hệ thống an toàn (Nhấn để xem)',
+          onPressed: () {
+            final ZaloActionType actionType;
+            if (state.selectedTab == 0) {
+              actionType = ZaloActionType.bulkMessageByPhone;
+            } else if (state.selectedTab == 1) {
+              actionType = ZaloActionType.bulkMessageToGroup;
+            } else {
+              actionType = ZaloActionType.bulkMessageToFriends;
+            }
+            showComplianceWarningsDialog(
+              context,
+              activeWarning: state.complianceError ?? state.complianceWarning,
+              actionType: actionType,
+            );
+          },
+        ),
+        const SizedBox(width: AppSpacing.s),
         if (accounts.isNotEmpty)
           SizedBox(
             width: 240,
@@ -327,6 +357,8 @@ class _Header extends ConsumerWidget {
     );
   }
 }
+
+
 
 class _CampaignTabs extends StatelessWidget {
   final int selectedIndex;
@@ -1433,44 +1465,15 @@ class _ZaloPreview extends StatelessWidget {
   const _ZaloPreview({required this.message});
 
   List<TextSpan> _parseFormattedText(String text) {
-    String processed = text
-      .replaceAll('{{tên}}', 'Anh/Chị Khách Hàng')
-      .replaceAll('{{sdt}}', '0901234567')
-      .replaceAll('{{nhóm}}', 'Nhóm Zalo Demo')
-      .replaceAll('{A|B|C}', 'Chào');
-      
-    final List<TextSpan> spans = [];
-    final pattern = RegExp(r'(\*\*(.*?)\*\*|\*(.*?)\*|__(.*?)__|~~(.*?)~~)');
-    int lastMatchEnd = 0;
-
-    for (final match in pattern.allMatches(processed)) {
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(text: processed.substring(lastMatchEnd, match.start)));
-      }
-
-      final bold = match.group(2);
-      final italic = match.group(3);
-      final underline = match.group(4);
-      final strike = match.group(5);
-
-      if (bold != null) {
-        spans.add(TextSpan(text: bold, style: const TextStyle(fontWeight: FontWeight.bold)));
-      } else if (italic != null) {
-        spans.add(TextSpan(text: italic, style: const TextStyle(fontStyle: FontStyle.italic)));
-      } else if (underline != null) {
-        spans.add(TextSpan(text: underline, style: const TextStyle(decoration: TextDecoration.underline)));
-      } else if (strike != null) {
-        spans.add(TextSpan(text: strike, style: const TextStyle(decoration: TextDecoration.lineThrough)));
-      }
-
-      lastMatchEnd = match.end;
-    }
-
-    if (lastMatchEnd < processed.length) {
-      spans.add(TextSpan(text: processed.substring(lastMatchEnd)));
-    }
-
-    return spans;
+    String processed = ZaloTextFormatter.resolveVariablesAndSpintax(
+      text,
+      name: 'Anh/Chị Khách Hàng',
+      phone: '0901234567',
+      group: 'Nhóm Zalo Demo',
+    );
+    processed = ZaloTextFormatter.formatMarkdownToUnicode(processed);
+    
+    return [TextSpan(text: processed)];
   }
 
   @override
@@ -1586,19 +1589,7 @@ class _ZaloPreview extends StatelessWidget {
                         Positioned(
                           right: AppSpacing.m,
                           bottom: AppSpacing.m,
-                          child: Container(
-                            width: 28,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFC7E8FF),
-                              border: Border.all(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
+                          child: const SizedBox.shrink(),
                         ),
                       ],
                     ),

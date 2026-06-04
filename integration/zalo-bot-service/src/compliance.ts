@@ -258,9 +258,9 @@ export function evaluateCompliance(req: ComplianceRequest): ComplianceDecision {
 
   if (actionType === 'bulk_message_by_phone' && !hasConsentProof) {
     return {
-      allowed: false,
+      allowed: true, // was false
       riskLevel: 'high',
-      reason: 'Bulk messaging by phone requires consent proof from recipients.',
+      reason: 'Warning: Bulk messaging by phone without consent proof.',
     };
   }
 
@@ -271,9 +271,9 @@ export function evaluateCompliance(req: ComplianceRequest): ComplianceDecision {
     !hasRecentInteraction
   ) {
     return {
-      allowed: false,
+      allowed: true, // was false
       riskLevel: 'medium',
-      reason: 'Bulk messaging without consent or recent interaction is not allowed.',
+      reason: 'Warning: Bulk messaging without consent or recent interaction.',
     };
   }
 

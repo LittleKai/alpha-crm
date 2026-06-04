@@ -78,7 +78,33 @@ class AppTopbar extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.s),
-          const WarningIconButton(),
+          Builder(
+            builder: (context) {
+              final ZaloActionType? actionType;
+              if (currentRoute.startsWith('/messaging/bulk')) {
+                actionType = ZaloActionType.bulkMessageByPhone;
+              } else if (currentRoute.startsWith('/messaging/live-chat')) {
+                actionType = ZaloActionType.liveChatReply;
+              } else if (currentRoute.startsWith('/messaging/chatbot')) {
+                actionType = ZaloActionType.chatbotReply;
+              } else if (currentRoute.startsWith('/friends/by-phone')) {
+                actionType = ZaloActionType.friendByPhone;
+              } else if (currentRoute.startsWith('/friends/by-group')) {
+                actionType = ZaloActionType.friendByGroup;
+              } else if (currentRoute.startsWith('/groups/scan-members')) {
+                actionType = ZaloActionType.scanGroupMembers;
+              } else if (currentRoute.startsWith('/groups/join')) {
+                actionType = ZaloActionType.joinGroups;
+              } else if (currentRoute.startsWith('/groups/invite')) {
+                actionType = ZaloActionType.inviteToGroup;
+              } else if (currentRoute.startsWith('/groups/create')) {
+                actionType = ZaloActionType.createGroups;
+              } else {
+                actionType = null;
+              }
+              return WarningIconButton(actionType: actionType);
+            },
+          ),
         ],
       ),
     );

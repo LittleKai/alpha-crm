@@ -101,6 +101,16 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
     );
   }
 
+  Future<void> cancelSetup() async {
+    if (state.setupRequired) {
+      state = state.copyWith(
+        isLocked: false,
+        setupRequired: false,
+        errorText: null,
+      );
+    }
+  }
+
   Future<void> setPassword(String password, {bool lockOnStartup = true}) async {
     if (password.trim().length < 4) {
       state = state.copyWith(errorText: 'Mật khẩu khóa cần ít nhất 4 ký tự.');

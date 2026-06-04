@@ -30,6 +30,7 @@ class CrmAuthState {
   final String? subscriptionStatus; // 'active', 'expired', 'none'
   final int includedAiRemaining;
   final int extraAiRemaining;
+  final int creditBalance;
   final String? errorText;
 
   const CrmAuthState({
@@ -40,6 +41,7 @@ class CrmAuthState {
     this.subscriptionStatus,
     this.includedAiRemaining = 0,
     this.extraAiRemaining = 0,
+    this.creditBalance = 0,
     this.errorText,
   });
 
@@ -51,6 +53,7 @@ class CrmAuthState {
     String? subscriptionStatus,
     int? includedAiRemaining,
     int? extraAiRemaining,
+    int? creditBalance,
     String? errorText,
   }) {
     return CrmAuthState(
@@ -61,6 +64,7 @@ class CrmAuthState {
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       includedAiRemaining: includedAiRemaining ?? this.includedAiRemaining,
       extraAiRemaining: extraAiRemaining ?? this.extraAiRemaining,
+      creditBalance: creditBalance ?? this.creditBalance,
       errorText: errorText,
     );
   }
@@ -119,6 +123,11 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
           ? meData['user']
           : meData;
       final user = CrmUserState.fromJson(Map<String, dynamic>.from(userJson));
+      final creditBalance =
+          int.tryParse(
+            (meData['balance'] ?? userJson['balance'])?.toString() ?? '0',
+          ) ??
+          0;
 
       // Gọi API lấy trạng thái đăng ký CRM
       final subResult = await CrmCloudApi.get('/crm/subscription/me');
@@ -162,6 +171,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         subscriptionStatus: subStatus,
         includedAiRemaining: incRemaining,
         extraAiRemaining: extRemaining,
+        creditBalance: creditBalance,
       );
     } else {
       // Xóa token không hợp lệ
@@ -205,6 +215,20 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   Future<void> refreshSubscription() async {
     if (!state.isAuthenticated) return;
 
+    int creditBalance = state.creditBalance;
+    final meResult = await CrmCloudApi.get('/auth/me');
+    if (meResult['success'] == true && meResult['data'] != null) {
+      final meData = meResult['data'];
+      if (meData is Map) {
+        final userJson = meData['user'] is Map ? meData['user'] as Map : meData;
+        creditBalance =
+            int.tryParse(
+              (meData['balance'] ?? userJson['balance'])?.toString() ?? '0',
+            ) ??
+            0;
+      }
+    }
+
     final subResult = await CrmCloudApi.get('/crm/subscription/me');
     String subStatus = 'none';
     if (subResult['success'] == true && subResult['data'] != null) {
@@ -240,6 +264,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       subscriptionStatus: subStatus,
       includedAiRemaining: incRemaining,
       extraAiRemaining: extRemaining,
+      creditBalance: creditBalance,
     );
   }
 }

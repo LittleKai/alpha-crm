@@ -190,6 +190,7 @@ Examples:
 - Backend service owns all Zalo credentials, cookies, IMEI, user-agent values, QR artifacts, access tokens, and listener sessions. Flutter must never store or display these secrets.
 - Preferred backend channel names are `personal_zca` for the `zca-js` personal-account adapter, `official_oa` for OA/OpenAPI, and `mock` for local test mode.
 - Keep personal-account workflows risk-aware: use rate limits, cooldowns, human approval for high-risk batches, stop conditions, and clear operator status. Do not silently remove safeguards just because personal Zalo is preferred.
+- Đối với tất cả màn hình có tính năng tiếp thị hoặc hành động rủi ro cao trên Zalo (Gửi tin hàng loạt, kết bạn qua SĐT/Nhóm, mời/tạo/tham gia nhóm, quét thành viên), luôn hiển thị một nút cảnh báo/an toàn ở Header trang và luôn sử dụng hộp thoại thiết kế riêng biệt `showComplianceWarningsDialog` từ `lib/shared/widgets/compliance_warnings_popup.dart` để hiển thị các khuyến cáo thay vì dùng Dialog mặc định của Flutter.
 - Do not reintroduce official-only assumptions into docs, settings, guards, or backend code unless the user explicitly changes the product direction.
 - For media/file sends through `zca-js`, remember that file-path image/GIF metadata requires a backend `imageMetadataGetter`; keep that dependency in the Node service, not Flutter.
 

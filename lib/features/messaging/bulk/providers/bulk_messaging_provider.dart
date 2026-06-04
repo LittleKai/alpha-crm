@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/zalo_compliance_guard.dart';
+import '../../../../shared/utils/zalo_text_formatter.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../data/bulk_campaign_repository.dart';
@@ -24,6 +25,7 @@ class BulkMessagingState {
   final int cancelledCount;
   final int totalCount;
   final String? complianceError;
+  final String? complianceWarning;
   final String? activeCampaignId;
   final bool isPolling;
 
@@ -43,6 +45,7 @@ class BulkMessagingState {
     required this.cancelledCount,
     required this.totalCount,
     this.complianceError,
+    this.complianceWarning,
     this.activeCampaignId,
     this.isPolling = false,
   });
@@ -82,6 +85,7 @@ class BulkMessagingState {
     int? cancelledCount,
     int? totalCount,
     String? complianceError,
+    String? complianceWarning,
     String? activeCampaignId,
     bool? isPolling,
   }) {
@@ -101,6 +105,7 @@ class BulkMessagingState {
       cancelledCount: cancelledCount ?? this.cancelledCount,
       totalCount: totalCount ?? this.totalCount,
       complianceError: complianceError, // explicitly clear if not provided
+      complianceWarning: complianceWarning, // explicitly clear if not provided
       activeCampaignId: activeCampaignId ?? this.activeCampaignId,
       isPolling: isPolling ?? this.isPolling,
     );
@@ -178,7 +183,8 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   }
 
   void setSelectedTab(int index) {
-    state = state.copyWith(selectedTab: index, complianceError: null);
+    state = state.copyWith(selectedTab: index, complianceError: null, complianceWarning: null);
+    _checkCompliance();
   }
 
   void setCampaignName(String name) {
@@ -187,6 +193,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
   void setRecipientsText(String text) {
     state = state.copyWith(recipientsText: text);
+    _checkCompliance();
   }
 
   void setMinDelay(int min) {
@@ -199,10 +206,117 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
   void setMessageText(String text) {
     state = state.copyWith(messageText: text);
+    _checkCompliance();
   }
 
   void selectAccount(ZaloAccount? account) {
     state = state.copyWith(selectedAccount: account);
+    _checkCompliance();
+  }
+
+  void _checkCompliance() {
+    final recipients = state.recipientsText
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (recipients.isEmpty) {
+      state = state.copyWith(
+        complianceError: null,
+        complianceWarning: null,
+        selectedTab: state.selectedTab,
+        campaignName: state.campaignName,
+        recipientsText: state.recipientsText,
+        minDelay: state.minDelay,
+        maxDelay: state.maxDelay,
+        messageText: state.messageText,
+        selectedAccount: state.selectedAccount,
+        accounts: state.accounts,
+        isSending: state.isSending,
+        logs: state.logs,
+        successCount: state.successCount,
+        failureCount: state.failureCount,
+        cancelledCount: state.cancelledCount,
+        totalCount: state.totalCount,
+        activeCampaignId: state.activeCampaignId,
+        isPolling: state.isPolling,
+      );
+      return;
+    }
+
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: _actionTypeForTab(),
+      targetCount: recipients.length,
+    );
+
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+        complianceWarning: null,
+        selectedTab: state.selectedTab,
+        campaignName: state.campaignName,
+        recipientsText: state.recipientsText,
+        minDelay: state.minDelay,
+        maxDelay: state.maxDelay,
+        messageText: state.messageText,
+        selectedAccount: state.selectedAccount,
+        accounts: state.accounts,
+        isSending: state.isSending,
+        logs: state.logs,
+        successCount: state.successCount,
+        failureCount: state.failureCount,
+        cancelledCount: state.cancelledCount,
+        totalCount: state.totalCount,
+        activeCampaignId: state.activeCampaignId,
+        isPolling: state.isPolling,
+      );
+    } else if (decision.riskLevel == ZaloRiskLevel.medium ||
+        decision.riskLevel == ZaloRiskLevel.high) {
+      state = state.copyWith(
+        complianceError: null,
+        complianceWarning: '${decision.title}: ${decision.message}',
+        selectedTab: state.selectedTab,
+        campaignName: state.campaignName,
+        recipientsText: state.recipientsText,
+        minDelay: state.minDelay,
+        maxDelay: state.maxDelay,
+        messageText: state.messageText,
+        selectedAccount: state.selectedAccount,
+        accounts: state.accounts,
+        isSending: state.isSending,
+        logs: state.logs,
+        successCount: state.successCount,
+        failureCount: state.failureCount,
+        cancelledCount: state.cancelledCount,
+        totalCount: state.totalCount,
+        activeCampaignId: state.activeCampaignId,
+        isPolling: state.isPolling,
+      );
+    } else {
+      state = state.copyWith(
+        complianceError: null,
+        complianceWarning: null,
+        selectedTab: state.selectedTab,
+        campaignName: state.campaignName,
+        recipientsText: state.recipientsText,
+        minDelay: state.minDelay,
+        maxDelay: state.maxDelay,
+        messageText: state.messageText,
+        selectedAccount: state.selectedAccount,
+        accounts: state.accounts,
+        isSending: state.isSending,
+        logs: state.logs,
+        successCount: state.successCount,
+        failureCount: state.failureCount,
+        cancelledCount: state.cancelledCount,
+        totalCount: state.totalCount,
+        activeCampaignId: state.activeCampaignId,
+        isPolling: state.isPolling,
+      );
+    }
   }
 
   void clearLogs() {
@@ -278,11 +392,19 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     );
 
     try {
+      final formattedMessage = ZaloTextFormatter.resolveVariablesAndSpintax(
+        state.messageText.trim(),
+        name: 'Khách hàng', // Fallback if backend doesn't resolve per user
+        phone: '',
+        group: '',
+      );
+      final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(formattedMessage);
+
       final templateResp = await _repository.createTemplate({
         'name': state.campaignName.trim().isNotEmpty
             ? '${state.campaignName.trim()} - Nội dung gửi'
             : 'Bulk template ${DateTime.now().toIso8601String()}',
-        'body': state.messageText.trim(),
+        'body': finalMessage,
         'type': 'zalo',
         'category': 'bulk',
         'isQuick': false,

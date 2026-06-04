@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/api/crm_cloud_api.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../auth/providers/crm_auth_provider.dart';
+import '../../models/subscription_catalog.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
@@ -13,86 +18,395 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 }
 
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
-  bool _isAutoRenew = false;
   bool _isProcessing = false;
 
-  Future<void> _purchasePack(int amount, int price) async {
-    setState(() {
-      _isProcessing = true;
-    });
+  Future<void> _checkout(
+    CrmSubscriptionProduct product,
+    String paymentMethod,
+  ) async {
+    setState(() => _isProcessing = true);
 
-    String productId = 'crm_ai_pack_100';
-    if (amount == 1000) productId = 'crm_ai_pack_500';
-    if (amount == 2000) productId = 'crm_ai_pack_1000';
-
-    // Gọi API nạp thêm gói AI qua cổng thanh toán thực tế của Phase 1
     final response = await CrmCloudApi.post('/crm/billing/checkout', {
-      'productId': productId,
-      'paymentMethod': 'credit',
+      'productId': product.productId,
+      'paymentMethod': paymentMethod,
     });
 
-    setState(() {
-      _isProcessing = false;
-    });
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
 
-    if (mounted) {
-      if (response['success'] == true) {
-        ref.read(crmAuthProvider.notifier).refreshSubscription();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã mua thành công gói nạp thêm $amount yêu cầu AI!'),
-            backgroundColor: AppColors.successText,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              response['message'] ?? 'Mua gói thất bại. Vui lòng thử lại.',
-            ),
-            backgroundColor: AppColors.errorText,
-          ),
-        );
-      }
+    if (response['success'] != true) {
+      _showSnack(
+        response['message']?.toString() ??
+            'Không thể tạo giao dịch. Vui lòng thử lại.',
+        isError: true,
+      );
+      return;
     }
+
+    if (paymentMethod == 'credit') {
+      await ref.read(crmAuthProvider.notifier).refreshSubscription();
+      if (!mounted) return;
+      _showSnack(
+        product.isPlan
+            ? 'Gói Alpha CRM đã được kích hoạt/gia hạn thành công.'
+            : 'Đã mua thành công ${product.aiRequests} yêu cầu AI.',
+      );
+      return;
+    }
+
+    final data = response['data'] is Map
+        ? Map<String, dynamic>.from(response['data'] as Map)
+        : <String, dynamic>{};
+    final checkout = CrmCheckoutResult.fromJson(data);
+    await _showBankTransferDialog(product, checkout);
   }
 
-  Future<void> _renewSubscription() async {
-    setState(() {
-      _isProcessing = true;
-    });
+  void _showSnack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.errorText : AppColors.successText,
+      ),
+    );
+  }
 
-    // Gia hạn gói crm_monthly qua cổng thanh toán thực tế của Phase 1
-    final response = await CrmCloudApi.post('/crm/billing/checkout', {
-      'productId': 'crm_monthly',
-      'paymentMethod': 'credit',
-    });
+  Future<void> _showRenewalConfirmDialog(CrmAuthState authState) async {
+    final details = buildRenewalDetails(
+      balanceCredits: authState.creditBalance,
+    );
 
-    setState(() {
-      _isProcessing = false;
-    });
-
-    if (mounted) {
-      if (response['success'] == true) {
-        ref.read(crmAuthProvider.notifier).refreshSubscription();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Gia hạn đăng ký dịch vụ thành công!'),
-            backgroundColor: AppColors.successText,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              response['message'] ??
-                  'Gia hạn thất bại. Vui lòng kiểm tra số dư.',
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(AppSpacing.m),
+          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DialogHeader(
+                  icon: Icons.workspace_premium_rounded,
+                  title: authState.subscriptionStatus == 'active'
+                      ? 'Xác nhận gia hạn gói tháng'
+                      : 'Xác nhận đăng ký gói tháng',
+                  subtitle:
+                      'Kiểm tra chi phí, quota và số dư trước khi tiếp tục.',
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SummaryTile(
+                              label: 'Chi phí',
+                              value: '${crmMonthlyPlan.priceCredits} Credits',
+                              note: formatVnd(crmMonthlyPlan.priceVnd),
+                              icon: Icons.account_balance_wallet_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(
+                            child: _SummaryTile(
+                              label: 'Quota mới',
+                              value: '${crmMonthlyPlan.aiRequests} AI',
+                              note: 'Hiệu lực 30 ngày',
+                              icon: Icons.auto_awesome_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      ...details.rows.map(
+                        (row) => _DetailRow(label: row.$1, value: row.$2),
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.m),
+                        decoration: BoxDecoration(
+                          color: details.canPayWithCredits
+                              ? AppColors.successSoft
+                              : AppColors.warningSoft,
+                          borderRadius: AppSpacing.borderRadiusM,
+                          border: Border.all(
+                            color: details.canPayWithCredits
+                                ? AppColors.success
+                                : AppColors.warning,
+                          ),
+                        ),
+                        child: Text(
+                          details.canPayWithCredits
+                              ? 'Số dư hiện tại: ${authState.creditBalance} Credits. Bạn có thể thanh toán bằng Credits ngay.'
+                              : 'Số dư hiện tại: ${authState.creditBalance} Credits, thiếu ${details.missingCredits} Credits. Bạn vẫn có thể chọn VietQR.',
+                          style: AppTextStyles.body.copyWith(
+                            color: details.canPayWithCredits
+                                ? AppColors.successText
+                                : AppColors.warningText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _DialogActions(
+                  cancelText: 'Chưa gia hạn',
+                  confirmText: 'Tôi xác nhận',
+                  onCancel: () => Navigator.of(dialogContext).pop(),
+                  onConfirm: () {
+                    Navigator.of(dialogContext).pop();
+                    _showCheckoutDialog(crmMonthlyPlan);
+                  },
+                ),
+              ],
             ),
-            backgroundColor: AppColors.errorText,
           ),
         );
-      }
-    }
+      },
+    );
+  }
+
+  Future<void> _showCheckoutDialog(CrmSubscriptionProduct product) async {
+    final authState = ref.read(crmAuthProvider);
+    final canPayCredits = authState.creditBalance >= product.priceCredits;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(AppSpacing.m),
+          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DialogHeader(
+                  icon: product.isPlan
+                      ? Icons.workspace_premium_rounded
+                      : Icons.bolt_rounded,
+                  title: product.name,
+                  subtitle:
+                      'Chọn Credits để kích hoạt ngay hoặc VietQR để tạo mã chuyển khoản chính xác.',
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Column(
+                    children: [
+                      _DetailRow(
+                        label: 'Giá trị',
+                        value:
+                            '${formatVnd(product.priceVnd)} hoặc ${product.priceCredits} Credits',
+                      ),
+                      _DetailRow(
+                        label: product.isPlan ? 'Quota gói chính' : 'AI thêm',
+                        value: '${product.aiRequests} yêu cầu AI',
+                      ),
+                      _DetailRow(
+                        label: 'Số dư Credits',
+                        value: '${authState.creditBalance} Credits',
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      AppButton(
+                        text: canPayCredits
+                            ? 'Thanh toán bằng Credits'
+                            : 'Không đủ Credits',
+                        icon: Icons.account_balance_wallet_rounded,
+                        width: double.infinity,
+                        height: 44,
+                        isLoading: _isProcessing,
+                        onPressed: canPayCredits && !_isProcessing
+                            ? () {
+                                Navigator.of(dialogContext).pop();
+                                _checkout(product, 'credit');
+                              }
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpacing.s),
+                      AppButton(
+                        text: 'Tạo mã VietQR chuyển khoản',
+                        icon: Icons.qr_code_2_rounded,
+                        width: double.infinity,
+                        height: 44,
+                        variant: AppButtonVariant.outline,
+                        onPressed: _isProcessing
+                            ? null
+                            : () {
+                                Navigator.of(dialogContext).pop();
+                                _checkout(product, 'bank_transfer');
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                _DialogActions(
+                  cancelText: 'Đóng',
+                  onCancel: () => Navigator.of(dialogContext).pop(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showBankTransferDialog(
+    CrmSubscriptionProduct product,
+    CrmCheckoutResult checkout,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(AppSpacing.m),
+          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 760),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DialogHeader(
+                  icon: Icons.qr_code_2_rounded,
+                  title: 'Mã VietQR chuyển khoản',
+                  subtitle:
+                      'Quét đúng mã hoặc chuyển khoản đúng nội dung để hệ thống tự duyệt giao dịch.',
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppSpacing.l),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.m),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: AppSpacing.borderRadiusM,
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: checkout.qrCodeUrl == null
+                              ? const Icon(
+                                  Icons.qr_code_2_rounded,
+                                  size: 160,
+                                  color: AppColors.textSecondary,
+                                )
+                              : Image.network(
+                                  checkout.qrCodeUrl!,
+                                  width: 240,
+                                  height: 240,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.qr_code_2_rounded,
+                                        size: 160,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                ),
+                        ),
+                        const SizedBox(height: AppSpacing.l),
+                        _DetailRow(label: 'Sản phẩm', value: product.name),
+                        _DetailRow(
+                          label: 'Số tiền',
+                          value: formatVnd(checkout.amountVnd),
+                        ),
+                        _DetailRow(
+                          label: 'Ngân hàng',
+                          value: checkout.bankName,
+                        ),
+                        _DetailRow(
+                          label: 'Số tài khoản',
+                          value: checkout.accountNumber,
+                        ),
+                        _DetailRow(
+                          label: 'Chủ tài khoản',
+                          value: checkout.accountHolder,
+                        ),
+                        const SizedBox(height: AppSpacing.s),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.m),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoft,
+                            borderRadius: AppSpacing.borderRadiusM,
+                            border: Border.all(color: AppColors.primaryBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Nội dung chuyển khoản',
+                                style: AppTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              SelectableText(
+                                checkout.transferContent,
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.s),
+                              AppButton(
+                                text: 'Sao chép nội dung',
+                                icon: Icons.copy_rounded,
+                                variant: AppButtonVariant.outline,
+                                onPressed: () {
+                                  Clipboard.setData(
+                                    ClipboardData(
+                                      text: checkout.transferContent,
+                                    ),
+                                  );
+                                  _showSnack(
+                                    'Đã sao chép nội dung chuyển khoản.',
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.m),
+                        Text(
+                          'Lưu ý: Không sửa nội dung chuyển khoản. Sau khi ngân hàng ghi nhận đúng mã ${checkout.transferContent}, giao dịch sẽ được tự động duyệt.',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.warningText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                _DialogActions(
+                  cancelText: 'Đóng',
+                  confirmText: 'Tôi đã chuyển khoản',
+                  onCancel: () {
+                    Navigator.of(dialogContext).pop();
+                    ref.read(crmAuthProvider.notifier).refreshSubscription();
+                  },
+                  onConfirm: () {
+                    Navigator.of(dialogContext).pop();
+                    ref.read(crmAuthProvider.notifier).refreshSubscription();
+                    _showSnack(
+                      'Đã ghi nhận. Hệ thống sẽ tự duyệt khi tiền về.',
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -102,228 +416,263 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final isActive = authState.subscriptionStatus == 'active';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Đăng Ký & Quản Lý Gói AI',
-          style: AppTextStyles.pageTitle.copyWith(fontSize: 20),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Row chứa gói hiện tại và quota AI
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 800;
-                return Flex(
-                  direction: isWide ? Axis.horizontal : Axis.vertical,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Cột trái: Trạng thái gói
-                    Expanded(
-                      flex: isWide ? 1 : 0,
-                      child: _buildPlanStatusCard(
-                        isActive,
-                        isExpired,
-                        authState,
-                      ),
-                    ),
-                    if (isWide) const SizedBox(width: 24),
-                    if (!isWide) const SizedBox(height: 24),
-                    // Cột phải: Quota AI
-                    Expanded(
-                      flex: isWide ? 1 : 0,
-                      child: _buildAiQuotaCard(authState),
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // Phần nạp thêm AI & Gia hạn qua Ngân hàng
-            Text(
-              'Mua Gói Nạp Thêm AI Quota',
-              style: AppTextStyles.sectionTitle,
-            ),
-            const SizedBox(height: 16),
-            _buildAiTopupPackages(),
-            const SizedBox(height: 32),
-
-            Text('Thanh Toán & Nạp Tiền', style: AppTextStyles.sectionTitle),
-            const SizedBox(height: 16),
-            _buildBillingInstructions(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlanStatusCard(
-    bool isActive,
-    bool isExpired,
-    CrmAuthState authState,
-  ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Gói Dịch Vụ CRM',
-                  style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
+                _HeaderSection(
+                  status: authState.subscriptionStatus ?? 'none',
+                  creditBalance: authState.creditBalance,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? AppColors.successSoft
-                        : (isExpired
-                              ? AppColors.errorSoft
-                              : AppColors.warningSoft),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isActive
-                        ? 'Đang hoạt động'
-                        : (isExpired ? 'Đã hết hạn' : 'Chưa đăng ký'),
-                    style: AppTextStyles.caption.copyWith(
-                      color: isActive
-                          ? AppColors.successText
-                          : (isExpired
-                                ? AppColors.errorText
-                                : AppColors.warningText),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 16),
-            _buildPlanDetailRow(
-              'Mức Giá:',
-              '500,000 VND / tháng (hoặc 525 credits)',
-            ),
-            _buildPlanDetailRow(
-              'Thời Hạn:',
-              'Hằng tháng (Gia hạn thủ công mặc định)',
-            ),
-            _buildPlanDetailRow(
-              'Trạng Thái Hệ Thống:',
-              isExpired
-                  ? 'Chế độ Đọc-Chỉ-Xem (Read-Only) đang kích hoạt'
-                  : 'Hoạt động đầy đủ tính năng',
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isProcessing
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Gia Hạn Dịch Vụ'),
-                                content: const Text(
-                                  'Hệ thống sẽ trừ 525 Credits từ số dư tài khoản của bạn để gia hạn gói CRM 1 tháng. Bạn có muốn tiếp tục?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('Hủy'),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _renewSubscription();
-                                    },
-                                    child: const Text('Xác Nhận'),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: _isProcessing
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Gia Hạn Bằng Credits (525đ)'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Switch(
-                  value: _isAutoRenew,
-                  activeColor: AppColors.primary,
-                  onChanged: (val) {
-                    setState(() {
-                      _isAutoRenew = val;
-                    });
+                const SizedBox(height: AppSpacing.l),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 860;
+                    final planCard = _buildPlanCard(
+                      isActive: isActive,
+                      isExpired: isExpired,
+                      authState: authState,
+                    );
+                    final quotaCard = _buildQuotaCard(authState);
+
+                    if (!isWide) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          planCard,
+                          const SizedBox(height: AppSpacing.l),
+                          quotaCard,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 6, child: planCard),
+                        const SizedBox(width: AppSpacing.l),
+                        Expanded(flex: 5, child: quotaCard),
+                      ],
+                    );
                   },
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Tự động gia hạn từ Credits khi hết chu kỳ',
-                    style: AppTextStyles.body.copyWith(fontSize: 13),
+                const SizedBox(height: AppSpacing.xl),
+                Text('Gói AI bổ sung', style: AppTextStyles.sectionTitle),
+                const SizedBox(height: AppSpacing.s),
+                Text(
+                  'Mua thêm lượt AI khi gói Alpha CRM đang hoạt động. Có thể thanh toán bằng Credits hoặc tạo mã VietQR riêng cho từng gói.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.m),
+                _buildAiTopUpGrid(isActive),
+                const SizedBox(height: AppSpacing.xl),
+                _buildPaymentGuide(),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPlanDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
+  Widget _buildPlanCard({
+    required bool isActive,
+    required bool isExpired,
+    required CrmAuthState authState,
+  }) {
+    final statusColor = isActive
+        ? AppColors.successText
+        : isExpired
+        ? AppColors.errorText
+        : AppColors.warningText;
+    final statusBg = isActive
+        ? AppColors.successSoft
+        : isExpired
+        ? AppColors.errorSoft
+        : AppColors.warningSoft;
+
+    return _SurfaceCard(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$label ',
-            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.body.copyWith(
-                color: AppColors.textPrimary,
-                fontSize: 13,
+          Row(
+            children: [
+              const _IconBadge(icon: Icons.workspace_premium_rounded),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gói Alpha CRM hàng tháng',
+                      style: AppTextStyles.cardTitle,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Dùng cho Windows Client, Android Connector và các tính năng CRM/Zalo automation.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.s,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: AppSpacing.borderRadiusPill,
+                ),
+                child: Text(
+                  isActive
+                      ? 'Đang hoạt động'
+                      : isExpired
+                      ? 'Đã hết hạn'
+                      : 'Chưa đăng ký',
+                  style: AppTextStyles.caption.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.l),
+          Wrap(
+            spacing: AppSpacing.m,
+            runSpacing: AppSpacing.m,
+            children: [
+              _MetricPill(
+                label: 'Chi phí',
+                value: '${crmMonthlyPlan.priceCredits} Credits',
+                note: formatVnd(crmMonthlyPlan.priceVnd),
+              ),
+              _MetricPill(
+                label: 'Chu kỳ',
+                value: '30 ngày',
+                note: 'Gia hạn thủ công',
+              ),
+              _MetricPill(
+                label: 'Quota AI',
+                value: '${crmMonthlyPlan.aiRequests}',
+                note: 'yêu cầu / chu kỳ',
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.l),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.m),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: AppSpacing.borderRadiusM,
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: Text(
+              isExpired
+                  ? 'Gói đã hết hạn. Hãy gia hạn để mở lại gửi tin, chatbot và sử dụng quota AI.'
+                  : isActive
+                  ? 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 1000 yêu cầu AI.'
+                  : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị.',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.l),
+          AppButton(
+            text: isActive ? 'Gia hạn gói tháng' : 'Đăng ký gói tháng',
+            icon: Icons.payments_rounded,
+            height: 44,
+            width: double.infinity,
+            isLoading: _isProcessing,
+            onPressed: _isProcessing
+                ? null
+                : () => _showRenewalConfirmDialog(authState),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuotaCard(CrmAuthState authState) {
+    final totalRemaining =
+        authState.includedAiRemaining + authState.extraAiRemaining;
+
+    return _SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _IconBadge(icon: Icons.auto_awesome_rounded),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Text(
+                  'Hạn mức AI hiện tại',
+                  style: AppTextStyles.cardTitle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.l),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  '$totalRemaining',
+                  style: AppTextStyles.pageTitle.copyWith(
+                    fontSize: 48,
+                    color: totalRemaining > 0
+                        ? AppColors.successText
+                        : AppColors.errorText,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  'yêu cầu AI khả dụng',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.l),
+          Row(
+            children: [
+              Expanded(
+                child: _QuotaBucket(
+                  label: 'Trong gói tháng',
+                  value: authState.includedAiRemaining,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: _QuotaBucket(
+                  label: 'Mua thêm',
+                  value: authState.extraAiRemaining,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Text(
+            'Quota mua thêm được giữ lại, nhưng chỉ dùng khi gói Alpha CRM đang hoạt động.',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textMuted,
+              height: 1.45,
             ),
           ),
         ],
@@ -331,167 +680,39 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  Widget _buildAiQuotaCard(CrmAuthState authState) {
-    final totalRemaining =
-        authState.includedAiRemaining + authState.extraAiRemaining;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Hạn Mức AI (Quota)',
-              style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 24),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    '$totalRemaining',
-                    style: AppTextStyles.pageTitle.copyWith(
-                      fontSize: 48,
-                      color: totalRemaining > 0
-                          ? AppColors.successText
-                          : AppColors.errorText,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'Yêu cầu AI còn lại',
-                    style: AppTextStyles.caption.copyWith(fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildQuotaInfoSub(
-                  'Bao gồm trong gói:',
-                  '${authState.includedAiRemaining}',
-                ),
-                Container(width: 1, height: 32, color: AppColors.border),
-                _buildQuotaInfoSub(
-                  'Nạp thêm ngoài gói:',
-                  '${authState.extraAiRemaining}',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuotaInfoSub(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 11)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.textPrimary,
-            fontSize: 15,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAiTopupPackages() {
-    final packages = [
-      {'amount': 200, 'price': 50, 'badge': 'Tiết kiệm'},
-      {'amount': 1000, 'price': 200, 'badge': 'Phổ biến'},
-      {'amount': 2000, 'price': 350, 'badge': 'Ưu đãi lớn'},
-    ];
-
+  Widget _buildAiTopUpGrid(bool hasActivePlan) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth > 700;
-        return Flex(
-          direction: isWide ? Axis.horizontal : Axis.vertical,
-          children: packages.map((pkg) {
-            final card = Card(
-              color: AppColors.surfaceMuted,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppColors.border.withOpacity(0.5)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 24,
+        final isWide = constraints.maxWidth > 760;
+        if (!isWide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: crmAiTopUpPacks.map((product) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.m),
+                child: _TopUpCard(
+                  product: product,
+                  enabled: hasActivePlan && !_isProcessing,
+                  onBuy: () => _showCheckoutDialog(product),
                 ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primarySoft,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        pkg['badge'] as String,
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '+${pkg['amount']} AI Requests',
-                      style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '${pkg['price']} Credits',
-                      style: AppTextStyles.pageTitle.copyWith(
-                        fontSize: 22,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _isProcessing
-                          ? null
-                          : () => _purchasePack(
-                              pkg['amount'] as int,
-                              pkg['price'] as int,
-                            ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      child: const Text('Mua Ngay'),
-                    ),
-                  ],
-                ),
-              ),
-            );
+              );
+            }).toList(),
+          );
+        }
 
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: crmAiTopUpPacks.map((product) {
             return Expanded(
-              flex: isWide ? 1 : 0,
               child: Padding(
                 padding: EdgeInsets.only(
-                  right: isWide ? 16.0 : 0,
-                  bottom: isWide ? 0 : 16.0,
+                  right: product != crmAiTopUpPacks.last ? AppSpacing.m : 0,
                 ),
-                child: card,
+                child: _TopUpCard(
+                  product: product,
+                  enabled: hasActivePlan && !_isProcessing,
+                  onBuy: () => _showCheckoutDialog(product),
+                ),
               ),
             );
           }).toList(),
@@ -500,121 +721,494 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  Widget _buildBillingInstructions() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 700;
-            return Flex(
-              direction: isWide ? Axis.horizontal : Axis.vertical,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // QR hoặc Bank Logo
-                Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    color: AppColors.slateSoft,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.qr_code_2_rounded,
-                          size: 64,
-                          color: AppColors.textSecondary,
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Quét mã chuyển khoản',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (isWide) const SizedBox(width: 32),
-                if (!isWide) const SizedBox(height: 24),
-
-                // Bank Details
-                Expanded(
-                  flex: isWide ? 1 : 0,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Chuyển Khoản Ngân Hàng (24/7)',
-                        style: AppTextStyles.cardTitle,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildBankDetail(
-                        'Ngân hàng:',
-                        'MB Bank (Ngân hàng Quân Đội)',
-                      ),
-                      _buildBankDetail('Số tài khoản:', '9999-8888-6666-999'),
-                      _buildBankDetail(
-                        'Chủ tài khoản:',
-                        'CONG TY COPH AN ALPHA STUDIO',
-                      ),
-                      _buildBankDetail(
-                        'Nội dung chuyển khoản:',
-                        'ALPHA CRM <Email của bạn>',
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.warningSoft,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '⚠️ Lưu ý: Tỷ giá nạp Credits là 1,000 VND = 1 Credit. Hệ thống sẽ tự động duyệt giao dịch chuyển khoản trong vòng 2-5 phút.',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.warningText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBankDetail(String label, String val) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+  Widget _buildPaymentGuide() {
+    return _SurfaceCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const _IconBadge(icon: Icons.qr_code_2_rounded),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Thanh toán VietQR chính xác',
+                  style: AppTextStyles.cardTitle,
+                ),
+                const SizedBox(height: AppSpacing.s),
+                Text(
+                  'Mỗi lần đăng ký/gia hạn hoặc mua gói AI, hãy bấm "Tạo mã VietQR" để hệ thống tạo QR riêng kèm mã giao dịch. Không dùng mã QR tĩnh hoặc nội dung chuyển khoản tự nhập.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.m),
+                const Wrap(
+                  spacing: AppSpacing.s,
+                  runSpacing: AppSpacing.s,
+                  children: [
+                    _GuideChip(text: 'Ngân hàng OCB'),
+                    _GuideChip(text: 'Tài khoản CASS55252503'),
+                    _GuideChip(text: 'Tự duyệt khi đúng mã CRM'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderSection extends StatelessWidget {
+  final String status;
+  final int creditBalance;
+
+  const _HeaderSection({required this.status, required this.creditBalance});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const _IconBadge(icon: Icons.subscriptions_rounded, size: 56),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Đăng ký & gói AI',
+                  style: AppTextStyles.pageTitle.copyWith(fontSize: 24),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Quản lý gói Alpha CRM, mua thêm quota AI và tạo mã VietQR chuyển khoản cho từng giao dịch.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.m),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('Credits', style: AppTextStyles.caption),
+              Text(
+                '$creditBalance',
+                style: AppTextStyles.cardTitle.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                status == 'active'
+                    ? 'Gói đang hoạt động'
+                    : status == 'expired'
+                    ? 'Gói đã hết hạn'
+                    : 'Chưa có gói',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  final Widget child;
+
+  const _SurfaceCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+  final double size;
+
+  const _IconBadge({required this.icon, this.size = 44});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: AppSpacing.borderRadiusM,
+      ),
+      child: Icon(icon, color: AppColors.primary, size: size * 0.52),
+    );
+  }
+}
+
+class _MetricPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final String note;
+
+  const _MetricPill({
+    required this.label,
+    required this.value,
+    required this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyles.caption),
+          const SizedBox(height: AppSpacing.xs),
+          Text(value, style: AppTextStyles.bodyMedium),
           Text(
-            '$label ',
-            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+            note,
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuotaBucket extends StatelessWidget {
+  final String label;
+  final int value;
+
+  const _QuotaBucket({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyles.caption),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '$value',
+            style: AppTextStyles.cardTitle.copyWith(
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopUpCard extends StatelessWidget {
+  final CrmSubscriptionProduct product;
+  final bool enabled;
+  final VoidCallback onBuy;
+
+  const _TopUpCard({
+    required this.product,
+    required this.enabled,
+    required this.onBuy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPopular = product.productId == 'crm_ai_pack_500';
+
+    return _SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _IconBadge(
+                icon: isPopular ? Icons.local_fire_department : Icons.bolt,
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: isPopular
+                      ? AppColors.warningSoft
+                      : AppColors.primarySoft,
+                  borderRadius: AppSpacing.borderRadiusPill,
+                ),
+                child: Text(
+                  product.badge,
+                  style: AppTextStyles.caption.copyWith(
+                    color: isPopular
+                        ? AppColors.warningText
+                        : AppColors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Text(product.name, style: AppTextStyles.cardTitle),
+          const SizedBox(height: AppSpacing.s),
+          Text(
+            '+${product.aiRequests} yêu cầu AI dùng cho chatbot, phân tích khách hàng và soạn chiến dịch.',
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.l),
+          Text(
+            formatVnd(product.priceVnd),
+            style: AppTextStyles.pageTitle.copyWith(fontSize: 24),
+          ),
+          Text(
+            'hoặc ${product.priceCredits} Credits',
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.l),
+          AppButton(
+            text: enabled ? 'Mua gói này' : 'Cần gói CRM',
+            icon: Icons.shopping_cart_checkout_rounded,
+            width: double.infinity,
+            onPressed: enabled ? onBuy : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final String note;
+  final IconData icon;
+
+  const _SummaryTile({
+    required this.label,
+    required this.value,
+    required this.note,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(height: AppSpacing.s),
+          Text(label, style: AppTextStyles.caption),
+          Text(value, style: AppTextStyles.bodyMedium),
+          Text(
+            note,
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
-              val,
+              value,
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textPrimary,
-                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DialogHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _DialogHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: const BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.radiusM),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _IconBadge(icon: icon),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTextStyles.sectionTitle),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  subtitle,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DialogActions extends StatelessWidget {
+  final String cancelText;
+  final String? confirmText;
+  final VoidCallback onCancel;
+  final VoidCallback? onConfirm;
+
+  const _DialogActions({
+    required this.cancelText,
+    this.confirmText,
+    required this.onCancel,
+    this.onConfirm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.borderSoft)),
+      ),
+      child: Wrap(
+        spacing: AppSpacing.s,
+        runSpacing: AppSpacing.s,
+        alignment: WrapAlignment.end,
+        children: [
+          AppButton(
+            text: cancelText,
+            variant: AppButtonVariant.outline,
+            onPressed: onCancel,
+          ),
+          if (confirmText != null)
+            AppButton(text: confirmText!, onPressed: onConfirm),
+        ],
+      ),
+    );
+  }
+}
+
+class _GuideChip extends StatelessWidget {
+  final String text;
+
+  const _GuideChip({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.s,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: AppSpacing.borderRadiusPill,
+      ),
+      child: Text(
+        text,
+        style: AppTextStyles.caption.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }

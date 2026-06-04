@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
+import '../../../../../shared/widgets/compliance_warnings_popup.dart';
+import '../../../../../shared/utils/zalo_compliance_guard.dart';
+import '../../../../settings/providers/settings_provider.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_button.dart';
@@ -93,7 +96,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildHeader(),
+            _buildHeader(state),
             if (state.complianceError != null) ...[
               const SizedBox(height: AppSpacing.sm),
               AppAlert(
@@ -147,7 +150,18 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(FriendByGroupState state) {
+    final settings = ref.watch(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: ZaloActionType.friendByGroup,
+      targetCount: state.selectedMemberIds.length,
+    );
+    final activeWarning = decision.allowed
+        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        : '${decision.title}: ${decision.message}';
+    final hasWarningOrError = activeWarning != null;
+
     return Row(
       children: [
         const Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
@@ -165,6 +179,24 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
             ],
           ),
         ),
+        IconButton(
+          icon: Icon(
+            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
+            size: 28,
+          ),
+          tooltip: hasWarningOrError
+              ? 'Có khuyến cáo an toàn (Nhấn để xem)'
+              : 'Hệ thống an toàn (Nhấn để xem)',
+          onPressed: () {
+            showComplianceWarningsDialog(
+              context,
+              activeWarning: activeWarning,
+              actionType: ZaloActionType.friendByGroup,
+            );
+          },
+        ),
+        const SizedBox(width: AppSpacing.s),
       ],
     );
   }

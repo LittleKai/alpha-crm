@@ -113,12 +113,31 @@ class _AppLockOverlayState extends ConsumerState<AppLockOverlay> {
                         ),
                       ],
                       const SizedBox(height: AppSpacing.l),
-                      ElevatedButton.icon(
-                        onPressed: () => _submit(state.setupRequired),
-                        icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(
-                          state.setupRequired ? 'Tạo khóa' : 'Mở khóa',
-                        ),
+                      Row(
+                        children: [
+                          if (state.setupRequired) ...[
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  _passwordController.clear();
+                                  _confirmController.clear();
+                                  ref.read(appLockProvider.notifier).cancelSetup();
+                                },
+                                child: const Text('Hủy'),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.m),
+                          ],
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _submit(state.setupRequired),
+                              icon: const Icon(Icons.lock_open_rounded),
+                              label: Text(
+                                state.setupRequired ? 'Tạo khóa' : 'Mở khóa',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -124,9 +124,7 @@ class ZaloBackendManager {
 
       // Lắng nghe dữ liệu đầu ra từ backend để tiện debug trong quá trình phát triển
       _backendProcess!.stdout.listen((data) {
-        if (kDebugMode) {
-          debugPrint("ZaloBot-Log: ${String.fromCharCodes(data).trim()}");
-        }
+        debugPrint("ZaloBot-Log: ${String.fromCharCodes(data).trim()}");
       });
 
       _backendProcess!.stderr.listen((data) {
