@@ -1,6 +1,8 @@
 # Project Summary
 
-**Last Updated:** 2026-06-04T16:35:00+07:00
+**Last Updated:** 2026-06-04T19:25:35+07:00
+**Session:** #58 - Completed the requested Alpha CRM/reference-project analysis before implementation. Added `docs/reference-analysis.md` comparing the current Flutter CRM against the Deplao Builder Electron reference and the ZaloCRM Vue/Fastify reference, plus `docs/implementation-plan.md` with a phased integration plan and risk/test checklist. Implemented Phase 1 on the Customers screen: added a status pipeline summary, desktop/tablet customer detail panel, richer identity/source/status table cells, selected-contact bulk action bar, responsive toolbar overflow fix, and `AppDialog` usage for complex customer/segment dialogs. Added `test/customers_screen_test.dart` covering the new pipeline and detail-panel interaction. Verified formatting, focused Customers test, and full Flutter tests; `flutter analyze` still reports existing info-level lints outside the modified Customers files.
+
 **Session:** #57 - Refactored the Alpha CRM Flutter "Đăng ký & gói AI" screen with backend-aligned catalog data and real checkout flows. Added `subscription_catalog.dart` for the monthly plan (`crm_monthly`: 500,000 VND / 525 Credits / 1000 AI quota) and AI top-up packs (+200/+1000/+2000), plus tests for catalog parity, renewal detail calculation, and VietQR checkout parsing. Redesigned `subscription_screen.dart` into a dense operational dashboard with a monthly plan card, AI quota card, AI top-up cards, custom renewal confirmation dialog, payment-method dialog, and a real VietQR dialog using backend-returned `qrCodeUrl`, OCB `CASS55252503`, and exact `transferContent` instead of static placeholder bank instructions. Added desktop/mobile widget tests that caught and fixed the Flutter unbounded-height layout assertion (`parentDataDirty` follow-on) and mobile button overflow. `CrmAuthState` now tracks `creditBalance` and refreshes it from `/auth/me` so the renewal dialog can warn when Credits are insufficient.
 
 **Session:** #56 - Refactored compliance warning UX across all high-risk screens. Redesigned the Zalo compliance warnings dialog (`_ComplianceWarningsDialog` in `compliance_warnings_popup.dart`) with premium styling, dynamic header gradients based on warning state (deep Amber for warning, Dark Slate for safe), and user-friendly Vietnamese text translating technical jargon like "Consent". Modified `bulk_messaging_screen.dart` to make the warning button always visible in the header and open the redesigned dialog on click, fixing the typo "danh bạ bè" to "danh bạ bạn bè". Integrated the same always-visible warning button UX into the headers of 6 other high-risk screens: Invite-to-Group, Join-Groups, Create-Groups, Scan-Members, Friend-by-Phone, and Friend-by-Group. Updated `.claude/CONVENTIONS.md` and `claude.md` to document the convention requiring developers to use the custom `showComplianceWarningsDialog` instead of Flutter's default dialogs for Zalo compliance and safety alerts. Verified with clean static analysis.
@@ -96,6 +98,8 @@ integration/
     src/personal-login.ts      CLI bootstrap for personal Zalo QR login
     src/zalo.ts                Channel selector/router
 docs/
+  reference-analysis.md                    Current Alpha CRM vs Deplao Builder and ZaloCRM reference analysis
+  implementation-plan.md                   Phased integration plan derived from the reference analysis
   zalo-integration-and-risk-controls.md  Zalo compliance documentation (personal-first)
   zalo-integration-installation-and-usage.md  Setup and usage guide for Zalo integration
   zalo-reference-sources.md              List of 3 external reference projects and local paths
@@ -116,6 +120,7 @@ docs/
 | `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 17 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
+| `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, selected-contact actions, and a desktop/tablet detail panel. |
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
@@ -136,6 +141,9 @@ docs/
 | `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
 | `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
 | `docs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
+| `docs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
+| `docs/implementation-plan.md` | Reference integration plan | Documents the phased implementation plan, impacted files, risks, and verification checklist. |
+| `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 

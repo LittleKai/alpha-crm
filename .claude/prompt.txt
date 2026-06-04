@@ -1,76 +1,218 @@
+Bạn là senior Flutter developer kiêm software architect. Nhiệm vụ của bạn là phân tích, tham khảo và tích hợp có chọn lọc các ý tưởng giao diện, luồng chức năng và tính năng phù hợp từ 2 dự án tham chiếu vào dự án Flutter CRM hiện tại của tôi.
 
+## Dự án chính cần cải thiện
 
-lib/features/settings/presentation/screens/settings_screen.dart:507:14: Error: The final variable 'showAddButton' must be
-initialized.
-Try adding an initializer ('= expression') to the declaration.
-  final bool showAddButton;
-             ^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:509:3: Error: Can't have modifier 'const' here.
-Try removing 'const'.
-  const _AccountCard({
-  ^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:516:5: Error: Expected a function body or '=>'.
-Try adding {}.
-  });
-    ^
-lib/features/settings/presentation/screens/settings_screen.dart:676:1: Error: Expected a declaration, but got '}'.
-}
-^
-lib/features/settings/presentation/screens/settings_screen.dart:507:14: Error: Field 'showAddButton' should be initialized
-because its type 'bool' doesn't allow null.
-  final bool showAddButton;
-             ^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:510:14: Error: Field formal parameters can only be used in a
-constructor.
-Try removing 'this.'.
-    required this.connectedCount,
-             ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:511:14: Error: Field formal parameters can only be used in a  
-constructor.
-Try removing 'this.'.
-    required this.accounts,
-             ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:512:14: Error: Field formal parameters can only be used in a  
-constructor.
-Try removing 'this.'.
-    required this.onAddAccount,
-             ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:513:14: Error: Field formal parameters can only be used in a  
-constructor.
-Try removing 'this.'.
-    required this.onConfigureAccount,
-             ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:514:14: Error: Field formal parameters can only be used in a  
-constructor.
-Try removing 'this.'.
-    required this.onDeleteAccount,
-             ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:515:5: Error: Field formal parameters can only be used in a   
-constructor.
-Try removing 'this.'.
-    this.showAddButton = true,
-    ^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:535:26: Error: Undefined name 'connectedCount'.
-                label: '$connectedCount đang kết nối',
-                         ^^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:536:26: Error: Undefined name 'connectedCount'.
-                variant: connectedCount > 0
-                         ^^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:548:15: Error: Undefined name 'accounts'.
-          if (accounts.isNotEmpty) ...[
-              ^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:560:26: Error: Undefined name 'accounts'.
-              itemCount: accounts.length,
-                         ^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:564:29: Error: Undefined name 'accounts'.
-                final acc = accounts[index];
-                            ^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:643:42: Error: Method not found: 'onConfigureAccount'.        
-                        onPressed: () => onConfigureAccount(acc),
-                                         ^^^^^^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:652:42: Error: Method not found: 'onDeleteAccount'.
-                        onPressed: () => onDeleteAccount(acc),
-                                         ^^^^^^^^^^^^^^^
-lib/features/settings/presentation/screens/settings_screen.dart:668:28: Error: Undefined name 'onAddAccount'.
-                onPressed: onAddAccount,
-                           ^^^^^^^^^^^^
+Dự án Flutter hiện tại:
+
+`D:\Dev\NodeJS\alpha-studio\tools\alpha-crm`
+
+## Hai dự án tham chiếu
+
+1. `D:\Dev\2.reference_pj\Zalo-ref\deplao-builder`
+2. `D:\Dev\2.reference_pj\Zalo-ref\ZaloCRM`
+
+## Mục tiêu chính
+
+Tôi muốn bạn tham khảo từ hai dự án trên để giúp tôi:
+
+1. Cải thiện lại giao diện UI/UX của dự án Flutter `alpha-crm`.
+2. Chỉnh sửa và cải tiến các chức năng có sẵn trong dự án hiện tại.
+3. Tích hợp các tính năng quan trọng, phù hợp và có giá trị từ hai dự án tham chiếu vào dự án Flutter hiện tại.
+4. Không copy máy móc toàn bộ code, mà phải phân tích, chọn lọc và chuyển đổi phù hợp với kiến trúc Flutter hiện có.
+5. Ưu tiên giao diện đẹp, rõ ràng, chuyên nghiệp, giống CRM hiện đại, phù hợp desktop/web/mobile responsive.
+
+## Yêu cầu làm việc
+
+Trước khi chỉnh sửa code, hãy thực hiện các bước sau:
+
+### Bước 1: Phân tích dự án hiện tại
+
+Hãy đọc toàn bộ cấu trúc dự án:
+
+`D:\Dev\NodeJS\alpha-studio\tools\alpha-crm`
+
+Sau đó xác định:
+
+* Kiến trúc hiện tại của Flutter app.
+* Các màn hình chính đang có.
+* Các component UI đang được dùng.
+* Cách quản lý state hiện tại.
+* Cách tổ chức route/navigation.
+* Các chức năng CRM hiện có.
+* Các điểm yếu về UI/UX.
+* Các điểm yếu về code structure.
+* Các phần có thể tái cấu trúc mà không phá vỡ app.
+
+Không được sửa code ngay ở bước này.
+
+### Bước 2: Phân tích hai dự án tham chiếu
+
+Hãy phân tích hai thư mục:
+
+`D:\Dev\2.reference_pj\Zalo-ref\deplao-builder`
+
+và
+
+`D:\Dev\2.reference_pj\Zalo-ref\ZaloCRM`
+
+Với mỗi dự án, hãy xác định:
+
+* Dự án dùng công nghệ gì.
+* Các màn hình đáng tham khảo.
+* Các flow chức năng đáng tham khảo.
+* Các component UI đáng tham khảo.
+* Các tính năng liên quan CRM/Zalo đáng tích hợp.
+* Các điểm mạnh của giao diện.
+* Các điểm mạnh của trải nghiệm người dùng.
+* Những tính năng không nên tích hợp vì không phù hợp, rủi ro hoặc quá lệch kiến trúc.
+
+### Bước 3: Lập bảng so sánh tính năng
+
+Tạo một bảng phân tích gồm các cột:
+
+* Feature / UI / Flow
+* Nguồn tham khảo: deplao-builder hoặc ZaloCRM
+* Mô tả
+* Giá trị khi đưa vào alpha-crm
+* Mức độ ưu tiên: High / Medium / Low
+* Độ khó triển khai: Easy / Medium / Hard
+* Có nên tích hợp không: Yes / No / Later
+* Ghi chú kỹ thuật
+
+Sau đó lưu bảng này vào file markdown:
+
+`D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\docs\reference-analysis.md`
+
+Nếu thư mục `docs` chưa tồn tại thì tạo mới.
+
+### Bước 4: Lập kế hoạch triển khai
+
+Tạo file kế hoạch triển khai:
+
+`D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\docs\implementation-plan.md`
+
+Trong file này cần có:
+
+* Danh sách task rõ ràng.
+* Chia task theo phase.
+* Task nào làm UI trước.
+* Task nào làm function trước.
+* Task nào cần refactor.
+* Task nào có thể làm độc lập.
+* File/directory dự kiến sẽ chỉnh sửa.
+* Rủi ro có thể phát sinh.
+* Cách test sau khi sửa.
+
+Không được bắt đầu sửa code nếu chưa tạo xong 2 file phân tích trên.
+
+## Yêu cầu khi sửa giao diện
+
+Khi cải thiện UI, hãy ưu tiên:
+
+* Sidebar hiện đại, rõ ràng.
+* Dashboard có card thống kê.
+* Table/list dễ đọc.
+* Layout responsive cho desktop/web/mobile.
+* Component tái sử dụng.
+* Màu sắc nhất quán.
+* Spacing, padding, border radius, shadow chuyên nghiệp.
+* Tránh hard-code quá nhiều style rải rác.
+* Tạo theme hoặc design tokens nếu dự án chưa có.
+* Không phá vỡ các chức năng hiện có.
+
+Nếu hai dự án tham chiếu có màn hình đẹp hơn hoặc flow tốt hơn, hãy chuyển đổi sang Flutter theo hướng phù hợp, không copy nguyên văn nếu khác framework.
+
+## Yêu cầu khi cải tiến chức năng
+
+Hãy kiểm tra các chức năng hiện có trong `alpha-crm`, sau đó cải tiến nếu cần:
+
+* Quản lý khách hàng.
+* Quản lý hội thoại/chat nếu có.
+* Quản lý tài khoản/kênh Zalo nếu có.
+* Quản lý nhãn/tag khách hàng nếu có.
+* Tìm kiếm/lọc/sắp xếp dữ liệu.
+* Dashboard thống kê.
+* Cấu hình hệ thống.
+* Mock data hoặc data layer hiện tại.
+* Error handling và empty state.
+* Loading state.
+* Navigation giữa các màn hình.
+
+Nếu trong hai dự án tham chiếu có tính năng phù hợp, hãy tích hợp theo mức ưu tiên.
+
+## Nguyên tắc tích hợp
+
+* Không tích hợp những phần có rủi ro bảo mật cao.
+* Không thêm code không dùng.
+* Không thêm dependency nếu không thật sự cần thiết.
+* Nếu cần thêm package Flutter mới, phải giải thích lý do trong implementation-plan.md.
+* Ưu tiên giữ kiến trúc hiện tại nếu hợp lý.
+* Nếu kiến trúc hiện tại yếu, đề xuất refactor từng bước.
+* Mọi thay đổi phải có mục tiêu rõ ràng.
+* Không làm app phình to không cần thiết.
+
+## Quy trình thực hiện bắt buộc
+
+Hãy làm theo thứ tự:
+
+1. Phân tích dự án chính.
+2. Phân tích hai dự án tham chiếu.
+3. Tạo `docs/reference-analysis.md`.
+4. Tạo `docs/implementation-plan.md`.
+5. Sau đó mới bắt đầu chỉnh sửa code.
+6. Sau mỗi phase, chạy kiểm tra lỗi bằng lệnh phù hợp.
+7. Sửa toàn bộ lỗi compile/lint phát sinh do thay đổi của bạn.
+8. Cuối cùng cung cấp summary các thay đổi.
+
+## Yêu cầu kỹ thuật Flutter
+
+Khi chỉnh sửa code Flutter:
+
+* Code phải chạy được.
+* Không để lỗi compile.
+* Không để import thừa nghiêm trọng.
+* Ưu tiên widget nhỏ, dễ tái sử dụng.
+* Tách file hợp lý.
+* Không nhồi toàn bộ UI vào một file lớn.
+* Dùng const constructor khi có thể.
+* Không dùng magic number quá nhiều.
+* Tạo component riêng cho card, sidebar, table, filter, empty state nếu cần.
+* Responsive bằng LayoutBuilder, MediaQuery hoặc breakpoint helper phù hợp.
+* Giữ code dễ đọc và dễ mở rộng.
+
+## Kiểm tra sau khi hoàn thành
+
+Sau khi sửa, hãy chạy các lệnh phù hợp trong project Flutter, ví dụ:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+```
+
+Nếu project không có test thì vẫn phải chạy `flutter analyze`.
+
+Nếu có lỗi, hãy sửa lỗi. Nếu có lỗi không thể sửa vì thiếu thông tin hoặc phụ thuộc bên ngoài, hãy ghi rõ trong summary.
+
+## Output cuối cùng cần báo cáo
+
+Sau khi hoàn thành, hãy báo cáo bằng tiếng Việt, gồm:
+
+1. Đã phân tích những gì.
+2. Đã tạo những file tài liệu nào.
+3. Đã tích hợp hoặc cải thiện tính năng nào.
+4. Đã chỉnh sửa những màn hình/component nào.
+5. Các file chính đã thay đổi.
+6. Lệnh kiểm tra đã chạy.
+7. Kết quả kiểm tra.
+8. Các việc nên làm tiếp theo.
+
+## Lưu ý quan trọng
+
+Không được xóa chức năng hiện có nếu không có lý do rõ ràng.
+
+Không được thay đổi backend/API contract nếu chưa cần thiết.
+
+Nếu dự án tham chiếu dùng công nghệ khác Flutter, hãy chỉ học theo UI/UX, flow và logic tính năng, sau đó implement lại theo chuẩn Flutter.
+
+Hãy ưu tiên chất lượng, sự ổn định và khả năng mở rộng hơn là tích hợp quá nhiều tính năng cùng lúc.
