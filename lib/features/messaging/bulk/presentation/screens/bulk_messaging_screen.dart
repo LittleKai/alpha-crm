@@ -9,6 +9,7 @@ import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../shared/utils/zalo_text_formatter.dart';
 import '../../../../../shared/widgets/compliance_warnings_popup.dart';
+import '../../../../../shared/widgets/activity_log_panel.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_button.dart';
@@ -1123,7 +1124,8 @@ class _ConfigPanel extends StatelessWidget {
 
                           if (state.totalCount > 0 ||
                               state.successCount > 0 ||
-                              state.failureCount > 0) ...[
+                              state.failureCount > 0 ||
+                              state.logs.isNotEmpty) ...[
                             const SizedBox(height: AppSpacing.m),
                             Row(
                               children: [
@@ -1166,6 +1168,17 @@ class _ConfigPanel extends StatelessWidget {
                                       state.totalCount,
                                 ),
                               ),
+                            if (state.logs.isNotEmpty) ...[
+                              const SizedBox(height: AppSpacing.m),
+                              SizedBox(
+                                height: 200,
+                                child: ActivityLogPanel(
+                                  logs: state.logs,
+                                  isRunning: state.isSending || state.isPolling,
+                                  onClear: notifier.clearLogs,
+                                ),
+                              ),
+                            ],
                           ],
                         ],
                       );

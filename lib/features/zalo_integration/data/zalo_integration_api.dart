@@ -21,7 +21,7 @@ class ZaloIntegrationApi {
     return cleaned;
   }
 
-  String _translateToVietnamese(String text) {
+  static String translateToVietnamese(String text) {
     if (text.isEmpty) return text;
 
     // Translate common errors
@@ -134,7 +134,7 @@ class ZaloIntegrationApi {
     return text;
   }
 
-  String? _translateRiskLevel(String risk) {
+  static String? _translateRiskLevel(String risk) {
     switch (risk.toLowerCase()) {
       case 'low':
         return 'Rủi ro: Thấp';
@@ -165,9 +165,9 @@ class ZaloIntegrationApi {
         final reason = bodyData['reason'];
         final risk = bodyData['riskLevel'] ?? bodyData['risk'];
 
-        final translatedErr = _translateToVietnamese(err.toString());
+        final translatedErr = translateToVietnamese(err.toString());
         final translatedReason = reason != null
-            ? _translateToVietnamese(reason.toString())
+            ? translateToVietnamese(reason.toString())
             : null;
         final riskLabel = risk != null
             ? _translateRiskLevel(risk.toString())
@@ -210,7 +210,7 @@ class ZaloIntegrationApi {
               'HTTP ${response.statusCode}';
           return {
             'status': 'error',
-            'error': _translateToVietnamese(err.toString()),
+            'error': translateToVietnamese(err.toString()),
           };
         }
       } catch (_) {}
@@ -239,7 +239,7 @@ class ZaloIntegrationApi {
           return {
             'connected': false,
             'mode': 'disconnected',
-            'error': _translateToVietnamese(err.toString()),
+            'error': translateToVietnamese(err.toString()),
           };
         }
       } catch (_) {}

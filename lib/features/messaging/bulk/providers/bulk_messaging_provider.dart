@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../../mock/mock_campaigns.dart';
 import '../../../../shared/utils/zalo_compliance_guard.dart';
 import '../../../../shared/utils/zalo_text_formatter.dart';
+import '../../../../shared/widgets/activity_log_panel.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../../zalo_integration/data/zalo_integration_api.dart';
 import '../data/bulk_campaign_repository.dart';
 
 class BulkMessagingState {
@@ -19,7 +22,7 @@ class BulkMessagingState {
   final ZaloAccount? selectedAccount;
   final List<ZaloAccount> accounts;
   final bool isSending;
-  final List<String> logs;
+  final List<LogItem> logs;
   final int successCount;
   final int failureCount;
   final int cancelledCount;
@@ -79,13 +82,15 @@ class BulkMessagingState {
     ZaloAccount? selectedAccount,
     List<ZaloAccount>? accounts,
     bool? isSending,
-    List<String>? logs,
+    List<LogItem>? logs,
     int? successCount,
     int? failureCount,
     int? cancelledCount,
     int? totalCount,
     String? complianceError,
     String? complianceWarning,
+    bool clearComplianceError = false,
+    bool clearComplianceWarning = false,
     String? activeCampaignId,
     bool? isPolling,
   }) {
@@ -104,8 +109,8 @@ class BulkMessagingState {
       failureCount: failureCount ?? this.failureCount,
       cancelledCount: cancelledCount ?? this.cancelledCount,
       totalCount: totalCount ?? this.totalCount,
-      complianceError: complianceError, // explicitly clear if not provided
-      complianceWarning: complianceWarning, // explicitly clear if not provided
+      complianceError: clearComplianceError ? null : (complianceError ?? this.complianceError),
+      complianceWarning: clearComplianceWarning ? null : (complianceWarning ?? this.complianceWarning),
       activeCampaignId: activeCampaignId ?? this.activeCampaignId,
       isPolling: isPolling ?? this.isPolling,
     );
@@ -183,7 +188,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   }
 
   void setSelectedTab(int index) {
-    state = state.copyWith(selectedTab: index, complianceError: null, complianceWarning: null);
+    state = state.copyWith(
+      selectedTab: index,
+      clearComplianceError: true,
+      clearComplianceWarning: true,
+    );
     _checkCompliance();
   }
 
@@ -223,24 +232,8 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
     if (recipients.isEmpty) {
       state = state.copyWith(
-        complianceError: null,
-        complianceWarning: null,
-        selectedTab: state.selectedTab,
-        campaignName: state.campaignName,
-        recipientsText: state.recipientsText,
-        minDelay: state.minDelay,
-        maxDelay: state.maxDelay,
-        messageText: state.messageText,
-        selectedAccount: state.selectedAccount,
-        accounts: state.accounts,
-        isSending: state.isSending,
-        logs: state.logs,
-        successCount: state.successCount,
-        failureCount: state.failureCount,
-        cancelledCount: state.cancelledCount,
-        totalCount: state.totalCount,
-        activeCampaignId: state.activeCampaignId,
-        isPolling: state.isPolling,
+        clearComplianceError: true,
+        clearComplianceWarning: true,
       );
       return;
     }
@@ -255,66 +248,18 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     if (!decision.allowed) {
       state = state.copyWith(
         complianceError: '${decision.title}: ${decision.message}',
-        complianceWarning: null,
-        selectedTab: state.selectedTab,
-        campaignName: state.campaignName,
-        recipientsText: state.recipientsText,
-        minDelay: state.minDelay,
-        maxDelay: state.maxDelay,
-        messageText: state.messageText,
-        selectedAccount: state.selectedAccount,
-        accounts: state.accounts,
-        isSending: state.isSending,
-        logs: state.logs,
-        successCount: state.successCount,
-        failureCount: state.failureCount,
-        cancelledCount: state.cancelledCount,
-        totalCount: state.totalCount,
-        activeCampaignId: state.activeCampaignId,
-        isPolling: state.isPolling,
+        clearComplianceWarning: true,
       );
     } else if (decision.riskLevel == ZaloRiskLevel.medium ||
         decision.riskLevel == ZaloRiskLevel.high) {
       state = state.copyWith(
-        complianceError: null,
+        clearComplianceError: true,
         complianceWarning: '${decision.title}: ${decision.message}',
-        selectedTab: state.selectedTab,
-        campaignName: state.campaignName,
-        recipientsText: state.recipientsText,
-        minDelay: state.minDelay,
-        maxDelay: state.maxDelay,
-        messageText: state.messageText,
-        selectedAccount: state.selectedAccount,
-        accounts: state.accounts,
-        isSending: state.isSending,
-        logs: state.logs,
-        successCount: state.successCount,
-        failureCount: state.failureCount,
-        cancelledCount: state.cancelledCount,
-        totalCount: state.totalCount,
-        activeCampaignId: state.activeCampaignId,
-        isPolling: state.isPolling,
       );
     } else {
       state = state.copyWith(
-        complianceError: null,
-        complianceWarning: null,
-        selectedTab: state.selectedTab,
-        campaignName: state.campaignName,
-        recipientsText: state.recipientsText,
-        minDelay: state.minDelay,
-        maxDelay: state.maxDelay,
-        messageText: state.messageText,
-        selectedAccount: state.selectedAccount,
-        accounts: state.accounts,
-        isSending: state.isSending,
-        logs: state.logs,
-        successCount: state.successCount,
-        failureCount: state.failureCount,
-        cancelledCount: state.cancelledCount,
-        totalCount: state.totalCount,
-        activeCampaignId: state.activeCampaignId,
-        isPolling: state.isPolling,
+        clearComplianceError: true,
+        clearComplianceWarning: true,
       );
     }
   }
@@ -329,8 +274,14 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     );
   }
 
-  void addLog(String log) {
-    state = state.copyWith(logs: [...state.logs, log]);
+  void addLog(String message, {LogType type = LogType.info}) {
+    final timeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+    state = state.copyWith(
+      logs: [
+        ...state.logs,
+        LogItem(timestamp: timeStr, message: message, type: type),
+      ],
+    );
   }
 
   ZaloActionType _actionTypeForTab() {
@@ -378,16 +329,17 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       return;
     }
 
+    final timeStr = DateFormat('HH:mm:ss').format(DateTime.now());
     state = state.copyWith(
       isSending: true,
       successCount: 0,
       failureCount: 0,
       cancelledCount: 0,
       totalCount: recipients.length,
-      complianceError: null,
+      clearComplianceError: true,
       logs: [
-        '[Hệ thống] Đang khởi tạo chiến dịch trên Cloud...',
-        '[Hệ thống] Thiết bị gửi: Windows/Zalo agent đang hoạt động trên Cloud',
+        LogItem(timestamp: timeStr, message: '[Hệ thống] Đang khởi tạo chiến dịch trên Cloud...', type: LogType.info),
+        LogItem(timestamp: timeStr, message: '[Hệ thống] Thiết bị gửi: Windows/Zalo agent đang hoạt động trên Cloud', type: LogType.info),
       ],
     );
 
@@ -464,20 +416,26 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         throw Exception(startResp['message'] ?? 'Bắt đầu chiến dịch thất bại');
       }
 
+      final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       state = state.copyWith(
         activeCampaignId: campaignId,
         logs: [
           ...state.logs,
-          '[Hệ thống] Đã đưa lệnh vào hàng đợi Cloud. Bắt đầu xử lý...',
+          LogItem(timestamp: nowTimeStr, message: '[Hệ thống] Đã đưa lệnh vào hàng đợi Cloud. Bắt đầu xử lý...', type: LogType.info),
         ],
       );
 
       // 3. Poll for progress
       _startPolling(campaignId);
     } catch (e) {
+      final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       state = state.copyWith(
         isSending: false,
         complianceError: 'Lỗi: ${e.toString()}',
+        logs: [
+          ...state.logs,
+          LogItem(timestamp: nowTimeStr, message: 'Lỗi: ${e.toString()}', type: LogType.error),
+        ],
       );
     }
   }
@@ -493,27 +451,54 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
           final data = resp['data'];
           final statusCounts = data['statusCounts'] ?? {};
           final campaignStatus = data['campaign']['status'];
+          final commandStatus = data['commandStatus']?.toString();
+          final commandError = data['commandError']?.toString();
 
           final success = statusCounts['success'] ?? 0;
           final failed = statusCounts['failed'] ?? 0;
           final cancelled = statusCounts['cancelled'] ?? 0;
 
+          String? displayError;
+          if (commandStatus == 'failed' && commandError != null && commandError.isNotEmpty) {
+            displayError = ZaloIntegrationApi.translateToVietnamese(commandError);
+          }
+
           state = state.copyWith(
             successCount: success,
             failureCount: failed,
             cancelledCount: cancelled,
+            complianceError: displayError,
           );
 
-          // If campaign is done or cancelled
-          if (campaignStatus == 'completed' || campaignStatus == 'cancelled') {
+          // If campaign is done or cancelled or command failed
+          if (campaignStatus == 'completed' || campaignStatus == 'cancelled' || commandStatus == 'failed') {
             timer.cancel();
+            
+            final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+            final displayErrorText = displayError ?? 'Lỗi không rõ';
+            String statusText = campaignStatus;
+            if (campaignStatus == 'completed') statusText = 'hoàn thành';
+            if (campaignStatus == 'cancelled') statusText = 'bị hủy';
+
             state = state.copyWith(
               isSending: false,
               isPolling: false,
               activeCampaignId: null,
+              complianceError: displayError,
               logs: [
                 ...state.logs,
-                '[Hệ thống] Chiến dịch $campaignStatus. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+                if (commandStatus == 'failed' && displayError != null)
+                  LogItem(
+                    timestamp: nowTimeStr,
+                    message: '[Hệ thống] Chiến dịch thất bại: $displayErrorText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+                    type: LogType.error,
+                  )
+                else
+                  LogItem(
+                    timestamp: nowTimeStr,
+                    message: '[Hệ thống] Chiến dịch $statusText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+                    type: campaignStatus == 'completed' ? LogType.success : LogType.warning,
+                  ),
               ],
             );
           }
@@ -529,14 +514,23 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
     final campaignId = state.activeCampaignId!;
     try {
+      final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       state = state.copyWith(
-        logs: [...state.logs, '[Hệ thống] Đang gửi yêu cầu hủy...'],
+        logs: [
+          ...state.logs,
+          LogItem(timestamp: nowTimeStr, message: '[Hệ thống] Đang gửi yêu cầu hủy...', type: LogType.info),
+        ],
       );
       await _repository.cancelCampaign(campaignId);
       // Polling will catch the 'cancelled' state and clean up
     } catch (e) {
+      final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       state = state.copyWith(
         complianceError: 'Không thể hủy chiến dịch: ${e.toString()}',
+        logs: [
+          ...state.logs,
+          LogItem(timestamp: nowTimeStr, message: 'Không thể hủy chiến dịch: ${e.toString()}', type: LogType.error),
+        ],
       );
     }
   }
