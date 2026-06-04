@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/api/crm_cloud_api.dart';
 
@@ -55,9 +58,106 @@ class CrmDeviceState {
   }
 }
 
+CrmDeviceState parseCrmDeviceList(List<dynamic> devices) {
+  Map<dynamic, dynamic>? pcDevice;
+  Map<dynamic, dynamic>? fallbackActiveDevice;
+
+  for (final device in devices) {
+    if (device is! Map || device['status']?.toString() != 'active') {
+      continue;
+    }
+    fallbackActiveDevice ??= device;
+    final platform = device['platform']?.toString().toLowerCase() ?? '';
+    if (platform.contains('windows')) {
+      pcDevice = device;
+      break;
+    }
+  }
+
+  pcDevice ??= fallbackActiveDevice;
+  final pairedUsers = _readPairedMobileUsers(pcDevice);
+  final pairedDevices = pairedUsers.indexed.map((entry) {
+    final index = entry.$1;
+    final value = entry.$2;
+    final displayName = value is Map
+        ? (value['displayName']?.toString() ??
+              value['name']?.toString() ??
+              value['email']?.toString() ??
+              'Thiết bị di động ${index + 1}')
+        : 'Thiết bị di động ${index + 1}';
+    final platform = value is Map
+        ? (value['platform']?.toString() ?? 'Mobile')
+        : 'Mobile';
+
+    return PairedDevice(
+      id: _readPairedMobileUserId(value, index),
+      displayName: displayName,
+      platform: platform,
+      status: 'active',
+    );
+  }).toList();
+
+  return CrmDeviceState(
+    isPaired: pairedDevices.isNotEmpty,
+    deviceId: pcDevice == null
+        ? null
+        : (pcDevice['_id']?.toString() ?? pcDevice['id']?.toString()),
+    pairedDevices: pairedDevices,
+  );
+}
+
+Map<String, dynamic> buildPairingConfirmPayload(String input) {
+  final cleanInput = input.trim();
+  final cleanCode = cleanInput.replaceAll(' ', '');
+  if (cleanCode.length == 6 && int.tryParse(cleanCode) != null) {
+    return {'pairingCode': cleanCode};
+  }
+
+  try {
+    final decoded = jsonDecode(cleanInput);
+    if (decoded is Map) {
+      final qrToken =
+          decoded['pairingToken']?.toString() ?? decoded['qrToken']?.toString();
+      if (qrToken != null && qrToken.isNotEmpty) {
+        return {'qrToken': qrToken};
+      }
+    }
+  } catch (_) {
+    // Raw QR token fallback.
+  }
+
+  return {'qrToken': cleanInput};
+}
+
+List<dynamic> _readPairedMobileUsers(Map<dynamic, dynamic>? pcDevice) {
+  final value = pcDevice?['pairedMobileUserIds'];
+  if (value is List) return value;
+  return const [];
+}
+
+String _readPairedMobileUserId(dynamic value, int index) {
+  if (value is Map) {
+    return value['_id']?.toString() ??
+        value['id']?.toString() ??
+        value['userId']?.toString() ??
+        'mobile-$index';
+  }
+  final id = value?.toString();
+  if (id != null && id.isNotEmpty) return id;
+  return 'mobile-$index';
+}
+
 class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
+  Timer? _pairingPollTimer;
+
   CrmDeviceNotifier() : super(const CrmDeviceState()) {
     checkPairingStatus();
+  }
+
+  @override
+  void dispose() {
+    _pairingPollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> checkPairingStatus() async {
@@ -65,36 +165,11 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     final response = await CrmCloudApi.get('/crm/devices');
 
     if (response['success'] == true && response['data'] != null) {
-      final List<dynamic> list = response['data'];
-      
-      // Tìm thiết bị PC hiện tại (active và platform là Windows)
-      final pcDevice = list.firstWhere(
-        (d) => d['platform']?.toString().toLowerCase().contains('windows') == true && d['status'] == 'active',
-        orElse: () => list.firstWhere(
-          (d) => d['status'] == 'active',
-          orElse: () => null,
-        ),
-      );
-
-      // Tìm tất cả các thiết bị di động đã ghép đôi hoạt động (active và platform không phải Windows)
-      final List<PairedDevice> mobileDevices = list
-          .where((d) =>
-              d['platform']?.toString().toLowerCase().contains('windows') != true &&
-              d['status'] == 'active')
-          .map((d) => PairedDevice(
-                id: d['_id']?.toString() ?? d['id']?.toString() ?? '',
-                displayName: d['displayName']?.toString() ?? 'Thiết bị di động',
-                platform: d['platform']?.toString() ?? 'Android',
-                status: d['status']?.toString() ?? 'active',
-              ))
-          .toList();
-
-      state = state.copyWith(
-        isLoading: false,
-        isPaired: mobileDevices.isNotEmpty,
-        deviceId: pcDevice != null ? (pcDevice['_id']?.toString() ?? pcDevice['id']?.toString()) : null,
-        pairedDevices: mobileDevices,
-      );
+      final parsed = parseCrmDeviceList(List<dynamic>.from(response['data']));
+      if (parsed.isPaired) {
+        _pairingPollTimer?.cancel();
+      }
+      state = parsed.copyWith(isLoading: false, errorText: null);
     } else {
       state = state.copyWith(isLoading: false);
     }
@@ -108,17 +183,8 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     String? devId;
 
     if (devicesRes['success'] == true && devicesRes['data'] != null) {
-      final List<dynamic> list = devicesRes['data'];
-      final pcDevice = list.firstWhere(
-        (d) => d['platform']?.toString().toLowerCase().contains('windows') == true && d['status'] == 'active',
-        orElse: () => list.firstWhere(
-          (d) => d['status'] == 'active',
-          orElse: () => null,
-        ),
-      );
-      if (pcDevice != null) {
-        devId = pcDevice['_id']?.toString() ?? pcDevice['id']?.toString();
-      }
+      final parsed = parseCrmDeviceList(List<dynamic>.from(devicesRes['data']));
+      devId = parsed.deviceId;
     }
 
     // 2. Nếu chưa có thiết bị máy chủ, thông báo lỗi cho người dùng
@@ -142,9 +208,13 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
         isLoading: false,
         deviceId: devId,
         pairingCode: data['pairingCode']?.toString(),
-        qrCodeData:
-            data['qrToken']?.toString() ?? data['pairingCode']?.toString(),
+        qrCodeData: jsonEncode({
+          'type': 'alpha_crm_pairing',
+          'pairingToken':
+              data['qrToken']?.toString() ?? data['pairingCode']?.toString(),
+        }),
       );
+      _startPairingStatusPolling();
       return true;
     } else {
       state = state.copyWith(
@@ -156,11 +226,12 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     }
   }
 
-  Future<bool> confirmPairing(String code) async {
+  Future<bool> confirmPairing(String input) async {
     state = state.copyWith(isLoading: true, errorText: null);
-    final response = await CrmCloudApi.post('/crm/pairing/confirm', {
-      'pairingCode': code,
-    });
+    final response = await CrmCloudApi.post(
+      '/crm/pairing/confirm',
+      buildPairingConfirmPayload(input),
+    );
 
     if (response['success'] == true) {
       await checkPairingStatus();
@@ -173,6 +244,17 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
       );
       return false;
     }
+  }
+
+  void _startPairingStatusPolling() {
+    _pairingPollTimer?.cancel();
+    _pairingPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || state.isPaired) {
+        _pairingPollTimer?.cancel();
+        return;
+      }
+      checkPairingStatus();
+    });
   }
 
   Future<void> unpairDevice([String? targetDeviceId]) async {

@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-03 +07:00
+**Last Updated:** 2026-06-04 +07:00
 
 ---
 
@@ -13,6 +13,22 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-04 - Windows ZIP Updates Must Self-Apply, Not Just Open Explorer
+
+- Symptom: The in-app Windows updater downloaded the release ZIP, opened it, and then stopped. Users had to manually extract/copy files, so the update did not actually apply.
+- Root cause: Portable ZIP releases are not installers. Calling `OpenFilex.open(zipPath)` only opens the archive in Explorer and cannot replace the running `alpha_crm.exe` bundle.
+- Fix summary: `AppUpdateService` now generates a detached `apply_update.cmd` helper for ZIP releases. The helper waits for the app to exit, expands the ZIP with PowerShell, finds the folder containing `alpha_crm.exe`, copies files into the current app directory with `robocopy`, restarts the app, and writes an update log.
+- Rule: For Windows portable ZIP releases, always launch a separate updater process/script that applies the bundle after the running app exits. Do not use `OpenFilex.open` as an installer for ZIP assets.
+- Related files: `tools/alpha-crm/lib/shared/utils/app_update_service.dart`, `tools/alpha-crm/test/app_update_service_test.dart`.
+
+### 2026-06-03 - Device Pairing Must Read `pairedMobileUserIds`, Not Mobile Device Records
+
+- Symptom: On mobile, tapping QR scan did not open a real scanner. Entering the pairing code could show success, but the PC and mobile device pairing screens still appeared unchanged.
+- Root cause: The cloud backend does not create separate active Android/iOS `CrmDevice` records for paired phones. It records mobile pairings on the active Windows device in `pairedMobileUserIds`. The Flutter provider incorrectly searched `/crm/devices` for non-Windows active device records, so confirmed pairings were ignored by the UI. The QR button was also a mock dialog rather than a camera scanner.
+- Fix summary: Parse paired state from the active Windows device's `pairedMobileUserIds`, accept both 6-digit `pairingCode` and QR `qrToken` confirm payloads, poll the PC pairing screen while waiting, render a real QR with `qr_flutter`, scan it with `mobile_scanner`, and add Android camera permission.
+- Rule: Treat the active Windows `CrmDevice` as the host record for mobile pairings unless the cloud backend schema changes; never infer mobile pairing status from separate mobile `CrmDevice` rows.
+- Related files: `tools/alpha-crm/lib/features/devices/providers/crm_device_provider.dart`, `tools/alpha-crm/lib/features/devices/presentation/screens/device_pairing_screen.dart`, `tools/alpha-crm/android/app/src/main/AndroidManifest.xml`, `tools/alpha-crm/test/crm_device_provider_test.dart`.
 
 ### 2026-06-03 - Windows Localhost vs 127.0.0.1 Loopback Refusal Error
 

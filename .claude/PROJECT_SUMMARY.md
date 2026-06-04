@@ -1,6 +1,14 @@
 # Project Summary
 
-**Last Updated:** 2026-06-03 18:30:00 +07:00
+**Last Updated:** 2026-06-04 00:52:02 +07:00
+**Session:** #54 - Fixed Windows ZIP self-update behavior. The app no longer opens the downloaded Windows ZIP in Explorer and stops there; `AppUpdateService` now writes and launches a detached `apply_update.cmd` helper that waits for the app to exit, expands the ZIP with PowerShell, finds the extracted folder containing `alpha_crm.exe`, copies the bundle into the current app directory with `robocopy`, restarts `alpha_crm.exe`, and logs failures. Added a regression test for the generated updater script and switched update-service logging from `print` to `debugPrint`.
+
+**Session:** #53 - Fixed PC-mobile device pairing state and QR flow. The cloud backend records paired mobile users in the active Windows `CrmDevice.pairedMobileUserIds` array rather than creating separate mobile device records, so the Flutter device provider now parses paired state from that field, accepts both 6-digit pairing codes and QR `qrToken` payloads, and polls the PC screen while waiting for confirmation. Replaced the previous mock QR scanner UX with real PC QR generation (`qr_flutter`) and mobile camera scanning (`mobile_scanner`), added Android camera permission, and added provider regression tests.
+
+**Session:** #52 - Fixed Windows portable ZIP backend startup failure caused by `integration/zalo-bot-service/node_modules/zca-js` being a local junction to the reference repository. Reinstalled `zca-js@2.1.2` from the npm registry so `package-lock.json` resolves to the published tarball, restaged the Windows backend bundle with a real `zca-js` directory, rebuilt `build/alpha-crm-windows.zip`, and verified the packaged backend starts successfully with `/health` returning HTTP 200.
+
+**Session:** #51 - Released CRM version 0.0.2 to Backblaze B2 and Web. Automatically bumped version in `pubspec.yaml` to `0.0.2+5`, built Android APK, Windows executable, local `zalo-bot-service` backend, packaged Windows release to ZIP (bundled with local backend), compiled Flutter Web with base href `/crm/` (copied to React public folder), uploaded packages to Backblaze B2, and updated metadata `version.json`. Refactored in-app updater to open Windows ZIP files in default explorer instead of trying to run them. Removed version suffix from Windows ZIP to keep folder name static after update. Configured release-to-b2.js script to optionally use Shorebird for APK builds if CLI is installed.
+
 **Session:** #50 - Fixed Windows local Zalo integration loopback refusal by switching `localhost` to explicit IPv4 `127.0.0.1:8787`. Refactored device pairing screen to support up to 3 paired mobile devices simultaneously, displaying them in a list with individual revoke buttons on PC. Streamlined Settings screen on mobile clients by automatically hiding redundant PC-only settings (Zalo backend integration card, add accounts, delays, risk controls, and auto-approve).
 
 **Session:** #49 - Fixed Live Chat inbound message normalization and avatar rendering: the local Zalo agent now extracts plain text from nested zca-js payload shapes while preserving rich preview JSON for link/file messages, normalizes protocol-relative avatar URLs, and the Flutter Live Chat model accepts text/message/avatar aliases with regression tests for normal text and avatar fallback.
@@ -93,7 +101,7 @@ docs/
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex. |
+| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. |
 | `lib/shared/api/crm_cloud_api.dart` | Alpha Studio cloud API client | Uses `ALPHA_STUDIO_API_URL` with production fallback and Bearer JWT headers. |

@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'zalo_backend_manager.dart';
 
 /// Thông tin một bản release từ GitHub.
 class AppReleaseInfo {
@@ -111,10 +114,10 @@ class AppUpdateService {
         return AppReleaseInfo.fromJson(json);
       }
 
-      print('[AppUpdateService] B2 API returned ${response.statusCode}');
+      debugPrint('[AppUpdateService] B2 API returned ${response.statusCode}');
       return null;
     } catch (e) {
-      print('[AppUpdateService] Error checking for updates from B2: $e');
+      debugPrint('[AppUpdateService] Error checking for updates from B2: $e');
       return null;
     }
   }
@@ -125,7 +128,7 @@ class AppUpdateService {
       final packageInfo = await PackageInfo.fromPlatform();
       return packageInfo.version;
     } catch (e) {
-      print('[AppUpdateService] Error getting current version: $e');
+      debugPrint('[AppUpdateService] Error getting current version: $e');
       return '0.0.0';
     }
   }
@@ -176,7 +179,7 @@ class AppUpdateService {
       );
 
       if (streamedResponse.statusCode != 200) {
-        print(
+        debugPrint(
           '[AppUpdateService] Download failed: ${streamedResponse.statusCode}',
         );
         return null;
@@ -197,7 +200,7 @@ class AppUpdateService {
       await sink.close();
       return filePath;
     } catch (e) {
-      print('[AppUpdateService] Download error: $e');
+      debugPrint('[AppUpdateService] Download error: $e');
       return null;
     }
   }
@@ -208,18 +211,115 @@ class AppUpdateService {
   static Future<bool> installUpdate(String filePath) async {
     try {
       if (Platform.isWindows) {
-        // Mở file .exe hoặc .msix trực tiếp
-        await Process.start(filePath, [], mode: ProcessStartMode.detached);
-        return true;
+        if (filePath.toLowerCase().endsWith('.zip')) {
+          // ZIP releases are portable bundles, so apply them with a helper
+          // script after this running process exits.
+          return _installWindowsZipUpdate(filePath);
+        } else {
+          // Mở file .exe hoặc .msix trực tiếp
+          await Process.start(filePath, [], mode: ProcessStartMode.detached);
+          return true;
+        }
       } else if (Platform.isAndroid) {
         final result = await OpenFilex.open(filePath);
         return result.type == ResultType.done;
       }
       return false;
     } catch (e) {
-      print('[AppUpdateService] Install error: $e');
+      debugPrint('[AppUpdateService] Install error: $e');
       return false;
     }
+  }
+
+  static Future<bool> _installWindowsZipUpdate(String zipPath) async {
+    final executableFile = File(Platform.resolvedExecutable);
+    final appDir = executableFile.parent.path;
+    final executableName = executableFile.uri.pathSegments.last;
+    final tempDir = await getTemporaryDirectory();
+    final updateRoot = Directory(
+      '${tempDir.path}${Platform.pathSeparator}alpha_crm_update_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await updateRoot.create(recursive: true);
+
+    final stagingDir = '${updateRoot.path}${Platform.pathSeparator}extracted';
+    final scriptPath =
+        '${updateRoot.path}${Platform.pathSeparator}apply_update.cmd';
+    final logPath = '${updateRoot.path}${Platform.pathSeparator}update.log';
+
+    final script = buildWindowsZipUpdaterScript(
+      zipPath: zipPath,
+      appDir: appDir,
+      executableName: executableName,
+      stagingDir: stagingDir,
+      logPath: logPath,
+    );
+    await File(scriptPath).writeAsString(script, flush: true);
+
+    ZaloBackendManager.stopBackend();
+    await Process.start('cmd.exe', [
+      '/c',
+      'start',
+      '',
+      scriptPath,
+    ], mode: ProcessStartMode.detached);
+
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    exit(0);
+  }
+
+  static String buildWindowsZipUpdaterScript({
+    required String zipPath,
+    required String appDir,
+    required String executableName,
+    required String stagingDir,
+    required String logPath,
+  }) {
+    return '''
+@echo off
+setlocal
+set "ZIP=$zipPath"
+set "APP_DIR=$appDir"
+set "EXE=$executableName"
+set "STAGE=$stagingDir"
+set "LOG=$logPath"
+
+echo [%date% %time%] Alpha CRM update started > "%LOG%"
+timeout /t 3 /nobreak >nul
+
+if exist "%STAGE%" rmdir /s /q "%STAGE%" >> "%LOG%" 2>&1
+mkdir "%STAGE%" >> "%LOG%" 2>&1
+if %ERRORLEVEL% GEQ 1 goto error
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath \$env:ZIP -DestinationPath \$env:STAGE -Force" >> "%LOG%" 2>&1
+if %ERRORLEVEL% GEQ 1 goto error
+
+set "SRC="
+if exist "%STAGE%\\%EXE%" set "SRC=%STAGE%"
+if not defined SRC (
+  for /d %%D in ("%STAGE%\\*") do (
+    if exist "%%~fD\\%EXE%" set "SRC=%%~fD"
+  )
+)
+if not defined SRC (
+  for /r "%STAGE%" %%F in (%EXE%) do (
+    if not defined SRC set "SRC=%%~dpF"
+  )
+)
+if not defined SRC goto error
+
+echo [%date% %time%] Copying from "%SRC%" to "%APP_DIR%" >> "%LOG%"
+robocopy "%SRC%" "%APP_DIR%" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >> "%LOG%" 2>&1
+if %ERRORLEVEL% GEQ 8 goto error
+
+echo [%date% %time%] Restarting "%APP_DIR%\\%EXE%" >> "%LOG%"
+start "" "%APP_DIR%\\%EXE%"
+exit /b 0
+
+:error
+echo [%date% %time%] Update failed. ZIP="%ZIP%" APP_DIR="%APP_DIR%" STAGE="%STAGE%" >> "%LOG%"
+start "" explorer.exe "%APP_DIR%"
+exit /b 1
+''';
   }
 
   /// Mở trang releases trên trình duyệt.

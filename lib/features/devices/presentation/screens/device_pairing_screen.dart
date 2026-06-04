@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../providers/crm_device_provider.dart';
@@ -57,9 +59,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Xác Nhận Hủy'),
           ),
         ],
@@ -71,7 +71,49 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     }
   }
 
-  void _simulateQrScanner() {
+  void _openQrScanner() {
+    var didScan = false;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Quét QR từ màn hình PC'),
+          content: SizedBox(
+            width: 360,
+            height: 360,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: MobileScanner(
+                onDetect: (capture) {
+                  if (didScan) return;
+                  final value = capture.barcodes
+                      .map((barcode) => barcode.rawValue)
+                      .whereType<String>()
+                      .firstWhere(
+                        (rawValue) => rawValue.trim().isNotEmpty,
+                        orElse: () => '',
+                      );
+                  if (value.isEmpty) return;
+                  didScan = true;
+                  Navigator.pop(context);
+                  _codeController.text = value;
+                  _submitPairingCode();
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void simulateQrScanner() {
     showDialog(
       context: context,
       builder: (context) {
@@ -173,10 +215,12 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     const SizedBox(height: 24),
                     Text(
                       isClient
-                          ? (deviceState.isPaired ? 'Thiết Bị Đã Được Ghép Đôi' : 'Yêu Cầu Ghép Đôi Thiết Bị')
+                          ? (deviceState.isPaired
+                                ? 'Thiết Bị Đã Được Ghép Đôi'
+                                : 'Yêu Cầu Ghép Đôi Thiết Bị')
                           : (deviceState.pairedDevices.isNotEmpty
-                              ? 'Thiết Bị Di Động Đã Kết Nối'
-                              : 'Chưa Có Thiết Bị Di Động Kết Nối'),
+                                ? 'Thiết Bị Di Động Đã Kết Nối'
+                                : 'Chưa Có Thiết Bị Di Động Kết Nối'),
                       style: AppTextStyles.sectionTitle.copyWith(fontSize: 18),
                       textAlign: TextAlign.center,
                     ),
@@ -184,11 +228,11 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     Text(
                       isClient
                           ? (deviceState.isPaired
-                              ? 'Thiết bị di động của bạn đã liên kết thành công với máy chủ PC.'
-                              : 'Để đồng bộ dữ liệu Zalo cá nhân từ máy tính sang điện thoại di động, bạn cần ghép đôi thiết bị.')
+                                ? 'Thiết bị di động của bạn đã liên kết thành công với máy chủ PC.'
+                                : 'Để đồng bộ dữ liệu Zalo cá nhân từ máy tính sang điện thoại di động, bạn cần ghép đôi thiết bị.')
                           : (deviceState.pairedDevices.isNotEmpty
-                              ? 'Danh sách các thiết bị di động đang đồng bộ dữ liệu chiến dịch và Live Chat qua máy chủ này (Tối đa 3 thiết bị).'
-                              : 'Vui lòng sử dụng điện thoại di động quét mã QR hoặc nhập mã code bên dưới để liên kết thiết bị.'),
+                                ? 'Danh sách các thiết bị di động đang đồng bộ dữ liệu chiến dịch và Live Chat qua máy chủ này (Tối đa 3 thiết bị).'
+                                : 'Vui lòng sử dụng điện thoại di động quét mã QR hoặc nhập mã code bên dưới để liên kết thiết bị.'),
                       style: AppTextStyles.body,
                       textAlign: TextAlign.center,
                     ),
@@ -203,7 +247,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                           color: AppColors.errorSoft,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: AppColors.error.withOpacity(0.3),
+                            color: AppColors.error.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
@@ -242,7 +286,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                             color: AppColors.amberSoft,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: AppColors.warning.withOpacity(0.3),
+                              color: AppColors.warning.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(
@@ -380,7 +424,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final dev = state.pairedDevices[index];
-            final devIcon = dev.platform.toLowerCase().contains('ios') ||
+            final devIcon =
+                dev.platform.toLowerCase().contains('ios') ||
                     dev.platform.toLowerCase().contains('apple')
                 ? Icons.phone_iphone_rounded
                 : Icons.phone_android_rounded;
@@ -400,11 +445,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       color: AppColors.primarySoft,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      devIcon,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
+                    child: Icon(devIcon, color: AppColors.primary, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -536,6 +577,12 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                 return 'Vui lòng điền mã ghép đôi.';
               }
               final clean = value.replaceAll(' ', '');
+              if (clean.length == 6 && int.tryParse(clean) != null) {
+                return null;
+              }
+              if (value.trim().startsWith('{') || value.trim().length >= 16) {
+                return null;
+              }
               if (clean.length != 6 || int.tryParse(clean) == null) {
                 return 'Mã ghép đôi phải gồm đúng 6 chữ số.';
               }
@@ -573,7 +620,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
-            onPressed: () => _simulateQrScanner(),
+            onPressed: () => _openQrScanner(),
             icon: const Icon(Icons.qr_code_scanner_rounded),
             label: const Text('Quét mã QR từ màn hình PC'),
             style: OutlinedButton.styleFrom(
@@ -620,8 +667,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading
                 ? null
                 : () => ref
-                    .read(crmDeviceProvider.notifier)
-                    .startPairingProcess(),
+                      .read(crmDeviceProvider.notifier)
+                      .startPairingProcess(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -676,7 +723,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Mock QR Code
+                // QR Code
                 Container(
                   width: 180,
                   height: 180,
@@ -687,51 +734,21 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     border: Border.all(color: AppColors.border, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Styled Custom QR block grid representation using icons and squares
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(
-                          4,
-                          (index) => Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: List.generate(
-                              4,
-                              (subIndex) => Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: (index + subIndex) % 2 == 0
-                                      ? AppColors.textPrimary
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.rocket_launch_rounded,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                      ),
-                    ],
+                  child: QrImageView(
+                    data: state.qrCodeData ?? state.pairingCode!,
+                    version: QrVersions.auto,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(color: AppColors.textPrimary),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      color: AppColors.textPrimary,
+                    ),
+                    padding: EdgeInsets.zero,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -748,8 +765,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading
                 ? null
                 : () => ref
-                    .read(crmDeviceProvider.notifier)
-                    .startPairingProcess(),
+                      .read(crmDeviceProvider.notifier)
+                      .startPairingProcess(),
             child: const Text('Tạo lại mã ghép đôi mới'),
           ),
         ],
