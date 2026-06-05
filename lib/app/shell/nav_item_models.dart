@@ -38,15 +38,20 @@ final List<NavGroup> navigationGroups = [
         icon: Icons.people_outline,
         routePath: '/customers',
       ),
-      NavItem(
-        title: 'Tin mẫu nhanh',
-        icon: Icons.quickreply_outlined,
-        routePath: '/content/templates',
-      ),
+      // NavItem(
+      //   title: 'Tin mẫu nhanh',
+      //   icon: Icons.quickreply_outlined,
+      //   routePath: '/content/templates',
+      // ),
       NavItem(
         title: 'Công việc follow-up',
         icon: Icons.task_alt_outlined,
         routePath: '/tasks',
+      ),
+      NavItem(
+        title: 'Tự động hóa',
+        icon: Icons.account_tree_outlined,
+        routePath: '/workflows',
       ),
     ],
   ),

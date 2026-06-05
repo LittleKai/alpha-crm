@@ -6,6 +6,7 @@ import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
 import { config } from '../config.js';
 import { setInboundMessageHandler, type ZaloInboundMessageEvent } from '../channels/types.js';
+import { dispatchN8nEvent } from '../integrations/n8n-event-dispatcher.js';
 
 let running = false;
 let pollingIntervalTimer: NodeJS.Timeout | null = null;
@@ -202,6 +203,7 @@ async function handleInboundMessageEvent(
       if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) return;
     }
     await reportInboundMessage(deviceId, agentSecret, event);
+    await dispatchN8nEvent('zalo.message.inbound', event);
   } catch (err: any) {
     console.warn('[agent-runner] Failed to report inbound message:', err.message);
   }

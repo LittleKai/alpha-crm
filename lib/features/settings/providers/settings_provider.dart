@@ -269,6 +269,34 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     );
   }
 
+  Future<void> setAppThemeMode(String value) async {
+    final normalized = switch (value) {
+      'dark' => 'dark',
+      'system' => 'system',
+      _ => 'light',
+    };
+    final updated = state.settings.copyWith(appThemeMode: normalized);
+    state = state.copyWith(settings: updated, isSaved: false);
+    await _saveSettingsToFile(updated);
+  }
+
+  Future<void> saveAccountNickname(String accountId, String nickname) async {
+    final trimmedId = accountId.trim();
+    if (trimmedId.isEmpty) return;
+
+    final nicknames = Map<String, String>.from(state.settings.accountNicknames);
+    final trimmedNickname = nickname.trim();
+    if (trimmedNickname.isEmpty) {
+      nicknames.remove(trimmedId);
+    } else {
+      nicknames[trimmedId] = trimmedNickname;
+    }
+
+    final updated = state.settings.copyWith(accountNicknames: nicknames);
+    state = state.copyWith(settings: updated, isSaved: false);
+    await _saveSettingsToFile(updated);
+  }
+
   Future<void> saveSettings() async {
     final s = state.settings;
 

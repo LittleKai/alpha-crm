@@ -18,13 +18,25 @@ export interface ZaloSendMessageRequest {
   message: string;
   accountId?: string;
   threadType?: 'user' | 'group';
-  messageType?: 'text' | 'template';
+  messageType?: 'text' | 'template' | 'image' | 'file' | 'sticker' | 'video' | 'voice' | 'gif' | 'link' | 'rich';
+  /** File paths or URLs for attachments (images, videos, files) */
+  attachments?: string[];
 }
 
 export interface ZaloSendMessageResult {
   success: boolean;
   messageId?: string;
   error?: string;
+}
+
+export interface ZaloRecallMessageRequest {
+  accountId?: string;
+  threadId: string;
+  threadType?: 'user' | 'group';
+  /** The provider message ID (msgId from Zalo) */
+  msgId: string;
+  /** The client message ID */
+  cliMsgId?: string;
 }
 
 export interface ZaloFriend {
@@ -53,7 +65,19 @@ export interface ZaloInboundMessageEvent {
   senderName?: string;
   avatarUrl?: string;
   content: string;
-  messageType: 'text' | 'image' | 'file' | 'sticker' | 'unknown';
+  messageType:
+    | 'text'
+    | 'image'
+    | 'file'
+    | 'sticker'
+    | 'video'
+    | 'voice'
+    | 'gif'
+    | 'link'
+    | 'location'
+    | 'contact_card'
+    | 'rich'
+    | 'unknown';
   providerMessageId: string;
   timestamp: string;
 }
@@ -74,6 +98,7 @@ export async function emitInboundMessage(event: ZaloInboundMessageEvent): Promis
 export interface ZaloChannel {
   getStatus(): ZaloChannelStatus;
   sendMessage(req: ZaloSendMessageRequest, isTestMode?: boolean): Promise<ZaloSendMessageResult>;
+  recallMessage?(req: ZaloRecallMessageRequest): Promise<{ success: boolean; error?: string }>;
   handleWebhookEvent?(event: Record<string, unknown>): void;
   startListener?(): Promise<void>;
   stopListener?(): Promise<void>;

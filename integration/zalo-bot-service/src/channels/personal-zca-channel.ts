@@ -4,18 +4,20 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, basename } from 'path';
 import { config, projectRoot } from '../config.js';
 import type {
   ZaloChannel,
   ZaloChannelStatus,
   ZaloSendMessageRequest,
   ZaloSendMessageResult,
+  ZaloRecallMessageRequest,
   ZaloFriend,
   ZaloGroupMember,
   ZaloInboundMessageEvent,
 } from './types.js';
 import { emitInboundMessage } from './types.js';
+import { createProxyAgent, redactProxyUrl } from '../integrations/proxy-helper.js';
 
 // zca-js imports
 import { Zalo, ThreadType, FriendEventType } from 'zca-js';
@@ -41,6 +43,11 @@ export const accountPool = new Map<string, ZaloAccountInstance>();
 let loginError: string | null = null;
 let poolInitialized = false;
 
+export function setLoginPoolInitializedForTest(value: boolean): void {
+  poolInitialized = value;
+  if (value) loginError = null;
+}
+
 // Round-robin index selector
 let roundRobinIndex = 0;
 
@@ -53,6 +60,53 @@ interface CacheEntry<T> {
 const friendsCache = new Map<string, CacheEntry<ZaloFriend[]>>();
 const groupsCache = new Map<string, CacheEntry<any[]>>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+// User Profile Cache to prevent rate limits
+interface UserProfile {
+  displayName: string;
+  avatarUrl: string;
+  timestamp: number;
+}
+const userProfileCache = new Map<string, UserProfile>();
+const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getOrFetchUserProfile(instance: ZaloAccountInstance, userId: string): Promise<{ displayName: string; avatarUrl: string } | null> {
+  const cached = userProfileCache.get(userId);
+  const now = Date.now();
+  if (cached && (now - cached.timestamp < PROFILE_CACHE_TTL_MS)) {
+    return { displayName: cached.displayName, avatarUrl: cached.avatarUrl };
+  }
+
+  try {
+    console.log(`[PersonalZcaChannel - ${instance.label}] Fetching profile for user ${userId} from API...`);
+
+    // Bypass phonebook version by setting it to 0 temporarily
+    const apiCtx = (instance.api as any).getContext ? (instance.api as any).getContext() : null;
+    const originalPhonebook = apiCtx?.extraVer?.phonebook;
+    if (apiCtx?.extraVer) {
+      apiCtx.extraVer.phonebook = 0;
+    }
+
+    const res = await instance.api.getUserInfo(userId);
+
+    // Restore original phonebook version
+    if (apiCtx?.extraVer && originalPhonebook !== undefined) {
+      apiCtx.extraVer.phonebook = originalPhonebook;
+    }
+
+    const profiles = res?.changed_profiles || {};
+    const profile = profiles[userId] || profiles[`${userId}_0`];
+    if (profile) {
+      const displayName = profile.displayName || profile.zaloName || '';
+      const avatarUrl = normalizeImageUrl(profile.avatar || '');
+      userProfileCache.set(userId, { displayName, avatarUrl, timestamp: now });
+      return { displayName, avatarUrl };
+    }
+  } catch (err) {
+    console.warn(`[PersonalZcaChannel - ${instance.label}] Failed to fetch user profile for ${userId}:`, err);
+  }
+  return null;
+}
 
 function accountSettingsPath(): string {
   const credPath = resolve(projectRoot, config.personalCredentialsPath);
@@ -73,6 +127,26 @@ function writeAccountSettings(settings: Record<string, AccountSettings>): void {
   const filePath = accountSettingsPath();
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+function accountIdFromCredentialsPath(filePath: string): string | undefined {
+  const match = basename(filePath).match(/^credentials_(.+)\.json$/);
+  return match?.[1];
+}
+
+function createZaloClient(accountId?: string): Zalo {
+  const settings = accountId ? readAccountSettings()[accountId] : undefined;
+  const agent = settings?.proxy ? createProxyAgent(settings.proxy) : undefined;
+  if (agent && settings?.proxy) {
+    console.log(
+      `[PersonalZcaChannel] Using proxy for account ${accountId}: ${redactProxyUrl(settings.proxy)}`,
+    );
+  }
+  return new Zalo({
+    selfListen: config.personalSelfListen,
+    logging: true,
+    ...(agent ? { agent } : {}),
+  });
 }
 
 function toStringValue(value: unknown): string {
@@ -147,7 +221,7 @@ function extractInboundContent(data: Record<string, any>, messageType: ZaloInbou
 
 function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): ZaloInboundMessageEvent | null {
   const data = event?.data ?? event ?? {};
-  const threadTypeValue = data.threadType ?? event?.threadType;
+  const threadTypeValue = data.threadType ?? event?.threadType ?? event?.type;
   const isGroup =
     data.isGroup === true ||
     Boolean(data.groupId) ||
@@ -156,19 +230,53 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
   const senderId = toStringValue(
     data.uidFrom ?? data.fromUid ?? data.senderId ?? data.fromId ?? data.userId ?? data.authorId,
   );
-  const threadId = toStringValue(
-    data.threadId ?? data.groupId ?? data.idTo ?? data.toId ?? (isGroup ? '' : senderId),
-  );
+
+  // For 1:1 chats, threadId must ALWAYS be the OTHER person's UID.
+  // - Inbound (Customer→Operator): senderId = Customer → threadId = Customer
+  // - Self-sent (Operator→Customer): senderId = Operator, idTo = Customer → threadId = Customer
+  // Previous bug: data.idTo was prioritized, which for inbound msgs = Operator's own ID.
+  let threadId: string;
+  if (isGroup) {
+    threadId = toStringValue(data.threadId ?? event?.threadId ?? data.groupId);
+  } else {
+    const rawThreadId = toStringValue(data.threadId);
+    if (rawThreadId && rawThreadId !== instance.uId) {
+      // data.threadId is present and NOT our own ID → trust it
+      threadId = rawThreadId;
+    } else if (senderId && senderId !== instance.uId) {
+      // Inbound message from someone else → use their ID as thread
+      threadId = senderId;
+    } else {
+      // Self-sent message → recipient (idTo) is the other person
+      threadId = toStringValue(data.idTo ?? data.toId) || senderId;
+    }
+  }
   if (!senderId || !threadId) return null;
 
+  const rawType = String(data.msgType ?? data.type ?? '').toLowerCase();
+  const richContent = hasRichPreviewKeys(data.content) ||
+    hasRichPreviewKeys(data.attach) ||
+    hasRichPreviewKeys(data.attachments);
   const messageType: ZaloInboundMessageEvent['messageType'] =
-    data.msgType === 'chat.photo' || data.msgType === 'image' || data.type === 'image'
+    rawType.includes('photo') || rawType.includes('image')
       ? 'image'
-      : data.msgType === 'chat.file' || data.type === 'file'
+      : rawType.includes('file') || rawType.includes('doc')
         ? 'file'
-        : data.msgType === 'chat.sticker' || data.type === 'sticker'
+        : rawType.includes('sticker')
           ? 'sticker'
-          : 'text';
+          : rawType.includes('video')
+            ? 'video'
+            : rawType.includes('voice') || rawType.includes('audio')
+              ? 'voice'
+              : rawType.includes('gif')
+                ? 'gif'
+                : rawType.includes('location')
+                  ? 'location'
+                  : rawType.includes('contact')
+                    ? 'contact_card'
+                    : richContent
+                      ? 'link'
+                      : 'text';
   let content = extractInboundContent(data, messageType);
   if (!content) content = `[${messageType}]`;
 
@@ -179,9 +287,16 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
 
   // Try to find the sender's avatar from event data
   let avatarUrl = normalizeImageUrl(data.avatar || data.avt || data.avatarUrl || data.senderAvatar || '');
+  let senderName = toStringValue(data.dName ?? data.displayName ?? data.senderName ?? data.fromName);
 
-  // If not found in event, try to find in friendsCache
-  if (!avatarUrl && senderId) {
+  if (senderId === instance.uId) {
+    if (!avatarUrl) {
+      avatarUrl = instance.avatar || '';
+    }
+    if (!senderName) {
+      senderName = instance.label.replace(/\s*\([^)]*\)$/, '');
+    }
+  } else if (!avatarUrl && senderId) {
     const cached = friendsCache.get(instance.uId);
     if (cached?.data) {
       const friend = cached.data.find((f) => f.userId === senderId);
@@ -197,7 +312,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     threadId,
     threadType: isGroup ? 'group' as const : 'user' as const,
     senderId,
-    senderName: toStringValue(data.dName ?? data.displayName ?? data.senderName ?? data.fromName),
+    senderName,
     avatarUrl,
     content,
     messageType,
@@ -264,7 +379,7 @@ export async function addAccountInstance(uId: string, apiInstance: API): Promise
   try {
     const info = await apiInstance.fetchAccountInfo();
     const displayName = info?.profile?.displayName;
-    avatar = info?.profile?.avatar || '';
+    avatar = normalizeImageUrl(info?.profile?.avatar || '');
     if (displayName) {
       label = `${displayName} (${uId})`;
     }
@@ -293,10 +408,8 @@ async function loadCredentialsFile(filePath: string): Promise<void> {
     const raw = readFileSync(filePath, 'utf-8');
     const credentials: Credentials = JSON.parse(raw);
 
-    const zalo = new Zalo({
-      selfListen: config.personalSelfListen,
-      logging: true,
-    });
+    const accountId = accountIdFromCredentialsPath(filePath);
+    const zalo = createZaloClient(accountId);
 
     const activeApi = await zalo.login(credentials);
     const uId = activeApi.getOwnId ? activeApi.getOwnId() : `personal_${Date.now()}`;
@@ -341,6 +454,18 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         instance.lastEventAt = new Date().toISOString();
         const inbound = normalizeInboundMessage(instance, event);
         if (!inbound) return;
+
+        // Fetch missing sender avatar or display name
+        if (inbound.senderId && (!inbound.avatarUrl || !inbound.senderName)) {
+          const profile = await getOrFetchUserProfile(instance, inbound.senderId);
+          if (profile) {
+            inbound.avatarUrl = profile.avatarUrl;
+            if (!inbound.senderName) {
+              inbound.senderName = profile.displayName;
+            }
+          }
+        }
+
         console.log(
           `[PersonalZcaChannel - ${instance.label}] Message event from ${inbound.senderId} (${inbound.messageType}, ${inbound.content.length} chars).`,
         );
@@ -425,23 +550,93 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       console.log(`[PersonalZcaChannel] Selected sender account: ${selectedInstance.label}`);
 
+      const recipientId = String(req.recipientId || '').trim();
+      const messageText = String(req.message || '').trim();
+      const attachments = (req.attachments || []).filter((item) =>
+        String(item || '').trim(),
+      );
+      if (!recipientId || (!messageText && attachments.length === 0)) {
+        throw new Error('Missing recipientId or message/attachments.');
+      }
+
       const threadType =
         req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
 
+      const hasAttachments = attachments.length > 0;
+      console.log(`[PersonalZcaChannel] sendMessage params: recipientId=${recipientId}, threadType=${req.threadType}(${threadType}), message="${messageText.substring(0, 50)}", attachments=${hasAttachments ? attachments.length : 0}`);
+
+      // Build message content for zca-js
+      const messageContent: any = { msg: messageText };
+      if (hasAttachments) {
+        messageContent.attachments = attachments;
+      }
+
       const result = await selectedInstance.api.sendMessage(
-        { msg: req.message },
-        req.recipientId,
+        messageContent,
+        recipientId,
         threadType,
       );
 
+      // zca-js sendMessage returns { message: SendMessageResult | null, attachment: SendMessageResult[] }
+      const msgResult = (result as any)?.message ?? result;
+      const msgId = msgResult?.msgId ?? (result as any)?.msgId ?? `personal_${Date.now()}`;
+
+      console.log(`[PersonalZcaChannel] sendMessage result:`, JSON.stringify(result)?.substring(0, 200));
+
       return {
         success: true,
-        messageId: result?.msgId ?? `personal_${Date.now()}`,
+        messageId: msgId,
       };
     } catch (err) {
+      console.error(`[PersonalZcaChannel] sendMessage error:`, err);
+      const errAny = err as any;
+      const code = errAny?.code ?? errAny?.data?.code ?? errAny?.details?.code;
+      const message = loginError || (err instanceof Error ? err.message : 'Unknown personal send error');
       return {
         success: false,
-        error: loginError || (err instanceof Error ? err.message : 'Unknown personal send error'),
+        error: code ? `${message} (code: ${code})` : message,
+      };
+    }
+  }
+
+  async recallMessage(req: ZaloRecallMessageRequest): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      if (accountPool.size === 0) {
+        throw new Error('No active connected Zalo accounts in the pool.');
+      }
+
+      const instances = Array.from(accountPool.values());
+      let selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
+      if (!selectedInstance && req.accountId) {
+        throw new Error(`Requested Zalo account ${req.accountId} is not connected.`);
+      }
+      if (!selectedInstance) {
+        selectedInstance = instances[0];
+      }
+
+      console.log(`[PersonalZcaChannel] recallMessage: msgId=${req.msgId}, threadId=${req.threadId}`);
+
+      const threadType = req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
+      await selectedInstance.api.undoMessage(
+        {
+          msgId: req.msgId,
+          cliMsgId: req.cliMsgId || `recall_${Date.now()}`,
+          msgType: 1,
+          uidFrom: selectedInstance.uId,
+          idTo: req.threadId,
+        },
+        req.threadId,
+        threadType,
+      );
+
+      console.log(`[PersonalZcaChannel] recallMessage success`);
+      return { success: true };
+    } catch (err) {
+      console.error(`[PersonalZcaChannel] recallMessage error:`, err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown recall error',
       };
     }
   }

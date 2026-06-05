@@ -1,6 +1,7 @@
 import {
   getZaloStatus,
   sendMessage,
+  recallMessage,
   getAllGroups,
   getAllFriends,
   getAccounts,
@@ -22,6 +23,22 @@ export interface Command {
   _id: string;
   type: string;
   payload: any;
+}
+
+function validateZaloSendPayload(payload: any): void {
+  const attachments = Array.isArray(payload?.attachments)
+    ? payload.attachments.filter((item: unknown) => String(item || '').trim())
+    : [];
+  const hasMessage = String(payload?.message || '').trim().length > 0;
+  if (!payload?.recipientId || (!hasMessage && attachments.length === 0)) {
+    throw new Error(
+      'Thieu recipientId hoac message hoac attachments trong payload gui tin nhan.',
+    );
+  }
+}
+
+export function validateZaloSendPayloadForTest(payload: any): void {
+  validateZaloSendPayload(payload);
 }
 
 /**
@@ -53,16 +70,36 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
       return getAllFriends();
 
     case 'zalo.message.send': {
-      if (!payload.recipientId || !payload.message) {
-        throw new Error('Thiếu recipientId hoặc message trong payload gửi tin nhắn.');
-      }
-      return sendMessage({
+      validateZaloSendPayload(payload);
+      const result = await sendMessage({
         recipientId: payload.recipientId,
         message: payload.message,
         accountId: payload.accountId,
         threadType: payload.threadType,
-        messageType: payload.messageType
+        messageType: payload.messageType,
+        attachments: payload.attachments,
       }, payload.isTestMode || false);
+      if (!result.success) {
+        throw new Error(result.error || 'Gửi tin nhắn thất bại.');
+      }
+      return result;
+    }
+
+    case 'zalo.message.recall': {
+      if (!payload.threadId || !payload.msgId) {
+        throw new Error('Thiếu threadId hoặc msgId trong payload thu hồi tin nhắn.');
+      }
+      const recallResult = await recallMessage({
+        accountId: payload.accountId,
+        threadId: payload.threadId,
+        threadType: payload.threadType,
+        msgId: payload.msgId,
+        cliMsgId: payload.cliMsgId,
+      });
+      if (!recallResult.success) {
+        throw new Error(recallResult.error || 'Thu hồi tin nhắn thất bại.');
+      }
+      return recallResult;
     }
 
     case 'START_CAMPAIGN':

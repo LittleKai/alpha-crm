@@ -48,6 +48,14 @@ Quét QR bằng app Zalo. Credentials được lưu tại `.data/zalo-personal/c
 | POST | `/api/zalo/webhook` | Nhận webhook từ Zalo |
 | POST | `/api/zalo/test-send` | Gửi tin nhắn thử nghiệm |
 | POST | `/api/zalo/send-message` | Gửi tin nhắn qua channel hiện tại |
+| GET/POST | `/api/integrations/n8n/settings` | Lưu đọc cấu hình n8n, API key trả về UI dạng masked |
+| POST | `/api/integrations/n8n/test` | Kiểm tra kết nối n8n Public API |
+| GET | `/api/integrations/n8n/templates` | Danh sách workflow templates Alpha CRM |
+| POST | `/api/integrations/n8n/templates/install` | Tạo workflow nháp trong n8n từ template |
+| GET | `/api/integrations/n8n/workflows` | Đọc workflow list từ n8n |
+| POST | `/api/proxy/test` | Kiểm tra proxy URL trước khi gán vào account |
+
+Integration settings are stored locally at `.data/integrations/settings.json` (gitignored). Facebook Page tokens are intentionally not stored here; official Page/Messenger integration needs the cloud backend contract in `docs/specs/n8n-facebook-integration-contract.md`.
 
 ## Channel Modes
 

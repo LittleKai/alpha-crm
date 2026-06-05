@@ -136,8 +136,9 @@ lib/
 
 ## 📄 Tài Liệu Tham Khảo (Documentation)
 
-Các tài liệu đặc tả thiết kế, kiến trúc và phân chia nhiệm vụ chi tiết được lưu giữ trong thư mục `docs/`:
-*   [docs/00-image-analysis.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/00-image-analysis.md): Phân tích đặc tả hình ảnh và yêu cầu UI.
-*   [docs/01-design-system.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/01-design-system.md): Quy chuẩn về màu sắc, kích thước, spacing và typography.
-*   [docs/02-architecture.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/02-architecture.md): Cấu trúc thư mục, quy tắc thiết kế kiến trúc và định tuyến.
-*   [docs/06-progress-tracker.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/06-progress-tracker.md): Trình theo dõi tiến độ phát triển của dự án.
+Các tài liệu được lưu trữ có cấu trúc trong thư mục `docs/`:
+*   **[docs/guides/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/guides/)**: Sổ tay cài đặt & vận hành hệ thống CRM và tích hợp Zalo.
+*   **[docs/compliance/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/compliance/)**: Các quy chế an toàn & kiểm soát rủi ro chống block tài khoản Zalo.
+*   **[docs/specs/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/specs/)**: Đặc tả tích hợp nghiệp vụ, kế hoạch triển khai và phân tích gaps luồng dữ liệu.
+*   **[docs/api-catalog/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/api-catalog/)**: Danh mục phân loại API và tài liệu tra cứu thư viện lõi Zalo (`zca-js`).
+*   **[docs/releases/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/releases/)**: Checklist kiểm duyệt phát hành phiên bản production.

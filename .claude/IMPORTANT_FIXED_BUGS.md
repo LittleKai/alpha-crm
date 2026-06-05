@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-04 +07:00
+**Last Updated:** 2026-06-05 +07:00
 
 ---
 
@@ -13,6 +13,22 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-05 - Live Chat Polling Must Merge, Not Replace, Active Messages
+
+- Symptom: Live Chat flickered during refresh, old-message scrolling was pulled back to the top, raw rich-preview JSON leaked into conversation previews, and failed outbound messages stayed visible after reopening a chat.
+- Root cause: The Flutter provider reloaded the selected messages and the full conversation list on every poll/send, replaced the selected conversation message list wholesale, assumed only `contentType`, and displayed backend preview strings without defensive rich-content formatting.
+- Fix summary: Silent polling now refreshes conversations without replacing selected messages, selected messages merge by stable id/provider id, send/attachment no longer trigger a second full conversation reload, failed messages are filtered client-side, messages use `messageType` fallback parsing, and rich-preview JSON is formatted into safe labels.
+- Rule: Chat UIs must preserve scroll state and merge incremental updates; do not replace the active message list from background polling unless the user explicitly switches conversations.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/providers/live_chat_provider.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/data/live_chat_repository.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`, `tools/alpha-crm/test/live_chat_provider_test.dart`.
+
+### 2026-06-05 - ZCA Group Events May Carry ThreadType at the Event Root
+
+- Symptom: Some Zalo group conversations could appear as personal/direct chats or use the sender UID as the thread id, causing confusing Live Chat entries and send failures.
+- Root cause: The local `PersonalZcaChannel` normalizer checked `data.threadType` and group fields but missed `event.type === ThreadType.Group`, which is a common zca-js listener shape.
+- Fix summary: Group detection now checks the root event type, uses root `threadId` for group threads, extends inbound message type detection, allows attachment-only sends, and preserves ZCA error codes in send failures.
+- Rule: Normalize zca-js listener events from both root-level and nested `data` fields before deciding thread identity or message type.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/channels/types.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/agent/command-executor.ts`.
 
 ### 2026-06-04 - Windows ZIP Updates Must Self-Apply, Not Just Open Explorer
 

@@ -111,6 +111,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             const _Header(),
             const SizedBox(height: AppSpacing.l),
+            _AppearanceCard(
+              themeMode: state.settings.appThemeMode,
+              onChanged: notifier.setAppThemeMode,
+            ),
+            const SizedBox(height: AppSpacing.m),
             _AccountCard(
               connectedCount: connectedCount,
               accounts: zaloState.accounts,
@@ -333,6 +338,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     BuildContext context,
     ZaloConnectedAccount account,
   ) async {
+    final nicknameController = TextEditingController(text: account.nickname);
     final proxyController = TextEditingController(text: account.proxy);
     var blockSeen = account.blockSeen;
     var blockTyping = account.blockTyping;
@@ -349,6 +355,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    TextField(
+                      controller: nicknameController,
+                      decoration: InputDecoration(
+                        labelText: 'Nickname hiển thị',
+                        hintText: account.originalLabel,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    Text(
+                      'Tên Zalo gốc: ${account.originalLabel}. Nếu đặt nickname, toàn bộ tab sẽ dùng nickname này.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
                     TextField(
                       controller: proxyController,
                       decoration: const InputDecoration(
@@ -395,6 +417,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         .read(zaloIntegrationProvider.notifier)
                         .updateAccountSettings(
                           accountId: account.id,
+                          nickname: nicknameController.text.trim(),
                           proxy: proxyController.text.trim(),
                           blockSeen: blockSeen,
                           blockTyping: blockTyping,
@@ -419,6 +442,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       },
     );
+    nicknameController.dispose();
     proxyController.dispose();
   }
 
@@ -499,6 +523,65 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AppearanceCard extends StatelessWidget {
+  final String themeMode;
+  final ValueChanged<String> onChanged;
+
+  const _AppearanceCard({required this.themeMode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = <String>{
+      themeMode == 'dark' || themeMode == 'system' ? themeMode : 'light',
+    };
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.contrast_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text('Giao diện', style: AppTextStyles.sectionTitle),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'light',
+                icon: Icon(Icons.light_mode_outlined),
+                label: Text('Sáng'),
+              ),
+              ButtonSegment(
+                value: 'dark',
+                icon: Icon(Icons.dark_mode_outlined),
+                label: Text('Tối'),
+              ),
+              ButtonSegment(
+                value: 'system',
+                icon: Icon(Icons.brightness_auto_outlined),
+                label: Text('Hệ thống'),
+              ),
+            ],
+            selected: selected,
+            onSelectionChanged: (values) {
+              if (values.isNotEmpty) onChanged(values.first);
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -612,6 +695,19 @@ class _AccountCard extends StatelessWidget {
                                 fontSize: 13,
                               ),
                             ),
+                            if (acc.nickname.isNotEmpty &&
+                                acc.originalLabel != acc.label) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Zalo: ${acc.originalLabel}',
+                                style: AppTextStyles.caption.copyWith(
+                                  fontSize: 10.5,
+                                  color: AppColors.textMuted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                             const SizedBox(height: 2),
                             Row(
                               children: [
@@ -798,8 +894,6 @@ class _ZaloIntegrationCard extends ConsumerWidget {
     required this.onBackendUrlChanged,
   });
 
-
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final integrationState = ref.watch(zaloIntegrationProvider);
@@ -956,8 +1050,6 @@ class _ZaloIntegrationCard extends ConsumerWidget {
     );
   }
 }
-
-
 
 class _RiskControlsCard extends StatelessWidget {
   final SystemSettings settings;

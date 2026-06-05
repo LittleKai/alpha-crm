@@ -4,6 +4,7 @@ import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
 import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
+import 'features/settings/providers/settings_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
 
 void main() async {
@@ -49,10 +50,20 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final themeMode = switch (ref
+        .watch(settingsProvider)
+        .settings
+        .appThemeMode) {
+      'dark' => ThemeMode.dark,
+      'system' => ThemeMode.system,
+      _ => ThemeMode.light,
+    };
     return MaterialApp.router(
       title: 'Alpha CRM',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
         return AppLockOverlay(child: child ?? const SizedBox.shrink());

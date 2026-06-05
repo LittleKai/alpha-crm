@@ -4,7 +4,7 @@
  */
 
 import { config } from './config.js';
-import type { ZaloChannel, ZaloSendMessageRequest, ZaloSendMessageResult, ZaloChannelStatus, ZaloFriend, ZaloGroupMember } from './channels/types.js';
+import type { ZaloChannel, ZaloSendMessageRequest, ZaloSendMessageResult, ZaloRecallMessageRequest, ZaloChannelStatus, ZaloFriend, ZaloGroupMember } from './channels/types.js';
 import { PersonalZcaChannel } from './channels/personal-zca-channel.js';
 import { OfficialOaChannel } from './channels/official-oa-channel.js';
 import { MockZaloChannel } from './channels/mock-channel.js';
@@ -42,6 +42,11 @@ export async function sendMessage(
 
 export function handleWebhookEvent(event: Record<string, unknown>): void {
   channel.handleWebhookEvent?.(event);
+}
+
+export async function recallMessage(req: ZaloRecallMessageRequest): Promise<{ success: boolean; error?: string }> {
+  if (!channel.recallMessage) return { success: false, error: 'Recall not supported on current channel.' };
+  return channel.recallMessage(req);
 }
 
 export async function getAllGroups(): Promise<any[]> {

@@ -1,7 +1,24 @@
 # Project Summary
 
-**Last Updated:** 2026-06-04T22:50:00+07:00
-**Session:** #61 - Fixed bulk campaign compliance error logging and progress metrics in Flutter client. Converted `logs` in `BulkMessagingState` to use `LogItem` instead of `String`, and added `ActivityLogPanel` to the `BulkMessagingScreen` UI under the progress indicators. Fixed a bug where `complianceError` was implicitly cleared during state copies by adding `clearComplianceError` and `clearComplianceWarning` optional parameters to `copyWith`. Formatted completed and failed campaign log notifications to include final success, failure, and cancelled metrics. All tests passed successfully.
+**Last Updated:** 2026-06-05T20:33:00+07:00
+
+**Session:** #70 - Organized and grouped all documentation files under `docs/` into 5 categorized subdirectories: `guides`, `compliance`, `specs`, `api-catalog`, and `releases`. Updated relative file links inside `claude.md`, `SPEC.md`, `integration/zalo-bot-service/README.md`, `zca-js-api-catalog.md`, `zalo-integration-installation-and-usage.md`, and `.claude/PROJECT_SUMMARY.md`.
+
+**Session:** #69 - Stabilized Live Chat refresh behavior and Zalo account display naming. Live Chat now loads recent conversations/messages in smaller batches, preserves selected conversation messages during silent polling, filters failed outbound messages from the view, avoids duplicate conversation reload after send/attachment, supports load-older pagination, sanitizes rich JSON previews, reads backend `messageType`, and filters unmanaged group conversations client-side when managed group data is available. Added Settings appearance controls for light/dark/system theme mode and per-Zalo-account nicknames persisted in `zalo_settings.json`; `zaloIntegrationProvider` applies nicknames globally across tabs while retaining the original Zalo label for settings. Updated the local Zalo bridge to detect group events from root `ThreadType.Group`, support richer inbound message types, allow attachment-only sends, validate send payloads, and preserve ZCA error codes such as `114`. Verified with focused Live Chat tests, full `flutter test`, TypeScript build, and node bridge regression tests. `flutter analyze` still exits with existing info-level baseline lints only.
+
+**Session:** #68 - Implemented Alpha CRM workflow automation integration. Added a Flutter `/workflows` workspace with a n8n-ready workflow template catalog, channel capability matrix, Riverpod provider, n8n settings form, and sidebar/topbar routing. Extended the local `zalo-bot-service` with n8n settings storage, masked API key responses, n8n Public API workflow creation, inbound Zalo event dispatch to n8n webhooks, proxy testing, and per-account `proxy-agent` enforcement for `zca-js` login sessions. Added official Facebook Page/Messenger cloud contract documentation and focused Flutter/Node regression tests.
+
+**Session:** #67 - Refactored Zalo integration and Flutter Live Chat UI. Commented out the 'Tin mẫu nhanh' tab in `nav_item_models.dart`. Implemented a robust and crash-safe `_buildAvatar` helper in `live_chat_screen.dart` using `ClipOval` and `Image.network` with `errorBuilder` to render Zalo user and operator avatars safely, replacing all pre-existing `CircleAvatar` widgets. Fixed Zalo bot backend TypeScript compilation errors by adding `getUserInfo` and `getContext` declarations to `zca-js.d.ts` and optimizing `getOrFetchUserProfile` and `normalizeInboundMessage` to handle operator avatars and bypass caching. Verified compilation and 100% test pass.
+
+**Session:** #66 - Added `docs/zca-js-api-catalog.md`, a categorized snapshot of the usable public `zca-js` API surface from the local reference repository `D:\Dev\2.reference_pj\Zalo-ref\zca-js`. The catalog covers the `Zalo` login facade, generated `API` facade, realtime listener methods/events, public type families, and Alpha CRM backend usage guidance with safeguards for high-risk personal-Zalo operations. Updated `claude.md` so future sessions know to consult this catalog before designing new personal-Zalo backend features.
+
+**Session:** #65 - Fixed Zalo integration bugs and UI refinements. Threw error in `command-executor.ts` on `zalo.message.send` failure to correctly report delivery failure to the cloud. Implemented a 24-hour TTL `userProfileCache` in `personal-zca-channel.ts`, fetched missing profiles via `getUserInfo` to prevent Zalo rate limits, and fixed a TypeScript compilation mismatch with `getUserInfo` by casting to `any`. Corrected outbound conversation header handling in `crm.js` to prevent operator messages from overwriting customer profile details. In the Flutter Live Chat UI, removed tags/notes input fields from the conversation panel bottom, resolved the default avatar placeholder `/default` broken image load by falling back to letter initials, and fixed the hardcoded active account avatar indicator 'A' to dynamically display the first letter of the active account. Resolved a syntax error in the quick reply strip layout of `live_chat_screen.dart`. Verified backend compilation and 100% pass on all 25 widget and unit tests (`flutter test`).
+
+**Session:** #64 - Ported ZaloCRM chat and contact capabilities to Alpha CRM Live Chat. Added new `contentType`, `isDeleted`, `zaloMsgId`, and `attachments` fields to `ChatMessage`. Extended `Conversation` model with `crmCustomer` data. Added detailed CRM contact details side panel on desktop and modal bottom sheet on mobile, allowing operators to create/update CRM customers directly from their Live Chat screen. Refactored message bubble rendering to support inline images with fullscreen previews, file/document attachments with sizes, reminder/calendar cards, indicators for voice/stickers/videos, and deleted messages. Added group chat tags, sender names in group threads, relative time formatting (e.g. 5 phút, Hôm qua), and a 12-second background auto-polling mechanism. Verified all changes via static analysis (`flutter analyze`) and unit tests (`flutter test`) - all passed.
+
+**Session:** #63 - Reviewed the Builder implementation against `SPEC.md` and `BUILDER_LOG.md`. Added `REVIEW_LOG.md` and applied reviewer fixes: stopped `AppTopbar` from eagerly initializing dashboard/live-chat/task providers during ordinary shell render, changed subscription notifications to use known authenticated `crmAuthProvider` state, improved phone digit matching in global search, removed private dialog `key` lint warnings, added a topbar regression test for lazy provider behavior, and fixed the Dashboard async-context guard. Verified focused topbar/dashboard tests, full `flutter test`, and `dart format`; `flutter analyze` still exits with existing baseline info-level issues outside the reviewed topbar/dashboard fixes.
+
+**Session:** #62 - Implemented Phase 2, 3, and 4 of SPEC.md. Added Customer Pipeline, Source Distribution, and Campaign Status sections to DashboardScreen. Converted AppTopbar to ConsumerStatefulWidget and implemented Global Search & Notification Bell popups with local Vietnamese-aware diacritic normalization and navigation. Created widget test coverage in `test/dashboard_screen_test.dart` and `test/app_topbar_test.dart`. Performed contract audit in lib and local Node.js backend for appointments, orders, reports, and team ACL. Confirmed all contracts are missing, created contract gap documentation at `docs/crm-domain-contract-gap.md`, and stopped Phase 4. All tests passed, and static analysis verified successfully.
 
 **Session:** #59 - Fixed compliance error reporting for campaign execution. Modified backend `crm.js` agent command result route to set the campaign status to 'cancelled' (instead of 'completed') and mark all remaining queued execution logs as 'cancelled' with the corresponding error message when a command fails (e.g. blocked by compliance before sending). Fixed MongoDB Mixed field query matching issues in `crm.js` by querying `payload.campaignId` as both ObjectId and String formats. Exposed `translateToVietnamese` as a public static helper in `ZaloIntegrationApi`. Updated Flutter `BulkMessagingNotifier` progress status polling to parse the command status and errors, display compliance failure messages in the UI, and log them cleanly. Verified via static analysis.
 
@@ -85,6 +102,7 @@ lib/
   app/                        App shell, routing, theme, responsive scaffold
   features/                   Feature-first CRM screens and providers
     security/                  Local app lock provider, overlay, and password hashing helpers
+    workflows/                 n8n workflow template catalog, automation screen, channel capability matrix, and local backend API client
   mock/                       Mock domain models and sample/default data (includes ZaloChannelMode enum)
   shared/                     Reusable widgets and responsive utilities
 test/                         Flutter widget tests
@@ -94,19 +112,32 @@ integration/
   zalo-bot-service/            Node.js/TypeScript backend bridge — personal-first via zca-js
     src/channels/              Channel adapter pattern (PersonalZca, OfficialOa, Mock)
     src/agent/                 Production outbound agent layer (runner, command executor, machine fingerprinting, cloud-api)
+    src/integrations/           n8n settings/client/template builder, n8n event dispatcher, and proxy helper tests/utilities
     src/compliance.ts          Channel-aware backend compliance guard
     src/config.ts              Environment config with ZaloChannelMode and Agent configs
     src/server.ts              HTTP API server (hardened to bind to 127.0.0.1 and restrict CORS)
     src/personal-login.ts      CLI bootstrap for personal Zalo QR login
     src/zalo.ts                Channel selector/router
 docs/
-  reference-analysis.md                    Current Alpha CRM vs Deplao Builder and ZaloCRM reference analysis
-  implementation-plan.md                   Phased integration plan derived from the reference analysis
-  zalo-integration-and-risk-controls.md  Zalo compliance documentation (personal-first)
-  zalo-integration-installation-and-usage.md  Setup and usage guide for Zalo integration
-  zalo-reference-sources.md              List of 3 external reference projects and local paths
-  zca-js-unintegrated-apis.md           Catalog of remaining unintegrated APIs from zca-js
-  huong-dan-cai-dat-va-su-dung.md        Vietnamese installation and usage guide
+  guides/
+    customer-installation-guide.md               Setup quick-start for customers
+    production-crm-operator-guide.md             Daily handbook for operators
+    zalo-integration-installation-and-usage.md   Detailed setup guide for Zalo integration backend
+  compliance/
+    zalo-integration-and-risk-controls.md        Comprehensive Vietnamese Zalo risk control strategy
+    production-zalo-risk-controls.md             English Zalo risk controls summary checklist
+  specs/
+    reference-analysis.md                        Comparison of Alpha CRM vs Deplao and ZaloCRM
+    implementation-plan.md                       Phased integration plan
+    deplao-feature-integration-spec.md           Features integrated from Deplao
+    crm-domain-contract-gap.md                   Gap analysis for future domain models
+    n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
+  api-catalog/
+    zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
+    zca-js-api-catalog.md                        API catalog for the zca-js library
+    zca-js-unintegrated-apis.md                 List of remaining unintegrated zca-js APIs
+  releases/
+    production-release-checklist.md              Release checklists and verification steps
 ```
 
 ### Critical Files
@@ -114,6 +145,7 @@ docs/
 | File | Purpose | Notes |
 |------|---------|-------|
 | `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter. |
+| `integration/zalo-bot-service/package.json` | Local backend package metadata | Uses `zca-js@^2.1.2` and `proxy-agent@^6.5.0` for per-account HTTP/HTTPS/SOCKS proxy enforcement. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. |
 | `lib/shared/api/crm_cloud_api.dart` | Alpha Studio cloud API client | Uses `ALPHA_STUDIO_API_URL` with production fallback and Bearer JWT headers. |
@@ -126,6 +158,7 @@ docs/
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
+| `lib/features/workflows/` | Workflow automation feature | Provides `/workflows`, n8n settings UI, template catalog/filtering, channel capability matrix, and install calls to local backend. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
@@ -140,11 +173,12 @@ docs/
 | `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
 | `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. The automated Windows release stages its compiled `dist/`, `node_modules`, `.env.example`, and bundled Node runtime into the ZIP while excluding `.env` and `.data` secrets. |
+| `integration/zalo-bot-service/src/integrations/` | n8n/proxy helpers | Stores masked n8n settings, builds n8n workflow payloads, dispatches inbound events to n8n webhooks, and creates/test proxy agents. |
 | `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
 | `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
-| `docs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
-| `docs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
-| `docs/implementation-plan.md` | Reference integration plan | Documents the phased implementation plan, impacted files, risks, and verification checklist. |
+| `docs/specs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
+| `docs/specs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
+| `docs/specs/implementation-plan.md` | Reference integration plan | Documents the phased implementation plan, impacted files, risks, and verification checklist. |
 | `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |

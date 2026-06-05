@@ -5,11 +5,21 @@ class LiveChatRepository {
     return CrmCloudApi.get('/crm/groups/accounts');
   }
 
+  Future<Map<String, dynamic>> getManagedGroups({String? accountId}) {
+    final query = <String, String>{'managed': 'true'};
+    if (accountId != null && accountId.isNotEmpty) {
+      query['accountId'] = accountId;
+    }
+    final path = Uri(path: '/crm/groups', queryParameters: query).toString();
+    return CrmCloudApi.get(path);
+  }
+
   Future<Map<String, dynamic>> getConversations({
     String? accountId,
     String? search,
+    int limit = 30,
   }) {
-    final query = <String, String>{'limit': '100'};
+    final query = <String, String>{'limit': limit.toString()};
     if (accountId != null && accountId.isNotEmpty) {
       query['accountId'] = accountId;
     }
@@ -23,9 +33,26 @@ class LiveChatRepository {
     return CrmCloudApi.get(path);
   }
 
-  Future<Map<String, dynamic>> getMessages(String conversationId) {
-    return CrmCloudApi.get(
-      '/crm/conversations/$conversationId/messages?limit=100',
+  Future<Map<String, dynamic>> getMessages(
+    String conversationId, {
+    int limit = 30,
+    String? before,
+    String? after,
+  }) {
+    final query = <String, String>{'limit': limit.toString()};
+    if (before != null && before.isNotEmpty) query['before'] = before;
+    if (after != null && after.isNotEmpty) query['after'] = after;
+    final path = Uri(
+      path: '/crm/conversations/$conversationId/messages',
+      queryParameters: query,
+    ).toString();
+    return CrmCloudApi.get(path);
+  }
+
+  Future<Map<String, dynamic>> clearFailedMessages(String conversationId) {
+    return CrmCloudApi.post(
+      '/crm/conversations/$conversationId/messages/failed/clear',
+      {},
     );
   }
 
@@ -47,5 +74,31 @@ class LiveChatRepository {
 
   Future<Map<String, dynamic>> markRead(String conversationId) {
     return CrmCloudApi.post('/crm/conversations/$conversationId/read', {});
+  }
+
+  Future<Map<String, dynamic>> sendAttachment(
+    String conversationId,
+    List<String> attachmentPaths, {
+    String content = '',
+    String messageType = 'file',
+  }) {
+    return CrmCloudApi.post(
+      '/crm/conversations/$conversationId/send-attachment',
+      {
+        'content': content,
+        'attachments': attachmentPaths,
+        'messageType': messageType,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> recallMessage(
+    String conversationId,
+    String messageId,
+  ) {
+    return CrmCloudApi.post(
+      '/crm/conversations/$conversationId/messages/$messageId/recall',
+      {},
+    );
   }
 }

@@ -1,20 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_text_styles.dart';
+import '../routing/app_routes.dart';
 import '../../shared/widgets/compliance_warnings_popup.dart';
 
-class AppTopbar extends ConsumerWidget {
+import '../../features/customers/providers/customers_provider.dart';
+import '../../features/messaging/live_chat/providers/live_chat_provider.dart';
+import '../../features/tasks/providers/crm_tasks_provider.dart';
+import '../../features/zalo_integration/providers/zalo_integration_provider.dart';
+import '../../features/auth/providers/crm_auth_provider.dart';
+
+class AppTopbar extends ConsumerStatefulWidget {
   final String currentRoute;
   final VoidCallback? onMenuPressed;
 
   const AppTopbar({super.key, required this.currentRoute, this.onMenuPressed});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final breadcrumbs = _getBreadcrumbs(currentRoute);
+  ConsumerState<AppTopbar> createState() => _AppTopbarState();
+}
+
+class _AppTopbarState extends ConsumerState<AppTopbar> {
+  @override
+  Widget build(BuildContext context) {
+    final breadcrumbs = _getBreadcrumbs(widget.currentRoute);
+
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final authState = ref.watch(crmAuthProvider);
+
+    int notifCount = 0;
+    if (!zaloState.isBackendActive) notifCount++;
+    for (final acc in zaloState.accounts) {
+      if (!acc.connected || !acc.listenerRunning) notifCount++;
+    }
+    if (zaloState.agentError != null) notifCount++;
+    final subscriptionStatus = authState.subscriptionStatus;
+    final hasKnownSubscriptionWarning =
+        authState.isAuthenticated &&
+        subscriptionStatus != null &&
+        subscriptionStatus != 'active';
+    if (hasKnownSubscriptionWarning) notifCount++;
 
     return Container(
       height: 64,
@@ -27,11 +56,11 @@ class AppTopbar extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          if (onMenuPressed != null) ...[
+          if (widget.onMenuPressed != null) ...[
             IconButton(
               tooltip: 'Mở menu',
               icon: const Icon(Icons.menu, color: AppColors.textSecondary),
-              onPressed: onMenuPressed,
+              onPressed: widget.onMenuPressed,
             ),
             const SizedBox(width: AppSpacing.s),
           ],
@@ -41,7 +70,7 @@ class AppTopbar extends ConsumerWidget {
               child: Row(
                 children: [
                   Icon(
-                    _getRouteIcon(currentRoute),
+                    _getRouteIcon(widget.currentRoute),
                     size: 16,
                     color: AppColors.primary,
                   ),
@@ -78,26 +107,87 @@ class AppTopbar extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.s),
+          IconButton(
+            key: const ValueKey('global_search_button'),
+            tooltip: 'Tìm kiếm toàn cầu',
+            icon: const Icon(Icons.search, color: AppColors.textSecondary),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const _GlobalSearchDialog(),
+              );
+            },
+          ),
+          const SizedBox(width: AppSpacing.s),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                key: const ValueKey('notification_bell_button'),
+                tooltip: 'Thông báo',
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: AppColors.textSecondary,
+                ),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => const _NotificationMenuDialog(),
+                  );
+                },
+              ),
+              if (notifCount > 0)
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppColors.error,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      notifCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: AppSpacing.s),
           Builder(
             builder: (context) {
               final ZaloActionType? actionType;
-              if (currentRoute.startsWith('/messaging/bulk')) {
+              if (widget.currentRoute.startsWith('/messaging/bulk')) {
                 actionType = ZaloActionType.bulkMessageByPhone;
-              } else if (currentRoute.startsWith('/messaging/live-chat')) {
+              } else if (widget.currentRoute.startsWith(
+                '/messaging/live-chat',
+              )) {
                 actionType = ZaloActionType.liveChatReply;
-              } else if (currentRoute.startsWith('/messaging/chatbot')) {
+              } else if (widget.currentRoute.startsWith('/messaging/chatbot')) {
                 actionType = ZaloActionType.chatbotReply;
-              } else if (currentRoute.startsWith('/friends/by-phone')) {
+              } else if (widget.currentRoute.startsWith('/friends/by-phone')) {
                 actionType = ZaloActionType.friendByPhone;
-              } else if (currentRoute.startsWith('/friends/by-group')) {
+              } else if (widget.currentRoute.startsWith('/friends/by-group')) {
                 actionType = ZaloActionType.friendByGroup;
-              } else if (currentRoute.startsWith('/groups/scan-members')) {
+              } else if (widget.currentRoute.startsWith(
+                '/groups/scan-members',
+              )) {
                 actionType = ZaloActionType.scanGroupMembers;
-              } else if (currentRoute.startsWith('/groups/join')) {
+              } else if (widget.currentRoute.startsWith('/groups/join')) {
                 actionType = ZaloActionType.joinGroups;
-              } else if (currentRoute.startsWith('/groups/invite')) {
+              } else if (widget.currentRoute.startsWith('/groups/invite')) {
                 actionType = ZaloActionType.inviteToGroup;
-              } else if (currentRoute.startsWith('/groups/create')) {
+              } else if (widget.currentRoute.startsWith('/groups/create')) {
                 actionType = ZaloActionType.createGroups;
               } else {
                 actionType = null;
@@ -114,6 +204,7 @@ class AppTopbar extends ConsumerWidget {
     if (route.startsWith('/dashboard')) return Icons.dashboard_outlined;
     if (route.startsWith('/customers')) return Icons.people_outline;
     if (route.startsWith('/content')) return Icons.quickreply_outlined;
+    if (route.startsWith('/workflows')) return Icons.account_tree_outlined;
     if (route.startsWith('/messaging')) return Icons.send_outlined;
     if (route.startsWith('/friends')) return Icons.person_add_alt_outlined;
     if (route.startsWith('/groups')) return Icons.group_outlined;
@@ -130,6 +221,9 @@ class AppTopbar extends ConsumerWidget {
     }
     if (route.startsWith('/content/templates')) {
       return ['CRM Zalo', 'Chiến dịch', 'Tin nhắn mẫu'];
+    }
+    if (route.startsWith('/workflows')) {
+      return ['CRM Zalo', 'Tự động hóa', 'Kho workflow mẫu'];
     }
     if (route.startsWith('/messaging/bulk')) {
       return ['Chức năng nhắn tin', 'Gửi tin hàng loạt'];
@@ -175,4 +269,448 @@ class AppTopbar extends ConsumerWidget {
     }
     return ['Alpha CRM'];
   }
+}
+
+class _GlobalSearchDialog extends ConsumerStatefulWidget {
+  const _GlobalSearchDialog();
+
+  @override
+  ConsumerState<_GlobalSearchDialog> createState() =>
+      _GlobalSearchDialogState();
+}
+
+class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _normalize(String input) {
+    var str = input.toLowerCase().trim();
+    const vietnamese =
+        'aáàảãạâấầẩẫậăắằẳẵặeéèẻẽẹêếềểễệiíìỉĩịoóòỏõọôốồổỗộơớờởỡợuúùủũụưứừửữựyýỳỷỹỵdđ';
+    const english =
+        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeeiiiiiiioooooooooooooooooouuuuuuuuuuuuyyyyyydd';
+
+    for (int i = 0; i < vietnamese.length; i++) {
+      str = str.replaceAll(vietnamese[i], english[i]);
+    }
+    return str;
+  }
+
+  String _digitsOnly(String input) => input.replaceAll(RegExp(r'\D'), '');
+
+  @override
+  Widget build(BuildContext context) {
+    final customersState = ref.watch(customersProvider);
+    final liveChatState = ref.watch(liveChatProvider);
+    final tasksState = ref.watch(crmTasksProvider);
+
+    final normalizedQuery = _normalize(_query);
+    final List<_SearchResult> results = [];
+
+    if (normalizedQuery.isNotEmpty) {
+      final queryDigits = _digitsOnly(_query);
+      // Search contacts
+      for (final contact in customersState.contacts) {
+        if (_normalize(contact.name).contains(normalizedQuery) ||
+            (queryDigits.isNotEmpty &&
+                _digitsOnly(contact.phone).contains(queryDigits)) ||
+            _normalize(contact.group).contains(normalizedQuery) ||
+            _normalize(contact.tag).contains(normalizedQuery) ||
+            _normalize(contact.source).contains(normalizedQuery) ||
+            _normalize(contact.status).contains(normalizedQuery)) {
+          results.add(
+            _SearchResult(
+              title: contact.name,
+              subtitle: 'Khách hàng • ${contact.phone} • ${contact.status}',
+              route: AppRoutes.customers,
+              icon: Icons.person_outline,
+              extra: contact.group,
+            ),
+          );
+        }
+      }
+
+      // Search live chat threads
+      for (final conv in liveChatState.conversations) {
+        if (_normalize(conv.customerName).contains(normalizedQuery) ||
+            conv.threadId.contains(normalizedQuery) ||
+            _normalize(conv.lastMessage).contains(normalizedQuery) ||
+            _normalize(conv.tag).contains(normalizedQuery)) {
+          results.add(
+            _SearchResult(
+              title: conv.customerName,
+              subtitle: 'Live Chat • ${conv.lastMessage}',
+              route: AppRoutes.messagingLiveChat,
+              icon: Icons.chat_bubble_outline,
+              extra: conv.tag.isNotEmpty ? conv.tag : null,
+            ),
+          );
+        }
+      }
+
+      // Search tasks
+      for (final task in tasksState.tasks) {
+        if (_normalize(task.title).contains(normalizedQuery) ||
+            _normalize(task.description).contains(normalizedQuery) ||
+            _normalize(task.priority).contains(normalizedQuery) ||
+            _normalize(task.status).contains(normalizedQuery)) {
+          results.add(
+            _SearchResult(
+              title: task.title,
+              subtitle: 'Công việc • ${task.description}',
+              route: AppRoutes.tasks,
+              icon: Icons.task_alt_outlined,
+              extra: 'Ưu tiên: ${task.priority.toUpperCase()}',
+            ),
+          );
+        }
+      }
+    }
+
+    return Dialog(
+      key: const ValueKey('global_search_panel'),
+      insetPadding: const EdgeInsets.all(AppSpacing.m),
+      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, color: AppColors.primary),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Tìm kiếm khách hàng, hội thoại, công việc...',
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _query = val;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_query.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _query = '';
+                        });
+                      },
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.borderSoft),
+            Expanded(
+              child: _query.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Nhập từ khóa để bắt đầu tìm kiếm...',
+                        style: TextStyle(color: AppColors.textMuted),
+                      ),
+                    )
+                  : results.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Không tìm thấy kết quả phù hợp.',
+                        style: TextStyle(color: AppColors.textMuted),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      itemCount: results.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, color: AppColors.borderSoft),
+                      itemBuilder: (context, index) {
+                        final item = results[index];
+                        return ListTile(
+                          leading: Icon(item.icon, color: AppColors.primary),
+                          title: Text(
+                            item.title,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            item.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: item.extra != null
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.s,
+                                    vertical: AppSpacing.xs,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primarySoft,
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.radiusS,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    item.extra!,
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            Navigator.pop(context);
+                            context.go(item.route);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchResult {
+  final String title;
+  final String subtitle;
+  final String route;
+  final IconData icon;
+  final String? extra;
+
+  const _SearchResult({
+    required this.title,
+    required this.subtitle,
+    required this.route,
+    required this.icon,
+    this.extra,
+  });
+}
+
+class _NotificationMenuDialog extends ConsumerWidget {
+  const _NotificationMenuDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final zaloState = ref.watch(zaloIntegrationProvider);
+    final liveChatState = ref.watch(liveChatProvider);
+    final tasksState = ref.watch(crmTasksProvider);
+    final authState = ref.watch(crmAuthProvider);
+
+    final List<_NotificationItem> notifications = [];
+
+    if (!zaloState.isBackendActive) {
+      notifications.add(
+        const _NotificationItem(
+          title: 'Zalo Bot mất kết nối',
+          detail:
+              'Đường truyền dịch vụ Zalo Bot cục bộ đang tắt hoặc không hoạt động.',
+          icon: Icons.error_outline,
+          color: AppColors.error,
+          route: AppRoutes.settings,
+        ),
+      );
+    }
+
+    for (final acc in zaloState.accounts) {
+      if (!acc.connected) {
+        notifications.add(
+          _NotificationItem(
+            title: 'Tài khoản mất kết nối',
+            detail:
+                'Tài khoản Zalo "${acc.label}" đã bị đăng xuất hoặc ngắt kết nối.',
+            icon: Icons.warning_amber_rounded,
+            color: AppColors.warning,
+            route: AppRoutes.settings,
+          ),
+        );
+      } else if (!acc.listenerRunning) {
+        notifications.add(
+          _NotificationItem(
+            title: 'Lắng nghe tin nhắn dừng',
+            detail:
+                'Tiến trình nhận tin nhắn của "${acc.label}" đang tạm dừng.',
+            icon: Icons.pause_circle_outline,
+            color: AppColors.warning,
+            route: AppRoutes.settings,
+          ),
+        );
+      }
+    }
+
+    if (zaloState.agentError != null) {
+      notifications.add(
+        _NotificationItem(
+          title: 'Lỗi Zalo Bot Agent',
+          detail: zaloState.agentError!,
+          icon: Icons.bug_report_outlined,
+          color: AppColors.error,
+          route: AppRoutes.settings,
+        ),
+      );
+    }
+
+    for (final conv in liveChatState.conversations) {
+      if (conv.unreadCount > 0) {
+        notifications.add(
+          _NotificationItem(
+            title: 'Tin nhắn chưa đọc',
+            detail:
+                'Bạn có ${conv.unreadCount} tin nhắn mới từ "${conv.customerName}".',
+            icon: Icons.mark_chat_unread_outlined,
+            color: AppColors.primary,
+            route: AppRoutes.messagingLiveChat,
+          ),
+        );
+      }
+    }
+
+    final now = DateTime.now();
+    for (final task in tasksState.tasks) {
+      if (task.status != 'completed' &&
+          task.dueAt != null &&
+          task.dueAt!.isBefore(now)) {
+        notifications.add(
+          _NotificationItem(
+            title: 'Công việc quá hạn',
+            detail:
+                'Công việc "${task.title}" đã quá hạn vào lúc ${task.dueAt.toString().substring(0, 16)}.',
+            icon: Icons.alarm_on_outlined,
+            color: AppColors.error,
+            route: AppRoutes.tasks,
+          ),
+        );
+      }
+    }
+
+    final subscriptionStatus = authState.subscriptionStatus;
+    final hasKnownSubscriptionWarning =
+        authState.isAuthenticated &&
+        subscriptionStatus != null &&
+        subscriptionStatus != 'active';
+    if (hasKnownSubscriptionWarning) {
+      notifications.add(
+        const _NotificationItem(
+          title: 'Gói dịch vụ hết hạn',
+          detail:
+              'Vui lòng gia hạn gói Alpha CRM để tiếp tục sử dụng bot gửi tin.',
+          icon: Icons.credit_card_off_outlined,
+          color: AppColors.error,
+          route: AppRoutes.subscription,
+        ),
+      );
+    }
+
+    return Dialog(
+      key: const ValueKey('notification_menu'),
+      insetPadding: const EdgeInsets.all(AppSpacing.m),
+      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 450),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.notifications_active_outlined,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Text('Thông báo hệ thống', style: AppTextStyles.sectionTitle),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.borderSoft),
+            Expanded(
+              child: notifications.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Không có thông báo mới nào.',
+                        style: TextStyle(color: AppColors.textMuted),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      itemCount: notifications.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, color: AppColors.borderSoft),
+                      itemBuilder: (context, index) {
+                        final item = notifications[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: item.color.withValues(alpha: 0.1),
+                            child: Icon(item.icon, color: item.color),
+                          ),
+                          title: Text(
+                            item.title,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            item.detail,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (item.route != null) {
+                              context.go(item.route!);
+                            }
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationItem {
+  final String title;
+  final String detail;
+  final IconData icon;
+  final Color color;
+  final String? route;
+
+  const _NotificationItem({
+    required this.title,
+    required this.detail,
+    required this.icon,
+    required this.color,
+    this.route,
+  });
 }

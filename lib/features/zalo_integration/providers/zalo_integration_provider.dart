@@ -7,7 +7,9 @@ import '../data/zalo_integration_api.dart';
 
 class ZaloConnectedAccount {
   final String id;
-  final String label;
+  final String _label;
+  final String zaloLabel;
+  final String nickname;
   final bool connected;
   final bool listenerRunning;
   final String avatarUrl;
@@ -17,14 +19,20 @@ class ZaloConnectedAccount {
 
   const ZaloConnectedAccount({
     required this.id,
-    required this.label,
+    required String label,
+    this.zaloLabel = '',
+    this.nickname = '',
     required this.connected,
     required this.listenerRunning,
     this.avatarUrl = '',
     this.proxy = '',
     this.blockSeen = false,
     this.blockTyping = false,
-  });
+  }) : _label = label;
+
+  String get label => nickname.trim().isEmpty ? _label : nickname;
+
+  String get originalLabel => zaloLabel.trim().isEmpty ? _label : zaloLabel;
 }
 
 class ZaloIntegrationState {
@@ -150,8 +158,16 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
                 final settings = item['settings'] is Map
                     ? Map<String, dynamic>.from(item['settings'])
                     : const <String, dynamic>{};
+                final id = item['id']?.toString() ?? '';
+                final zaloLabel = item['label']?.toString() ?? 'Tài khoản';
+                final nickname = _ref
+                    .read(settingsProvider)
+                    .settings
+                    .nicknameForAccount(id);
                 return ZaloConnectedAccount(
-                  id: item['id']?.toString() ?? '',
+                  id: id,
+                  zaloLabel: zaloLabel,
+                  nickname: nickname ?? '',
                   label: item['label']?.toString() ?? 'Tài khoản',
                   connected: item['connected'] == true,
                   listenerRunning: item['listenerRunning'] == true,
@@ -165,6 +181,19 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
               .toList();
         }
 
+        final statusAccountId = status['accountId']?.toString() ?? '';
+        var displayAccountLabel = status['accountLabel']?.toString();
+        if (statusAccountId.isNotEmpty) {
+          for (final account in activeAccounts) {
+            if (account.id == statusAccountId) {
+              displayAccountLabel = account.label;
+              break;
+            }
+          }
+        } else if (activeAccounts.length == 1) {
+          displayAccountLabel = activeAccounts.first.label;
+        }
+
         state = state.copyWith(
           isLoading: false,
           isBackendActive: true,
@@ -172,7 +201,7 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           serviceVersion: (health['version'] ?? status['version'])?.toString(),
           mode: (status['mode'] ?? 'disconnected').toString(),
           accountType: status['accountType']?.toString(),
-          accountLabel: status['accountLabel']?.toString(),
+          accountLabel: displayAccountLabel,
           listenerRunning: status['listenerRunning'] == true,
           lastEventAt: status['lastEventAt']?.toString(),
           accounts: activeAccounts,
@@ -223,10 +252,15 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
 
   Future<bool> updateAccountSettings({
     required String accountId,
+    required String nickname,
     required String proxy,
     required bool blockSeen,
     required bool blockTyping,
   }) async {
+    await _ref
+        .read(settingsProvider.notifier)
+        .saveAccountNickname(accountId, nickname);
+    _applyLocalAccountNicknames();
     try {
       final api = _getApi();
       final response = await api.updateAccountSettings(
@@ -243,6 +277,28 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
     } catch (e) {
       return false;
     }
+  }
+
+  void _applyLocalAccountNicknames() {
+    final settings = _ref.read(settingsProvider).settings;
+    state = state.copyWith(
+      accounts: state.accounts
+          .map(
+            (account) => ZaloConnectedAccount(
+              id: account.id,
+              label: account.originalLabel,
+              zaloLabel: account.originalLabel,
+              nickname: settings.nicknameForAccount(account.id) ?? '',
+              connected: account.connected,
+              listenerRunning: account.listenerRunning,
+              avatarUrl: account.avatarUrl,
+              proxy: account.proxy,
+              blockSeen: account.blockSeen,
+              blockTyping: account.blockTyping,
+            ),
+          )
+          .toList(),
+    );
   }
 
   @override

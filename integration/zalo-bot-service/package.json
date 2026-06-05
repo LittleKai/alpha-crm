@@ -13,10 +13,11 @@
     "crm:register-device": "tsc && node dist/agent/register-device.js"
   },
   "dependencies": {
+    "proxy-agent": "^6.5.0",
     "zca-js": "^2.1.2"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
   }
 }

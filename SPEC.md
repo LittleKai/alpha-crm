@@ -14,8 +14,8 @@ already been completed.
 
 ## Current Status
 
-- Done: `docs/reference-analysis.md`.
-- Done: `docs/implementation-plan.md`.
+- Done: `docs/specs/reference-analysis.md`.
+- Done: `docs/specs/implementation-plan.md`.
 - Done: Phase 1 Customers workspace UI in
   `lib/features/customers/presentation/screens/customers_screen.dart`.
 - Done: Customers regression test in `test/customers_screen_test.dart`.
@@ -447,7 +447,7 @@ mock-only domain UI.
   - `integration/zalo-bot-service/src/**`
   - `docs/**`
 - Create only if contracts are missing:
-  - `docs/crm-domain-contract-gap.md`
+  - `docs/specs/crm-domain-contract-gap.md`
 
 **Action**
 
@@ -462,7 +462,7 @@ mock-only domain UI.
 - Confirm whether backend endpoints are already documented or consumed by
   Flutter. Do not infer contracts from reference projects.
 - If contracts are missing or ambiguous, create
-  `docs/crm-domain-contract-gap.md` with:
+  `docs/specs/crm-domain-contract-gap.md` with:
   - required endpoints
   - expected response shapes
   - screens that would consume them
@@ -533,7 +533,7 @@ mock-only domain UI.
 **Files**
 
 - Create or update:
-  - `docs/crm-domain-contract-gap.md`
+  - `docs/specs/crm-domain-contract-gap.md`
 
 **Action**
 
@@ -584,6 +584,6 @@ Before reporting completion, the Builder must provide:
 - Tests run and exact outcomes.
 - Whether `flutter analyze` has unrelated pre-existing issues.
 - Any Phase 4 contract gaps discovered.
-- Confirmation that `docs/reference-analysis.md`,
-  `docs/implementation-plan.md`, `SPEC.md`, and
+- Confirmation that `docs/specs/reference-analysis.md`,
+  `docs/specs/implementation-plan.md`, `SPEC.md`, and
   `.claude/PROJECT_SUMMARY.md` remain consistent with the current app state.

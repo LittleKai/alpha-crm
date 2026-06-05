@@ -13,7 +13,9 @@ import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_tabs.dart';
+import '../../../../mock/mock_contacts.dart';
 import '../../../auth/providers/crm_auth_provider.dart';
+import '../../../customers/providers/customers_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
@@ -31,6 +33,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
     final notifier = ref.read(dashboardProvider.notifier);
+    final customersState = ref.watch(customersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.appBackground,
@@ -57,6 +60,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _buildSubscriptionWarning(state),
                       const SizedBox(height: AppSpacing.l),
                       _buildOperationsMetrics(state),
+                      const SizedBox(height: AppSpacing.l),
+                      _buildCrmPipelineSection(state),
+                      const SizedBox(height: AppSpacing.l),
+                      _buildSourceDistributionSection(
+                        state,
+                        customersState.contacts,
+                      ),
+                      const SizedBox(height: AppSpacing.l),
+                      _buildCampaignStatusSection(state),
                       const SizedBox(height: AppSpacing.l),
                     ],
                     _buildPerformanceCard(state, notifier),
@@ -229,24 +241,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 // Reload dashboard data
                 await ref.read(dashboardProvider.notifier).loadDashboard();
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.check_circle_outline, color: Colors.white),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Đã cập nhật trạng thái gói cước và đánh thức Zalo Bot thành công!',
-                            ),
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline, color: Colors.white),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Đã cập nhật trạng thái gói cước và đánh thức Zalo Bot thành công!',
                           ),
-                        ],
-                      ),
-                      backgroundColor: AppColors.success,
+                        ),
+                      ],
                     ),
-                  );
-                }
+                    backgroundColor: AppColors.success,
+                  ),
+                );
               },
             ),
           ],
@@ -855,11 +866,529 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  int _safeInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val is String) {
+      return int.tryParse(val) ?? 0;
+    }
+    return 0;
+  }
+
+  Map<String, dynamic> _safeMap(dynamic val) {
+    if (val is Map) {
+      return Map<String, dynamic>.from(val);
+    }
+    return const <String, dynamic>{};
+  }
+
+  List<dynamic> _safeList(dynamic val) {
+    if (val is List) {
+      return val;
+    }
+    return const [];
+  }
+
+  Widget _buildCrmPipelineSection(DashboardState state) {
+    final customerStats = _safeMap(state.overview?['customerStats']);
+    final byStatus = _safeMap(customerStats['byStatus']);
+
+    final leadCount = _safeInt(byStatus['lead']);
+    final contactCount = _safeInt(byStatus['contact']);
+    final customerCount = _safeInt(byStatus['customer']);
+    final inactiveCount = _safeInt(byStatus['inactive']);
+
+    final total = leadCount + contactCount + customerCount + inactiveCount;
+
+    String getPercentage(int count) {
+      if (total == 0) return '0%';
+      return '${(count / total * 100).toStringAsFixed(1)}%';
+    }
+
+    final pipelineItems = [
+      _PipelineCardData(
+        label: 'Chưa gửi',
+        count: leadCount,
+        percentage: getPercentage(leadCount),
+        icon: Icons.hourglass_empty,
+        color: AppColors.info,
+        bgColor: AppColors.infoSoft,
+      ),
+      _PipelineCardData(
+        label: 'Đã gửi',
+        count: contactCount,
+        percentage: getPercentage(contactCount),
+        icon: Icons.near_me_outlined,
+        color: AppColors.warning,
+        bgColor: AppColors.warningSoft,
+      ),
+      _PipelineCardData(
+        label: 'Thành công',
+        count: customerCount,
+        percentage: getPercentage(customerCount),
+        icon: Icons.check_circle_outline,
+        color: AppColors.success,
+        bgColor: AppColors.successSoft,
+      ),
+      _PipelineCardData(
+        label: 'Thất bại',
+        count: inactiveCount,
+        percentage: getPercentage(inactiveCount),
+        icon: Icons.cancel_outlined,
+        color: AppColors.error,
+        bgColor: AppColors.errorSoft,
+      ),
+    ];
+
+    return AppCard(
+      key: const ValueKey('dashboard_pipeline_section'),
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Phễu khách hàng CRM', style: AppTextStyles.sectionTitle),
+          const SizedBox(height: AppSpacing.m),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 900
+                  ? 4
+                  : constraints.maxWidth >= 520
+                  ? 2
+                  : 1;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: AppSpacing.m,
+                  mainAxisSpacing: AppSpacing.m,
+                  mainAxisExtent: 96,
+                ),
+                itemCount: pipelineItems.length,
+                itemBuilder: (context, index) {
+                  final item = pipelineItems[index];
+                  return Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: AppSpacing.borderRadiusM,
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: item.bgColor,
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusS,
+                            ),
+                          ),
+                          child: Icon(item.icon, color: item.color, size: 24),
+                        ),
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                item.label,
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Row(
+                                children: [
+                                  Text(
+                                    item.count.toString(),
+                                    style: AppTextStyles.sectionTitle.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.s),
+                                  Text(
+                                    '(${item.percentage})',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceDistributionSection(
+    DashboardState state,
+    List<Contact> contacts,
+  ) {
+    final Map<String, int> sourceCounts = {};
+
+    final overview = state.overview;
+    if (overview != null) {
+      final customerStats = _safeMap(overview['customerStats']);
+      final bySource = _safeMap(
+        customerStats['bySource'] ?? overview['sourceStats'],
+      );
+      if (bySource.isNotEmpty) {
+        bySource.forEach((key, value) {
+          sourceCounts[key.toString()] = _safeInt(value);
+        });
+      }
+    }
+
+    if (sourceCounts.isEmpty && contacts.isNotEmpty) {
+      for (final contact in contacts) {
+        final source = contact.source.isEmpty ? 'Không rõ' : contact.source;
+        sourceCounts[source] = (sourceCounts[source] ?? 0) + 1;
+      }
+    }
+
+    final sortedEntries = sourceCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final totalSources = sortedEntries.fold<int>(
+      0,
+      (sum, item) => sum + item.value,
+    );
+
+    return AppCard(
+      key: const ValueKey('dashboard_source_section'),
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Nguồn khách hàng', style: AppTextStyles.sectionTitle),
+          const SizedBox(height: AppSpacing.m),
+          if (sortedEntries.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.l),
+                child: Text('Không có dữ liệu nguồn khách hàng.'),
+              ),
+            )
+          else ...[
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedEntries.length > 5 ? 5 : sortedEntries.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: AppSpacing.m),
+              itemBuilder: (context, index) {
+                final entry = sortedEntries[index];
+                final percent = totalSources > 0
+                    ? entry.value / totalSources
+                    : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          entry.key,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${entry.value} (${(percent * 100).toStringAsFixed(1)}%)',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+                      child: LinearProgressIndicator(
+                        value: percent,
+                        backgroundColor: AppColors.slateSoft,
+                        color: AppColors.primary,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignStatusSection(DashboardState state) {
+    final campaignStats = _safeMap(state.overview?['campaignStats']);
+    final byStatus = _safeMap(campaignStats['byStatus']);
+
+    String mapCampaignStatus(String status) {
+      switch (status.toLowerCase()) {
+        case 'running':
+          return 'Đang chạy';
+        case 'completed':
+          return 'Hoàn thành';
+        case 'draft':
+          return 'Nháp';
+        case 'paused':
+          return 'Tạm dừng';
+        case 'scheduled':
+          return 'Lên lịch';
+        default:
+          return status;
+      }
+    }
+
+    Color getStatusColor(String status) {
+      switch (status.toLowerCase()) {
+        case 'running':
+          return AppColors.primary;
+        case 'completed':
+          return AppColors.success;
+        case 'draft':
+          return AppColors.textSecondary;
+        case 'paused':
+          return AppColors.warning;
+        case 'scheduled':
+          return AppColors.info;
+        default:
+          return AppColors.textSecondary;
+      }
+    }
+
+    final statusWidgets = byStatus.entries.map((entry) {
+      final label = mapCampaignStatus(entry.key);
+      final count = _safeInt(entry.value);
+      final color = getStatusColor(entry.key);
+
+      return Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.m,
+          vertical: AppSpacing.s,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Text(
+              '$label: ',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              count.toString(),
+              style: AppTextStyles.captionBold.copyWith(color: color),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+
+    final recentPerformance = _safeList(state.performanceData);
+
+    return AppCard(
+      key: const ValueKey('dashboard_campaign_status_section'),
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Trạng thái chiến dịch & Hiệu suất gần đây',
+            style: AppTextStyles.sectionTitle,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          if (statusWidgets.isNotEmpty) ...[
+            Wrap(
+              spacing: AppSpacing.s,
+              runSpacing: AppSpacing.s,
+              children: statusWidgets,
+            ),
+            const SizedBox(height: AppSpacing.l),
+          ],
+          Text(
+            'Bảng chi tiết gửi tin gần đây',
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          if (recentPerformance.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.l),
+                child: Text('Không có dữ liệu hiệu suất gửi tin gần đây.'),
+              ),
+            )
+          else ...[
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: AppSpacing.borderRadiusM,
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    color: AppColors.surfaceMuted,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                      vertical: AppSpacing.s,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Thời gian',
+                            style: AppTextStyles.captionBold.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Thành công',
+                            style: AppTextStyles.captionBold.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Thất bại',
+                            style: AppTextStyles.captionBold.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Tổng cộng',
+                            style: AppTextStyles.captionBold.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  ...recentPerformance.map((item) {
+                    final mapItem = _safeMap(item);
+                    final label = mapItem['label']?.toString() ?? '';
+                    final success = _safeInt(mapItem['success']);
+                    final failure = _safeInt(mapItem['failure']);
+                    final total = success + failure;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.s,
+                      ),
+                      decoration: const BoxDecoration(color: AppColors.surface),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(label, style: AppTextStyles.bodyMedium),
+                          ),
+                          Expanded(
+                            child: Text(
+                              success.toString(),
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              failure.toString(),
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.error,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              total.toString(),
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   int _columnsForWidth(double width) {
     if (width >= 980) return 3;
     if (width >= 680) return 2;
     return 1;
   }
+}
+
+class _PipelineCardData {
+  final String label;
+  final int count;
+  final String percentage;
+  final IconData icon;
+  final Color color;
+  final Color bgColor;
+
+  const _PipelineCardData({
+    required this.label,
+    required this.count,
+    required this.percentage,
+    required this.icon,
+    required this.color,
+    required this.bgColor,
+  });
 }
 
 class _OperationMetric extends StatelessWidget {

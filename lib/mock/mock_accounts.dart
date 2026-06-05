@@ -33,6 +33,8 @@ class SystemSettings {
   final bool allowTestModeOnlyForRiskyActions;
   final String zaloBackendBaseUrl;
   final String zaloWebhookPath;
+  final String appThemeMode;
+  final Map<String, String> accountNicknames;
 
   const SystemSettings({
     required this.proxy,
@@ -63,6 +65,8 @@ class SystemSettings {
     this.allowTestModeOnlyForRiskyActions = true,
     this.zaloBackendBaseUrl = 'http://127.0.0.1:8787',
     this.zaloWebhookPath = '/api/zalo/webhook',
+    this.appThemeMode = 'light',
+    this.accountNicknames = const {},
   });
 
   SystemSettings copyWith({
@@ -94,6 +98,8 @@ class SystemSettings {
     bool? allowTestModeOnlyForRiskyActions,
     String? zaloBackendBaseUrl,
     String? zaloWebhookPath,
+    String? appThemeMode,
+    Map<String, String>? accountNicknames,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -133,7 +139,14 @@ class SystemSettings {
           this.allowTestModeOnlyForRiskyActions,
       zaloBackendBaseUrl: zaloBackendBaseUrl ?? this.zaloBackendBaseUrl,
       zaloWebhookPath: zaloWebhookPath ?? this.zaloWebhookPath,
+      appThemeMode: appThemeMode ?? this.appThemeMode,
+      accountNicknames: accountNicknames ?? this.accountNicknames,
     );
+  }
+
+  String? nicknameForAccount(String accountId) {
+    final nickname = accountNicknames[accountId]?.trim();
+    return nickname == null || nickname.isEmpty ? null : nickname;
   }
 
   Map<String, dynamic> toJson() {
@@ -166,6 +179,8 @@ class SystemSettings {
       'allowTestModeOnlyForRiskyActions': allowTestModeOnlyForRiskyActions,
       'zaloBackendBaseUrl': zaloBackendBaseUrl,
       'zaloWebhookPath': zaloWebhookPath,
+      'appThemeMode': appThemeMode,
+      'accountNicknames': accountNicknames,
     };
   }
 
@@ -208,6 +223,17 @@ class SystemSettings {
           json['allowTestModeOnlyForRiskyActions'] ?? true,
       zaloBackendBaseUrl: json['zaloBackendBaseUrl'] ?? 'http://localhost:8787',
       zaloWebhookPath: json['zaloWebhookPath'] ?? '/api/zalo/webhook',
+      appThemeMode:
+          json['appThemeMode'] == 'dark' || json['appThemeMode'] == 'system'
+          ? json['appThemeMode']
+          : 'light',
+      accountNicknames: json['accountNicknames'] is Map
+          ? Map<String, String>.from(
+              (json['accountNicknames'] as Map).map(
+                (key, value) => MapEntry(key.toString(), value.toString()),
+              ),
+            )
+          : const {},
     );
   }
 }
@@ -242,5 +268,7 @@ class MockAccounts {
     allowTestModeOnlyForRiskyActions: true,
     zaloBackendBaseUrl: 'http://127.0.0.1:8787',
     zaloWebhookPath: '/api/zalo/webhook',
+    appThemeMode: 'light',
+    accountNicknames: {},
   );
 }

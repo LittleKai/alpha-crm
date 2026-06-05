@@ -3,6 +3,7 @@ class AppRoutes {
   static const String dashboard = '/dashboard';
   static const String customers = '/customers';
   static const String contentTemplates = '/content/templates';
+  static const String workflows = '/workflows';
 
   // Messaging group
   static const String messagingBulk = '/messaging/bulk';

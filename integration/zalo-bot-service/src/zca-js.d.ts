@@ -35,6 +35,7 @@ declare module 'zca-js' {
     logging?: boolean;
     apiType?: number;
     apiVersion?: string;
+    agent?: import('http').Agent;
   }
 
   export enum ThreadType {
@@ -69,12 +70,35 @@ declare module 'zca-js' {
     removeAllListeners(event?: string): this;
   }
 
+  export interface MessageContent {
+    msg: string;
+    attachments?: string | string[];
+    mentions?: any[];
+    quote?: any;
+    ttl?: number;
+    styles?: any[];
+    urgency?: any;
+  }
+
+  export interface UndoMessageData {
+    msgId: string;
+    cliMsgId: string;
+    msgType: number;
+    uidFrom: string;
+    idTo: string;
+  }
+
   export class API {
     sendMessage(
-      content: { msg: string },
+      content: MessageContent | string,
       threadId: string,
       type?: ThreadType,
-    ): Promise<SendMessageResult>;
+    ): Promise<any>;
+    undoMessage(
+      data: UndoMessageData,
+      threadId: string,
+      type?: ThreadType,
+    ): Promise<any>;
     listener: Listener;
     acceptFriendRequest(senderId: string): Promise<any>;
     leaveGroup(groupId: string, silent?: boolean): Promise<any>;
@@ -84,6 +108,7 @@ declare module 'zca-js' {
     getGroupMembersInfo(memberIds: string | string[]): Promise<any>;
     getGroupLinkInfo(payload: { link: string; memberPage?: number }): Promise<any>;
     getOwnId(): string;
+    getContext(): any;
     fetchAccountInfo(): Promise<any>;
     createGroup(options: { name?: string; members: string[]; avatarPath?: string }): Promise<any>;
     joinGroupLink(link: string): Promise<any>;
@@ -91,6 +116,7 @@ declare module 'zca-js' {
     addUserToGroup(memberId: string | string[], groupId: string): Promise<any>;
     findUser(phoneNumber: string): Promise<any>;
     sendFriendRequest(message: string, userId: string): Promise<any>;
+    getUserInfo(userId: string | string[], avatarSize?: any): Promise<any>;
   }
 
   export enum LoginQRCallbackEventType {

@@ -23,6 +23,10 @@ import { addAccountInstance } from './channels/personal-zca-channel.js';
 import { startAgentRunner, lastRegistrationError } from './agent/agent-runner.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
 import { startPairingSession } from './agent/cloud-api.js';
+import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSettings } from './integrations/integration-store.js';
+import { N8nClient } from './integrations/n8n-client.js';
+import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
+import { testProxyConnection } from './integrations/proxy-helper.js';
 
 const VERSION = '0.2.0';
 
@@ -52,7 +56,7 @@ function setCorsHeaders(res: ServerResponse, req?: IncomingMessage): void {
     }
   }
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Content-Type, x-bot-api-secret-token, x-zalo-webhook-secret',
@@ -158,6 +162,122 @@ const server = createServer(async (req, res) => {
       ...status,
       version: VERSION,
     });
+    return;
+  }
+
+  // GET /api/integrations/n8n/settings
+  if (method === 'GET' && url === '/api/integrations/n8n/settings') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, settings: maskIntegrationSettings(settings) });
+    return;
+  }
+
+  // POST|PUT /api/integrations/n8n/settings
+  if ((method === 'POST' || method === 'PUT') && url === '/api/integrations/n8n/settings') {
+    try {
+      const current = readIntegrationSettings();
+      const payload = JSON.parse(await readBody(req));
+      const incomingN8n = payload.n8n || {};
+      const incomingApiKey = typeof incomingN8n.apiKey === 'string' ? incomingN8n.apiKey.trim() : '';
+      const apiKey = incomingApiKey.includes('*') ? current.n8n.apiKey : incomingApiKey;
+      const saved = writeIntegrationSettings({
+        ...current,
+        n8n: {
+          ...current.n8n,
+          ...incomingN8n,
+          apiKey,
+        },
+        facebook: {
+          ...current.facebook,
+          ...(payload.facebook || {}),
+        },
+      });
+      json(res, 200, { success: true, settings: maskIntegrationSettings(saved) });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // POST /api/integrations/n8n/test
+  if (method === 'POST' && url === '/api/integrations/n8n/test') {
+    try {
+      const current = readIntegrationSettings();
+      const payload = JSON.parse(await readBody(req) || '{}');
+      const incoming = payload.n8n || {};
+      const apiKey = typeof incoming.apiKey === 'string' && !incoming.apiKey.includes('*')
+        ? incoming.apiKey
+        : current.n8n.apiKey;
+      const client = new N8nClient({
+        baseUrl: incoming.baseUrl || current.n8n.baseUrl,
+        apiKey,
+      });
+      const result = await client.testConnection();
+      json(res, result.success ? 200 : 400, result);
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // GET /api/integrations/n8n/templates
+  if (method === 'GET' && url === '/api/integrations/n8n/templates') {
+    json(res, 200, { success: true, templates: workflowTemplates });
+    return;
+  }
+
+  // GET /api/integrations/n8n/workflows
+  if (method === 'GET' && url === '/api/integrations/n8n/workflows') {
+    try {
+      const settings = readIntegrationSettings();
+      const client = new N8nClient(settings.n8n);
+      const workflows = await client.listWorkflows();
+      json(res, 200, { success: true, workflows });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // POST /api/integrations/n8n/templates/install
+  if (method === 'POST' && url === '/api/integrations/n8n/templates/install') {
+    try {
+      const settings = readIntegrationSettings();
+      if (!settings.n8n.baseUrl || !settings.n8n.apiKey) {
+        json(res, 400, { success: false, error: 'n8n settings are missing.' });
+        return;
+      }
+      const payload = JSON.parse(await readBody(req));
+      const workflowPayload = buildN8nWorkflowPayload({
+        ...payload,
+        variables: {
+          callbackUrl: settings.n8n.callbackUrl,
+          ...(payload.variables || {}),
+        },
+      });
+      const client = new N8nClient(settings.n8n);
+      const workflow = await client.createWorkflow(workflowPayload);
+      json(res, 200, {
+        success: true,
+        workflow,
+        metadata: workflowPayload.metadata,
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // POST /api/proxy/test
+  if (method === 'POST' && url === '/api/proxy/test') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const proxy = typeof payload.proxy === 'string' ? payload.proxy : '';
+      const result = await testProxyConnection(proxy);
+      json(res, result.success ? 200 : 400, result);
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
     return;
   }
 

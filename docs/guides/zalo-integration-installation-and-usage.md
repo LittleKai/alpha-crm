@@ -241,6 +241,6 @@ Hệ thống Alpha CRM được thiết kế để có thể chuyển đổi kê
 ## 📖 6. Tài Liệu Liên Quan Trực Tiếp
 
 Để tối ưu hóa quá trình vận hành và hiểu sâu hơn về hệ thống bảo mật, vui lòng tham khảo các tài liệu liên quan sau:
-*   📄 **Quy chế kiểm soát rủi ro & Chính sách Zalo:** [zalo-integration-and-risk-controls.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/zalo-integration-and-risk-controls.md)
+*   📄 **Quy chế kiểm soát rủi ro & Chính sách Zalo:** [zalo-integration-and-risk-controls.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/compliance/zalo-integration-and-risk-controls.md)
 *   📐 **Bản đặc tả kiến trúc tích hợp hệ thống (SPEC):** [SPEC.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/SPEC.md)
 *   💾 **Hướng dẫn chi tiết module backend:** [integration/zalo-bot-service/README.md](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/README.md)
