@@ -44,6 +44,26 @@ class AppTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final errorColor = isDark ? const Color(0xFFF87171) : AppColors.errorText;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+    final surfaceColor = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final borderSoftColor = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.borderSoft;
+    final surfaceMutedColor = isDark
+        ? const Color(0xFF162033)
+        : AppColors.surfaceMuted;
+    final textPrimaryColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final overlayColor = isDark
+        ? Colors.black.withValues(alpha: 0.6)
+        : Colors.white.withValues(alpha: 0.6);
+
     if (isError) {
       return Center(
         child: Padding(
@@ -51,25 +71,17 @@ class AppTable extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: AppColors.errorText,
-                size: 48,
-              ),
+              Icon(Icons.error_outline, color: errorColor, size: 48),
               const SizedBox(height: AppSpacing.m),
               Text(
                 'Đã xảy ra lỗi khi tải dữ liệu',
-                style: AppTextStyles.sectionTitle.copyWith(
-                  color: AppColors.errorText,
-                ),
+                style: AppTextStyles.sectionTitle.copyWith(color: errorColor),
               ),
               if (errorMessage != null) ...[
                 const SizedBox(height: AppSpacing.s),
                 Text(
                   errorMessage!,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                  style: AppTextStyles.body.copyWith(color: textSecondaryColor),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -90,9 +102,9 @@ class AppTable extends StatelessWidget {
     return Stack(
       children: [
         Theme(
-          data: Theme.of(context).copyWith(
-            cardColor: AppColors.surface,
-            dividerColor: AppColors.borderSoft,
+          data: theme.copyWith(
+            cardColor: surfaceColor,
+            dividerColor: borderSoftColor,
           ),
           child: DataTable2(
             columnSpacing: AppSpacing.m,
@@ -100,9 +112,9 @@ class AppTable extends StatelessWidget {
             minWidth: 600,
             headingRowHeight: 48,
             dataRowHeight: 48,
-            headingRowColor: WidgetStateProperty.all(AppColors.surfaceMuted),
+            headingRowColor: WidgetStateProperty.all(surfaceMutedColor),
             headingTextStyle: AppTextStyles.label.copyWith(
-              color: AppColors.textPrimary,
+              color: textPrimaryColor,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -119,7 +131,7 @@ class AppTable extends StatelessWidget {
         if (isLoading)
           Positioned.fill(
             child: Container(
-              color: Colors.white.withValues(alpha: 0.6),
+              color: overlayColor,
               child: const Center(
                 child: CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),

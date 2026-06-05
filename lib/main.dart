@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
+import 'app/theme/app_colors.dart';
 import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
@@ -66,6 +67,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
+        final isDark = switch (themeMode) {
+          ThemeMode.dark => true,
+          ThemeMode.light => false,
+          ThemeMode.system =>
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+        };
+        AppColors.isDarkMode = isDark;
         return AppLockOverlay(child: child ?? const SizedBox.shrink());
       },
     );

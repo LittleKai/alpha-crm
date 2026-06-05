@@ -148,7 +148,9 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
     if (_isConnected) {
       try {
         final api = _getApi();
-        final response = await api.fetchFriends(accountId: state.selectedAccountId);
+        final response = await api.fetchFriends(
+          accountId: state.selectedAccountId,
+        );
         if (response['success'] == true && response['friends'] != null) {
           final List<dynamic> rawFriends = response['friends'];
           final friends = rawFriends.map((f) {

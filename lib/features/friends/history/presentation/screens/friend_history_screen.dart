@@ -61,7 +61,6 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
         .length;
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -85,7 +84,7 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
                         height: 320,
                       )
                     : filteredRecords.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Padding(
                           padding: EdgeInsets.all(AppSpacing.xl),
                           child: Text(
@@ -223,7 +222,7 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
     return ListView.separated(
       itemCount: records.length,
       separatorBuilder: (context, index) =>
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
       itemBuilder: (context, index) {
         final record = records[index];
         final isSuccess = record.status == 'Thành công';

@@ -56,7 +56,6 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     final filteredRecords = _getFilteredRecords(state);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -165,7 +164,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                                 cleanLabel.isNotEmpty
                                     ? cleanLabel[0].toUpperCase()
                                     : 'A',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,

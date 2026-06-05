@@ -97,7 +97,6 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -172,7 +171,9 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
       targetCount: state.selectedFriendIds.length,
     );
     final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        ? (decision.riskLevel != ZaloRiskLevel.low
+              ? '${decision.title}: ${decision.message}'
+              : null)
         : '${decision.title}: ${decision.message}';
     final hasWarningOrError = activeWarning != null;
 
@@ -199,7 +200,9 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
         ),
         IconButton(
           icon: Icon(
-            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            hasWarningOrError
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
             color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
             size: 28,
           ),
@@ -274,7 +277,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                                 cleanLabel.isNotEmpty
                                     ? cleanLabel[0].toUpperCase()
                                     : 'A',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,
@@ -316,7 +319,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                                   g.name.isNotEmpty
                                       ? g.name[0].toUpperCase()
                                       : 'G',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textSecondary,
@@ -514,7 +517,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           CheckboxListTile(
             title: Text(
               'Chọn tất cả bạn bè (${visibleFriends.length})',
@@ -533,10 +536,10 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
               horizontal: AppSpacing.m,
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Expanded(
             child: visibleFriends.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'Không tìm thấy bạn bè nào.',
                       style: TextStyle(color: AppColors.textMuted),
@@ -545,7 +548,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                 : ListView.separated(
                     itemCount: visibleFriends.length,
                     separatorBuilder: (context, index) =>
-                        const Divider(height: 1, color: AppColors.borderSoft),
+                        Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final friend = visibleFriends[index];
                       final isChecked = state.selectedFriendIds.contains(
@@ -567,7 +570,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                                                 .substring(0, 1)
                                                 .toUpperCase()
                                           : 'F',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textSecondary,

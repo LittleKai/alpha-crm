@@ -90,7 +90,6 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -158,7 +157,9 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
       targetCount: state.selectedMemberIds.length,
     );
     final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        ? (decision.riskLevel != ZaloRiskLevel.low
+              ? '${decision.title}: ${decision.message}'
+              : null)
         : '${decision.title}: ${decision.message}';
     final hasWarningOrError = activeWarning != null;
 
@@ -181,7 +182,9 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
         ),
         IconButton(
           icon: Icon(
-            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            hasWarningOrError
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
             color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
             size: 28,
           ),
@@ -300,7 +303,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           if (state.members.isNotEmpty) ...[
             CheckboxListTile(
               title: Text(
@@ -318,7 +321,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                 horizontal: AppSpacing.m,
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            Divider(height: 1, color: AppColors.borderSoft),
           ],
           Expanded(
             child: state.isScanning
@@ -329,13 +332,13 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                       _sourceTab == 0
                           ? 'Vui lòng nhập link nhóm và nhấn "Quét nhóm".'
                           : 'Vui lòng chọn nhóm Zalo để hiện thành viên.',
-                      style: const TextStyle(color: AppColors.textMuted),
+                      style: TextStyle(color: AppColors.textMuted),
                     ),
                   )
                 : ListView.separated(
                     itemCount: state.members.length,
                     separatorBuilder: (context, index) =>
-                        const Divider(height: 1, color: AppColors.borderSoft),
+                        Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final member = state.members[index];
                       final isChecked = state.selectedMemberIds.contains(
@@ -366,7 +369,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                                       member.name.isNotEmpty
                                           ? member.name[0].toUpperCase()
                                           : 'M',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textSecondary,
@@ -479,7 +482,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                                   cleanLabel.isNotEmpty
                                       ? cleanLabel[0].toUpperCase()
                                       : 'A',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textSecondary,
@@ -594,7 +597,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                     },
             ),
             const SizedBox(height: AppSpacing.m),
-            const Divider(color: AppColors.borderSoft),
+            Divider(color: AppColors.borderSoft),
             const SizedBox(height: AppSpacing.s),
             SizedBox(
               height: 200,

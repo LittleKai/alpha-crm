@@ -55,6 +55,9 @@ interface Config {
   crmAgentDeviceId: string;
   crmAgentSecretPath: string;
   crmAgentMode: 'enabled' | 'disabled';
+  // Local-first Live Chat
+  localFirstLiveChat: boolean;
+  localChatDbPath: string;
 }
 
 function loadEnv(): void {
@@ -131,4 +134,7 @@ export const config: Config = {
   crmAgentDeviceId: process.env['CRM_AGENT_DEVICE_ID'] || '',
   crmAgentSecretPath: process.env['CRM_AGENT_SECRET_PATH'] || '.data/agent/device-secret.json',
   crmAgentMode: (process.env['CRM_AGENT_MODE'] as 'enabled' | 'disabled') || 'enabled',
+  // Local-first Live Chat
+  localFirstLiveChat: parseBool(process.env['LOCAL_FIRST_LIVE_CHAT'], false),
+  localChatDbPath: process.env['LOCAL_CHAT_DB_PATH'] || '.data/live-chat/live-chat.sqlite',
 };

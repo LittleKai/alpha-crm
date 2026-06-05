@@ -253,7 +253,7 @@ class _ContactDetailPanel extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Column(
@@ -303,7 +303,7 @@ class _ContactDetailPanel extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Wrap(
@@ -423,7 +423,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final activeContact = _activeContact(filteredContacts, state.contacts);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(
           ResponsiveBreakpoints.isMobile(context) ? AppSpacing.m : AppSpacing.l,
@@ -557,21 +556,21 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         iconColor: AppColors.primary,
         iconBackgroundColor: AppColors.primarySoft,
       ),
-      const AppMetricCard(
+      AppMetricCard(
         title: 'Khách hàng tiềm năng',
         value: '0',
         icon: Icons.group_outlined,
         iconColor: AppColors.warning,
         iconBackgroundColor: AppColors.warningSoft,
       ),
-      const AppMetricCard(
+      AppMetricCard(
         title: 'Khách hàng VIP',
         value: '0',
         icon: Icons.group_outlined,
         iconColor: Color(0xFFA855F7),
         iconBackgroundColor: AppColors.purpleSoft,
       ),
-      const AppMetricCard(
+      AppMetricCard(
         title: 'Đã gửi tin nhắn (Tỷ lệ)',
         value: '0 / 0 (0%)',
         icon: Icons.phone_in_talk_outlined,

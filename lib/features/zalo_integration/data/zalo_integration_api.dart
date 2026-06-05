@@ -395,7 +395,9 @@ class ZaloIntegrationApi {
 
   Future<Map<String, dynamic>> fetchFriends({String? accountId}) async {
     try {
-      final query = accountId != null && accountId.isNotEmpty ? '?accountId=$accountId' : '';
+      final query = accountId != null && accountId.isNotEmpty
+          ? '?accountId=$accountId'
+          : '';
       final response = await _client
           .get(Uri.parse('$baseUrl/api/zalo/friends$query'))
           .timeout(const Duration(seconds: 15));

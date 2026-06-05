@@ -24,7 +24,6 @@ class ManagedGroupsScreen extends ConsumerWidget {
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -155,7 +154,7 @@ class _Header extends ConsumerWidget {
                                 cleanLabel.isNotEmpty
                                     ? cleanLabel[0].toUpperCase()
                                     : 'A',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,

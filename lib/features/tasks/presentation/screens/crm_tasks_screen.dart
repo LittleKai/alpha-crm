@@ -20,7 +20,6 @@ class CrmTasksScreen extends ConsumerWidget {
     final notifier = ref.read(crmTasksProvider.notifier);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.l),
         child: Column(

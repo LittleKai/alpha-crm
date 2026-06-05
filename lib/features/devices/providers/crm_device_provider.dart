@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/api/crm_cloud_api.dart';
 
@@ -130,6 +132,11 @@ Map<String, dynamic> buildPairingConfirmPayload(String input) {
 }
 
 List<dynamic> _readPairedMobileUsers(Map<dynamic, dynamic>? pcDevice) {
+  final newDevices = pcDevice?['pairedMobileDevices'];
+  if (newDevices is List && newDevices.isNotEmpty) {
+    return newDevices;
+  }
+  
   final value = pcDevice?['pairedMobileUserIds'];
   if (value is List) return value;
   return const [];
@@ -226,11 +233,56 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     }
   }
 
+  String getDevicePlatform() {
+    if (kIsWeb) return 'Web';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'Android';
+      case TargetPlatform.iOS:
+        return 'iOS';
+      case TargetPlatform.windows:
+        return 'Windows';
+      case TargetPlatform.macOS:
+        return 'macOS';
+      case TargetPlatform.linux:
+        return 'Linux';
+      default:
+        return 'Mobile';
+    }
+  }
+
+  String getDeviceDisplayName() {
+    if (kIsWeb) return 'Trình duyệt Web';
+    try {
+      if (!kIsWeb) {
+        final name = Platform.localHostname;
+        if (name.isNotEmpty) {
+          final os = getDevicePlatform();
+          return '$os ($name)';
+        }
+      }
+    } catch (_) {}
+    
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'Thiết bị Android';
+      case TargetPlatform.iOS:
+        return 'Thiết bị iOS';
+      default:
+        return 'Thiết bị di động';
+    }
+  }
+
   Future<bool> confirmPairing(String input) async {
     state = state.copyWith(isLoading: true, errorText: null);
+    
+    final payload = buildPairingConfirmPayload(input);
+    payload['platform'] = getDevicePlatform();
+    payload['displayName'] = getDeviceDisplayName();
+
     final response = await CrmCloudApi.post(
       '/crm/pairing/confirm',
-      buildPairingConfirmPayload(input),
+      payload,
     );
 
     if (response['success'] == true) {

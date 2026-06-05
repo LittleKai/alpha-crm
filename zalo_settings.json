@@ -26,5 +26,11 @@
   "quietHoursEnd": "08:00",
   "allowTestModeOnlyForRiskyActions": true,
   "zaloBackendBaseUrl": "http://127.0.0.1:8787",
-  "zaloWebhookPath": "/api/zalo/webhook"
+  "zaloWebhookPath": "/api/zalo/webhook",
+  "appThemeMode": "dark",
+  "accountNicknames": {},
+  "localFirstLiveChat": false,
+  "localBridgeBaseUrl": "http://127.0.0.1:8787",
+  "liveChatConversationCacheTtlSeconds": 30,
+  "liveChatMessageCacheTtlSeconds": 300
 }

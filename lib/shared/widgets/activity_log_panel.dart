@@ -64,12 +64,22 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final borderColor = isDark ? const Color(0xFF253247) : AppColors.border;
+    final textPrimaryColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textMutedColor = isDark
+        ? const Color(0xFF64748B)
+        : AppColors.textMuted;
+
     return Container(
       height: widget.height,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: surfaceColor,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,17 +108,17 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
                 Text(
                   widget.title,
                   style: AppTextStyles.label.copyWith(
-                    color: AppColors.textPrimary,
+                    color: textPrimaryColor,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const Spacer(),
                 if (widget.onClear != null && widget.logs.isNotEmpty)
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.delete_outline,
                       size: 16,
-                      color: AppColors.textMuted,
+                      color: textMutedColor,
                     ),
                     onPressed: widget.onClear,
                     padding: EdgeInsets.zero,
@@ -118,7 +128,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          const Divider(height: 1),
           // Log List
           Expanded(
             child: widget.logs.isEmpty
@@ -126,7 +136,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
                     child: Text(
                       'Chưa có hoạt động nào được ghi nhận.',
                       style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
+                        color: textMutedColor,
                       ),
                     ),
                   )
@@ -146,7 +156,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
                             Text(
                               '[${log.timestamp}]',
                               style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textMuted,
+                                color: textMutedColor,
                                 fontFamily: 'monospace',
                               ),
                             ),
@@ -156,7 +166,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
                               child: Text(
                                 log.message,
                                 style: AppTextStyles.caption.copyWith(
-                                  color: _getLogColor(log.type),
+                                  color: _getLogColor(log.type, isDark),
                                   fontWeight: log.type == LogType.error
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -174,16 +184,16 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
     );
   }
 
-  Color _getLogColor(LogType type) {
+  Color _getLogColor(LogType type, bool isDark) {
     switch (type) {
       case LogType.success:
-        return AppColors.successText;
+        return isDark ? const Color(0xFF34D399) : AppColors.successText;
       case LogType.warning:
-        return AppColors.warningText;
+        return isDark ? const Color(0xFFFBBF24) : AppColors.warningText;
       case LogType.error:
-        return AppColors.errorText;
+        return isDark ? const Color(0xFFF87171) : AppColors.errorText;
       case LogType.info:
-        return AppColors.textSecondary;
+        return isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
     }
   }
 }

@@ -36,6 +36,12 @@ class SystemSettings {
   final String appThemeMode;
   final Map<String, String> accountNicknames;
 
+  // Local-first Live Chat feature flag and settings
+  final bool localFirstLiveChat;
+  final String localBridgeBaseUrl;
+  final int liveChatConversationCacheTtlSeconds;
+  final int liveChatMessageCacheTtlSeconds;
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -67,6 +73,10 @@ class SystemSettings {
     this.zaloWebhookPath = '/api/zalo/webhook',
     this.appThemeMode = 'light',
     this.accountNicknames = const {},
+    this.localFirstLiveChat = false,
+    this.localBridgeBaseUrl = 'http://127.0.0.1:8787',
+    this.liveChatConversationCacheTtlSeconds = 30,
+    this.liveChatMessageCacheTtlSeconds = 300,
   });
 
   SystemSettings copyWith({
@@ -100,6 +110,10 @@ class SystemSettings {
     String? zaloWebhookPath,
     String? appThemeMode,
     Map<String, String>? accountNicknames,
+    bool? localFirstLiveChat,
+    String? localBridgeBaseUrl,
+    int? liveChatConversationCacheTtlSeconds,
+    int? liveChatMessageCacheTtlSeconds,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -141,6 +155,13 @@ class SystemSettings {
       zaloWebhookPath: zaloWebhookPath ?? this.zaloWebhookPath,
       appThemeMode: appThemeMode ?? this.appThemeMode,
       accountNicknames: accountNicknames ?? this.accountNicknames,
+      localFirstLiveChat: localFirstLiveChat ?? this.localFirstLiveChat,
+      localBridgeBaseUrl: localBridgeBaseUrl ?? this.localBridgeBaseUrl,
+      liveChatConversationCacheTtlSeconds:
+          liveChatConversationCacheTtlSeconds ??
+          this.liveChatConversationCacheTtlSeconds,
+      liveChatMessageCacheTtlSeconds:
+          liveChatMessageCacheTtlSeconds ?? this.liveChatMessageCacheTtlSeconds,
     );
   }
 
@@ -181,6 +202,11 @@ class SystemSettings {
       'zaloWebhookPath': zaloWebhookPath,
       'appThemeMode': appThemeMode,
       'accountNicknames': accountNicknames,
+      'localFirstLiveChat': localFirstLiveChat,
+      'localBridgeBaseUrl': localBridgeBaseUrl,
+      'liveChatConversationCacheTtlSeconds':
+          liveChatConversationCacheTtlSeconds,
+      'liveChatMessageCacheTtlSeconds': liveChatMessageCacheTtlSeconds,
     };
   }
 
@@ -234,6 +260,13 @@ class SystemSettings {
               ),
             )
           : const {},
+      localFirstLiveChat: json['localFirstLiveChat'] == true,
+      localBridgeBaseUrl:
+          (json['localBridgeBaseUrl'] as String?) ?? 'http://127.0.0.1:8787',
+      liveChatConversationCacheTtlSeconds:
+          json['liveChatConversationCacheTtlSeconds'] ?? 30,
+      liveChatMessageCacheTtlSeconds:
+          json['liveChatMessageCacheTtlSeconds'] ?? 300,
     );
   }
 }
@@ -270,5 +303,9 @@ class MockAccounts {
     zaloWebhookPath: '/api/zalo/webhook',
     appThemeMode: 'light',
     accountNicknames: {},
+    localFirstLiveChat: false,
+    localBridgeBaseUrl: 'http://127.0.0.1:8787',
+    liveChatConversationCacheTtlSeconds: 30,
+    liveChatMessageCacheTtlSeconds: 300,
   );
 }

@@ -129,7 +129,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.error_outline_rounded,
                                 color: AppColors.errorText,
                                 size: 20,
@@ -157,7 +157,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'name@company.com',
                           prefixIcon: Icon(
                             Icons.email_outlined,
@@ -188,7 +188,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         onFieldSubmitted: (_) => _submit(),
                         decoration: InputDecoration(
                           hintText: '••••••••',
-                          prefixIcon: const Icon(
+                          prefixIcon: Icon(
                             Icons.lock_outlined,
                             color: AppColors.iconMuted,
                           ),

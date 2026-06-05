@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-05 +07:00
+**Last Updated:** 2026-06-06 +07:00
 
 ---
 
@@ -13,6 +13,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-06 - Dart AOT Compilation Bypasses Overridden Getters on Custom Color Subclasses
+
+- Symptom: In dark mode, containers, cards, tables, and borders rendered with white/light backgrounds instead of dark backgrounds in production builds (Windows release executable and Web production target), despite working perfectly in JIT mode (unit/widget tests).
+- Root cause: In Dart AOT (Ahead-of-Time) compilation, the compiler optimizes property reads on core types like `Color`. Specifically, the graphics engine reads the color's `value` field directly via memory offset on the native/C++ side, completely bypassing the overridden Dart `value` getter in the custom `ThemeColor` subclass.
+- Fix summary: Converted all dynamic colors in `AppColors` from `static const Color` constants to dynamic `static Color get` properties, removed the `ThemeColor` class entirely, and removed the `const` keyword from widgets and text styles referencing the updated colors across 15+ screens, shared widgets, and test files to resolve compilation errors.
+- Rule: Never override properties on core Dart types like `Color` or `Duration` when writing cross-platform AOT/production code. Use dynamic getters returning plain standard instances instead.
+- Related files: `tools/alpha-crm/lib/app/theme/app_colors.dart`, `tools/alpha-crm/lib/app/theme/app_theme.dart`, `tools/alpha-crm/lib/shared/widgets/app_card.dart`, `tools/alpha-crm/lib/shared/widgets/app_metric_card.dart`, and 15+ screen files.
 
 ### 2026-06-05 - Live Chat Polling Must Merge, Not Replace, Active Messages
 

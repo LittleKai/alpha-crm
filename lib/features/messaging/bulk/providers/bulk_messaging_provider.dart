@@ -109,8 +109,12 @@ class BulkMessagingState {
       failureCount: failureCount ?? this.failureCount,
       cancelledCount: cancelledCount ?? this.cancelledCount,
       totalCount: totalCount ?? this.totalCount,
-      complianceError: clearComplianceError ? null : (complianceError ?? this.complianceError),
-      complianceWarning: clearComplianceWarning ? null : (complianceWarning ?? this.complianceWarning),
+      complianceError: clearComplianceError
+          ? null
+          : (complianceError ?? this.complianceError),
+      complianceWarning: clearComplianceWarning
+          ? null
+          : (complianceWarning ?? this.complianceWarning),
       activeCampaignId: activeCampaignId ?? this.activeCampaignId,
       isPolling: isPolling ?? this.isPolling,
     );
@@ -338,8 +342,17 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       totalCount: recipients.length,
       clearComplianceError: true,
       logs: [
-        LogItem(timestamp: timeStr, message: '[Hệ thống] Đang khởi tạo chiến dịch trên Cloud...', type: LogType.info),
-        LogItem(timestamp: timeStr, message: '[Hệ thống] Thiết bị gửi: Windows/Zalo agent đang hoạt động trên Cloud', type: LogType.info),
+        LogItem(
+          timestamp: timeStr,
+          message: '[Hệ thống] Đang khởi tạo chiến dịch trên Cloud...',
+          type: LogType.info,
+        ),
+        LogItem(
+          timestamp: timeStr,
+          message:
+              '[Hệ thống] Thiết bị gửi: Windows/Zalo agent đang hoạt động trên Cloud',
+          type: LogType.info,
+        ),
       ],
     );
 
@@ -350,7 +363,9 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         phone: '',
         group: '',
       );
-      final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(formattedMessage);
+      final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(
+        formattedMessage,
+      );
 
       final templateResp = await _repository.createTemplate({
         'name': state.campaignName.trim().isNotEmpty
@@ -421,7 +436,12 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         activeCampaignId: campaignId,
         logs: [
           ...state.logs,
-          LogItem(timestamp: nowTimeStr, message: '[Hệ thống] Đã đưa lệnh vào hàng đợi Cloud. Bắt đầu xử lý...', type: LogType.info),
+          LogItem(
+            timestamp: nowTimeStr,
+            message:
+                '[Hệ thống] Đã đưa lệnh vào hàng đợi Cloud. Bắt đầu xử lý...',
+            type: LogType.info,
+          ),
         ],
       );
 
@@ -434,7 +454,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         complianceError: 'Lỗi: ${e.toString()}',
         logs: [
           ...state.logs,
-          LogItem(timestamp: nowTimeStr, message: 'Lỗi: ${e.toString()}', type: LogType.error),
+          LogItem(
+            timestamp: nowTimeStr,
+            message: 'Lỗi: ${e.toString()}',
+            type: LogType.error,
+          ),
         ],
       );
     }
@@ -459,8 +483,12 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
           final cancelled = statusCounts['cancelled'] ?? 0;
 
           String? displayError;
-          if (commandStatus == 'failed' && commandError != null && commandError.isNotEmpty) {
-            displayError = ZaloIntegrationApi.translateToVietnamese(commandError);
+          if (commandStatus == 'failed' &&
+              commandError != null &&
+              commandError.isNotEmpty) {
+            displayError = ZaloIntegrationApi.translateToVietnamese(
+              commandError,
+            );
           }
 
           state = state.copyWith(
@@ -471,9 +499,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
           );
 
           // If campaign is done or cancelled or command failed
-          if (campaignStatus == 'completed' || campaignStatus == 'cancelled' || commandStatus == 'failed') {
+          if (campaignStatus == 'completed' ||
+              campaignStatus == 'cancelled' ||
+              commandStatus == 'failed') {
             timer.cancel();
-            
+
             final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
             final displayErrorText = displayError ?? 'Lỗi không rõ';
             String statusText = campaignStatus;
@@ -490,14 +520,18 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
                 if (commandStatus == 'failed' && displayError != null)
                   LogItem(
                     timestamp: nowTimeStr,
-                    message: '[Hệ thống] Chiến dịch thất bại: $displayErrorText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+                    message:
+                        '[Hệ thống] Chiến dịch thất bại: $displayErrorText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
                     type: LogType.error,
                   )
                 else
                   LogItem(
                     timestamp: nowTimeStr,
-                    message: '[Hệ thống] Chiến dịch $statusText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
-                    type: campaignStatus == 'completed' ? LogType.success : LogType.warning,
+                    message:
+                        '[Hệ thống] Chiến dịch $statusText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
+                    type: campaignStatus == 'completed'
+                        ? LogType.success
+                        : LogType.warning,
                   ),
               ],
             );
@@ -518,7 +552,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       state = state.copyWith(
         logs: [
           ...state.logs,
-          LogItem(timestamp: nowTimeStr, message: '[Hệ thống] Đang gửi yêu cầu hủy...', type: LogType.info),
+          LogItem(
+            timestamp: nowTimeStr,
+            message: '[Hệ thống] Đang gửi yêu cầu hủy...',
+            type: LogType.info,
+          ),
         ],
       );
       await _repository.cancelCampaign(campaignId);
@@ -529,7 +567,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         complianceError: 'Không thể hủy chiến dịch: ${e.toString()}',
         logs: [
           ...state.logs,
-          LogItem(timestamp: nowTimeStr, message: 'Không thể hủy chiến dịch: ${e.toString()}', type: LogType.error),
+          LogItem(
+            timestamp: nowTimeStr,
+            message: 'Không thể hủy chiến dịch: ${e.toString()}',
+            type: LogType.error,
+          ),
         ],
       );
     }

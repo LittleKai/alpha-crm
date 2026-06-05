@@ -27,6 +27,7 @@ import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSetti
 import { N8nClient } from './integrations/n8n-client.js';
 import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
 import { testProxyConnection } from './integrations/proxy-helper.js';
+import { handleLocalRoute } from './local-chat/local-chat-api.js';
 
 const VERSION = '0.2.0';
 
@@ -128,6 +129,11 @@ const server = createServer(async (req, res) => {
     setCorsHeaders(res, req);
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // Handle local-first Live Chat APIs
+  if (handleLocalRoute(method, url, req, res, json, readBody)) {
     return;
   }
 

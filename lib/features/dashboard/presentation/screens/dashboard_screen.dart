@@ -36,7 +36,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final customersState = ref.watch(customersProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: state.isLoading && state.overview == null
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
@@ -383,7 +382,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             },
           ),
           const SizedBox(height: AppSpacing.m),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.l),
           SizedBox(
             height: 300,
@@ -553,7 +552,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 drawVerticalLine: false,
                 horizontalInterval: maxY / 4,
                 getDrawingHorizontalLine: (value) {
-                  return const FlLine(
+                  return FlLine(
                     color: AppColors.borderSoft,
                     strokeWidth: 1,
                     dashArray: [4, 4],
@@ -733,7 +732,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   color: AppColors.surface.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(AppSpacing.radiusS),
                 ),
-                child: Icon(action.icon, color: AppColors.primary, size: 22),
+                child: Icon(action.icon, color: action.titleColor, size: 22),
               ),
               const SizedBox(width: AppSpacing.m),
               Expanded(
@@ -805,6 +804,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildGuideStep(GuideStepItem step) {
+    final Color stepBg;
+    final Color stepFg;
+    switch (step.stepNumber) {
+      case '1':
+        stepBg = const Color(0xFFEAF1FF);
+        stepFg = const Color(0xFF2563EB);
+        break;
+      case '2':
+        stepBg = const Color(0xFFECFDF5);
+        stepFg = const Color(0xFF059669);
+        break;
+      case '3':
+        stepBg = const Color(0xFFFFFBEB);
+        stepFg = const Color(0xFFD97706);
+        break;
+      default:
+        stepBg = AppColors.primarySoft;
+        stepFg = AppColors.primary;
+    }
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -823,15 +842,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Container(
                 width: 22,
                 height: 22,
-                decoration: const BoxDecoration(
-                  color: AppColors.primarySoft,
+                decoration: BoxDecoration(
+                  color: stepBg,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   step.stepNumber,
                   style: AppTextStyles.captionBold.copyWith(
-                    color: AppColors.primary,
+                    color: stepFg,
                     fontSize: 11,
                   ),
                 ),
@@ -1304,7 +1323,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ],
                     ),
                   ),
-                  const Divider(height: 1, color: AppColors.border),
+                  Divider(height: 1, color: AppColors.border),
                   ...recentPerformance.map((item) {
                     final mapItem = _safeMap(item);
                     final label = mapItem['label']?.toString() ?? '';
@@ -1317,7 +1336,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         horizontal: AppSpacing.m,
                         vertical: AppSpacing.s,
                       ),
-                      decoration: const BoxDecoration(color: AppColors.surface),
+                      decoration: BoxDecoration(color: AppColors.surface),
                       child: Row(
                         children: [
                           Expanded(

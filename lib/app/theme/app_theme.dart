@@ -20,11 +20,11 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppSpacing.borderRadiusM,
-          side: const BorderSide(color: AppColors.border, width: 1),
+          side: BorderSide(color: AppColors.border, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: AppColors.borderSoft,
         thickness: 1,
         space: 1,
@@ -38,11 +38,11 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: BorderSide(color: AppColors.border, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: BorderSide(color: AppColors.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
@@ -116,6 +116,15 @@ class AppTheme {
           borderRadius: AppSpacing.borderRadiusS,
           borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
+      ),
+      textTheme: TextTheme(
+        displayLarge: AppTextStyles.pageTitle,
+        titleLarge: AppTextStyles.sectionTitle,
+        titleMedium: AppTextStyles.cardTitle,
+        bodyLarge: AppTextStyles.bodyMedium,
+        bodyMedium: AppTextStyles.body,
+        labelLarge: AppTextStyles.label,
+        bodySmall: AppTextStyles.caption,
       ),
     );
   }

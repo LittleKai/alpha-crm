@@ -178,6 +178,44 @@ export async function reportInboundMessage(
   });
 }
 
+/**
+ * Reports inbound message metadata only (local-first mode).
+ * Omits full content, attachments, raw payload, and media data.
+ */
+export async function reportInboundMessageMetadata(
+  deviceId: string,
+  agentSecret: string,
+  event: any
+): Promise<any> {
+  const preview = typeof event.content === 'string'
+    ? event.content.slice(0, 100)
+    : '';
+  const metadata = {
+    accountId: event.accountId,
+    threadId: event.threadId,
+    threadType: event.threadType,
+    displayName: event.senderName || '',
+    avatarUrl: event.avatarUrl || '',
+    lastMessagePreview: preview,
+    lastMessageAt: event.timestamp || new Date().toISOString(),
+    unreadCountDelta: 1,
+    messageType: event.messageType || 'text',
+    bridgeDeviceId: deviceId,
+    providerMessageId: event.providerMessageId || '',
+    localFirst: true,
+  };
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-agent-device-id': deviceId,
+    'x-agent-secret': agentSecret
+  };
+  return callCloudApi('/crm/agent/events/message', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(metadata)
+  });
+}
+
 export async function fetchManagedGroups(
   deviceId: string,
   agentSecret: string

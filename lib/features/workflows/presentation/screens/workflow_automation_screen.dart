@@ -64,7 +64,6 @@ class _WorkflowAutomationScreenState
     });
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -124,12 +123,18 @@ class _WorkflowAutomationScreenState
         children: [
           Row(
             children: [
-              const Icon(Icons.account_tree_outlined, color: AppColors.primary),
+              const Icon(
+                Icons.account_tree_outlined,
+                color: Color(0xFFFF6D5A),
+                size: 24,
+              ),
               const SizedBox(width: AppSpacing.s),
               Text('n8n URL ngoài', style: AppTextStyles.sectionTitle),
               const Spacer(),
               Switch(
                 value: _n8nEnabled,
+                activeThumbColor: const Color(0xFFFF6D5A),
+                activeTrackColor: const Color(0xFFFFD4CF),
                 onChanged: (value) => setState(() => _n8nEnabled = value),
               ),
             ],
@@ -166,13 +171,25 @@ class _WorkflowAutomationScreenState
             children: [
               OutlinedButton.icon(
                 onPressed: () => notifier.testN8nConnection(_readN8nSettings()),
-                icon: const Icon(Icons.cable_outlined),
+                icon: const Icon(
+                  Icons.cable_outlined,
+                  color: Color(0xFFFF6D5A),
+                ),
                 label: const Text('Test n8n'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(color: AppColors.border),
+                ),
               ),
               ElevatedButton.icon(
                 onPressed: () => notifier.saveN8nSettings(_readN8nSettings()),
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Lưu cấu hình'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6D5A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                ),
               ),
             ],
           ),
@@ -221,11 +238,42 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Kho workflow mẫu', style: AppTextStyles.pageTitle),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text('Kho workflow mẫu', style: AppTextStyles.pageTitle),
+                  const SizedBox(width: AppSpacing.s),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'PRO AUTOMATION',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Tự động hóa CRM qua n8n, AI, Zalo và Facebook Page',
-                style: AppTextStyles.body,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -246,31 +294,38 @@ class _FacebookCloudCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AppCard(
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.facebook_outlined, color: AppColors.primary),
-              SizedBox(width: AppSpacing.s),
-              Text('Facebook Page API'),
+              const Icon(
+                Icons.facebook_outlined,
+                color: Color(0xFF1877F2),
+                size: 24,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text('Facebook Page API', style: AppTextStyles.sectionTitle),
             ],
           ),
-          SizedBox(height: AppSpacing.m),
-          _CapabilityRow(
+          const SizedBox(height: AppSpacing.m),
+          const _CapabilityRow(
             icon: Icons.cloud_done_outlined,
             label: 'Page token lưu ở cloud backend',
+            iconColor: Color(0xFF10B981),
           ),
-          SizedBox(height: AppSpacing.s),
-          _CapabilityRow(
+          const SizedBox(height: AppSpacing.s),
+          const _CapabilityRow(
             icon: Icons.webhook_outlined,
             label: 'Webhook Meta cần public cloud URL',
+            iconColor: Color(0xFF6366F1),
           ),
-          SizedBox(height: AppSpacing.s),
-          _CapabilityRow(
+          const SizedBox(height: AppSpacing.s),
+          const _CapabilityRow(
             icon: Icons.block_outlined,
             label: 'Không dùng cookie hoặc profile cá nhân',
+            iconColor: Color(0xFFEF4444),
           ),
         ],
       ),
@@ -281,14 +336,19 @@ class _FacebookCloudCard extends StatelessWidget {
 class _CapabilityRow extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Color iconColor;
 
-  const _CapabilityRow({required this.icon, required this.label});
+  const _CapabilityRow({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.textSecondary),
+        Icon(icon, size: 18, color: iconColor),
         const SizedBox(width: AppSpacing.s),
         Expanded(child: Text(label, style: AppTextStyles.body)),
       ],
@@ -509,6 +569,10 @@ class _TemplateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final iconTheme = _iconThemeFor(template.iconName);
+    final bgColor = iconTheme['bg']!;
+    final fgColor = iconTheme['fg']!;
+
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.m),
       child: Column(
@@ -520,13 +584,10 @@ class _TemplateCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primarySoft,
+                  color: bgColor,
                   borderRadius: AppSpacing.borderRadiusS,
                 ),
-                child: Icon(
-                  _iconFor(template.iconName),
-                  color: AppColors.primary,
-                ),
+                child: Icon(_iconFor(template.iconName), color: fgColor),
               ),
               const SizedBox(width: AppSpacing.s),
               Expanded(
@@ -551,10 +612,10 @@ class _TemplateCard extends StatelessWidget {
             spacing: AppSpacing.xs,
             runSpacing: AppSpacing.xs,
             children: [
-              _Chip(label: template.category.label),
-              _Chip(label: template.difficulty.label),
+              _buildColorChip(template.category.label),
+              _buildColorChip(template.difficulty.label),
               ...template.supportedChannels.map(
-                (channel) => _Chip(label: channel.label),
+                (channel) => _buildColorChip(channel.label),
               ),
             ],
           ),
@@ -570,6 +631,145 @@ class _TemplateCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildColorChip(String label) {
+    final style = _chipStyleFor(label);
+    return _Chip(
+      label: label,
+      backgroundColor: style['bg'],
+      textColor: style['text'],
+      borderColor: style['border'],
+    );
+  }
+
+  Map<String, Color> _iconThemeFor(String name) {
+    switch (name) {
+      case 'smart_toy':
+        return {
+          'bg': const Color(0xFFF5F3FF), // Purple 50
+          'fg': const Color(0xFF8B5CF6), // Violet 500
+        };
+      case 'psychology':
+        return {
+          'bg': const Color(0xFFFDF2F8), // Pink 50
+          'fg': const Color(0xFFEC4899), // Pink 500
+        };
+      case 'person_add':
+        return {
+          'bg': const Color(0xFFECFDF5), // Emerald 50
+          'fg': const Color(0xFF10B981), // Emerald 500
+        };
+      case 'schedule':
+        return {
+          'bg': const Color(0xFFFFFBEB), // Amber 50
+          'fg': const Color(0xFFF59E0B), // Amber 500
+        };
+      case 'notifications':
+        return {
+          'bg': const Color(0xFFFEF2F2), // Red 50
+          'fg': const Color(0xFFEF4444), // Red 500
+        };
+      case 'facebook':
+        return {
+          'bg': const Color(0xFFEEF2FF), // Indigo 50
+          'fg': const Color(0xFF3B82F6), // Blue 500
+        };
+      default:
+        return {
+          'bg': const Color(0xFFF0FDFA), // Teal 50
+          'fg': const Color(0xFF14B8A6), // Teal 500
+        };
+    }
+  }
+
+  Map<String, Color> _chipStyleFor(String label) {
+    switch (label) {
+      // Categories
+      case 'Bán hàng':
+        return {
+          'bg': const Color(0xFFECFDF5), // Emerald 50
+          'text': const Color(0xFF047857), // Emerald 700
+          'border': const Color(0xFFA7F3D0), // Emerald 200
+        };
+      case 'Quản lý':
+        return {
+          'bg': const Color(0xFFEFF6FF), // Blue 50
+          'text': const Color(0xFF1D4ED8), // Blue 700
+          'border': const Color(0xFFBFDBFE), // Blue 200
+        };
+      case 'Marketing':
+        return {
+          'bg': const Color(0xFFFDF4FF), // Fuchsia 50
+          'text': const Color(0xFF86198F), // Fuchsia 700
+          'border': const Color(0xFFF5D0FE), // Fuchsia 200
+        };
+      case 'Thông báo':
+        return {
+          'bg': const Color(0xFFFFF7ED), // Orange 50
+          'text': const Color(0xFFC2410C), // Orange 700
+          'border': const Color(0xFFFFEDD5), // Orange 200
+        };
+      case 'AI':
+        return {
+          'bg': const Color(0xFFF5F3FF), // Purple 50
+          'text': const Color(0xFF6D28D9), // Purple 700
+          'border': const Color(0xFFDDD6FE), // Purple 200
+        };
+      case 'Tích hợp':
+        return {
+          'bg': const Color(0xFFF0FDF4), // Green 50
+          'text': const Color(0xFF15803D), // Green 700
+          'border': const Color(0xFFBBF7D0), // Green 200
+        };
+
+      // Difficulty
+      case 'Dễ':
+        return {
+          'bg': const Color(0xFFF0FDF4), // Green 50
+          'text': const Color(0xFF166534), // Green 800
+          'border': const Color(0xFFDCFCE7), // Green 100
+        };
+      case 'Trung bình':
+        return {
+          'bg': const Color(0xFFFFFBEB), // Amber 50
+          'text': const Color(0xFF92400E), // Amber 800
+          'border': const Color(0xFFFEF3C7), // Amber 100
+        };
+      case 'Nâng cao':
+        return {
+          'bg': const Color(0xFFFEF2F2), // Red 50
+          'text': const Color(0xFF991B1B), // Red 800
+          'border': const Color(0xFFFEE2E2), // Red 100
+        };
+
+      // Channels
+      case 'Zalo cá nhân':
+        return {
+          'bg': const Color(0xFFE0F2FE), // Sky 50
+          'text': const Color(0xFF0369A1), // Sky 700
+          'border': const Color(0xFFBAE6FD), // Sky 200
+        };
+      case 'Zalo OA':
+        return {
+          'bg': const Color(0xFFF0F9FF), // Sky 50 (light)
+          'text': const Color(0xFF0284C7), // Sky 600
+          'border': const Color(0xFFE0F2FE), // Sky 100
+        };
+      case 'Facebook Page':
+        return {
+          'bg': const Color(0xFFEEF2FF), // Indigo 50
+          'text': const Color(0xFF4338CA), // Indigo 700
+          'border': const Color(0xFFC7D2FE), // Indigo 200
+        };
+
+      default:
+        return {
+          'bg': AppColors.surfaceMuted,
+          'text': AppColors.textSecondary,
+          'border': AppColors.borderSoft,
+        };
+    }
   }
 
   IconData _iconFor(String name) {
@@ -594,8 +794,16 @@ class _TemplateCard extends StatelessWidget {
 
 class _Chip extends StatelessWidget {
   final String label;
+  final Color? backgroundColor;
+  final Color? textColor;
+  final Color? borderColor;
 
-  const _Chip({required this.label});
+  const _Chip({
+    required this.label,
+    this.backgroundColor,
+    this.textColor,
+    this.borderColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -605,11 +813,16 @@ class _Chip extends StatelessWidget {
         vertical: AppSpacing.xs,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: backgroundColor ?? AppColors.surfaceMuted,
         borderRadius: AppSpacing.borderRadiusS,
-        border: Border.all(color: AppColors.borderSoft),
+        border: Border.all(color: borderColor ?? AppColors.borderSoft),
       ),
-      child: Text(label, style: AppTextStyles.caption),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(
+          color: textColor ?? AppColors.textSecondary,
+        ),
+      ),
     );
   }
 }

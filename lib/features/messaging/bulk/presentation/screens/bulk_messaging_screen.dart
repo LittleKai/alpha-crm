@@ -79,7 +79,6 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -161,7 +160,6 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
     );
   }
 
-
   void _showTemplateDialog() {
     showDialog(
       context: context,
@@ -185,13 +183,17 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
         final contents = await file.readAsString();
         _recipientsController.text = contents;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã nhập danh sách từ file: ${result.files.single.name}')),
+          SnackBar(
+            content: Text(
+              'Đã nhập danh sách từ file: ${result.files.single.name}',
+            ),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi đọc file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi khi đọc file: $e')));
     }
   }
 
@@ -236,12 +238,14 @@ class _Header extends ConsumerWidget {
             state.complianceWarning != null || state.complianceError != null
                 ? Icons.warning_amber_rounded
                 : Icons.gpp_good_outlined,
-            color: state.complianceWarning != null || state.complianceError != null
+            color:
+                state.complianceWarning != null || state.complianceError != null
                 ? AppColors.warning
                 : AppColors.textMuted,
             size: 28,
           ),
-          tooltip: state.complianceWarning != null || state.complianceError != null
+          tooltip:
+              state.complianceWarning != null || state.complianceError != null
               ? 'Có khuyến cáo an toàn (Nhấn để xem)'
               : 'Hệ thống an toàn (Nhấn để xem)',
           onPressed: () {
@@ -279,58 +283,65 @@ class _Header extends ConsumerWidget {
                       CircleAvatar(
                         radius: 12,
                         backgroundColor: AppColors.primarySoft,
-                        child: Icon(Icons.people, size: 14, color: AppColors.primary),
+                        child: Icon(
+                          Icons.people,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
                       ),
                       SizedBox(width: AppSpacing.s),
-                      Text('Toàn bộ tài khoản', style: AppTextStyles.bodyMedium),
+                      Text(
+                        'Toàn bộ tài khoản',
+                        style: AppTextStyles.bodyMedium,
+                      ),
                     ],
                   ),
                 ),
                 ...accounts.map((acc) {
-                final cleanLabel = acc.name.replaceAll(
-                  RegExp(r'\s*\([^)]*\)$'),
-                  '',
-                );
-                final matchingConnected = zaloState.accounts.firstWhere(
-                  (a) => a.id == acc.id,
-                  orElse: () => ZaloConnectedAccount(
-                    id: acc.id,
-                    label: acc.name,
-                    connected: acc.isConnected,
-                    listenerRunning: false,
-                  ),
-                );
-                final avatarUrl = matchingConnected.avatarUrl;
+                  final cleanLabel = acc.name.replaceAll(
+                    RegExp(r'\s*\([^)]*\)$'),
+                    '',
+                  );
+                  final matchingConnected = zaloState.accounts.firstWhere(
+                    (a) => a.id == acc.id,
+                    orElse: () => ZaloConnectedAccount(
+                      id: acc.id,
+                      label: acc.name,
+                      connected: acc.isConnected,
+                      listenerRunning: false,
+                    ),
+                  );
+                  final avatarUrl = matchingConnected.avatarUrl;
 
-                return DropdownMenuItem(
-                  value: acc.id,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: AppColors.surfaceMuted,
-                        backgroundImage: avatarUrl.isNotEmpty
-                            ? NetworkImage(avatarUrl)
-                            : null,
-                        child: avatarUrl.isEmpty
-                            ? Text(
-                                cleanLabel.isNotEmpty
-                                    ? cleanLabel[0].toUpperCase()
-                                    : 'A',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textSecondary,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: AppSpacing.s),
-                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
-                    ],
-                  ),
-                );
-              }).toList(),
+                  return DropdownMenuItem(
+                    value: acc.id,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: AppColors.surfaceMuted,
+                          backgroundImage: avatarUrl.isNotEmpty
+                              ? NetworkImage(avatarUrl)
+                              : null,
+                          child: avatarUrl.isEmpty
+                              ? Text(
+                                  cleanLabel.isNotEmpty
+                                      ? cleanLabel[0].toUpperCase()
+                                      : 'A',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ],
               onChanged: state.isSending || state.isPolling
                   ? null
@@ -358,8 +369,6 @@ class _Header extends ConsumerWidget {
     );
   }
 }
-
-
 
 class _CampaignTabs extends StatelessWidget {
   final int selectedIndex;
@@ -428,7 +437,7 @@ class _TargetPanel extends ConsumerWidget {
     Widget? actionButton;
 
     if (selectedTab == 0) {
-      filterField = const SizedBox(
+      filterField = SizedBox(
         width: 180,
         child: Text(
           'Chế độ: Nhập SĐT thủ công',
@@ -450,13 +459,26 @@ class _TargetPanel extends ConsumerWidget {
       final accountId = ref.watch(bulkMessagingProvider).selectedAccount?.id;
       // Synchronize account selection
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (accountId != null && accountId != 'all_accounts' && groupsState.selectedAccountId != accountId) {
-          ref.read(managedGroupsProvider.notifier).setSelectedAccountId(accountId);
+        if (accountId != null &&
+            accountId != 'all_accounts' &&
+            groupsState.selectedAccountId != accountId) {
+          ref
+              .read(managedGroupsProvider.notifier)
+              .setSelectedAccountId(accountId);
         }
       });
 
       final groupItems = groupsState.groups
-          .where((g) => accountId == null || accountId == 'all_accounts' || g.accountId == accountId || (accountId.length >= 4 && g.name.startsWith('[${accountId.substring(accountId.length - 4)}]')))
+          .where(
+            (g) =>
+                accountId == null ||
+                accountId == 'all_accounts' ||
+                g.accountId == accountId ||
+                (accountId.length >= 4 &&
+                    g.name.startsWith(
+                      '[${accountId.substring(accountId.length - 4)}]',
+                    )),
+          )
           .map(
             (g) => DropdownMenuItem<ManagedZaloGroup>(
               value: g,
@@ -465,8 +487,18 @@ class _TargetPanel extends ConsumerWidget {
                   CircleAvatar(
                     radius: 12,
                     backgroundColor: AppColors.surfaceMuted,
-                    backgroundImage: g.avatarUrl.isNotEmpty ? NetworkImage(g.avatarUrl) : null,
-                    child: g.avatarUrl.isEmpty ? Text(g.name.isNotEmpty ? g.name[0] : 'G', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)) : null,
+                    backgroundImage: g.avatarUrl.isNotEmpty
+                        ? NetworkImage(g.avatarUrl)
+                        : null,
+                    child: g.avatarUrl.isEmpty
+                        ? Text(
+                            g.name.isNotEmpty ? g.name[0] : 'G',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
@@ -506,25 +538,38 @@ class _TargetPanel extends ConsumerWidget {
       final friendsState = ref.watch(inviteToGroupProvider);
       final visibleContacts = friendsState.friends.where((c) {
         final q = searchController.text.toLowerCase();
-        return q.isEmpty || c.name.toLowerCase().contains(q) || c.phone.contains(q);
+        return q.isEmpty ||
+            c.name.toLowerCase().contains(q) ||
+            c.phone.contains(q);
       }).toList();
-      
+
       // Synchronize account selection and load friends
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final currentAccount = ref.read(bulkMessagingProvider).selectedAccount?.id;
+        final currentAccount = ref
+            .read(bulkMessagingProvider)
+            .selectedAccount
+            ?.id;
         final inviteNotifier = ref.read(inviteToGroupProvider.notifier);
-        
-        if (currentAccount != null && currentAccount != 'all_accounts' && friendsState.selectedAccountId != currentAccount) {
-           inviteNotifier.setAccount(currentAccount);
-           inviteNotifier.loadFriends();
+
+        if (currentAccount != null &&
+            currentAccount != 'all_accounts' &&
+            friendsState.selectedAccountId != currentAccount) {
+          inviteNotifier.setAccount(currentAccount);
+          inviteNotifier.loadFriends();
         } else if (friendsState.friends.isEmpty && !friendsState.isRunning) {
-           inviteNotifier.loadFriends();
+          inviteNotifier.loadFriends();
         }
       });
-      
-      final currentPhones = recipientsController.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+
+      final currentPhones = recipientsController.text
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet();
       // Assume friend ID or phone. Since friends might not have phone, use ID for recipientsController in this tab.
-      final allSelected = visibleContacts.isNotEmpty && visibleContacts.every((c) => currentPhones.contains(c.id));
+      final allSelected =
+          visibleContacts.isNotEmpty &&
+          visibleContacts.every((c) => currentPhones.contains(c.id));
 
       return AppCard(
         padding: EdgeInsets.zero,
@@ -550,38 +595,51 @@ class _TargetPanel extends ConsumerWidget {
                     text: 'Tải lại danh bạ',
                     icon: Icons.sync,
                     variant: AppButtonVariant.outline,
-                    onPressed: () => ref.read(inviteToGroupProvider.notifier).loadFriends(),
+                    onPressed: () =>
+                        ref.read(inviteToGroupProvider.notifier).loadFriends(),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            Divider(height: 1, color: AppColors.borderSoft),
             CheckboxListTile(
               title: Text(
                 'Chọn tất cả bạn bè (${visibleContacts.length})',
-                style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               value: allSelected,
               enabled: !isSending,
               onChanged: (val) {
                 if (val == true) {
-                  final newPhones = currentPhones.union(visibleContacts.map((c) => c.id).where((p) => p.isNotEmpty).toSet());
+                  final newPhones = currentPhones.union(
+                    visibleContacts
+                        .map((c) => c.id)
+                        .where((p) => p.isNotEmpty)
+                        .toSet(),
+                  );
                   recipientsController.text = newPhones.join('\n');
                 } else {
-                  final newPhones = currentPhones.difference(visibleContacts.map((c) => c.id).toSet());
+                  final newPhones = currentPhones.difference(
+                    visibleContacts.map((c) => c.id).toSet(),
+                  );
                   recipientsController.text = newPhones.join('\n');
                 }
                 (context as Element).markNeedsBuild();
               },
               activeColor: AppColors.primary,
               controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+              ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            Divider(height: 1, color: AppColors.borderSoft),
             Expanded(
               child: ListView.separated(
                 itemCount: visibleContacts.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderSoft),
+                separatorBuilder: (context, index) =>
+                    Divider(height: 1, color: AppColors.borderSoft),
                 itemBuilder: (context, index) {
                   final contact = visibleContacts[index];
                   final isChecked = currentPhones.contains(contact.id);
@@ -591,22 +649,42 @@ class _TargetPanel extends ConsumerWidget {
                         CircleAvatar(
                           radius: 14,
                           backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: contact.avatarUrl.isNotEmpty ? NetworkImage(contact.avatarUrl) : null,
-                          child: contact.avatarUrl.isEmpty ? Text(
-                            contact.name.isNotEmpty ? contact.name.substring(0, 1).toUpperCase() : 'F',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                          ) : null,
+                          backgroundImage: contact.avatarUrl.isNotEmpty
+                              ? NetworkImage(contact.avatarUrl)
+                              : null,
+                          child: contact.avatarUrl.isEmpty
+                              ? Text(
+                                  contact.name.isNotEmpty
+                                      ? contact.name
+                                            .substring(0, 1)
+                                            .toUpperCase()
+                                      : 'F',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                )
+                              : null,
                         ),
                         const SizedBox(width: AppSpacing.s),
                         Expanded(
-                          child: Text(contact.name, style: AppTextStyles.bodyMedium),
+                          child: Text(
+                            contact.name,
+                            style: AppTextStyles.bodyMedium,
+                          ),
                         ),
                       ],
                     ),
                     subtitle: contact.phone.isNotEmpty
                         ? Padding(
                             padding: const EdgeInsets.only(left: 36.0),
-                            child: Text(contact.phone, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                            child: Text(
+                              contact.phone,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textMuted,
+                              ),
+                            ),
                           )
                         : null,
                     value: isChecked,
@@ -622,7 +700,9 @@ class _TargetPanel extends ConsumerWidget {
                     },
                     activeColor: AppColors.primary,
                     controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                    ),
                   );
                 },
               ),
@@ -695,7 +775,10 @@ class _TargetPanel extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.s),
                 PopupMenuButton<String>(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       border: Border.all(color: AppColors.border),
                       borderRadius: AppSpacing.borderRadiusS,
@@ -710,9 +793,18 @@ class _TargetPanel extends ConsumerWidget {
                   ),
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'all', child: Text('Tất cả')),
-                    const PopupMenuItem(value: 'unsent', child: Text('Chưa nhắn tin')),
-                    const PopupMenuItem(value: 'success', child: Text('Thành công')),
-                    const PopupMenuItem(value: 'failure', child: Text('Thất bại')),
+                    const PopupMenuItem(
+                      value: 'unsent',
+                      child: Text('Chưa nhắn tin'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'success',
+                      child: Text('Thành công'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'failure',
+                      child: Text('Thất bại'),
+                    ),
                   ],
                   onSelected: (value) {
                     // Filter action
@@ -730,7 +822,7 @@ class _TargetPanel extends ConsumerWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
@@ -741,20 +833,21 @@ class _TargetPanel extends ConsumerWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Expanded(
             child: recipientsController.text.trim().isEmpty
                 ? const _ManualPhoneEmpty()
-                : (selectedTab == 1 
-                     ? _GroupMembersPreview(groupId: recipientsController.text.trim()) 
-                     : _RecipientPreview(controller: recipientsController)),
+                : (selectedTab == 1
+                      ? _GroupMembersPreview(
+                          groupId: recipientsController.text.trim(),
+                        )
+                      : _RecipientPreview(controller: recipientsController)),
           ),
         ],
       ),
     );
   }
 }
-
 
 class _GroupMembersPreview extends ConsumerWidget {
   final String groupId;
@@ -764,14 +857,15 @@ class _GroupMembersPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(scanMembersProvider);
-    
+
     if (state.isScanning) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (state.members.isEmpty) {
       return Center(
-        child: Text('Không tìm thấy thành viên (hoặc đang chờ tải).', 
+        child: Text(
+          'Không tìm thấy thành viên (hoặc đang chờ tải).',
           style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
         ),
       );
@@ -781,15 +875,24 @@ class _GroupMembersPreview extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
-          child: Text('Thành viên nhóm (${state.members.length}):', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.s,
+          ),
+          child: Text(
+            'Thành viên nhóm (${state.members.length}):',
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
-        const Divider(height: 1, color: AppColors.borderSoft),
+        Divider(height: 1, color: AppColors.borderSoft),
         Expanded(
           child: ListView.separated(
             padding: EdgeInsets.zero,
             itemCount: state.members.length,
-            separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderSoft),
+            separatorBuilder: (context, index) =>
+                Divider(height: 1, color: AppColors.borderSoft),
             itemBuilder: (context, index) {
               final member = state.members[index];
               return ListTile(
@@ -797,14 +900,31 @@ class _GroupMembersPreview extends ConsumerWidget {
                 leading: CircleAvatar(
                   radius: 14,
                   backgroundColor: AppColors.surfaceMuted,
-                  backgroundImage: member.avatarUrl.isNotEmpty ? NetworkImage(member.avatarUrl) : null,
-                  child: member.avatarUrl.isEmpty ? Text(
-                    member.name.isNotEmpty ? member.name.substring(0, 1).toUpperCase() : 'M',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                  ) : null,
+                  backgroundImage: member.avatarUrl.isNotEmpty
+                      ? NetworkImage(member.avatarUrl)
+                      : null,
+                  child: member.avatarUrl.isEmpty
+                      ? Text(
+                          member.name.isNotEmpty
+                              ? member.name.substring(0, 1).toUpperCase()
+                              : 'M',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textSecondary,
+                          ),
+                        )
+                      : null,
                 ),
                 title: Text(member.name, style: AppTextStyles.bodyMedium),
-                subtitle: member.role != 'Thành viên' ? Text(member.role, style: AppTextStyles.caption.copyWith(color: AppColors.primary)) : null,
+                subtitle: member.role != 'Thành viên'
+                    ? Text(
+                        member.role,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : null,
               );
             },
           ),
@@ -885,7 +1005,7 @@ class _RecipientPreview extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.m),
       itemCount: rows.length,
       separatorBuilder: (context, index) =>
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
       itemBuilder: (context, index) {
         return ListTile(
           dense: true,
@@ -956,7 +1076,7 @@ class _ConfigPanel extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            Divider(height: 1, color: AppColors.borderSoft),
             _Section(
               title: '1. CẤU HÌNH CHUNG',
               child: Column(
@@ -1070,14 +1190,17 @@ class _ConfigPanel extends StatelessWidget {
                           final result = await FilePicker.platform.pickFiles();
                           if (result != null) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Đã chọn: ${result.files.single.name}')),
+                              SnackBar(
+                                content: Text(
+                                  'Đã chọn: ${result.files.single.name}',
+                                ),
+                              ),
                             );
                           }
                         },
                       ),
                     ],
                   ),
-
                 ],
               ),
             ),
@@ -1085,105 +1208,105 @@ class _ConfigPanel extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
               child: Consumer(
-                    builder: (context, ref, child) {
-                      final state = ref.watch(bulkMessagingProvider);
-                      final notifier = ref.read(bulkMessagingProvider.notifier);
+                builder: (context, ref, child) {
+                  final state = ref.watch(bulkMessagingProvider);
+                  final notifier = ref.read(bulkMessagingProvider.notifier);
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (state.isSending || state.isPolling)
-                            AppButton(
-                              text: state.isPolling
-                                  ? 'Đang chạy (Hủy)'
-                                  : 'Dừng gửi',
-                              icon: Icons.stop,
-                              variant: AppButtonVariant.primary,
-                              onPressed: notifier.stopSending,
-                            )
-                          else
-                            AppButton(
-                              text: 'Bắt đầu gửi',
-                              icon: Icons.send,
-                              variant: AppButtonVariant.primary,
-                              onPressed: () {
-                                if (state.recipientsText.trim().isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Vui lòng nhập danh sách người nhận.',
-                                      ),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-                                notifier.startSending();
-                              },
-                            ),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (state.isSending || state.isPolling)
+                        AppButton(
+                          text: state.isPolling
+                              ? 'Đang chạy (Hủy)'
+                              : 'Dừng gửi',
+                          icon: Icons.stop,
+                          variant: AppButtonVariant.primary,
+                          onPressed: notifier.stopSending,
+                        )
+                      else
+                        AppButton(
+                          text: 'Bắt đầu gửi',
+                          icon: Icons.send,
+                          variant: AppButtonVariant.primary,
+                          onPressed: () {
+                            if (state.recipientsText.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Vui lòng nhập danh sách người nhận.',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+                            notifier.startSending();
+                          },
+                        ),
 
-                          if (state.totalCount > 0 ||
-                              state.successCount > 0 ||
-                              state.failureCount > 0 ||
-                              state.logs.isNotEmpty) ...[
-                            const SizedBox(height: AppSpacing.m),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _MetricCard(
-                                    title: 'Thành công',
-                                    value: '${state.successCount}',
-                                    color: Colors.green,
-                                    icon: Icons.check_circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _MetricCard(
-                                    title: 'Thất bại',
-                                    value: '${state.failureCount}',
-                                    color: Colors.red,
-                                    icon: Icons.error,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _MetricCard(
-                                    title: 'Đã hủy',
-                                    value: '${state.cancelledCount}',
-                                    color: Colors.orange,
-                                    icon: Icons.cancel,
-                                  ),
-                                ),
-                              ],
+                      if (state.totalCount > 0 ||
+                          state.successCount > 0 ||
+                          state.failureCount > 0 ||
+                          state.logs.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.m),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _MetricCard(
+                                title: 'Thành công',
+                                value: '${state.successCount}',
+                                color: Colors.green,
+                                icon: Icons.check_circle,
+                              ),
                             ),
-                            if (state.totalCount > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: LinearProgressIndicator(
-                                  value:
-                                      (state.successCount +
-                                          state.failureCount +
-                                          state.cancelledCount) /
-                                      state.totalCount,
-                                ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _MetricCard(
+                                title: 'Thất bại',
+                                value: '${state.failureCount}',
+                                color: Colors.red,
+                                icon: Icons.error,
                               ),
-                            if (state.logs.isNotEmpty) ...[
-                              const SizedBox(height: AppSpacing.m),
-                              SizedBox(
-                                height: 200,
-                                child: ActivityLogPanel(
-                                  logs: state.logs,
-                                  isRunning: state.isSending || state.isPolling,
-                                  onClear: notifier.clearLogs,
-                                ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _MetricCard(
+                                title: 'Đã hủy',
+                                value: '${state.cancelledCount}',
+                                color: Colors.orange,
+                                icon: Icons.cancel,
                               ),
-                            ],
+                            ),
                           ],
+                        ),
+                        if (state.totalCount > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: LinearProgressIndicator(
+                              value:
+                                  (state.successCount +
+                                      state.failureCount +
+                                      state.cancelledCount) /
+                                  state.totalCount,
+                            ),
+                          ),
+                        if (state.logs.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.m),
+                          SizedBox(
+                            height: 200,
+                            child: ActivityLogPanel(
+                              logs: state.logs,
+                              isRunning: state.isSending || state.isPolling,
+                              onClear: notifier.clearLogs,
+                            ),
+                          ),
                         ],
-                      );
-                    },
-                  ),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ),
             const SizedBox(height: AppSpacing.m),
           ],
@@ -1267,7 +1390,7 @@ class _Section extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(child: Text(title, style: AppTextStyles.cardTitle)),
-                const Icon(
+                Icon(
                   Icons.keyboard_arrow_down,
                   color: AppColors.textSecondary,
                   size: 18,
@@ -1275,7 +1398,7 @@ class _Section extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Padding(padding: const EdgeInsets.all(AppSpacing.m), child: child),
         ],
       ),
@@ -1317,7 +1440,7 @@ class _EditorToolbar extends StatelessWidget {
     final selection = controller.selection;
     final start = selection.start != -1 ? selection.start : textLength;
     final end = selection.end != -1 ? selection.end : textLength;
-    
+
     final newText = controller.text.replaceRange(start, end, text);
     controller.value = TextEditingValue(
       text: newText,
@@ -1327,7 +1450,9 @@ class _EditorToolbar extends StatelessWidget {
 
   void _wrapText(BuildContext context, String wrapStr) {
     final selection = controller.selection;
-    if (selection.start == -1 || selection.end == -1 || selection.start == selection.end) {
+    if (selection.start == -1 ||
+        selection.end == -1 ||
+        selection.start == selection.end) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng bôi đen chữ cần định dạng.')),
       );
@@ -1336,7 +1461,11 @@ class _EditorToolbar extends StatelessWidget {
     final start = selection.start;
     final end = selection.end;
     final selectedText = controller.text.substring(start, end);
-    final newText = controller.text.replaceRange(start, end, wrapStr + selectedText + wrapStr);
+    final newText = controller.text.replaceRange(
+      start,
+      end,
+      wrapStr + selectedText + wrapStr,
+    );
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: end + wrapStr.length * 2),
@@ -1348,7 +1477,7 @@ class _EditorToolbar extends StatelessWidget {
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(
           top: BorderSide(color: AppColors.border),
@@ -1384,32 +1513,32 @@ class _EditorToolbar extends StatelessWidget {
           ),
           const VerticalDivider(width: AppSpacing.m),
           _MiniChip(
-            icon: Icons.person, 
-            label: 'Tên', 
+            icon: Icons.person,
+            label: 'Tên',
             tooltip: 'Chèn tên người nhận',
             color: Colors.blue,
             onTap: () => _insertText('{{tên}}'),
           ),
           const SizedBox(width: AppSpacing.xs),
           _MiniChip(
-            icon: Icons.phone, 
-            label: 'SĐT', 
+            icon: Icons.phone,
+            label: 'SĐT',
             tooltip: 'Chèn số điện thoại người nhận',
             color: Colors.green,
             onTap: () => _insertText('{{sdt}}'),
           ),
           const SizedBox(width: AppSpacing.xs),
           _MiniChip(
-            icon: Icons.group, 
-            label: 'Nhóm', 
+            icon: Icons.group,
+            label: 'Nhóm',
             tooltip: 'Chèn tên nhóm',
             color: Colors.orange,
             onTap: () => _insertText('{{nhóm}}'),
           ),
           const SizedBox(width: AppSpacing.xs),
           _MiniChip(
-            icon: Icons.shuffle, 
-            label: 'Spintax', 
+            icon: Icons.shuffle,
+            label: 'Spintax',
             tooltip: 'Trộn văn bản ngẫu nhiên (VD: {Chào|Hi} bạn)',
             color: Colors.purple,
             onTap: () => _insertText('{A|B|C}'),
@@ -1471,7 +1600,6 @@ class _MiniChip extends StatelessWidget {
   }
 }
 
-
 class _ZaloPreview extends StatelessWidget {
   final String message;
 
@@ -1485,12 +1613,23 @@ class _ZaloPreview extends StatelessWidget {
       group: 'Nhóm Zalo Demo',
     );
     processed = ZaloTextFormatter.formatMarkdownToUnicode(processed);
-    
+
     return [TextSpan(text: processed)];
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final viewportBg = isDark
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFDDEAF8);
+    final bubbleBg = isDark
+        ? const Color(0xFF1E293B)
+        : Colors.white;
+    final bubbleTextColor = isDark
+        ? Colors.white
+        : AppColors.textPrimary;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1520,7 +1659,7 @@ class _ZaloPreview extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFDDEAF8),
+                color: viewportBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -1585,14 +1724,16 @@ class _ZaloPreview extends StatelessWidget {
                             right: AppSpacing.xl,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: bubbleBg,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(AppSpacing.s),
                                 child: RichText(
                                   text: TextSpan(
-                                    style: AppTextStyles.body,
+                                    style: AppTextStyles.body.copyWith(
+                                      color: bubbleTextColor,
+                                    ),
                                     children: _parseFormattedText(message),
                                   ),
                                 ),
@@ -1649,10 +1790,17 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                   padding: const EdgeInsets.all(AppSpacing.l),
                   child: Row(
                     children: [
-                      const Icon(Icons.add_box_outlined, color: AppColors.primary, size: 28),
+                      const Icon(
+                        Icons.add_box_outlined,
+                        color: AppColors.primary,
+                        size: 28,
+                      ),
                       const SizedBox(width: AppSpacing.s),
                       Expanded(
-                        child: Text('Thêm tin mẫu mới', style: AppTextStyles.pageTitle),
+                        child: Text(
+                          'Thêm tin mẫu mới',
+                          style: AppTextStyles.pageTitle,
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
@@ -1661,13 +1809,16 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: AppColors.border),
+                Divider(height: 1, color: AppColors.border),
                 Padding(
                   padding: const EdgeInsets.all(AppSpacing.l),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Tên chiến dịch / Tên mẫu *', style: AppTextStyles.label),
+                      Text(
+                        'Tên chiến dịch / Tên mẫu *',
+                        style: AppTextStyles.label,
+                      ),
                       const SizedBox(height: AppSpacing.xs),
                       TextField(
                         controller: titleController,
@@ -1706,12 +1857,19 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                               final c = contentController.text.trim();
                               if (t.isNotEmpty && c.isNotEmpty) {
                                 setState(() {
-                                  templates.insert(0, {'title': t, 'content': c});
+                                  templates.insert(0, {
+                                    'title': t,
+                                    'content': c,
+                                  });
                                 });
                                 Navigator.pop(ctx);
                               } else {
                                 ScaffoldMessenger.of(ctx).showSnackBar(
-                                  const SnackBar(content: Text('Vui lòng nhập đầy đủ Tên và Nội dung')),
+                                  const SnackBar(
+                                    content: Text(
+                                      'Vui lòng nhập đầy đủ Tên và Nội dung',
+                                    ),
+                                  ),
                                 );
                               }
                             },
@@ -1730,10 +1888,26 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
   }
 
   final List<Map<String, String>> templates = [
-    {'title': 'Chúc mừng sinh nhật', 'content': 'Chào {{tên}}, chúc bạn một ngày sinh nhật thật vui vẻ và hạnh phúc!'},
-    {'title': 'Tri ân khách hàng', 'content': 'Cảm ơn {{tên}} đã đồng hành cùng chúng tôi trong thời gian qua. Tặng bạn mã giảm giá 20%.'},
-    {'title': 'Thông báo offline', 'content': 'Thông báo: Nhóm {{nhóm}} sẽ có buổi offline vào cuối tuần này. Mọi người sắp xếp thời gian nhé!'},
-    {'title': 'Giới thiệu sản phẩm', 'content': '{Chào|Hi|Hello} {{tên}}, bạn có quan tâm đến sản phẩm mới của bên mình không?'}
+    {
+      'title': 'Chúc mừng sinh nhật',
+      'content':
+          'Chào {{tên}}, chúc bạn một ngày sinh nhật thật vui vẻ và hạnh phúc!',
+    },
+    {
+      'title': 'Tri ân khách hàng',
+      'content':
+          'Cảm ơn {{tên}} đã đồng hành cùng chúng tôi trong thời gian qua. Tặng bạn mã giảm giá 20%.',
+    },
+    {
+      'title': 'Thông báo offline',
+      'content':
+          'Thông báo: Nhóm {{nhóm}} sẽ có buổi offline vào cuối tuần này. Mọi người sắp xếp thời gian nhé!',
+    },
+    {
+      'title': 'Giới thiệu sản phẩm',
+      'content':
+          '{Chào|Hi|Hello} {{tên}}, bạn có quan tâm đến sản phẩm mới của bên mình không?',
+    },
   ];
 
   @override
@@ -1753,10 +1927,17 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
               padding: const EdgeInsets.all(AppSpacing.l),
               child: Row(
                 children: [
-                  const Icon(Icons.inventory_2, color: AppColors.primary, size: 28),
+                  const Icon(
+                    Icons.inventory_2,
+                    color: AppColors.primary,
+                    size: 28,
+                  ),
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
-                    child: Text('Quản lý tin mẫu', style: AppTextStyles.pageTitle),
+                    child: Text(
+                      'Quản lý tin mẫu',
+                      style: AppTextStyles.pageTitle,
+                    ),
                   ),
                   AppButton(
                     text: 'Thêm tin mẫu',
@@ -1772,12 +1953,13 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.border),
+            Divider(height: 1, color: AppColors.border),
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.all(AppSpacing.l),
                 itemCount: templates.length,
-                separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.m),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: AppSpacing.m),
                 itemBuilder: (context, index) {
                   final tpl = templates[index];
                   return InkWell(
@@ -1798,13 +1980,25 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.bookmark_outline, size: 18, color: AppColors.primary),
+                              const Icon(
+                                Icons.bookmark_outline,
+                                size: 18,
+                                color: AppColors.primary,
+                              ),
                               const SizedBox(width: AppSpacing.xs),
-                              Text(tpl['title']!, style: AppTextStyles.cardTitle),
+                              Text(
+                                tpl['title']!,
+                                style: AppTextStyles.cardTitle,
+                              ),
                             ],
                           ),
                           const SizedBox(height: AppSpacing.xs),
-                          Text(tpl['content']!, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                          Text(
+                            tpl['content']!,
+                            style: AppTextStyles.body.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),

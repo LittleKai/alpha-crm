@@ -121,7 +121,9 @@ class _AppLockOverlayState extends ConsumerState<AppLockOverlay> {
                                 onPressed: () {
                                   _passwordController.clear();
                                   _confirmController.clear();
-                                  ref.read(appLockProvider.notifier).cancelSetup();
+                                  ref
+                                      .read(appLockProvider.notifier)
+                                      .cancelSetup();
                                 },
                                 child: const Text('Hủy'),
                               ),

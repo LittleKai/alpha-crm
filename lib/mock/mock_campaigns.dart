@@ -103,6 +103,7 @@ class MockCampaigns {
       icon: Icons.send_rounded,
       gradient: [Color(0xFFFFFFFF), Color(0xFFEAF1FF)],
       route: '/messaging/bulk',
+      titleColor: Color(0xFF2563EB),
     ),
     QuickActionItem(
       title: 'Quản lý danh bạ',
@@ -110,6 +111,7 @@ class MockCampaigns {
       icon: Icons.group_outlined,
       gradient: [Color(0xFFFFFFFF), Color(0xFFFFF7ED)],
       route: '/customers',
+      titleColor: Color(0xFFEA580C),
     ),
     QuickActionItem(
       title: 'Chatbot tự động',

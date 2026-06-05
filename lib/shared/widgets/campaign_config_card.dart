@@ -32,11 +32,21 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final borderColor = isDark ? const Color(0xFF253247) : AppColors.border;
+    final textPrimaryColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: surfaceColor,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: borderColor, width: 1),
       ),
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       child: Column(
@@ -68,7 +78,7 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
                     _isExpanded
                         ? Icons.keyboard_arrow_down
                         : Icons.keyboard_arrow_right,
-                    color: AppColors.textSecondary,
+                    color: textSecondaryColor,
                     size: 20,
                   ),
                   const SizedBox(width: AppSpacing.s),
@@ -76,7 +86,7 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
                     child: Text(
                       widget.title,
                       style: AppTextStyles.cardTitle.copyWith(
-                        color: AppColors.textPrimary,
+                        color: textPrimaryColor,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -93,7 +103,7 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
           ),
           // Collapsible Content
           if (_isExpanded) ...[
-            const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.m),
               child: widget.child,

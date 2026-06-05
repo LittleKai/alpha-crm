@@ -11,6 +11,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../../../shared/widgets/app_badge.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
@@ -103,7 +104,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -347,71 +347,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Cấu hình ${account.label}'),
-              content: SizedBox(
-                width: 460,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: nicknameController,
-                      decoration: InputDecoration(
-                        labelText: 'Nickname hiển thị',
-                        hintText: account.originalLabel,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.s),
-                    Text(
-                      'Tên Zalo gốc: ${account.originalLabel}. Nếu đặt nickname, toàn bộ tab sẽ dùng nickname này.',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    TextField(
-                      controller: proxyController,
-                      decoration: const InputDecoration(
-                        labelText: 'Proxy riêng',
-                        hintText: 'ip:port hoặc ip:port:user:pass',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.s),
-                    Text(
-                      'Proxy được lưu theo tài khoản trong local bot service. Việc áp dụng network proxy phụ thuộc khả năng hỗ trợ của adapter Zalo hiện tại.',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    SwitchListTile(
-                      value: blockSeen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Chặn trạng thái đã xem'),
-                      onChanged: (value) {
-                        setDialogState(() => blockSeen = value);
-                      },
-                    ),
-                    SwitchListTile(
-                      value: blockTyping,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Chặn trạng thái đang nhập'),
-                      onChanged: (value) {
-                        setDialogState(() => blockTyping = value);
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            return AppDialog(
+              title: 'Cấu hình ${account.label}',
+              subtitle:
+                  'Thiết lập tên hiển thị, proxy riêng và các tùy chọn bảo mật',
+              icon: Icons.tune_rounded,
+              width: 500,
               actions: [
-                TextButton(
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Hủy'),
                 ),
-                ElevatedButton(
+                AppDialogAction(
+                  text: 'Lưu cấu hình',
+                  variant: AppButtonVariant.primary,
                   onPressed: () async {
                     final success = await ref
                         .read(zaloIntegrationProvider.notifier)
@@ -434,9 +384,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     );
                   },
-                  child: const Text('Lưu'),
                 ),
               ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nicknameController,
+                    decoration: InputDecoration(
+                      labelText: 'Nickname hiển thị',
+                      hintText: account.originalLabel,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Text(
+                    'Tên Zalo gốc: ${account.originalLabel}. Nếu đặt nickname, toàn bộ ứng dụng sẽ hiển thị nickname này.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextField(
+                    controller: proxyController,
+                    decoration: const InputDecoration(
+                      labelText: 'Proxy riêng',
+                      hintText: 'ip:port hoặc ip:port:user:pass',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Text(
+                    'Proxy được lưu theo tài khoản trong local bot service. Việc áp dụng network proxy phụ thuộc khả năng hỗ trợ của adapter Zalo hiện tại.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  SwitchListTile(
+                    value: blockSeen,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Chặn trạng thái đã xem'),
+                    onChanged: (value) {
+                      setDialogState(() => blockSeen = value);
+                    },
+                  ),
+                  SwitchListTile(
+                    value: blockTyping,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Chặn trạng thái đang nhập'),
+                    onChanged: (value) {
+                      setDialogState(() => blockTyping = value);
+                    },
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -736,7 +739,7 @@ class _AccountCard extends StatelessWidget {
                       ),
                       IconButton(
                         tooltip: 'Cấu hình tài khoản',
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.tune_rounded,
                           color: AppColors.textSecondary,
                           size: 18,
@@ -1017,7 +1020,7 @@ class _ZaloIntegrationCard extends ConsumerWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.info_outline,
                     size: 16,
                     color: AppColors.textMuted,
@@ -1636,7 +1639,7 @@ class _UpdateCard extends ConsumerWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.info_outline,
                     size: 16,
                     color: AppColors.textMuted,
@@ -2206,7 +2209,7 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     const SizedBox(width: AppSpacing.s),
-                    const Text(
+                    Text(
                       'Đang chờ quét mã QR...',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -2221,7 +2224,7 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
                       size: 16,
                     ),
                     const SizedBox(width: AppSpacing.s),
-                    const Text(
+                    Text(
                       'Mã QR đã hết hạn',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,

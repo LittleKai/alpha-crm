@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
@@ -123,7 +124,6 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
 
     final isMobile = ResponsiveBreakpoints.isMobile(context);
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -595,7 +595,7 @@ class _ConversationList extends ConsumerWidget {
                                       ? accountLabel
                                       : 'A',
                                   radius: 7,
-                                  textStyle: const TextStyle(
+                                  textStyle: TextStyle(
                                     fontSize: 5,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textSecondary,
@@ -776,7 +776,7 @@ class _ConversationPanel extends ConsumerWidget {
               width: double.infinity,
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.note_alt_outlined,
                     color: AppColors.warningText,
                     size: 16,
@@ -847,18 +847,31 @@ class _ConversationPanel extends ConsumerWidget {
                 ),
               ),
             ),
+          if (state.isBridgeOffline && !state.isUsingCachedMessages)
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.s),
+              color: AppColors.errorSoft,
+              width: double.infinity,
+              child: Text(
+                'Bridge offline, chi xem duoc metadata/recent summary',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.errorText,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.attach_file,
                     color: AppColors.textSecondary,
                   ),
                   tooltip: 'Đính kèm file/ảnh/video',
-                  onPressed: state.isSending
+                  onPressed: state.isSending || state.isBridgeOffline
                       ? null
                       : () => _pickAndSendFile(notifier),
                 ),
@@ -867,9 +880,12 @@ class _ConversationPanel extends ConsumerWidget {
                     controller: messageController,
                     minLines: 1,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: 'Nhập tin nhắn hoặc /1, /hello...',
-                      border: OutlineInputBorder(),
+                    enabled: !state.isBridgeOffline,
+                    decoration: InputDecoration(
+                      hintText: state.isBridgeOffline
+                          ? 'Không thể gửi tin khi Bridge offline'
+                          : 'Nhập tin nhắn hoặc /1, /hello...',
+                      border: const OutlineInputBorder(),
                     ),
                     onSubmitted: (_) => _send(quickTemplates),
                   ),
@@ -878,7 +894,7 @@ class _ConversationPanel extends ConsumerWidget {
                 AppButton(
                   text: 'Gửi',
                   icon: Icons.send_rounded,
-                  onPressed: state.isSending
+                  onPressed: state.isSending || state.isBridgeOffline
                       ? null
                       : () => _send(quickTemplates),
                 ),
@@ -969,7 +985,7 @@ class _QuickReplyStrip extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
               minimumSize: const Size(0, 32),
-              side: const BorderSide(color: AppColors.border),
+              side: BorderSide(color: AppColors.border),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppSpacing.radiusS),
               ),
@@ -1140,10 +1156,10 @@ class _MessageBubble extends ConsumerWidget {
             GestureDetector(
               onTap: () => Navigator.of(context).pop(),
               child: InteractiveViewer(
-                child: Image.network(
-                  url,
+                child: CachedNetworkImage(
+                  imageUrl: url,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, err, stack) => const Text(
+                  errorWidget: (context, url, error) => const Text(
                     'Không thể xem ảnh lớn',
                     style: TextStyle(color: Colors.white),
                   ),
@@ -1336,18 +1352,15 @@ class _MessageBubble extends ConsumerWidget {
         onTap: () => _showImagePreviewDialog(context, imageUrl),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            imageUrl,
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
             fit: BoxFit.contain,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return const SizedBox(
-                width: 100,
-                height: 100,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) => Container(
+            placeholder: (context, url) => const SizedBox(
+              width: 100,
+              height: 100,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            errorWidget: (context, url, error) => Container(
               padding: const EdgeInsets.all(AppSpacing.s),
               color: Colors.black12,
               child: Row(
@@ -1581,12 +1594,12 @@ class _MessageBubble extends ConsumerWidget {
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(8),
                         ),
-                        child: Image.network(
-                          thumb,
+                        child: CachedNetworkImage(
+                          imageUrl: thumb,
                           width: double.infinity,
                           height: 150,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
+                          errorWidget: (context, error, stackTrace) =>
                               const SizedBox(),
                         ),
                       ),
@@ -1759,12 +1772,12 @@ Widget _buildAvatar({
       height: radius * 2,
       color: backgroundColor ?? AppColors.surfaceMuted,
       child: hasImage
-          ? Image.network(
-              trimmed,
+          ? CachedNetworkImage(
+              imageUrl: trimmed,
               width: radius * 2,
               height: radius * 2,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
+              errorWidget: (context, error, stackTrace) {
                 return Center(
                   child: Text(
                     fallbackChar,

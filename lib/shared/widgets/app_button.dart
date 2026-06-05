@@ -28,14 +28,16 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isDisabled = onPressed == null || isLoading;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     Color bg;
     Color textCol;
     BorderSide borderSide = BorderSide.none;
 
     if (isDisabled) {
-      bg = AppColors.disabled;
-      textCol = AppColors.disabledText;
+      bg = isDark ? const Color(0xFF1E293B) : AppColors.disabled;
+      textCol = isDark ? const Color(0xFF475569) : AppColors.disabledText;
     } else {
       switch (variant) {
         case AppButtonVariant.primary:
@@ -43,14 +45,20 @@ class AppButton extends StatelessWidget {
           textCol = Colors.white;
           break;
         case AppButtonVariant.outline:
-          bg = AppColors.surface;
-          textCol = AppColors.textSecondary;
-          borderSide = const BorderSide(color: AppColors.border, width: 1);
+          bg = isDark ? const Color(0xFF111827) : AppColors.surface;
+          textCol = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+          borderSide = BorderSide(
+            color: isDark ? const Color(0xFF253247) : AppColors.border,
+            width: 1,
+          );
           break;
         case AppButtonVariant.destructive:
-          bg = AppColors.errorSoft;
-          textCol = AppColors.errorText;
-          borderSide = const BorderSide(color: Color(0xFFFCA5A5), width: 1);
+          bg = isDark ? const Color(0xFF3F0000) : AppColors.errorSoft;
+          textCol = isDark ? const Color(0xFFF87171) : AppColors.errorText;
+          borderSide = BorderSide(
+            color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFCA5A5),
+            width: 1,
+          );
           break;
       }
     }
@@ -58,8 +66,8 @@ class AppButton extends StatelessWidget {
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: bg,
       foregroundColor: textCol,
-      disabledBackgroundColor: AppColors.disabled,
-      disabledForegroundColor: AppColors.disabledText,
+      disabledBackgroundColor: bg,
+      disabledForegroundColor: textCol,
       elevation: 0,
       minimumSize: Size(width ?? 80, height),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),

@@ -79,7 +79,6 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -148,7 +147,9 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
       targetCount: phonesCount > 0 ? phonesCount : 1,
     );
     final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        ? (decision.riskLevel != ZaloRiskLevel.low
+              ? '${decision.title}: ${decision.message}'
+              : null)
         : '${decision.title}: ${decision.message}';
     final hasWarningOrError = activeWarning != null;
 
@@ -178,7 +179,9 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
         ),
         IconButton(
           icon: Icon(
-            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            hasWarningOrError
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
             color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
             size: 28,
           ),
@@ -255,7 +258,7 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                                   cleanLabel.isNotEmpty
                                       ? cleanLabel[0].toUpperCase()
                                       : 'A',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textSecondary,

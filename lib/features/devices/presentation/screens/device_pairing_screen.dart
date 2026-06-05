@@ -36,8 +36,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     if (success && mounted) {
       _codeController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ghép đôi thiết bị thành công!'),
+        SnackBar(
+          content: const Text('Ghép đôi thiết bị thành công!'),
           backgroundColor: AppColors.successText,
         ),
       );
@@ -291,7 +291,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.info_outline_rounded,
                                 color: AppColors.warningText,
                               ),
@@ -391,7 +391,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               ),
             ),
             child: state.isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 16,
                     width: 16,
                     child: CircularProgressIndicator(
@@ -441,7 +441,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.primarySoft,
                       shape: BoxShape.circle,
                     ),
@@ -744,8 +744,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     data: state.qrCodeData ?? state.pairingCode!,
                     version: QrVersions.auto,
                     backgroundColor: Colors.white,
-                    eyeStyle: const QrEyeStyle(color: AppColors.textPrimary),
-                    dataModuleStyle: const QrDataModuleStyle(
+                    eyeStyle: QrEyeStyle(color: AppColors.textPrimary),
+                    dataModuleStyle: QrDataModuleStyle(
                       color: AppColors.textPrimary,
                     ),
                     padding: EdgeInsets.zero,

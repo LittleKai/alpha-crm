@@ -48,16 +48,19 @@ class _WarningIconButtonState extends State<WarningIconButton>
 
   int _getWarningCount(ZaloActionType? actionType) {
     if (actionType == null) return 5;
-    final isBulk = actionType == ZaloActionType.bulkMessageByPhone ||
+    final isBulk =
+        actionType == ZaloActionType.bulkMessageByPhone ||
         actionType == ZaloActionType.bulkMessageToGroup ||
         actionType == ZaloActionType.bulkMessageToFriends ||
         actionType == ZaloActionType.chatbotReply ||
         actionType == ZaloActionType.liveChatReply;
 
-    final isFriend = actionType == ZaloActionType.friendByPhone ||
+    final isFriend =
+        actionType == ZaloActionType.friendByPhone ||
         actionType == ZaloActionType.friendByGroup;
 
-    final isGroup = actionType == ZaloActionType.joinGroups ||
+    final isGroup =
+        actionType == ZaloActionType.joinGroups ||
         actionType == ZaloActionType.inviteToGroup ||
         actionType == ZaloActionType.createGroups ||
         actionType == ZaloActionType.scanGroupMembers;
@@ -108,7 +111,7 @@ class _WarningIconButtonState extends State<WarningIconButton>
                     right: -4,
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.warningText,
                         shape: BoxShape.circle,
                       ),
@@ -142,11 +145,18 @@ class _WarningIconButtonState extends State<WarningIconButton>
 }
 
 /// Hiển thị Dialog trung tâm tuân thủ & an toàn Zalo CRM
-void showComplianceWarningsDialog(BuildContext context, {String? activeWarning, ZaloActionType? actionType}) {
+void showComplianceWarningsDialog(
+  BuildContext context, {
+  String? activeWarning,
+  ZaloActionType? actionType,
+}) {
   showDialog(
     context: context,
     builder: (context) {
-      return _ComplianceWarningsDialog(activeWarning: activeWarning, actionType: actionType);
+      return _ComplianceWarningsDialog(
+        activeWarning: activeWarning,
+        actionType: actionType,
+      );
     },
   );
 }
@@ -159,18 +169,21 @@ class _ComplianceWarningsDialog extends StatelessWidget {
 
   List<Widget> _buildRulesList() {
     final List<Widget> items = [];
-    
+
     // Group rules based on ZaloActionType
-    final isBulk = actionType == ZaloActionType.bulkMessageByPhone ||
+    final isBulk =
+        actionType == ZaloActionType.bulkMessageByPhone ||
         actionType == ZaloActionType.bulkMessageToGroup ||
         actionType == ZaloActionType.bulkMessageToFriends ||
         actionType == ZaloActionType.chatbotReply ||
         actionType == ZaloActionType.liveChatReply;
 
-    final isFriend = actionType == ZaloActionType.friendByPhone ||
+    final isFriend =
+        actionType == ZaloActionType.friendByPhone ||
         actionType == ZaloActionType.friendByGroup;
 
-    final isGroup = actionType == ZaloActionType.joinGroups ||
+    final isGroup =
+        actionType == ZaloActionType.joinGroups ||
         actionType == ZaloActionType.inviteToGroup ||
         actionType == ZaloActionType.createGroups ||
         actionType == ZaloActionType.scanGroupMembers;
@@ -270,19 +283,49 @@ class _ComplianceWarningsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasWarning = activeWarning != null;
-    
-    final isBulk = actionType == ZaloActionType.bulkMessageByPhone ||
+
+    final isBulk =
+        actionType == ZaloActionType.bulkMessageByPhone ||
         actionType == ZaloActionType.bulkMessageToGroup ||
         actionType == ZaloActionType.bulkMessageToFriends ||
         actionType == ZaloActionType.chatbotReply ||
         actionType == ZaloActionType.liveChatReply;
 
-    final isFriend = actionType == ZaloActionType.friendByPhone ||
+    final isFriend =
+        actionType == ZaloActionType.friendByPhone ||
         actionType == ZaloActionType.friendByGroup;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor =
+        Theme.of(context).cardTheme.color ??
+        Theme.of(context).colorScheme.surface;
+    final textMuted = isDark ? const Color(0xFF64748B) : AppColors.textMuted;
+    final appBackground = isDark
+        ? const Color(0xFF0B1120)
+        : AppColors.appBackground;
+    final borderSoft = isDark ? const Color(0xFF253247) : AppColors.borderSoft;
+
+    final activeWarningBg = isDark
+        ? const Color(0xFF3F2D00)
+        : const Color(0xFFFFFBEB);
+    final activeWarningBorder = isDark
+        ? const Color(0xFFD97706)
+        : const Color(0xFFFDE68A);
+    final activeWarningTextColor = isDark
+        ? const Color(0xFFFBBF24)
+        : const Color(0xFF92400E);
+
+    final safeBg = isDark ? const Color(0xFF003F2D) : const Color(0xFFECFDF5);
+    final safeBorder = isDark
+        ? const Color(0xFF10B981)
+        : const Color(0xFFA7F3D0);
+    final safeTextColor = isDark
+        ? const Color(0xFF34D399)
+        : const Color(0xFF047857);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      backgroundColor: AppColors.surface,
+      backgroundColor: surfaceColor,
       elevation: 24,
       clipBehavior: Clip.antiAlias,
       child: Container(
@@ -300,8 +343,14 @@ class _ComplianceWarningsDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: hasWarning
-                      ? const [Color(0xFFD97706), Color(0xFFB45309)] // Deep Amber warning gradient
-                      : const [Color(0xFF0F172A), Color(0xFF1E293B)], // Dark slate premium gradient
+                      ? const [
+                          Color(0xFFD97706),
+                          Color(0xFFB45309),
+                        ] // Deep Amber warning gradient
+                      : const [
+                          Color(0xFF0F172A),
+                          Color(0xFF1E293B),
+                        ], // Dark slate premium gradient
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -309,7 +358,9 @@ class _ComplianceWarningsDialog extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    hasWarning ? Icons.security_rounded : Icons.gpp_good_rounded,
+                    hasWarning
+                        ? Icons.security_rounded
+                        : Icons.gpp_good_rounded,
                     color: Colors.white,
                     size: 28,
                   ),
@@ -338,7 +389,11 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -359,12 +414,17 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                       padding: const EdgeInsets.all(AppSpacing.l),
                       margin: const EdgeInsets.only(bottom: AppSpacing.l),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB), // Soft warm amber
+                        color: activeWarningBg,
                         borderRadius: AppSpacing.borderRadiusM,
-                        border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+                        border: Border.all(
+                          color: activeWarningBorder,
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFD97706).withValues(alpha: 0.05),
+                            color: const Color(
+                              0xFFD97706,
+                            ).withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -374,8 +434,12 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            children: const [
-                              Icon(Icons.report_problem_rounded, color: AppColors.warningText, size: 22),
+                            children: [
+                              Icon(
+                                Icons.report_problem_rounded,
+                                color: AppColors.warningText,
+                                size: 22,
+                              ),
                               SizedBox(width: AppSpacing.s),
                               Text(
                                 'CẢNH BÁO TỪ TIẾN TRÌNH HIỆN TẠI',
@@ -391,8 +455,8 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                           const SizedBox(height: AppSpacing.s),
                           Text(
                             activeWarning!,
-                            style: const TextStyle(
-                              color: Color(0xFF92400E),
+                            style: TextStyle(
+                              color: activeWarningTextColor,
                               fontSize: 13.5,
                               height: 1.5,
                               fontWeight: FontWeight.w600,
@@ -406,12 +470,14 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                       padding: const EdgeInsets.all(AppSpacing.l),
                       margin: const EdgeInsets.only(bottom: AppSpacing.l),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5), // Soft green
+                        color: safeBg,
                         borderRadius: AppSpacing.borderRadiusM,
-                        border: Border.all(color: const Color(0xFFA7F3D0), width: 1.5),
+                        border: Border.all(color: safeBorder, width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.05),
+                            color: const Color(
+                              0xFF10B981,
+                            ).withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -425,7 +491,11 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                               color: Color(0xFF10B981),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 16),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                           const SizedBox(width: AppSpacing.m),
                           Expanded(
@@ -445,7 +515,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                                 Text(
                                   'Không phát hiện thấy rủi ro chặn hành động nào ở màn hình hiện tại.',
                                   style: AppTextStyles.caption.copyWith(
-                                    color: const Color(0xFF047857),
+                                    color: safeTextColor,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -460,14 +530,14 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                     actionType == null
                         ? 'QUY TẮC AN TOÀN CHUNG KHI SỬ DỤNG ZALO'
                         : (isBulk
-                            ? 'QUY TẮC AN TOÀN GỬI TIN NHẮN'
-                            : (isFriend
-                                ? 'QUY TẮC AN TOÀN KẾT BẠN'
-                                : 'QUY TẮC AN TOÀN HOẠT ĐỘNG NHÓM')),
-                    style: const TextStyle(
+                              ? 'QUY TẮC AN TOÀN GỬI TIN NHẮN'
+                              : (isFriend
+                                    ? 'QUY TẮC AN TOÀN KẾT BẠN'
+                                    : 'QUY TẮC AN TOÀN HOẠT ĐỘNG NHÓM')),
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textMuted,
+                      color: textMuted,
                       letterSpacing: 1.0,
                     ),
                   ),
@@ -483,26 +553,18 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                 horizontal: AppSpacing.xl,
                 vertical: AppSpacing.m,
               ),
-              decoration: const BoxDecoration(
-                color: AppColors.appBackground,
-                border: Border(
-                  top: BorderSide(color: AppColors.borderSoft, width: 1),
-                ),
+              decoration: BoxDecoration(
+                color: appBackground,
+                border: Border(top: BorderSide(color: borderSoft, width: 1)),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: AppColors.textMuted,
-                  ),
+                  Icon(Icons.info_outline_rounded, size: 16, color: textMuted),
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
                     child: Text(
                       'Cấu hình an toàn có thể tùy chỉnh trong phần "Cài đặt".',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
-                      ),
+                      style: AppTextStyles.caption.copyWith(color: textMuted),
                     ),
                   ),
                   ElevatedButton(
@@ -553,12 +615,24 @@ class _WarningItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF162033) : AppColors.surface;
+    final borderSoftColor = isDark
+        ? const Color(0xFF253247)
+        : AppColors.borderSoft;
+    final textPrimaryColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: surfaceColor,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.borderSoft, width: 1),
+        border: Border.all(color: borderSoftColor, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -592,7 +666,7 @@ class _WarningItem extends StatelessWidget {
                         title,
                         style: AppTextStyles.bodyMedium.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                          color: textPrimaryColor,
                         ),
                       ),
                     ),
@@ -625,7 +699,7 @@ class _WarningItem extends StatelessWidget {
                 Text(
                   description,
                   style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
+                    color: textSecondaryColor,
                     fontSize: 12.5,
                     height: 1.45,
                   ),

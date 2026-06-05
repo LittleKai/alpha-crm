@@ -1,19 +1,44 @@
-- Theo bạn có nên sử dụng sqlite db hoặc loại db nào khác phù hợp để lưu trữ và load dữ liệu tốt hơn không? Đồng thời có thể sử dụng tính năng tương tự cache để giảm tần suất load ảnh, lịch sử chat,... không (cũng để tránh gọi api quá nhiều)? hiện tại trong Tab Nhắn Tin Live chat lại nháy màn hình mỗi khi refresh (có lẽ vậy), và khi cuộn xuống lịch sử chat thì nó refresh lại kéo lại lên đầu, khiến cho không thể xem được tin nhắn, có lẽ nên hiển thị tin mới nhất thay vì tin cũ nhất, và chỉ hiển thị vài chục tin gần nhất thay vì hiển thị hàng loạt (Bạn hãy tham khảo các app chat thông dụng để áp dụng hợp lý hơn).
+Hãy refactor Alpha CRM Live Chat sang kiến trúc Phương án : Local-first, Cloud minimal.
 
-- Đồng thời kiểm tra lỗi khi gửi tin nhắn như log trong backend. Đồng thời các tin nhắn đã fail thì khi mở lại chat đó nên xóa đi.
-[PersonalZcaChannel] sendMessage error: ZaloApiError [ZcaApiError]: Tham số không hợp lệ
-    at resolveResponse (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/node_modules/zca-js/dist/utils.js:616:15)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/node_modules/zca-js/dist/apis/sendMessage.js:93:24
-    at async Promise.all (index 0)
-    at async send (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/node_modules/zca-js/dist/apis/sendMessage.js:96:16)
-    at async API.sendMessage (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/node_modules/zca-js/dist/apis/sendMessage.js:448:34)
-    at async PersonalZcaChannel.sendMessage (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/dist/channels/personal-zca-channel.js:439:28)
-    at async executeCommand (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/dist/agent/command-executor.js:31:28)
-    at async runPollStep (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/dist/agent/agent-runner.js:226:28)
-    at async Timeout._onTimeout (file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/dist/agent/agent-runner.js:206:9) {
-  code: 114
-}
-[agent-runner] Lệnh "zalo.message.send" xử lý thất bại: Tham số không hợp lệ
+Mục tiêu:
+- Cloud backend alpha-studio-backend chỉ lưu metadata tối thiểu cho CRM Live Chat.
+- Không lưu full nội dung tin nhắn trên cloud nữa.
+- Local Zalo bridge trong tools/alpha-crm/integration/zalo-bot-service lưu toàn bộ message history vào local DB.
+- Flutter Alpha CRM ưu tiên lấy full messages từ local bridge thay vì cloud.
 
-- Theo như trong hình D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\img\image.png là ảnh chụp của Tab Nhắn Tin Live Chat. Có vài tin nhắn của Lengoc, Nguyễn Phương Thảo, Dương Thái Anh, Phạm Thị Kim Yến, Levuong, Nhanh vốn không có trên app Zalo của tôi mà lại hiện ở đây, chúng là các tin nhắm spam sao (hoặc đây là các tin nhắn trong nhóm chứ không phải gửi riêng cho tài khoản, vì vậy cách hiển thị như vậy đã sai)? Tôi cần bạn áp dụng phần Tin Nhắn từ dự án D:\Dev\2.reference_pj\Zalo-ref\ZaloCRM\ để xử lý đúng hơn. Ngoài ra khi nội dung tin nhắn khi đính kèm gì thì trong đầu mục hội thoại lại có hiển thị các 'title', 'description',... cần xử lý cái này.
+Yêu cầu cụ thể:
+1. Cloud backend:
+   - Giữ API /crm/conversations để trả danh sách hội thoại nhẹ.
+   - Chỉ lưu các field tối thiểu: conversationId, zaloThreadId, threadType, displayName, avatarUrl, lastMessagePreview, lastMessageAt, unreadCount, managedGroup flag, bridgeDeviceId, bridgeOnline.
+   - Không lưu body/full payload/raw message/media base64 vào CrmMessage trên cloud.
+   - Endpoint /crm/conversations/:id/messages chỉ trả lỗi/empty hoặc redirect logic sang local bridge, tùy cách phù hợp với code hiện tại.
+   - Giữ command queue để local bridge poll lệnh gửi tin.
+
+2. Local Zalo bridge:
+   - Thêm local SQLite DB hoặc DB nhẹ tương đương để lưu conversations, messages, attachments, sync_state.
+   - Khi nhận inbound message từ Zalo, lưu full message vào local DB trước.
+   - Chỉ sync metadata/summary lên cloud.
+   - Cung cấp local API:
+     GET /local/conversations/:id/messages?before=&after=&limit=
+     POST /local/messages/send
+     GET /local/health
+   - Đảm bảo gửi tin vẫn đi qua ZCA/local bridge.
+
+3. Flutter Alpha CRM:
+   - Sửa live_chat_repository.dart để:
+     - Lấy danh sách conversations từ cloud.
+     - Khi mở hội thoại, lấy messages từ local bridge.
+     - Nếu local bridge offline, hiển thị trạng thái “Bridge offline, chỉ xem được metadata/recent summary”.
+   - Thêm cấu hình localBridgeBaseUrl.
+   - Không phụ thuộc cloud message history nữa.
+
+4. Migration:
+   - Không xóa code cũ ngay; tách bằng feature flag LOCAL_FIRST_LIVE_CHAT=true.
+   - Viết fallback an toàn nếu local bridge chưa sẵn sàng.
+   - Cập nhật README/ENV mẫu.
+   - Chạy test/lint/build nếu có.
+
+Trước khi sửa code:
+- Phân tích kiến trúc hiện tại.
+- Liệt kê file cần sửa.
+- Sau đó thực hiện từng bước nhỏ, commit-style summary cuối cùng.

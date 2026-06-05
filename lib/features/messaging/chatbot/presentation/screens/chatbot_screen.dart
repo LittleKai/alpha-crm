@@ -237,7 +237,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           ),
                           if (i < drafts.length - 1) ...[
                             const SizedBox(height: AppSpacing.m),
-                            const Divider(
+                            Divider(
                               height: 1,
                               color: AppColors.borderSoft,
                             ),
@@ -851,7 +851,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     );
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -1002,7 +1001,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s),
-                  const Divider(height: 1, color: AppColors.borderSoft),
+                  Divider(height: 1, color: AppColors.borderSoft),
                   const SizedBox(height: AppSpacing.s),
                   Text(
                     'Trạng thái: ${rule.isActive ? "Đang hoạt động" : "Tạm ngưng"}',
@@ -1250,7 +1249,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.m),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.m),
           Text(
             'Trò chuyện cá nhân (1-1)',
@@ -1410,7 +1409,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ),
             ],
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.m),
           Container(
             padding: const EdgeInsets.all(AppSpacing.m),
@@ -1688,7 +1687,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.m),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.s),
           state.knowledgeDocuments.isEmpty
               ? Padding(
@@ -1714,7 +1713,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       color: AppColors.surfaceMuted,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-                        side: const BorderSide(color: AppColors.border),
+                        side: BorderSide(color: AppColors.border),
                       ),
                       child: ListTile(
                         leading: const Icon(
@@ -1785,7 +1784,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           SizedBox(
             height: 350,
             child: AppTable(

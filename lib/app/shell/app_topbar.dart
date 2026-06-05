@@ -45,21 +45,33 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
         subscriptionStatus != 'active';
     if (hasKnownSubscriptionWarning) notifCount++;
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final surfaceColor = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final dividerColor = theme.dividerTheme.color ?? theme.dividerColor;
+    final textSecondary = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+    final textPrimary = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textMuted = isDark ? const Color(0xFF64748B) : AppColors.textMuted;
+    final disabledColor = isDark ? const Color(0xFF475569) : AppColors.disabled;
+
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderSoft, width: 1),
-        ),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        border: Border(bottom: BorderSide(color: dividerColor, width: 1)),
       ),
       child: Row(
         children: [
           if (widget.onMenuPressed != null) ...[
             IconButton(
               tooltip: 'Mở menu',
-              icon: const Icon(Icons.menu, color: AppColors.textSecondary),
+              icon: Icon(Icons.menu, color: textSecondary),
               onPressed: widget.onMenuPressed,
             ),
             const SizedBox(width: AppSpacing.s),
@@ -83,19 +95,17 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
                           breadcrumbs[index],
                           style: isLast
                               ? AppTextStyles.bodyMedium.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: textPrimary,
                                   fontWeight: FontWeight.w600,
                                 )
-                              : AppTextStyles.body.copyWith(
-                                  color: AppColors.textMuted,
-                                ),
+                              : AppTextStyles.body.copyWith(color: textMuted),
                         ),
                         if (!isLast) ...[
                           const SizedBox(width: AppSpacing.xs),
-                          const Icon(
+                          Icon(
                             Icons.chevron_right,
                             size: 14,
-                            color: AppColors.disabled,
+                            color: disabledColor,
                           ),
                           const SizedBox(width: AppSpacing.xs),
                         ],
@@ -110,7 +120,7 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
           IconButton(
             key: const ValueKey('global_search_button'),
             tooltip: 'Tìm kiếm toàn cầu',
-            icon: const Icon(Icons.search, color: AppColors.textSecondary),
+            icon: Icon(Icons.search, color: textSecondary),
             onPressed: () {
               showDialog(
                 context: context,
@@ -125,10 +135,7 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
               IconButton(
                 key: const ValueKey('notification_bell_button'),
                 tooltip: 'Thông báo',
-                icon: const Icon(
-                  Icons.notifications_outlined,
-                  color: AppColors.textSecondary,
-                ),
+                icon: Icon(Icons.notifications_outlined, color: textSecondary),
                 onPressed: () {
                   showDialog(
                     context: context,
@@ -421,27 +428,35 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1),
             Expanded(
               child: _query.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Nhập từ khóa để bắt đầu tìm kiếm...',
-                        style: TextStyle(color: AppColors.textMuted),
+                        style: TextStyle(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF64748B)
+                              : AppColors.textMuted,
+                        ),
                       ),
                     )
                   : results.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Không tìm thấy kết quả phù hợp.',
-                        style: TextStyle(color: AppColors.textMuted),
+                        style: TextStyle(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF64748B)
+                              : AppColors.textMuted,
+                        ),
                       ),
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.all(AppSpacing.m),
                       itemCount: results.length,
                       separatorBuilder: (context, index) =>
-                          const Divider(height: 1, color: AppColors.borderSoft),
+                          const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = results[index];
                         return ListTile(
@@ -464,7 +479,11 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                                     vertical: AppSpacing.xs,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primarySoft,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? const Color(0xFF1E293B)
+                                        : AppColors.primarySoft,
                                     borderRadius: BorderRadius.circular(
                                       AppSpacing.radiusS,
                                     ),
@@ -472,7 +491,11 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                                   child: Text(
                                     item.extra!,
                                     style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.primary,
+                                      color:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(0xFF60A5FA)
+                                          : AppColors.primary,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -650,20 +673,24 @@ class _NotificationMenuDialog extends ConsumerWidget {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1),
             Expanded(
               child: notifications.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Không có thông báo mới nào.',
-                        style: TextStyle(color: AppColors.textMuted),
+                        style: TextStyle(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF64748B)
+                              : AppColors.textMuted,
+                        ),
                       ),
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.all(AppSpacing.m),
                       itemCount: notifications.length,
                       separatorBuilder: (context, index) =>
-                          const Divider(height: 1, color: AppColors.borderSoft),
+                          const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = notifications[index];
                         return ListTile(

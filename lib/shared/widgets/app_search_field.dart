@@ -19,6 +19,9 @@ class AppSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? const Color(0xFF475569) : AppColors.iconMuted;
+
     return SizedBox(
       height: 40,
       child: TextField(
@@ -27,18 +30,10 @@ class AppSearchField extends StatelessWidget {
         style: AppTextStyles.body,
         decoration: InputDecoration(
           hintText: hintText,
-          prefixIcon: const Icon(
-            Icons.search,
-            size: 18,
-            color: AppColors.iconMuted,
-          ),
+          prefixIcon: Icon(Icons.search, size: 18, color: iconColor),
           suffixIcon: controller != null && controller!.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(
-                    Icons.clear,
-                    size: 16,
-                    color: AppColors.iconMuted,
-                  ),
+                  icon: Icon(Icons.clear, size: 16, color: iconColor),
                   onPressed: () {
                     controller!.clear();
                     if (onClear != null) onClear!();

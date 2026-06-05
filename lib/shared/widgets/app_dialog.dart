@@ -75,7 +75,7 @@ class AppDialog extends StatelessWidget {
               ),
             ),
             if (actions.isNotEmpty) ...[
-              const Divider(height: 1, color: AppColors.borderSoft),
+              const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.m),
                 child: Wrap(
@@ -116,12 +116,21 @@ class AppDialogSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceMuted = isDark
+        ? const Color(0xFF162033)
+        : AppColors.surfaceMuted;
+    final border = isDark ? const Color(0xFF253247) : AppColors.border;
+    final textPrimary = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: surfaceMuted,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,7 +143,7 @@ class AppDialogSection extends StatelessWidget {
                 child: Text(
                   title,
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
+                    color: textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -198,11 +207,19 @@ class _AppDialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primarySoftColor = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.primarySoft;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
-      decoration: const BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.vertical(
+      decoration: BoxDecoration(
+        color: primarySoftColor,
+        borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppSpacing.radiusM),
         ),
       ),
@@ -229,7 +246,7 @@ class _AppDialogHeader extends StatelessWidget {
                   Text(
                     subtitle!,
                     style: AppTextStyles.body.copyWith(
-                      color: AppColors.textSecondary,
+                      color: textSecondaryColor,
                       height: 1.45,
                     ),
                   ),
@@ -241,7 +258,7 @@ class _AppDialogHeader extends StatelessWidget {
             IconButton(
               tooltip: 'Đóng',
               icon: const Icon(Icons.close_rounded),
-              color: AppColors.textSecondary,
+              color: textSecondaryColor,
               onPressed: () => Navigator.of(context).pop(),
             ),
         ],

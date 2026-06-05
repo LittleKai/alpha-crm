@@ -1,12 +1,13 @@
 import os from 'os';
 import fs from 'fs';
 import { getAgentCredentials, getMachineFingerprint, saveAgentCredentials, getCrmToken, getCrmTokenPath } from './agent-identity.js';
-import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, sendHeartbeat, registerDevice } from './cloud-api.js';
+import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, reportInboundMessageMetadata, sendHeartbeat, registerDevice } from './cloud-api.js';
 import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
 import { config } from '../config.js';
 import { setInboundMessageHandler, type ZaloInboundMessageEvent } from '../channels/types.js';
 import { dispatchN8nEvent } from '../integrations/n8n-event-dispatcher.js';
+import { getLocalChatStore } from '../local-chat/index.js';
 
 let running = false;
 let pollingIntervalTimer: NodeJS.Timeout | null = null;
@@ -202,7 +203,35 @@ async function handleInboundMessageEvent(
       const managedKeys = await getManagedGroupKeys(deviceId, agentSecret);
       if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) return;
     }
-    await reportInboundMessage(deviceId, agentSecret, event);
+
+    // Local-first: persist full message locally before cloud sync
+    const localStore = getLocalChatStore();
+    if (localStore) {
+      try {
+        localStore.upsertInboundMessage({
+          accountId: event.accountId,
+          threadId: event.threadId,
+          threadType: event.threadType,
+          senderId: event.senderId,
+          senderName: event.senderName || '',
+          avatarUrl: event.avatarUrl,
+          content: event.content,
+          messageType: event.messageType,
+          providerMessageId: event.providerMessageId,
+          timestamp: event.timestamp,
+        });
+      } catch (localErr: any) {
+        console.error('[agent-runner] Local store write failed — skipping cloud report to preserve data ownership:', localErr.message);
+        return;
+      }
+
+      // Send metadata-only to cloud
+      await reportInboundMessageMetadata(deviceId, agentSecret, event);
+    } else {
+      // Legacy full-payload path when local-first is disabled
+      await reportInboundMessage(deviceId, agentSecret, event);
+    }
+
     await dispatchN8nEvent('zalo.message.inbound', event);
   } catch (err: any) {
     console.warn('[agent-runner] Failed to report inbound message:', err.message);

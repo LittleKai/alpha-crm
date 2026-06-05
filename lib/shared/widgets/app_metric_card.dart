@@ -8,7 +8,7 @@ class AppMetricCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color iconColor;
-  final Color iconBackgroundColor;
+  final Color? iconBackgroundColor;
   final Widget? trailing;
 
   const AppMetricCard({
@@ -17,12 +17,29 @@ class AppMetricCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.iconColor = AppColors.primary,
-    this.iconBackgroundColor = AppColors.primarySoft,
+    this.iconBackgroundColor,
     this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Resolve icon background if it's default null
+    final resolvedIconBg =
+        iconBackgroundColor ??
+        (isDark ? const Color(0xFF1E293B) : AppColors.primarySoft);
+
+    final resolvedBg = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final resolvedBorder = isDark ? const Color(0xFF253247) : AppColors.border;
+    final resolvedTitleColor = isDark
+        ? const Color(0xFF64748B)
+        : AppColors.textMuted;
+    final resolvedValColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+
     return Container(
       height: 76,
       padding: const EdgeInsets.symmetric(
@@ -30,9 +47,9 @@ class AppMetricCard extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: resolvedBg,
         borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: resolvedBorder, width: 1),
       ),
       child: Row(
         children: [
@@ -41,7 +58,7 @@ class AppMetricCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: iconBackgroundColor,
+              color: resolvedIconBg,
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: iconColor, size: 20),
@@ -56,7 +73,7 @@ class AppMetricCard extends StatelessWidget {
                 Text(
                   title,
                   style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textMuted,
+                    color: resolvedTitleColor,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
@@ -68,7 +85,7 @@ class AppMetricCard extends StatelessWidget {
                   style: AppTextStyles.cardTitle.copyWith(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: resolvedValColor,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

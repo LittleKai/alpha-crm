@@ -37,7 +37,6 @@ class _ScanMembersScreenState extends ConsumerState<ScanMembersScreen> {
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -90,7 +89,9 @@ class _Header extends ConsumerWidget {
       targetCount: 1,
     );
     final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        ? (decision.riskLevel != ZaloRiskLevel.low
+              ? '${decision.title}: ${decision.message}'
+              : null)
         : '${decision.title}: ${decision.message}';
     final hasWarningOrError = activeWarning != null;
 
@@ -113,7 +114,9 @@ class _Header extends ConsumerWidget {
         ),
         IconButton(
           icon: Icon(
-            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            hasWarningOrError
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
             color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
             size: 28,
           ),
@@ -212,7 +215,7 @@ class _ScanFormCard extends StatelessWidget {
             },
           ),
           const SizedBox(height: AppSpacing.m),
-          const Divider(color: AppColors.borderSoft),
+          Divider(color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.s),
           if (state.savedGroups.isEmpty)
             Padding(
@@ -296,7 +299,7 @@ class _ScanFormCard extends StatelessWidget {
                                                       .substring(0, 1)
                                                       .toUpperCase()
                                                 : 'G',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
                                               color: AppColors.textSecondary,
@@ -357,7 +360,7 @@ class _ScanFormCard extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 border: Border.all(color: AppColors.borderSoft),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.close,
                                 size: 12,
                                 color: AppColors.textMuted,
@@ -445,7 +448,7 @@ class _MemberTable extends StatelessWidget {
                                 member.name.isNotEmpty
                                     ? member.name.substring(0, 1).toUpperCase()
                                     : '?',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontWeight: FontWeight.bold,
                                 ),

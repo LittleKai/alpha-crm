@@ -1,6 +1,20 @@
 # Project Summary
 
-**Last Updated:** 2026-06-05T20:33:00+07:00
+**Last Updated:** 2026-06-06T01:10:00+07:00
+
+**Session:** #77 - Resolved the remaining dark mode rendering issues in compiled AOT/production environments by refactoring `AppColors` properties from constants to dynamic getters, removing the overridden `ThemeColor` class, and removing the `const` keyword from referencing widgets. Updated `app_sidebar.dart` to make inactive text/icon colors white-ish, active text colors pure white, and group/header labels highly legible in dark mode. Styled the `_ZaloPreview` widget dynamically in `bulk_messaging_screen.dart` with a dark viewport background, slate bubble background, and white text to ensure contrast in dark mode. Verified with 100% passing tests (68/68).
+
+**Session:** #76 - Completed Phase 2 to 5 of the local-first Live Chat refactor. Implemented local better-sqlite3 DB in the Zalo bridge to store full messages and synced only metadata to the cloud. Split Flutter LiveChatRepository to conditionally route messages and attachments to the local bridge based on localFirstLiveChat, falling back to sqflite caching or cloud fallback. Added CachedNetworkImage for media previews, opportunistic TTL cache eviction, and "Bridge offline" UI banners in live_chat_screen.dart. Verified no old cloud messages are deleted and migration handles empty DBs gracefully. Updated pubspec.yaml, local_db.dart, and crm.js for full local-first capability. All tests passing.
+
+**Session:** #75 - Resolved the dark mode text color and container background issues by fixing the `isDarkMode` detection logic inside the `MaterialApp` builder in `main.dart` to correctly query the active `themeMode` and platform brightness instead of relying on context-based `Theme.of(context)` (which is placed above the theme context). Implemented dynamic `ThemeColor` overrides for `AppColors` texts (`textPrimary`, `textSecondary`, `textMuted` and `iconMuted`), so all texts render in white in dark mode. Fixed compilation errors in `live_chat_cache.dart` (changed JS `.push` to Dart `.add`) and mock constructor errors in `live_chat_provider_test.dart`. Verified clean static analysis and 100% test pass on all 64 tests.
+
+**Session:** #74 - Resolved the dark mode theme issue by implementing a dynamic `ThemeColor` subclass of `Color` that overrides the `value` getter based on runtime theme state, automatically updating backgrounds, surfaces, text, and borders without changing hardcoded references. Updated `main.dart` to toggle `AppColors.isDarkMode` inside the `MaterialApp` builder. Migrated the Zalo account configuration dialog in `settings_screen.dart` to the project's standard custom `AppDialog` widget with a custom subtitle, icon, and action buttons. Verified clean `flutter analyze` and 100% `flutter test` pass.
+
+**Session:** #73 - Phase 1 of local-first Live Chat refactor: added `localFirstLiveChat` feature flag, `localBridgeBaseUrl`, and cache TTL settings to `SystemSettings` with full `toJson/fromJson/copyWith` support and safe defaults. Created `live_chat_contracts.dart` defining local bridge path builders, response helpers, and failure indicators. Added contract and `ChatMessage.fromJson` compatibility tests. No production behavior changed unless `LOCAL_FIRST_LIVE_CHAT=true`.
+
+**Session:** #72 - Colorized the automation tab icons, template category/difficulty/channel chips, n8n cards, Facebook Page API cards, and added a premium gradient "PRO AUTOMATION" badge to the screen header. In addition, enhanced the sidebar navigation to support dynamic, route-specific active colors for icons and soft backgrounds, and color-coded dashboard Quick Actions and Quick Guide steps. Verified using `flutter analyze` and `flutter test` showing 100% success.
+
+**Session:** #71 - Replaced the monolithic `SPEC.md` with a phase-based Local-First Live Chat refactor SPEC derived from `.claude/prompt.txt` and the requested SQLite/sqflite cache direction. Archived the previous SPEC under `.spec-archive/`. New phase files cover feature flags, local Zalo bridge SQLite/local APIs, cloud metadata-only compatibility, Flutter local-first repository with sqflite cache, and media/cache/migration verification.
 
 **Session:** #70 - Organized and grouped all documentation files under `docs/` into 5 categorized subdirectories: `guides`, `compliance`, `specs`, `api-catalog`, and `releases`. Updated relative file links inside `claude.md`, `SPEC.md`, `integration/zalo-bot-service/README.md`, `zca-js-api-catalog.md`, `zalo-integration-installation-and-usage.md`, and `.claude/PROJECT_SUMMARY.md`.
 
@@ -182,6 +196,7 @@ docs/
 | `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
+| `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
 
 ---
 
@@ -235,3 +250,4 @@ flutter build windows
 ---
 
 **Critical:** Read this entire file before making any changes to the project.
+

@@ -292,7 +292,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                             border: Border.all(color: AppColors.border),
                           ),
                           child: checkout.qrCodeUrl == null
-                              ? const Icon(
+                              ? Icon(
                                   Icons.qr_code_2_rounded,
                                   size: 160,
                                   color: AppColors.textSecondary,
@@ -303,7 +303,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                                   height: 240,
                                   fit: BoxFit.contain,
                                   errorBuilder: (context, error, stackTrace) =>
-                                      const Icon(
+                                      Icon(
                                         Icons.qr_code_2_rounded,
                                         size: 160,
                                         color: AppColors.textSecondary,
@@ -416,7 +416,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final isActive = authState.subscriptionStatus == 'active';
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.l),
         child: Center(
@@ -1116,7 +1115,7 @@ class _DialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.primarySoft,
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppSpacing.radiusM),
@@ -1166,7 +1165,7 @@ class _DialogActions extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.borderSoft)),
       ),
       child: Wrap(

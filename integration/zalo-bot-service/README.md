@@ -90,3 +90,19 @@ Current scope:
 | `npm start` | Chạy service |
 | `npm run dev` | Watch mode |
 | `npm run zalo:login-personal` | CLI bootstrap đăng nhập personal Zalo |
+
+## Local-First Live Chat
+
+This service acts as the source of truth for full Live Chat message bodies when Local-First mode is enabled.
+
+Configure in .env:
+\\\env
+LOCAL_FIRST_LIVE_CHAT=true
+LOCAL_CHAT_DB_PATH=.data/live-chat/live-chat.sqlite
+\\\
+
+When enabled:
+- Inbound messages are captured fully into the local \etter-sqlite3\ database before cloud sync.
+- Only a metadata summary (lastMessagePreview, timestamps, unreadCount) is sent to the cloud.
+- The Flutter client queries \/local/conversations/:id/messages\ and sends via \/local/messages/send\ directly, avoiding cloud payload overhead.
+

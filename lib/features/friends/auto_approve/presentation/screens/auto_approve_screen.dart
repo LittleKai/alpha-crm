@@ -44,7 +44,6 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -256,7 +255,7 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
           ),
           const SizedBox(height: AppSpacing.m),
           if (accounts.isEmpty)
-            const Expanded(
+            Expanded(
               child: Center(
                 child: Text(
                   'Chưa có tài khoản nào kết nối.',
@@ -269,7 +268,7 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
               child: ListView.separated(
                 itemCount: accounts.length,
                 separatorBuilder: (context, index) =>
-                    const Divider(color: AppColors.borderSoft),
+                    Divider(color: AppColors.borderSoft),
                 itemBuilder: (context, index) {
                   final acc = accounts[index];
                   final cleanLabel = acc.label.replaceAll(
@@ -289,7 +288,7 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
                               cleanLabel.isNotEmpty
                                   ? cleanLabel[0].toUpperCase()
                                   : 'A',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textSecondary,

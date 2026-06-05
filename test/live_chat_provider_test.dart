@@ -1,4 +1,6 @@
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_repository.dart';
+import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_cache.dart';
+import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import 'package:alpha_crm/features/messaging/live_chat/providers/live_chat_provider.dart';
 import 'package:alpha_crm/mock/mock_accounts.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -114,6 +116,12 @@ void main() {
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
+  _FakeLiveChatRepository() : super(
+    localFirstEnabled: false,
+    cache: LiveChatCache(),
+    localApi: LiveChatLocalBridgeApi(baseUrl: ''),
+  );
+
   int getConversationsCalls = 0;
   int getMessagesCalls = 0;
   int sendMessageCalls = 0;

@@ -38,7 +38,6 @@ class _ContentTemplatesScreenState
     final filteredTemplates = _filteredTemplates(state);
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(
           ResponsiveBreakpoints.isMobile(context) ? AppSpacing.m : AppSpacing.l,
@@ -235,7 +234,7 @@ class _ContentTemplatesScreenState
             ),
           ),
           const SizedBox(height: AppSpacing.s),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.s),
           Row(
             children: [

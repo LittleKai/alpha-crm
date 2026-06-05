@@ -64,7 +64,6 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -134,7 +133,9 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
       targetCount: linksCount > 0 ? linksCount : 1,
     );
     final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low ? '${decision.title}: ${decision.message}' : null)
+        ? (decision.riskLevel != ZaloRiskLevel.low
+              ? '${decision.title}: ${decision.message}'
+              : null)
         : '${decision.title}: ${decision.message}';
     final hasWarningOrError = activeWarning != null;
 
@@ -161,7 +162,9 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
         ),
         IconButton(
           icon: Icon(
-            hasWarningOrError ? Icons.warning_amber_rounded : Icons.gpp_good_outlined,
+            hasWarningOrError
+                ? Icons.warning_amber_rounded
+                : Icons.gpp_good_outlined,
             color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
             size: 28,
           ),
@@ -238,7 +241,7 @@ class _JoinGroupsScreenState extends ConsumerState<JoinGroupsScreen> {
                                 cleanLabel.isNotEmpty
                                     ? cleanLabel[0].toUpperCase()
                                     : 'A',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,

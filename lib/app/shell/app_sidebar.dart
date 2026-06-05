@@ -23,6 +23,15 @@ class AppSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final surfaceColor = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final dividerColor = theme.dividerTheme.color ?? theme.dividerColor;
+    final textSecondary = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : AppColors.textSecondary;
+
     final bool isCollapsed =
         forceCollapsed ?? ref.watch(sidebarCollapsedProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
@@ -32,17 +41,15 @@ class AppSidebar extends ConsumerWidget {
       children: [
         Container(
           width: isCollapsed ? 72 : 250,
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(
-              right: BorderSide(color: AppColors.border, width: 1),
-            ),
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            border: Border(right: BorderSide(color: dividerColor, width: 1)),
           ),
           child: Column(
             children: [
               // Branding Header
-              _buildBrandingHeader(isCollapsed),
-              const Divider(height: 1, color: AppColors.borderSoft),
+              _buildBrandingHeader(context, isCollapsed),
+              const Divider(height: 1),
 
               // Navigation List
               Expanded(
@@ -55,7 +62,7 @@ class AppSidebar extends ConsumerWidget {
               ),
 
               // User Footer & Logout Section
-              const Divider(height: 1, color: AppColors.borderSoft),
+              const Divider(height: 1),
               _buildUserFooter(context, ref, isCollapsed),
             ],
           ),
@@ -77,9 +84,9 @@ class AppSidebar extends ConsumerWidget {
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: surfaceColor,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border, width: 1),
+                    border: Border.all(color: dividerColor, width: 1),
                     boxShadow: const [
                       BoxShadow(
                         color: Color.fromRGBO(0, 0, 0, 0.05),
@@ -91,7 +98,7 @@ class AppSidebar extends ConsumerWidget {
                   child: Icon(
                     isCollapsed ? Icons.chevron_right : Icons.chevron_left,
                     size: 14,
-                    color: AppColors.textSecondary,
+                    color: textSecondary,
                   ),
                 ),
               ),
@@ -101,7 +108,15 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildBrandingHeader(bool isCollapsed) {
+  Widget _buildBrandingHeader(BuildContext context, bool isCollapsed) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textMuted = isDark
+        ? Colors.white.withValues(alpha: 0.5)
+        : AppColors.textMuted;
+
     return Container(
       height: 64,
       padding: EdgeInsets.symmetric(
@@ -148,7 +163,7 @@ class AppSidebar extends ConsumerWidget {
                       Text(
                         'CRM ZALO',
                         style: AppTextStyles.cardTitle.copyWith(
-                          color: AppColors.textPrimary,
+                          color: textPrimary,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -176,7 +191,7 @@ class AppSidebar extends ConsumerWidget {
                     style: AppTextStyles.caption.copyWith(
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textMuted,
+                      color: textMuted,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -193,6 +208,10 @@ class AppSidebar extends ConsumerWidget {
     final hasActiveItem = group.items.any(
       (item) => currentRoute == item.routePath,
     );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textMuted = isDark
+        ? Colors.white.withValues(alpha: 0.4)
+        : AppColors.textMuted;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +228,9 @@ class AppSidebar extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: hasActiveItem ? AppColors.primary : AppColors.textMuted,
+                color: isDark
+                    ? (hasActiveItem ? Colors.white.withValues(alpha: 0.9) : textMuted)
+                    : (hasActiveItem ? AppColors.primary : textMuted),
                 letterSpacing: 1.0,
               ),
             ),
@@ -223,6 +244,22 @@ class AppSidebar extends ConsumerWidget {
 
   Widget _buildNavItem(BuildContext context, NavItem item, bool isCollapsed) {
     final isActive = currentRoute == item.routePath;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textSecondary = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : AppColors.textSecondary;
+    final activeBg = _activeBgColor(item, isDark);
+    final activeIcon = _activeIconColor(item, isDark);
+
+    final Color itemTextColor;
+    final Color itemIconColor;
+    if (isDark) {
+      itemTextColor = isActive ? Colors.white : Colors.white.withValues(alpha: 0.7);
+      itemIconColor = isActive ? activeIcon : Colors.white.withValues(alpha: 0.6);
+    } else {
+      itemTextColor = isActive ? activeIcon : textSecondary;
+      itemIconColor = isActive ? activeIcon : textSecondary;
+    }
 
     if (isCollapsed) {
       return Tooltip(
@@ -234,7 +271,7 @@ class AppSidebar extends ConsumerWidget {
           ),
           height: 40,
           child: Material(
-            color: isActive ? AppColors.primarySoft : Colors.transparent,
+            color: isActive ? activeBg : Colors.transparent,
             borderRadius: BorderRadius.circular(AppSpacing.radiusS),
             child: InkWell(
               borderRadius: BorderRadius.circular(AppSpacing.radiusS),
@@ -242,7 +279,7 @@ class AppSidebar extends ConsumerWidget {
               child: Center(
                 child: Icon(
                   item.icon,
-                  color: isActive ? AppColors.primary : AppColors.textSecondary,
+                  color: itemIconColor,
                   size: 20,
                 ),
               ),
@@ -262,7 +299,7 @@ class AppSidebar extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
             child: Material(
-              color: isActive ? AppColors.primarySoft : Colors.transparent,
+              color: isActive ? activeBg : Colors.transparent,
               borderRadius: BorderRadius.circular(AppSpacing.radiusS),
               child: InkWell(
                 borderRadius: BorderRadius.circular(AppSpacing.radiusS),
@@ -274,9 +311,7 @@ class AppSidebar extends ConsumerWidget {
                       const SizedBox(width: AppSpacing.m),
                       Icon(
                         item.icon,
-                        color: isActive
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                        color: itemIconColor,
                         size: 20,
                       ),
                       const SizedBox(width: AppSpacing.sm),
@@ -284,9 +319,7 @@ class AppSidebar extends ConsumerWidget {
                         child: Text(
                           item.title,
                           style: AppTextStyles.bodyMedium.copyWith(
-                            color: isActive
-                                ? AppColors.primary
-                                : AppColors.textSecondary,
+                            color: itemTextColor,
                             fontWeight: isActive
                                 ? FontWeight.w600
                                 : FontWeight.w500,
@@ -309,9 +342,9 @@ class AppSidebar extends ConsumerWidget {
               bottom: 0,
               width: 3.5,
               child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  color: activeIcon,
+                  borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(3),
                     bottomRight: Radius.circular(3),
                   ),
@@ -328,6 +361,20 @@ class AppSidebar extends ConsumerWidget {
     WidgetRef ref,
     bool isCollapsed,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? const Color(0xFFF8FAFC)
+        : AppColors.textPrimary;
+    final textSecondary = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : AppColors.textSecondary;
+    final textMuted = isDark
+        ? Colors.white.withValues(alpha: 0.5)
+        : AppColors.textMuted;
+    final surfaceMuted = isDark
+        ? const Color(0xFF162033)
+        : AppColors.surfaceMuted;
+
     final authState = ref.watch(crmAuthProvider);
     final user = authState.user;
     final displayName = user?.name ?? user?.email ?? 'Người dùng';
@@ -342,9 +389,9 @@ class AppSidebar extends ConsumerWidget {
               height: 32,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) =>
-                  _buildDefaultAvatar(displayName),
+                  _buildDefaultAvatar(context, displayName),
             )
-          : _buildDefaultAvatar(displayName),
+          : _buildDefaultAvatar(context, displayName),
     );
 
     if (isCollapsed) {
@@ -374,7 +421,7 @@ class AppSidebar extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: const BoxDecoration(color: AppColors.surfaceMuted),
+      decoration: BoxDecoration(color: surfaceMuted),
       child: Row(
         children: [
           // User Avatar Circle
@@ -389,7 +436,7 @@ class AppSidebar extends ConsumerWidget {
                 Text(
                   displayName,
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
+                    color: textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
@@ -398,7 +445,7 @@ class AppSidebar extends ConsumerWidget {
                 Text(
                   role,
                   style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textMuted,
+                    color: textMuted,
                     fontSize: 10,
                   ),
                   maxLines: 1,
@@ -410,14 +457,14 @@ class AppSidebar extends ConsumerWidget {
           const SizedBox(width: AppSpacing.xs),
           IconButton(
             icon: const Icon(Icons.lock_outline_rounded, size: 18),
-            color: AppColors.textSecondary,
+            color: textSecondary,
             tooltip: 'Khóa ứng dụng',
             onPressed: () => ref.read(appLockProvider.notifier).lock(),
           ),
           // Logout Button
           IconButton(
             icon: const Icon(Icons.logout, size: 18),
-            color: AppColors.textSecondary,
+            color: textSecondary,
             tooltip: 'Đăng xuất',
             onPressed: () => _showLogoutConfirmDialog(context, ref),
           ),
@@ -426,14 +473,16 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildDefaultAvatar(String displayName) {
+  Widget _buildDefaultAvatar(BuildContext context, String displayName) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primarySoft = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.primarySoft;
+
     return Container(
       width: 32,
       height: 32,
-      decoration: const BoxDecoration(
-        color: AppColors.primarySoft,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: primarySoft, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Text(
         displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
@@ -447,6 +496,11 @@ class AppSidebar extends ConsumerWidget {
   }
 
   void _showLogoutConfirmDialog(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textSecondary = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : AppColors.textSecondary;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -457,10 +511,7 @@ class AppSidebar extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Hủy',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
+            child: Text('Hủy', style: TextStyle(color: textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -476,5 +527,45 @@ class AppSidebar extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Color _activeIconColor(NavItem item, bool isDark) {
+    final path = item.routePath;
+    if (isDark && path == '/settings') return const Color(0xFF94A3B8);
+    if (path == '/dashboard') return const Color(0xFFF97316);
+    if (path == '/customers') return const Color(0xFF0068FF);
+    if (path == '/tasks') return const Color(0xFF10B981);
+    if (path == '/workflows') return const Color(0xFF8B5CF6);
+    if (path == '/messaging/bulk') return const Color(0xFF6366F1);
+    if (path == '/messaging/live-chat') return const Color(0xFF0D9488);
+    if (path == '/messaging/chatbot') return const Color(0xFFD946EF);
+    if (path == '/messaging/history') return const Color(0xFF64748B);
+    if (path.startsWith('/friends')) return const Color(0xFF059669);
+    if (path.startsWith('/groups')) return const Color(0xFF0891B2);
+    if (path == '/subscription') return const Color(0xFFEC4899);
+    if (path == '/devices') return const Color(0xFF7C3AED);
+    if (path == '/settings') return const Color(0xFF475569);
+    return AppColors.primary;
+  }
+
+  Color _activeBgColor(NavItem item, bool isDark) {
+    if (isDark) {
+      return _activeIconColor(item, true).withValues(alpha: 0.15);
+    }
+    final path = item.routePath;
+    if (path == '/dashboard') return const Color(0xFFFFF7ED);
+    if (path == '/customers') return const Color(0xFFF0F9FF);
+    if (path == '/tasks') return const Color(0xFFF0FDF4);
+    if (path == '/workflows') return const Color(0xFFF5F3FF);
+    if (path == '/messaging/bulk') return const Color(0xFFEEF2FF);
+    if (path == '/messaging/live-chat') return const Color(0xFFF0FDFA);
+    if (path == '/messaging/chatbot') return const Color(0xFFFDF4FF);
+    if (path == '/messaging/history') return const Color(0xFFF8FAFC);
+    if (path.startsWith('/friends')) return const Color(0xFFECFDF5);
+    if (path.startsWith('/groups')) return const Color(0xFFECFEFF);
+    if (path == '/subscription') return const Color(0xFFFDF2F8);
+    if (path == '/devices') return const Color(0xFFF5F3FF);
+    if (path == '/settings') return const Color(0xFFF1F5F9);
+    return AppColors.primarySoft;
   }
 }

@@ -28,16 +28,28 @@ class AppTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: isSegmented ? _buildSegmentedTabs() : _buildUnderlineTabs(),
+      child: isSegmented
+          ? _buildSegmentedTabs(context)
+          : _buildUnderlineTabs(context),
     );
   }
 
-  Widget _buildSegmentedTabs() {
+  Widget _buildSegmentedTabs(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final slateSoftColor = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.slateSoft;
+    final surfaceColor = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
       height: 40,
       padding: const EdgeInsets.all(AppSpacing.xs),
       decoration: BoxDecoration(
-        color: AppColors.slateSoft,
+        color: slateSoftColor,
         borderRadius: BorderRadius.circular(AppSpacing.radiusS),
       ),
       child: Row(
@@ -55,7 +67,7 @@ class AppTabs extends StatelessWidget {
                 height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.surface : Colors.transparent,
+                  color: isSelected ? surfaceColor : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusS - 2),
                   boxShadow: isSelected
                       ? const [
@@ -74,9 +86,7 @@ class AppTabs extends StatelessWidget {
                   iconSize: 14,
                   iconGap: AppSpacing.xs,
                   textStyle: AppTextStyles.label.copyWith(
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
+                    color: isSelected ? AppColors.primary : textSecondaryColor,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     fontSize: 13,
                   ),
@@ -89,12 +99,17 @@ class AppTabs extends StatelessWidget {
     );
   }
 
-  Widget _buildUnderlineTabs() {
+  Widget _buildUnderlineTabs(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final borderSoftColor = theme.dividerTheme.color ?? theme.dividerColor;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderSoft, width: 1),
-        ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: borderSoftColor, width: 1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -122,9 +137,7 @@ class AppTabs extends StatelessWidget {
                 iconSize: 16,
                 iconGap: AppSpacing.s,
                 textStyle: AppTextStyles.bodyMedium.copyWith(
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.textSecondary,
+                  color: isSelected ? AppColors.primary : textSecondaryColor,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -153,6 +166,11 @@ class _TabContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textSecondaryColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -161,7 +179,7 @@ class _TabContent extends StatelessWidget {
           Icon(
             item.icon,
             size: iconSize,
-            color: isSelected ? AppColors.primary : AppColors.textSecondary,
+            color: isSelected ? AppColors.primary : textSecondaryColor,
           ),
           SizedBox(width: iconGap),
         ],

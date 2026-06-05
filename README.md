@@ -142,3 +142,11 @@ CÃ¡c tÃ i liá»‡u Ä‘Æ°á»£c lÆ°u trá»¯ cÃ³ cáº¥u trÃºc trong thÆ° má»¥c `docs/`:
 *   **[docs/specs/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/specs/)**: Äáº·c táº£ tÃ­ch há»£p nghiá»‡p vá»¥, káº¿ hoáº¡ch triá»ƒn khai vÃ  phÃ¢n tÃ­ch gaps luá»“ng dá»¯ liá»‡u.
 *   **[docs/api-catalog/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/api-catalog/)**: Danh má»¥c phÃ¢n loáº¡i API vÃ  tÃ i liá»‡u tra cá»©u thÆ° viá»‡n lÃµi Zalo (`zca-js`).
 *   **[docs/releases/](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/docs/releases/)**: Checklist kiá»ƒm duyá»‡t phÃ¡t hÃ nh phiÃªn báº£n production.
+## ?? Local-First Live Chat
+
+T? Phase 2+, h? th?ng h? tr? cõ ch? Local-First Live Chat:
+- Toàn b? n?i dung tin nh?n và file ğính kèm ğı?c lıu tr?c ti?p xu?ng \etter-sqlite3\ t?i Local Bridge.
+- Client Flutter giao ti?p qua API \/local/*\ ğ? load/g?i tin nh?n siêu t?c mà không b? delay ho?c gi?i h?n t?i tr?ng (payload) t? Cloud.
+- Tính nãng Cache c?c b? (\sqflite\) trên Flutter giúp hi?n th? d? li?u ngay l?p t?c, fallback c?c k? mı?t mà khi Local Bridge offline.
+- T? ğ?ng d?n d?p các ?nh thumbnail và d? li?u cache h?t h?n ğ? ti?t ki?m dung lı?ng ğ?a.
+

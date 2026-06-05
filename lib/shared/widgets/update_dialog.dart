@@ -25,9 +25,39 @@ class _UpdateDialog extends ConsumerWidget {
     final state = ref.watch(updateProvider);
     final notifier = ref.read(updateProvider.notifier);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final primarySoftColor = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.primarySoft;
+    final surfaceMutedColor = isDark
+        ? const Color(0xFF162033)
+        : AppColors.surfaceMuted;
+    final borderSoftColor = isDark
+        ? const Color(0xFF253247)
+        : AppColors.borderSoft;
+    final borderColor = isDark ? const Color(0xFF253247) : AppColors.border;
+    final textMutedColor = isDark
+        ? const Color(0xFF64748B)
+        : AppColors.textMuted;
+
+    final successSoftColor = isDark
+        ? const Color(0xFF003F2D)
+        : AppColors.successSoft;
+    final successTextColor = isDark
+        ? const Color(0xFF34D399)
+        : AppColors.successText;
+
+    final errorSoftColor = isDark
+        ? const Color(0xFF3F0000)
+        : AppColors.errorSoft;
+    final errorTextColor = isDark
+        ? const Color(0xFFF87171)
+        : AppColors.errorText;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      backgroundColor: AppColors.surface,
+      backgroundColor: surfaceColor,
       clipBehavior: Clip.antiAlias,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -42,7 +72,7 @@ class _UpdateDialog extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.s),
                   decoration: BoxDecoration(
-                    color: AppColors.primarySoft,
+                    color: primarySoftColor,
                     borderRadius: AppSpacing.borderRadiusS,
                   ),
                   child: const Icon(
@@ -105,9 +135,9 @@ class _UpdateDialog extends ConsumerWidget {
                 constraints: const BoxConstraints(maxHeight: 180),
                 padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceMuted,
+                  color: surfaceMutedColor,
                   borderRadius: AppSpacing.borderRadiusS,
-                  border: Border.all(color: AppColors.borderSoft),
+                  border: Border.all(color: borderSoftColor),
                 ),
                 child: SingleChildScrollView(
                   child: Text(
@@ -126,10 +156,10 @@ class _UpdateDialog extends ConsumerWidget {
               const SizedBox(height: AppSpacing.s),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.file_download_outlined,
                     size: 14,
-                    color: AppColors.textMuted,
+                    color: textMutedColor,
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   Text(
@@ -161,7 +191,7 @@ class _UpdateDialog extends ConsumerWidget {
                 child: LinearProgressIndicator(
                   value: state.downloadProgress,
                   minHeight: 8,
-                  backgroundColor: AppColors.border,
+                  backgroundColor: borderColor,
                   valueColor: const AlwaysStoppedAnimation<Color>(
                     AppColors.primary,
                   ),
@@ -175,23 +205,27 @@ class _UpdateDialog extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: AppColors.successSoft,
+                  color: successSoftColor,
                   borderRadius: AppSpacing.borderRadiusS,
-                  border: Border.all(color: const Color(0xFFD1FAE5)),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF065F46)
+                        : const Color(0xFFD1FAE5),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_outline,
                       size: 18,
-                      color: AppColors.successText,
+                      color: successTextColor,
                     ),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: Text(
                         'Tải xuống hoàn tất! Nhấn "Cài đặt ngay" để cập nhật.',
                         style: AppTextStyles.body.copyWith(
-                          color: AppColors.successText,
+                          color: successTextColor,
                           fontSize: 13,
                         ),
                       ),
@@ -225,23 +259,23 @@ class _UpdateDialog extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: AppColors.errorSoft,
+                  color: errorSoftColor,
                   borderRadius: AppSpacing.borderRadiusS,
-                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF7F1D1D)
+                        : const Color(0xFFFCA5A5),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 18,
-                      color: AppColors.errorText,
-                    ),
+                    Icon(Icons.error_outline, size: 18, color: errorTextColor),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: Text(
                         state.errorText!,
                         style: AppTextStyles.body.copyWith(
-                          color: AppColors.errorText,
+                          color: errorTextColor,
                           fontSize: 13,
                         ),
                       ),

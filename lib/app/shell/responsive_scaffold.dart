@@ -82,7 +82,7 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
               ),
               Expanded(
                 child: Container(
-                  color: AppColors.appBackground,
+                  color: Theme.of(context).scaffoldBackgroundColor,
                   child: widget.child,
                 ),
               ),
@@ -110,7 +110,7 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
                     AppTopbar(currentRoute: widget.currentRoute),
                     Expanded(
                       child: Container(
-                        color: AppColors.appBackground,
+                        color: Theme.of(context).scaffoldBackgroundColor,
                         child: widget.child,
                       ),
                     ),

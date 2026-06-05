@@ -77,7 +77,6 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
       body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
@@ -341,7 +340,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                             ),
                           ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.refresh_rounded,
                           color: AppColors.textSecondary,
                         ),
@@ -353,7 +352,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           CheckboxListTile(
             title: Text(
               'Chọn tất cả nhóm (${visibleGroups.length})',
@@ -372,7 +371,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
               horizontal: AppSpacing.m,
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          Divider(height: 1, color: AppColors.borderSoft),
           Expanded(
             child: state.isLoadingGroups
                 ? const Center(
@@ -383,7 +382,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                     ),
                   )
                 : visibleGroups.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'Không tìm thấy nhóm nào.',
                       style: TextStyle(color: AppColors.textMuted),
@@ -392,7 +391,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                 : ListView.separated(
                     itemCount: visibleGroups.length,
                     separatorBuilder: (context, index) =>
-                        const Divider(height: 1, color: AppColors.borderSoft),
+                        Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final group = visibleGroups[index];
                       final isChecked = state.selectedGroupIds.contains(
@@ -414,7 +413,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                                                 .substring(0, 1)
                                                 .toUpperCase()
                                           : 'G',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textSecondary,
@@ -480,7 +479,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
-          children: const [
+          children: [
             Icon(Icons.warning_amber_rounded, color: AppColors.errorText),
             SizedBox(width: AppSpacing.s),
             Text('Xác nhận rời nhóm'),
@@ -492,7 +491,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            child: Text(
               'Hủy bỏ',
               style: TextStyle(color: AppColors.textSecondary),
             ),

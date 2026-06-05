@@ -5,12 +5,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/models/crm_customer.dart';
 import '../../../../shared/utils/image_helper.dart';
+import '../../../../shared/local_db/local_db_maintenance.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../data/live_chat_repository.dart';
+import '../data/live_chat_cache.dart';
+import '../data/live_chat_local_bridge_api.dart';
 
 const Object _unset = Object();
 
 final liveChatRepositoryProvider = Provider<LiveChatRepository>((ref) {
-  return LiveChatRepository();
+  final settings = ref.watch(settingsProvider).settings;
+  // Opportunistic cache eviction
+  LocalDbMaintenance.runCleanup();
+
+  return LiveChatRepository(
+    localFirstEnabled: settings.localFirstLiveChat,
+    cache: LiveChatCache(),
+    localApi: LiveChatLocalBridgeApi(baseUrl: settings.localBridgeBaseUrl),
+  );
 });
 
 class LiveChatAccount {
@@ -208,6 +220,9 @@ class LiveChatState {
   final bool isSending;
   final String searchQuery;
   final String? errorMessage;
+  final bool isBridgeOffline;
+  final bool isUsingCachedMessages;
+  final String messageSource;
 
   const LiveChatState({
     this.selectedAccount,
@@ -222,6 +237,9 @@ class LiveChatState {
     required this.isSending,
     required this.searchQuery,
     this.errorMessage,
+    this.isBridgeOffline = false,
+    this.isUsingCachedMessages = false,
+    this.messageSource = 'cloudLegacy',
   });
 
   factory LiveChatState.initial() {
@@ -238,6 +256,9 @@ class LiveChatState {
       isSending: false,
       searchQuery: '',
       errorMessage: null,
+      isBridgeOffline: false,
+      isUsingCachedMessages: false,
+      messageSource: 'cloudLegacy',
     );
   }
 
@@ -254,6 +275,9 @@ class LiveChatState {
     bool? isSending,
     String? searchQuery,
     String? errorMessage,
+    bool? isBridgeOffline,
+    bool? isUsingCachedMessages,
+    String? messageSource,
   }) {
     return LiveChatState(
       selectedAccount: selectedAccount == _unset
@@ -274,6 +298,10 @@ class LiveChatState {
       isSending: isSending ?? this.isSending,
       searchQuery: searchQuery ?? this.searchQuery,
       errorMessage: errorMessage,
+      isBridgeOffline: isBridgeOffline ?? this.isBridgeOffline,
+      isUsingCachedMessages:
+          isUsingCachedMessages ?? this.isUsingCachedMessages,
+      messageSource: messageSource ?? this.messageSource,
     );
   }
 }
@@ -414,9 +442,22 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   Future<void> selectConversation(Conversation conversation) async {
+    final cachedData = await _repository.getCachedMessages(conversation.id);
+    final cachedMessages =
+        cachedData
+            .map(
+              (item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
     state = state.copyWith(
-      selectedConversation: conversation.copyWith(unreadCount: 0),
+      selectedConversation: conversation.copyWith(
+        unreadCount: 0,
+        messages: cachedMessages,
+      ),
       hasMoreMessages: true,
+      isUsingCachedMessages: cachedMessages.isNotEmpty,
     );
     await _repository.clearFailedMessages(conversation.id);
     await Future.wait([
@@ -573,10 +614,23 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       before: before,
       after: after,
     );
+
+    final isBridgeOffline =
+        response['code'] == 'LOCAL_BRIDGE_OFFLINE' ||
+        response['code'] == 'LOCAL_BRIDGE_REQUIRED';
+    final isUsingCachedMessages = response['code'] == 'LOCAL_BRIDGE_OFFLINE';
+    final messageSource = response['code'] == 'LOCAL_BRIDGE_REQUIRED'
+        ? 'cloudLegacy'
+        : (isUsingCachedMessages ? 'cache' : 'local');
+
     state = state.copyWith(
       isLoadingMessages: false,
       isLoadingOlderMessages: false,
+      isBridgeOffline: isBridgeOffline,
+      isUsingCachedMessages: isUsingCachedMessages,
+      messageSource: messageSource,
     );
+
     if (response['success'] != true || response['data'] is! List) return;
     final messages = (response['data'] as List)
         .whereType<Map>()

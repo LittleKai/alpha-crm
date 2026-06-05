@@ -63,11 +63,15 @@ class ZaloBackendManager {
               final data = jsonDecode(content);
               if (data is Map && data['port'] is int) {
                 final activePort = data['port'] as int;
-                debugPrint("ZaloBackendManager (Development): Phát hiện cổng active manually: $activePort");
+                debugPrint(
+                  "ZaloBackendManager (Development): Phát hiện cổng active manually: $activePort",
+                );
                 await _updateSettingsPort(activePort);
               }
             } catch (e) {
-              debugPrint("ZaloBackendManager (Development): Lỗi đọc active-port.json: $e");
+              debugPrint(
+                "ZaloBackendManager (Development): Lỗi đọc active-port.json: $e",
+              );
             }
           }
         } else {
@@ -93,13 +97,16 @@ class ZaloBackendManager {
       );
 
       _isRunning = true;
-      debugPrint("ZaloBackendManager: Backend đã khởi động thành công. Đang dò tìm cổng active...");
+      debugPrint(
+        "ZaloBackendManager: Backend đã khởi động thành công. Đang dò tìm cổng active...",
+      );
 
       // Dò tìm cổng active từ file port sinh ra bởi Node.js backend
       final portFile = _getActivePortFile(executablePath);
       int? activePort;
-      
-      for (int i = 0; i < 25; i++) { // Chờ tối đa 5 giây (25 * 200ms)
+
+      for (int i = 0; i < 25; i++) {
+        // Chờ tối đa 5 giây (25 * 200ms)
         if (await portFile.exists()) {
           try {
             final content = await portFile.readAsString();
@@ -116,10 +123,14 @@ class ZaloBackendManager {
       }
 
       if (activePort != null) {
-        debugPrint("ZaloBackendManager: Phát hiện cổng active của Backend: $activePort");
+        debugPrint(
+          "ZaloBackendManager: Phát hiện cổng active của Backend: $activePort",
+        );
         await _updateSettingsPort(activePort);
       } else {
-        debugPrint("ZaloBackendManager: Không tìm thấy cổng active của Backend. Sử dụng cổng mặc định.");
+        debugPrint(
+          "ZaloBackendManager: Không tìm thấy cổng active của Backend. Sử dụng cổng mặc định.",
+        );
       }
 
       // Lắng nghe dữ liệu đầu ra từ backend để tiện debug trong quá trình phát triển
@@ -143,10 +154,14 @@ class ZaloBackendManager {
   static File _getActivePortFile(String? executablePath) {
     if (executablePath != null) {
       final workingDir = File(executablePath).parent.path;
-      return File('$workingDir${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json');
+      return File(
+        '$workingDir${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json',
+      );
     } else {
       final currentDir = Directory.current.path;
-      return File('$currentDir${Platform.pathSeparator}integration${Platform.pathSeparator}zalo-bot-service${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json');
+      return File(
+        '$currentDir${Platform.pathSeparator}integration${Platform.pathSeparator}zalo-bot-service${Platform.pathSeparator}.data${Platform.pathSeparator}active-port.json',
+      );
     }
   }
 
@@ -164,9 +179,13 @@ class ZaloBackendManager {
 
       final content = const JsonEncoder.withIndent('  ').convert(jsonMap);
       await settingsFile.writeAsString(content);
-      debugPrint("ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend: http://127.0.0.1:$port");
+      debugPrint(
+        "ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend: http://127.0.0.1:$port",
+      );
     } catch (e) {
-      debugPrint("ZaloBackendManager: Lỗi cập nhật cổng vào zalo_settings.json: $e");
+      debugPrint(
+        "ZaloBackendManager: Lỗi cập nhật cổng vào zalo_settings.json: $e",
+      );
     }
   }
 
