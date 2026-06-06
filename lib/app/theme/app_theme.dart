@@ -8,53 +8,53 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primary,
-        primary: AppColors.primary,
-        secondary: AppColors.zaloBlue,
-        surface: AppColors.surface,
-        error: AppColors.error,
+        seedColor: const Color(0xFF2563EB),
+        primary: const Color(0xFF2563EB),
+        secondary: const Color(0xFF0068FF),
+        surface: const Color(0xFFFFFFFF),
+        error: const Color(0xFFEF4444),
       ),
-      scaffoldBackgroundColor: AppColors.appBackground,
+      scaffoldBackgroundColor: const Color(0xFFF6F9FD),
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: const Color(0xFFFFFFFF),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppSpacing.borderRadiusM,
-          side: BorderSide(color: AppColors.border, width: 1),
+          side: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
-      dividerTheme: DividerThemeData(
-        color: AppColors.borderSoft,
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFFE7EDF5),
         thickness: 1,
         space: 1,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: const Color(0xFFFFFFFF),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.m,
           vertical: AppSpacing.sm,
         ),
         border: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: BorderSide(color: AppColors.border, width: 1),
+          borderSide: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: BorderSide(color: AppColors.border, width: 1),
+          borderSide: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: AppColors.error, width: 1),
+          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1),
         ),
-        hintStyle: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+        hintStyle: AppTextStyles.body.copyWith(color: const Color(0xFF718096)),
         labelStyle: AppTextStyles.label,
-        errorStyle: AppTextStyles.caption.copyWith(color: AppColors.errorText),
+        errorStyle: AppTextStyles.caption.copyWith(color: const Color(0xFFDC2626)),
       ),
       textTheme: TextTheme(
         displayLarge: AppTextStyles.pageTitle,

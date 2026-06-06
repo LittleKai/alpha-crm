@@ -18,22 +18,26 @@ import type {
 } from './local-chat-types.js';
 
 export class LocalChatStore {
-  private db: Database.Database;
+  private _db: Database.Database;
+
+  get db(): Database.Database {
+    return this._db;
+  }
 
   constructor(dbPath: string) {
     const dir = dirname(dbPath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this._db = new Database(dbPath);
+    this._db.pragma('journal_mode = WAL');
+    this._db.pragma('foreign_keys = ON');
     this._migrate();
   }
 
   /** Run idempotent schema migration */
   private _migrate(): void {
-    this.db.exec(`
+    this._db.exec(`
       CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         accountId TEXT NOT NULL,
@@ -104,6 +108,28 @@ export class LocalChatStore {
         value TEXT NOT NULL DEFAULT '',
         updatedAt TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        payloadJson TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        retryCount INTEGER NOT NULL DEFAULT 0,
+        nextRetryAt TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
+    `);
+
+    // ── Incremental migrations (idempotent) ──
+    // Add senderAvatarUrl column to messages if not present
+    try {
+      this.db.exec(`ALTER TABLE messages ADD COLUMN senderAvatarUrl TEXT NOT NULL DEFAULT ''`);
+    } catch {
+      // Column already exists — ignore
+    }
+    // Add index on providerMessageId for fast undo lookups
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_msg_provider_id
+        ON messages(providerMessageId) WHERE providerMessageId != '';
     `);
   }
 
@@ -199,11 +225,16 @@ export class LocalChatStore {
       if (existing) return existing.id;
     }
 
+    // For group chats, use groupName as display name; for 1:1, use senderName
+    const displayName = input.threadType === 'group'
+      ? (input.groupName || input.senderName || '')
+      : (input.senderName || '');
+
     const conversationId = this.findOrCreateConversation(
       input.accountId,
       input.threadId,
       input.threadType,
-      input.senderName,
+      displayName,
       input.avatarUrl || '',
     );
 
@@ -214,9 +245,9 @@ export class LocalChatStore {
       .prepare(
         `INSERT INTO messages
          (id, conversationId, accountId, threadId, threadType, direction,
-          senderId, senderName, content, messageType, providerMessageId,
+          senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
           zaloMsgId, status, isDeleted, receivedAt, sentAt, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, ?, ?, ?, '', 'delivered', 0,
+         VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?, '', 'delivered', 0,
                  ?, '', ?, ?)`,
       )
       .run(
@@ -227,6 +258,7 @@ export class LocalChatStore {
         input.threadType,
         input.senderId,
         input.senderName,
+        input.senderAvatarUrl || input.avatarUrl || '',
         input.content,
         input.messageType || 'text',
         input.providerMessageId || '',
@@ -241,10 +273,11 @@ export class LocalChatStore {
     }
 
     // Update conversation preview
+    const previewContent = input.content;
     const preview =
-      input.content.length > 100
-        ? input.content.slice(0, 100) + '...'
-        : input.content;
+      previewContent.length > 100
+        ? previewContent.slice(0, 100) + '...'
+        : previewContent;
     this.db
       .prepare(
         `UPDATE conversations
@@ -252,7 +285,14 @@ export class LocalChatStore {
              unreadCount = unreadCount + 1, updatedAt = ?
          WHERE id = ?`,
       )
-      .run(preview, input.timestamp || now, now, conversationId);
+      .run(JSON.stringify({
+        direction: 'inbound',
+        messageType: input.messageType || 'text',
+        content: preview,
+      }), input.timestamp || now, now, conversationId);
+
+    this.enqueueSyncAction('sync_message', { messageId: id });
+    this.enqueueSyncAction('sync_conversation', { conversationId });
 
     return id;
   }
@@ -280,9 +320,9 @@ export class LocalChatStore {
       .prepare(
         `INSERT INTO messages
          (id, conversationId, accountId, threadId, threadType, direction,
-          senderId, senderName, content, messageType, providerMessageId,
+          senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
           zaloMsgId, status, isDeleted, receivedAt, sentAt, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'outbound', '', '', ?, ?, '', '', 'queued', 0,
+         VALUES (?, ?, ?, ?, ?, 'outbound', '', '', '', ?, ?, '', '', 'queued', 0,
                  '', ?, ?, ?)`,
       )
       .run(
@@ -301,6 +341,27 @@ export class LocalChatStore {
     if (input.attachments && input.attachments.length > 0) {
       this._insertAttachments(id, input.attachments);
     }
+
+    // Update conversation preview
+    const previewContent = input.messageType === 'text' || !input.messageType ? input.content : `[${input.messageType}] ${input.content}`;
+    const preview =
+      previewContent.length > 100
+        ? previewContent.slice(0, 100) + '...'
+        : previewContent;
+    this.db
+      .prepare(
+        `UPDATE conversations
+         SET lastMessagePreview = ?, lastMessageAt = ?, updatedAt = ?, unreadCount = 0
+         WHERE id = ?`,
+      )
+      .run(JSON.stringify({
+        direction: 'outbound',
+        messageType: input.messageType || 'text',
+        content: preview,
+      }), now, now, conversationId);
+
+    this.enqueueSyncAction('sync_message', { messageId: id });
+    this.enqueueSyncAction('sync_conversation', { conversationId });
 
     return id;
   }
@@ -325,6 +386,24 @@ export class LocalChatStore {
       this.db
         .prepare('UPDATE messages SET status = ?, updatedAt = ? WHERE id = ?')
         .run(status, now, messageId);
+    }
+    this.enqueueSyncAction('sync_message', { messageId });
+  }
+
+  /**
+   * Update message status by providerMessageId.
+   * Useful for seen/delivered receipts from Zalo.
+   */
+  updateMessageStatusByProviderId(providerMessageId: string, status: string): void {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE messages SET status = ?, updatedAt = ?
+         WHERE providerMessageId = ? AND providerMessageId != '' RETURNING id`,
+      )
+      .get(status, now, providerMessageId) as { id: string } | undefined;
+    if (result) {
+      this.enqueueSyncAction('sync_message', { messageId: result.id });
     }
   }
 
@@ -426,6 +505,93 @@ export class LocalChatStore {
         'UPDATE messages SET isDeleted = 1, content = ?, updatedAt = ? WHERE id = ?',
       )
       .run('[Tin nhắn đã thu hồi]', now, messageId);
+    if (result.changes > 0) {
+      this.enqueueSyncAction('sync_message', { messageId });
+    }
+    return result.changes > 0;
+  }
+
+  /**
+   * Soft-delete a message by its Zalo provider message ID (for undo events).
+   * Returns true if any row was updated.
+   */
+  markMessageDeletedByProviderMsgId(providerMessageId: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE messages SET isDeleted = 1, content = ?, updatedAt = ?
+         WHERE providerMessageId = ? AND providerMessageId != '' RETURNING id`,
+      )
+      .get('[Tin nhắn đã thu hồi]', now, providerMessageId) as { id: string } | undefined;
+    if (result) {
+      this.enqueueSyncAction('sync_message', { messageId: result.id });
+      return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Conversation listing (paginated)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List conversations with optional filtering and pagination.
+   * Returns conversations ordered by lastMessageAt descending (most recent first).
+   */
+  listConversations(options: {
+    accountId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): { conversations: LocalConversation[]; total: number } {
+    const limit = Math.min(options.limit || 50, 200);
+    const offset = options.offset || 0;
+
+    let whereClause = '1=1';
+    const params: any[] = [];
+
+    if (options.accountId) {
+      whereClause += ' AND accountId = ?';
+      params.push(options.accountId);
+    }
+
+    if (options.search) {
+      whereClause += ' AND (displayName LIKE ? OR threadId LIKE ?)';
+      const searchPattern = `%${options.search}%`;
+      params.push(searchPattern, searchPattern);
+    }
+
+    const totalRow = this.db
+      .prepare(`SELECT COUNT(*) as c FROM conversations WHERE ${whereClause}`)
+      .get(...params) as { c: number };
+    const total = totalRow.c;
+
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM conversations WHERE ${whereClause}
+         ORDER BY lastMessageAt DESC LIMIT ? OFFSET ?`,
+      )
+      .all(...params, limit, offset) as any[];
+
+    return {
+      conversations: rows.map((r) => this._mapConversation(r)),
+      total,
+    };
+  }
+
+  /**
+   * Mark a conversation as read (reset unreadCount to 0).
+   */
+  markConversationRead(conversationId: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        'UPDATE conversations SET unreadCount = 0, updatedAt = ? WHERE id = ?',
+      )
+      .run(now, conversationId);
+    if (result.changes > 0) {
+      this.enqueueSyncAction('sync_conversation', { conversationId });
+    }
     return result.changes > 0;
   }
 
@@ -449,6 +615,50 @@ export class LocalChatStore {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
       )
       .run(key, value, now);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background Sync Queue
+  // ---------------------------------------------------------------------------
+
+  enqueueSyncAction(action: string, payload: any): void {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO sync_queue (id, action, payloadJson, status, retryCount, nextRetryAt, createdAt)
+         VALUES (?, ?, ?, 'pending', 0, ?, ?)`
+      )
+      .run(id, action, JSON.stringify(payload), now, now);
+  }
+
+  getPendingSyncActions(limit = 10): any[] {
+    const now = new Date().toISOString();
+    return this.db
+      .prepare(
+        `SELECT * FROM sync_queue
+         WHERE status = 'pending' AND nextRetryAt <= ?
+         ORDER BY createdAt ASC LIMIT ?`
+      )
+      .all(now, limit) as any[];
+  }
+
+  markSyncActionComplete(id: string): void {
+    this.db
+      .prepare(`UPDATE sync_queue SET status = 'completed' WHERE id = ?`)
+      .run(id);
+    // Optionally delete it:
+    // this.db.prepare(`DELETE FROM sync_queue WHERE id = ?`).run(id);
+  }
+
+  markSyncActionFailed(id: string, nextRetryAt: string): void {
+    this.db
+      .prepare(
+        `UPDATE sync_queue
+         SET retryCount = retryCount + 1, nextRetryAt = ?
+         WHERE id = ?`
+      )
+      .run(nextRetryAt, id);
   }
 
   // ---------------------------------------------------------------------------
@@ -521,6 +731,7 @@ export class LocalChatStore {
       direction: row.direction,
       senderId: row.senderId,
       senderName: row.senderName,
+      senderAvatarUrl: row.senderAvatarUrl || '',
       content: row.content,
       messageType: row.messageType,
       providerMessageId: row.providerMessageId,

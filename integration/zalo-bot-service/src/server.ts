@@ -28,6 +28,7 @@ import { N8nClient } from './integrations/n8n-client.js';
 import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
 import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
+import { startBackgroundSync } from './local-chat/sync-worker.js';
 
 const VERSION = '0.2.0';
 
@@ -1036,6 +1037,8 @@ function listenOnPort(port: number): void {
       console.log('[server] Zalo integration initialized successfully.');
       // Start outbound agent connection loops
       startAgentRunner();
+      // Start local-first background sync to cloud
+      startBackgroundSync();
     } catch (err) {
       console.error('[server] Failed to initialize Zalo integration:', err);
     }

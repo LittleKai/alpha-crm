@@ -43,6 +43,22 @@ export const accountPool = new Map<string, ZaloAccountInstance>();
 let loginError: string | null = null;
 let poolInitialized = false;
 
+// Undo (message recall) handler — set by the local-chat integration
+type UndoMessageHandler = (accountId: string, zaloMsgId: string) => void | Promise<void>;
+let _undoMessageHandler: UndoMessageHandler | null = null;
+
+export function setUndoMessageHandler(handler: UndoMessageHandler | null): void {
+  _undoMessageHandler = handler;
+}
+
+// Status (seen/delivered) handler — set by the local-chat integration
+type StatusMessageHandler = (accountId: string, zaloMsgId: string, status: 'seen' | 'delivered') => void | Promise<void>;
+let _statusMessageHandler: StatusMessageHandler | null = null;
+
+export function setStatusMessageHandler(handler: StatusMessageHandler | null): void {
+  _statusMessageHandler = handler;
+}
+
 export function setLoginPoolInitializedForTest(value: boolean): void {
   poolInitialized = value;
   if (value) loginError = null;
@@ -60,6 +76,29 @@ interface CacheEntry<T> {
 const friendsCache = new Map<string, CacheEntry<ZaloFriend[]>>();
 const groupsCache = new Map<string, CacheEntry<any[]>>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+// Group name cache — short TTL to keep group display names fresh
+const groupNameCache = new Map<string, { name: string; timestamp: number }>();
+const GROUP_NAME_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function resolveGroupName(api: API, groupId: string): Promise<string> {
+  const cached = groupNameCache.get(groupId);
+  if (cached && Date.now() - cached.timestamp < GROUP_NAME_CACHE_TTL_MS) {
+    return cached.name;
+  }
+  try {
+    const result = await (api as any).getGroupInfo(groupId);
+    const info = result?.gridInfoMap?.[groupId];
+    const name = info?.name || '';
+    if (name) {
+      groupNameCache.set(groupId, { name, timestamp: Date.now() });
+    }
+    return name;
+  } catch (err) {
+    console.warn(`[PersonalZcaChannel] getGroupInfo failed for ${groupId}:`, err);
+    return '';
+  }
+}
 
 // User Profile Cache to prevent rate limits
 interface UserProfile {
@@ -314,6 +353,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     senderId,
     senderName,
     avatarUrl,
+    senderAvatarUrl: avatarUrl, // per-sender avatar for group chat display
     content,
     messageType,
     providerMessageId: toStringValue(data.msgId ?? data.cliMsgId ?? data.messageId ?? data.id) ||
@@ -428,6 +468,9 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
     if (listener) {
       listener.removeAllListeners("friend_event");
       listener.removeAllListeners("message");
+      listener.removeAllListeners("undo");
+      listener.removeAllListeners("group_event");
+
       listener.on("friend_event", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
         console.log(`[PersonalZcaChannel - ${instance.label}] Event friend_event received:`, JSON.stringify(event));
@@ -450,24 +493,118 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
           }
         }
       });
+
+      // ── Undo (message recall) event ──
+      listener.on("undo", async (data: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const msgId = data?.data?.msgId ?? data?.msgId;
+        if (msgId) {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Undo event for msgId: ${msgId}`);
+          // Delegate to the local chat store via the undo handler
+          if (_undoMessageHandler) {
+            await _undoMessageHandler(instance.uId, String(msgId));
+          }
+        }
+      });
+
+      // ── Group events (member add/remove, rename) ──
+      listener.on("group_event", async (event: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const groupId = event?.data?.groupId ?? event?.threadId ?? '';
+        const subType = event?.data?.updateType ?? event?.subType ?? '';
+        console.log(
+          `[PersonalZcaChannel - ${instance.label}] Group event: groupId=${groupId}, subType=${subType}`,
+          JSON.stringify(event).substring(0, 300),
+        );
+        // Invalidate group name cache on rename/update events
+        if (groupId) {
+          groupNameCache.delete(groupId);
+          groupsCache.delete(instance.uId);
+        }
+      });
+
+      // ── Seen, Delivered, Typing events ──
+      listener.on("seen_messages", async (data: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const msgId = data?.data?.msgId ?? data?.msgId;
+        if (msgId) {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Seen event for msgId: ${msgId}`);
+          if (_statusMessageHandler) await _statusMessageHandler(instance.uId, String(msgId), 'seen');
+        }
+      });
+
+      listener.on("delivered_messages", async (data: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const msgId = data?.data?.msgId ?? data?.msgId;
+        if (msgId) {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Delivered event for msgId: ${msgId}`);
+          if (_statusMessageHandler) await _statusMessageHandler(instance.uId, String(msgId), 'delivered');
+        }
+      });
+
+      listener.on("typing", async (data: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const threadId = data?.data?.threadId ?? data?.threadId ?? data?.uidFrom;
+        const isTyping = data?.data?.isTyping ?? data?.isTyping;
+        console.log(`[PersonalZcaChannel - ${instance.label}] Typing event in threadId: ${threadId}, isTyping: ${isTyping}`);
+        // Can be forwarded to frontend via local API/socket in the future
+      });
+
+      listener.on("old_messages", async (event: any) => {
+        instance.lastEventAt = new Date().toISOString();
+        const msgs = event?.data?.msgs ?? event?.messages ?? [];
+        console.log(`[PersonalZcaChannel - ${instance.label}] Received ${msgs.length} old messages.`);
+        for (const msg of msgs) {
+          try {
+            const inbound = normalizeInboundMessage(instance, msg);
+            if (!inbound) continue;
+            
+            if (inbound.senderId && (!inbound.avatarUrl || !inbound.senderName)) {
+               const profile = await getOrFetchUserProfile(instance, inbound.senderId);
+               if (profile) {
+                 inbound.avatarUrl = profile.avatarUrl;
+                 inbound.senderAvatarUrl = profile.avatarUrl;
+                 inbound.senderName = inbound.senderName || profile.displayName;
+               }
+            }
+            if (inbound.threadType === 'group' && inbound.threadId) {
+               const groupName = await resolveGroupName(instance.api, inbound.threadId);
+               if (groupName) inbound.groupName = groupName;
+            }
+            await emitInboundMessage(inbound);
+          } catch (err) {
+            console.error(`[PersonalZcaChannel - ${instance.label}] Error processing old message:`, err);
+          }
+        }
+      });
+
       listener.on("message", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
         const inbound = normalizeInboundMessage(instance, event);
         if (!inbound) return;
 
-        // Fetch missing sender avatar or display name
+        // Fetch missing sender avatar or display name from API
         if (inbound.senderId && (!inbound.avatarUrl || !inbound.senderName)) {
           const profile = await getOrFetchUserProfile(instance, inbound.senderId);
           if (profile) {
             inbound.avatarUrl = profile.avatarUrl;
+            inbound.senderAvatarUrl = profile.avatarUrl;
             if (!inbound.senderName) {
               inbound.senderName = profile.displayName;
             }
           }
         }
 
+        // Resolve group display name for group threads
+        if (inbound.threadType === 'group' && inbound.threadId) {
+          const groupName = await resolveGroupName(instance.api, inbound.threadId);
+          if (groupName) {
+            inbound.groupName = groupName;
+          }
+        }
+
         console.log(
-          `[PersonalZcaChannel - ${instance.label}] Message event from ${inbound.senderId} (${inbound.messageType}, ${inbound.content.length} chars).`,
+          `[PersonalZcaChannel - ${instance.label}] Message event from ${inbound.senderId} (${inbound.messageType}, ${inbound.content.length} chars)${inbound.groupName ? ` in group "${inbound.groupName}"` : ''}.`,
         );
         await emitInboundMessage(inbound);
       });
@@ -489,6 +626,8 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
       listener.stop();
       listener.removeAllListeners("friend_event");
       listener.removeAllListeners("message");
+      listener.removeAllListeners("undo");
+      listener.removeAllListeners("group_event");
       instance.listenerRunning = false;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
     }

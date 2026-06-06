@@ -64,6 +64,10 @@ export interface ZaloInboundMessageEvent {
   senderId: string;
   senderName?: string;
   avatarUrl?: string;
+  /** Per-sender avatar URL (especially useful for group chats) */
+  senderAvatarUrl?: string;
+  /** Group display name (only set for group threads) */
+  groupName?: string;
   content: string;
   messageType:
     | 'text'

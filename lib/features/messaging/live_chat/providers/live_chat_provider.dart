@@ -51,6 +51,7 @@ class ChatMessage {
   final String id;
   final String senderId;
   final String senderName;
+  final String? senderAvatarUrl;
   final String message;
   final String direction;
   final String status;
@@ -64,6 +65,7 @@ class ChatMessage {
     required this.id,
     required this.senderId,
     required this.senderName,
+    this.senderAvatarUrl,
     required this.message,
     required this.direction,
     required this.status,
@@ -81,6 +83,7 @@ class ChatMessage {
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       senderId: (json['senderId'] ?? '').toString(),
       senderName: (json['senderName'] ?? '').toString(),
+      senderAvatarUrl: json['senderAvatarUrl']?.toString(),
       message: _stringFrom(json, const ['content', 'text', 'message', 'body']),
       direction: (json['direction'] ?? 'inbound').toString(),
       status: (json['status'] ?? '').toString(),

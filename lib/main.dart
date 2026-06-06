@@ -59,6 +59,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       'system' => ThemeMode.system,
       _ => ThemeMode.light,
     };
+
+    // Set isDarkMode early so that the widget tree has the correct state during build evaluation
+    final isDark = switch (themeMode) {
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
+      ThemeMode.system =>
+        WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
+    };
+    AppColors.isDarkMode = isDark;
+
     return MaterialApp.router(
       title: 'Alpha CRM',
       debugShowCheckedModeBanner: false,
@@ -67,13 +77,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
-        final isDark = switch (themeMode) {
+        final currentIsDark = switch (themeMode) {
           ThemeMode.dark => true,
           ThemeMode.light => false,
           ThemeMode.system =>
             MediaQuery.platformBrightnessOf(context) == Brightness.dark,
         };
-        AppColors.isDarkMode = isDark;
+        AppColors.isDarkMode = currentIsDark;
         return AppLockOverlay(child: child ?? const SizedBox.shrink());
       },
     );

@@ -27,7 +27,7 @@
   "allowTestModeOnlyForRiskyActions": true,
   "zaloBackendBaseUrl": "http://127.0.0.1:8787",
   "zaloWebhookPath": "/api/zalo/webhook",
-  "appThemeMode": "dark",
+  "appThemeMode": "light",
   "accountNicknames": {},
   "localFirstLiveChat": false,
   "localBridgeBaseUrl": "http://127.0.0.1:8787",

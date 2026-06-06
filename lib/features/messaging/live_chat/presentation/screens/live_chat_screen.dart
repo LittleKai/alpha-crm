@@ -1188,9 +1188,17 @@ class _MessageBubble extends ConsumerWidget {
 
     Widget avatarWidget;
     if (!isMine) {
+      final isGroup = conversation.threadType == 'group';
+      final avatarUrl = isGroup && message.senderAvatarUrl != null && message.senderAvatarUrl!.isNotEmpty 
+          ? message.senderAvatarUrl! 
+          : conversation.customerAvatar;
+      final fallbackText = isGroup && message.senderName.isNotEmpty 
+          ? message.senderName 
+          : conversation.customerName;
+
       avatarWidget = _buildAvatar(
-        url: conversation.customerAvatar,
-        fallbackText: conversation.customerName,
+        url: avatarUrl,
+        fallbackText: fallbackText,
         radius: 13,
       );
     } else {

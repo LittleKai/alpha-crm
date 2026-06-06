@@ -1,44 +1,58 @@
-Hãy refactor Alpha CRM Live Chat sang kiến trúc Phương án : Local-first, Cloud minimal.
+# Yêu cầu: Nghiên cứu, so sánh và cải tiến toàn diện hệ thống Live Chat & API dựa trên dự án ZaloCRM
 
-Mục tiêu:
-- Cloud backend alpha-studio-backend chỉ lưu metadata tối thiểu cho CRM Live Chat.
-- Không lưu full nội dung tin nhắn trên cloud nữa.
-- Local Zalo bridge trong tools/alpha-crm/integration/zalo-bot-service lưu toàn bộ message history vào local DB.
-- Flutter Alpha CRM ưu tiên lấy full messages từ local bridge thay vì cloud.
+## 1. Ngữ cảnh & Mục tiêu
+Chúng ta cần cải tiến toàn diện tính năng nhắn tin Live Chat (phần xử lý tin nhắn inbound, outbound, cấu trúc database lưu trữ tin nhắn, thiết kế API và cơ chế đồng bộ) của dự án hiện tại (**Alpha CRM** tại `d:\Dev\NodeJS\alpha-studio\tools\alpha-crm`) bằng cách đối chiếu và áp dụng các giải pháp tối ưu từ dự án tham chiếu (**ZaloCRM** tại `D:\Dev\2.reference_pj\Zalo-ref\ZaloCRM`).
 
-Yêu cầu cụ thể:
-1. Cloud backend:
-   - Giữ API /crm/conversations để trả danh sách hội thoại nhẹ.
-   - Chỉ lưu các field tối thiểu: conversationId, zaloThreadId, threadType, displayName, avatarUrl, lastMessagePreview, lastMessageAt, unreadCount, managedGroup flag, bridgeDeviceId, bridgeOnline.
-   - Không lưu body/full payload/raw message/media base64 vào CrmMessage trên cloud.
-   - Endpoint /crm/conversations/:id/messages chỉ trả lỗi/empty hoặc redirect logic sang local bridge, tùy cách phù hợp với code hiện tại.
-   - Giữ command queue để local bridge poll lệnh gửi tin.
+Mục tiêu là xây dựng một hệ thống Live Chat ổn định, nhận diện đúng các loại hội thoại (User và Group), xử lý chuẩn xác mọi sự kiện thời gian thực (realtime events) và đồng bộ mượt mà giữa local database và cloud.
 
-2. Local Zalo bridge:
-   - Thêm local SQLite DB hoặc DB nhẹ tương đương để lưu conversations, messages, attachments, sync_state.
-   - Khi nhận inbound message từ Zalo, lưu full message vào local DB trước.
-   - Chỉ sync metadata/summary lên cloud.
-   - Cung cấp local API:
-     GET /local/conversations/:id/messages?before=&after=&limit=
-     POST /local/messages/send
-     GET /local/health
-   - Đảm bảo gửi tin vẫn đi qua ZCA/local bridge.
+---
 
-3. Flutter Alpha CRM:
-   - Sửa live_chat_repository.dart để:
-     - Lấy danh sách conversations từ cloud.
-     - Khi mở hội thoại, lấy messages từ local bridge.
-     - Nếu local bridge offline, hiển thị trạng thái “Bridge offline, chỉ xem được metadata/recent summary”.
-   - Thêm cấu hình localBridgeBaseUrl.
-   - Không phụ thuộc cloud message history nữa.
+## 2. Các khía cạnh kỹ thuật cần đối chiếu và nâng cấp
 
-4. Migration:
-   - Không xóa code cũ ngay; tách bằng feature flag LOCAL_FIRST_LIVE_CHAT=true.
-   - Viết fallback an toàn nếu local bridge chưa sẵn sàng.
-   - Cập nhật README/ENV mẫu.
-   - Chạy test/lint/build nếu có.
+### A. Cách xử lý thông tin nhận tới (Inbound Realtime Events)
+*   **Tham chiếu ZaloCRM:** File [zalo-listener-factory.ts](file:///D:/Dev/2.reference_pj/Zalo-ref/ZaloCRM/backend/src/modules/zalo/zalo-listener-factory.ts) và [message-handler.ts](file:///D:/Dev/2.reference_pj/Zalo-ref/ZaloCRM/backend/src/modules/chat/message-handler.ts).
+*   **Yêu cầu cải tiến:**
+    *   **Phân loại hội thoại (Thread Type):** Nhận diện chính xác tin nhắn nhóm (`message.type === 1` - Group) và tin nhắn cá nhân (`message.type === 0` - User) trực tiếp bằng giá trị số, tránh lỗi import Enum `ThreadType` từ `zca-js` ở runtime dẫn đến việc tất cả tin nhắn nhóm bị phân tách thành chat 1:1.
+    *   **Đồng bộ Metadata người gửi:** Xử lý và cập nhật tự động tên hiển thị (`senderName`/`fullName`) và avatar của người gửi khi nhận được tin nhắn mới.
+    *   **Xử lý các sự kiện phụ:** Nghiên cứu cách ZaloCRM bắt và đồng bộ các sự kiện Socket.io/Realtime khác từ `zca-js` như:
+        *   Sự kiện thu hồi tin nhắn (`undo`) để cập nhật trạng thái xóa trong DB.
+        *   Sự kiện trạng thái đã xem (`seen_messages`) và đã phát (`delivered_messages`).
+        *   Sự kiện đang gõ chữ (`typing`).
+        *   Sự kiện nhóm (`group_event` - thêm/xóa thành viên, đổi tên nhóm) và sự kiện bạn bè (`friend_event`).
 
-Trước khi sửa code:
-- Phân tích kiến trúc hiện tại.
-- Liệt kê file cần sửa.
-- Sau đó thực hiện từng bước nhỏ, commit-style summary cuối cùng.
+### B. Cách thiết kế và xử lý API gửi tin nhắn (Outbound Messages & Media)
+*   **Tham chiếu ZaloCRM:** File [chat-routes.ts](file:///D:/Dev/2.reference_pj/Zalo-ref/ZaloCRM/backend/src/modules/chat/chat-routes.ts) và [zalo-message-helpers.ts](file:///D:/Dev/2.reference_pj/Zalo-ref/ZaloCRM/backend/src/modules/zalo/zalo-message-helpers.ts).
+*   **Yêu cầu cải tiến:**
+    *   **Định dạng Payload tin nhắn:** So sánh cách ZaloCRM đóng gói và gửi đi các loại định dạng tin nhắn khác nhau (Văn bản thường, Hình ảnh, Tài liệu/File đính kèm, Sticker, Link preview có thẻ mô tả) qua API `sendMessage` của `zca-js`.
+    *   **Xử lý lỗi gửi tin:** Cách ZaloCRM bắt lỗi gửi tin không thành công (ví dụ: lỗi chặn tương tác, quá hạn, spam...) từ `zca-js` để đánh dấu trạng thái tin nhắn lỗi (`failed`) trên DB cục bộ và hiển thị cảnh báo lên UI cho Operator biết.
+    *   **Thu hồi tin nhắn (Recall):** Chuẩn hóa luồng gọi API thu hồi tin nhắn (`undoMessage` / `undo`).
+
+### C. Quản lý hội thoại và đồng bộ (Conversations & Sync Flow)
+*   **Tham chiếu ZaloCRM:** Cách phân chia cấu trúc dữ liệu giữa `Contact` (người liên hệ/nhóm), `Conversation` (phiên hội thoại) và `Message` (các tin nhắn chi tiết).
+*   **Yêu cầu cải tiến:**
+    *   **Gom nhóm hội thoại:** Đảm bảo mọi tin nhắn trong nhóm chat được liên kết chặt chẽ vào cùng một ID hội thoại (`conversationId` của nhóm) dựa trên `externalThreadId` (chính là `groupId`), trong khi vẫn lưu đúng ID thành viên gửi (`senderUid`).
+    *   **Phân trang tin nhắn cũ (Pagination / Load Older):** Nghiên cứu phương pháp lấy tin nhắn cũ của ZaloCRM khi người dùng cuộn lên trên khung chat (sử dụng API lấy lịch sử trò chuyện `getGroupChatHistory` hoặc `requestOldMessages` của listener).
+    *   **Đồng bộ Offline/Cache:** Xem cách ZaloCRM lưu trữ cơ sở dữ liệu (PostgreSQL qua Prisma) để hoàn thiện cơ chế local-first SQLite (`better-sqlite3`) trong Zalo Bot Service của dự án hiện tại, đảm bảo dữ liệu offline hoạt động ổn định và tự động sync lên cloud khi có mạng.
+
+---
+
+## 3. Các tệp tin đích cần tác động
+
+### Phía Backend (Node.js - Zalo Bot Service)
+1.  **Zalo Adapter:** [personal-zca-channel.ts](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts) - Nơi lắng nghe sự kiện Zalo và chuẩn hóa tin nhắn.
+2.  **Local Database Store:** [local-chat-store.ts](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/src/local-chat/local-chat-store.ts) - File quản lý SQLite cục bộ để lưu trữ tạm thời tin nhắn và hội thoại.
+3.  **Local API Router:** [local-chat-api.ts](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/src/local-chat/local-chat-api.ts) - Các route cung cấp API cho Flutter Frontend.
+4.  **Main Server:** [server.ts](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/src/server.ts) - Cấu trúc định tuyến API chung của bot service.
+
+### Phía Frontend (Flutter)
+1.  **Live Chat Provider/Notifier:** [live_chat_provider.dart](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/features/messaging/live_chat/providers/live_chat_provider.dart) - Trực tiếp quản lý trạng thái tải hội thoại, tin nhắn, và phân trang.
+2.  **Live Chat Screen (UI):** [live_chat_screen.dart](file:///d:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart) - Hiển thị danh sách chat, bong bóng chat nhóm (bao gồm hiển thị avatar/tên từng thành viên gửi tin trong nhóm).
+
+---
+
+## 4. Kế hoạch triển khai đề xuất
+1.  **Nghiên cứu & Đối chiếu (Research):** Đi qua các file backend của ZaloCRM để lập bản đồ ánh xạ chi tiết cách xử lý tin nhắn từ Zalo vào DB và cách API trả về thông tin.
+2.  **Refactor Node.js Backend:** Cập nhật hàm xử lý sự kiện trong `personal-zca-channel.ts` và database schema/truy vấn trong `local-chat-store.ts`.
+3.  **Cập nhật API Endpoints:** Hoàn thiện các endpoint lấy danh sách tin nhắn cũ, gửi tin nhắn đa phương tiện, trạng thái đã xem (seen).
+4.  **Đồng bộ Frontend Flutter:** Cập nhật Live Chat Provider trên Flutter để tiêu thụ các cấu trúc dữ liệu mới từ Local API (nhóm chat, tên/avatar người gửi cụ thể).
+5.  **Kiểm thử thực tế:** Tạo/mở nhóm chat thực tế trên Zalo, cho nhiều tài khoản chat vào nhóm và kiểm tra xem tin nhắn có hiển thị chung một thread trên CRM hay không, cũng như kiểm tra các tính năng gửi file/sticker/ảnh/thu hồi tin nhắn.

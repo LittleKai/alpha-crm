@@ -28,6 +28,7 @@ export interface LocalMessage {
   direction: 'inbound' | 'outbound';
   senderId: string;
   senderName: string;
+  senderAvatarUrl: string;
   content: string;
   messageType: string;
   providerMessageId: string;
@@ -60,6 +61,10 @@ export interface InboundMessageInput {
   senderId: string;
   senderName: string;
   avatarUrl?: string;
+  /** Per-sender avatar URL (especially for group chats) */
+  senderAvatarUrl?: string;
+  /** Group display name (only set for group threads) */
+  groupName?: string;
   content: string;
   messageType: string;
   providerMessageId: string;
