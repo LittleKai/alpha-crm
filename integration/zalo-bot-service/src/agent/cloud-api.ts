@@ -21,236 +21,262 @@ export interface PairingResponse {
   expiresAt: string;
 }
 
-/**
- * Helper to call cloud APIs with error handling
- */
-async function callCloudApi(path: string, options: RequestInit): Promise<any> {
-  const url = `${config.crmCloudApiUrl}${path}`;
-  try {
-    const res = await fetch(url, options);
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({ message: `HTTP status ${res.status}` }));
-      throw new Error(errBody.message || `Lỗi API Cloud (${res.status})`);
-    }
-    const body: any = await res.json();
-    if (!body.success) {
-      throw new Error(body.message || 'Lỗi API Cloud không thành công.');
-    }
-    return body.data;
-  } catch (err: any) {
-    console.error(`[cloud-api] Call to ${path} failed:`, err.message);
-    throw err;
+export class CloudApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+    public readonly data: unknown = null,
+  ) {
+    super(message);
+    this.name = 'CloudApiError';
   }
 }
 
-/**
- * Registers device against active CRM subscription using User's JWT token
- */
+export function isDeviceRevokedError(error: unknown): boolean {
+  return error instanceof CloudApiError
+    && error.status === 403
+    && error.code === 'DEVICE_REVOKED';
+}
+
+async function callCloudApi(path: string, options: RequestInit): Promise<any> {
+  const url = `${config.crmCloudApiUrl}${path}`;
+  try {
+    const response = await fetch(url, options);
+    const body: any = await response.json().catch(() => null);
+    if (!response.ok || !body?.success) {
+      throw new CloudApiError(
+        body?.message || `Cloud API error (${response.status})`,
+        response.status,
+        body?.code,
+        body?.data,
+      );
+    }
+    return body.data;
+  } catch (error: any) {
+    console.error(`[cloud-api] Call to ${path} failed:`, error.message);
+    throw error;
+  }
+}
+
+export async function verifyCloudIdentity(userJwt: string): Promise<{ userId: string }> {
+  const data = await callCloudApi('/auth/me', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${userJwt}`,
+    },
+  });
+  const user = data?.user ?? data;
+  const userId = user?._id ?? user?.id;
+  if (typeof userId !== 'string' || userId.length === 0) {
+    throw new CloudApiError(
+      'Cloud identity response is missing a user ID.',
+      502,
+      'INVALID_IDENTITY_RESPONSE',
+    );
+  }
+  return { userId };
+}
+
 export async function registerDevice(
   userJwt: string,
   displayName: string,
-  machineFingerprint: string
+  machineFingerprint: string,
 ): Promise<{ deviceId: string; agentSecret: string }> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${userJwt}`
-  };
-  const body = {
-    machineFingerprint,
-    displayName,
-    platform: 'windows'
-  };
   return callCloudApi('/crm/devices/register', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${userJwt}`,
+    },
+    body: JSON.stringify({
+      machineFingerprint,
+      displayName,
+      platform: 'windows',
+      agentVersion: '0.2.0',
+    }),
   });
 }
 
-/**
- * Sends online heartbeat to cloud backend
- */
+export async function forceReplaceDevice(
+  userJwt: string,
+  displayName: string,
+  machineFingerprint: string,
+): Promise<{ deviceId: string; agentSecret: string }> {
+  return callCloudApi('/crm/devices/force-logout-old', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${userJwt}`,
+    },
+    body: JSON.stringify({
+      machineFingerprint,
+      displayName,
+      platform: 'windows',
+      agentVersion: '0.2.0',
+    }),
+  });
+}
+
+export async function disableDevice(userJwt: string, deviceId: string): Promise<void> {
+  await callCloudApi(`/crm/devices/${deviceId}/disable`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${userJwt}`,
+    },
+  });
+}
+
 export async function sendHeartbeat(
   deviceId: string,
   agentSecret: string,
-  statusPayload: { status: string; appVersion?: string; agentVersion?: string; lastError?: string }
+  statusPayload: {
+    status: string;
+    appVersion?: string;
+    agentVersion?: string;
+    lastError?: string;
+  },
 ): Promise<any> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
   return callCloudApi('/crm/agent/heartbeat', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(statusPayload)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify(statusPayload),
   });
 }
 
-/**
- * Polls for the next queued command for this agent device
- */
 export async function fetchNextCommand(
   deviceId: string,
-  agentSecret: string
+  agentSecret: string,
 ): Promise<CommandResponse | null> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
   return callCloudApi('/crm/agent/commands/next', {
     method: 'POST',
-    headers
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
   });
 }
 
-/**
- * Reports results of executing a command
- */
 export async function reportCommandResult(
   deviceId: string,
   agentSecret: string,
   commandId: string,
   success: boolean,
   result?: any,
-  errorMessage?: string
+  errorMessage?: string,
 ): Promise<any> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
-  const body = {
-    success,
-    result,
-    errorMessage
-  };
   return callCloudApi(`/crm/agent/commands/${commandId}/result`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify({ success, result, errorMessage }),
   });
 }
 
-/**
- * Reports intermediate progress of a running command
- */
 export async function reportCommandProgress(
   deviceId: string,
   agentSecret: string,
   commandId: string,
-  progressData: any
+  progressData: any,
 ): Promise<any> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
-  const body = {
-    success: true,
-    result: {
-      status: 'running',
-      ...progressData
-    }
-  };
   return callCloudApi(`/crm/agent/commands/${commandId}/result`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify({
+      success: true,
+      result: {
+        status: 'running',
+        ...progressData,
+      },
+    }),
   });
 }
 
 export async function reportInboundMessage(
   deviceId: string,
   agentSecret: string,
-  event: any
+  event: any,
 ): Promise<any> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
   return callCloudApi('/crm/agent/events/message', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(event)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify(event),
   });
 }
 
-/**
- * Reports inbound message metadata only (local-first mode).
- * Omits full content, attachments, raw payload, and media data.
- */
 export async function reportInboundMessageMetadata(
   deviceId: string,
   agentSecret: string,
-  event: any
+  event: any,
 ): Promise<any> {
   const preview = typeof event.content === 'string'
     ? event.content.slice(0, 100)
     : '';
-  const metadata = {
-    accountId: event.accountId,
-    threadId: event.threadId,
-    threadType: event.threadType,
-    displayName: event.senderName || '',
-    avatarUrl: event.avatarUrl || '',
-    lastMessagePreview: preview,
-    lastMessageAt: event.timestamp || new Date().toISOString(),
-    unreadCountDelta: 1,
-    messageType: event.messageType || 'text',
-    bridgeDeviceId: deviceId,
-    providerMessageId: event.providerMessageId || '',
-    localFirst: true,
-  };
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
   return callCloudApi('/crm/agent/events/message', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(metadata)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify({
+      accountId: event.accountId,
+      threadId: event.threadId,
+      threadType: event.threadType,
+      displayName: event.senderName || '',
+      avatarUrl: event.avatarUrl || '',
+      lastMessagePreview: preview,
+      lastMessageAt: event.timestamp || new Date().toISOString(),
+      unreadCountDelta: 1,
+      messageType: event.messageType || 'text',
+      bridgeDeviceId: deviceId,
+      providerMessageId: event.providerMessageId || '',
+      localFirst: true,
+    }),
   });
 }
 
 export async function fetchManagedGroups(
   deviceId: string,
-  agentSecret: string
+  agentSecret: string,
 ): Promise<ManagedGroupResponse[]> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
   return callCloudApi('/crm/agent/groups/managed', {
     method: 'GET',
-    headers
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
   });
 }
 
-/**
- * Requests a new pairing session from the cloud backend
- */
 export async function startPairingSession(
   deviceId: string,
-  agentSecret: string
+  agentSecret: string,
 ): Promise<PairingResponse> {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-agent-device-id': deviceId,
-    'x-agent-secret': agentSecret
-  };
-  // Wait! The /pairing/start route requires standard user auth in Phase 1,
-  // but let's see if we can support calling it with agent auth in the backend.
-  // Let's call /crm/pairing/start with deviceId in the body and agent auth headers,
-  // which is extremely convenient for the Windows app/agent!
-  const body = { deviceId };
   return callCloudApi('/crm/pairing/start', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify({ deviceId }),
   });
 }

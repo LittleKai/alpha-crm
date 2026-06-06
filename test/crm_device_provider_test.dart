@@ -49,4 +49,13 @@ void main() {
 
     expect(payload, {'pairingCode': '123456'});
   });
+
+  test('mobile remote disconnect never targets the PC lifecycle route', () {
+    final request = buildRemoteDisconnectRequest(mobileUserId: 'mobile-user');
+
+    expect(request.path, '/crm/pairing/revoke');
+    expect(request.path, isNot(contains('/devices/')));
+    expect(request.path, isNot(contains('/disable')));
+    expect(request.body, {'mobileUserId': 'mobile-user'});
+  });
 }

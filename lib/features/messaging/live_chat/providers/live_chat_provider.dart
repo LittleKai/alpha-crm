@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../../settings/providers/settings_provider.dart';
 import '../data/live_chat_repository.dart';
 import '../data/live_chat_cache.dart';
 import '../data/live_chat_local_bridge_api.dart';
+import '../data/live_chat_event.dart';
 
 const Object _unset = Object();
 
@@ -59,6 +61,12 @@ class ChatMessage {
   final String contentType;
   final bool isDeleted;
   final String? zaloMsgId;
+  final String? clientMessageId;
+  final String errorText;
+  final Map<String, dynamic>? quote;
+  final List<Map<String, dynamic>> reactions;
+  final List<Map<String, dynamic>> receipts;
+  final Map<String, dynamic> metadata;
   final dynamic attachments;
 
   const ChatMessage({
@@ -73,10 +81,47 @@ class ChatMessage {
     this.contentType = 'text',
     this.isDeleted = false,
     this.zaloMsgId,
+    this.clientMessageId,
+    this.errorText = '',
+    this.quote,
+    this.reactions = const [],
+    this.receipts = const [],
+    this.metadata = const {},
     this.attachments,
   });
 
   bool get isMine => direction == 'outbound';
+
+  ChatMessage copyWith({
+    String? id,
+    String? status,
+    String? errorText,
+    String? zaloMsgId,
+    bool? isDeleted,
+    List<Map<String, dynamic>>? reactions,
+    List<Map<String, dynamic>>? receipts,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      senderId: senderId,
+      senderName: senderName,
+      senderAvatarUrl: senderAvatarUrl,
+      message: message,
+      direction: direction,
+      status: status ?? this.status,
+      timestamp: timestamp,
+      contentType: contentType,
+      isDeleted: isDeleted ?? this.isDeleted,
+      zaloMsgId: zaloMsgId ?? this.zaloMsgId,
+      clientMessageId: clientMessageId,
+      errorText: errorText ?? this.errorText,
+      quote: quote,
+      reactions: reactions ?? this.reactions,
+      receipts: receipts ?? this.receipts,
+      metadata: metadata,
+      attachments: attachments,
+    );
+  }
 
   static ChatMessage fromJson(Map<String, dynamic> json) {
     return ChatMessage(
@@ -93,7 +138,15 @@ class ChatMessage {
       contentType: (json['messageType'] ?? json['contentType'] ?? 'text')
           .toString(),
       isDeleted: json['isDeleted'] == true,
-      zaloMsgId: json['zaloMsgId']?.toString(),
+      zaloMsgId: (json['zaloMsgId'] ?? json['providerMessageId'])?.toString(),
+      clientMessageId: json['clientMessageId']?.toString(),
+      errorText: (json['errorText'] ?? json['error'] ?? '').toString(),
+      quote: _mapFromJsonField(json['quote'] ?? json['quoteJson']),
+      reactions: _mapListFromJsonField(json['reactions']),
+      receipts: _mapListFromJsonField(json['receipts']),
+      metadata:
+          _mapFromJsonField(json['metadata'] ?? json['metadataJson']) ??
+          const {},
       attachments: json['attachments'],
     );
   }
@@ -226,6 +279,13 @@ class LiveChatState {
   final bool isBridgeOffline;
   final bool isUsingCachedMessages;
   final String messageSource;
+  final bool realtimeConnected;
+  final Set<String> typingUserIds;
+  final String draftText;
+  final ChatMessage? replyingTo;
+  final List<ChatMessage> messageSearchResults;
+  final bool isChatFocused;
+  final int unfocusedNewMessageCount;
 
   const LiveChatState({
     this.selectedAccount,
@@ -243,6 +303,13 @@ class LiveChatState {
     this.isBridgeOffline = false,
     this.isUsingCachedMessages = false,
     this.messageSource = 'cloudLegacy',
+    this.realtimeConnected = false,
+    this.typingUserIds = const {},
+    this.draftText = '',
+    this.replyingTo,
+    this.messageSearchResults = const [],
+    this.isChatFocused = true,
+    this.unfocusedNewMessageCount = 0,
   });
 
   factory LiveChatState.initial() {
@@ -262,6 +329,13 @@ class LiveChatState {
       isBridgeOffline: false,
       isUsingCachedMessages: false,
       messageSource: 'cloudLegacy',
+      realtimeConnected: false,
+      typingUserIds: {},
+      draftText: '',
+      replyingTo: null,
+      messageSearchResults: [],
+      isChatFocused: true,
+      unfocusedNewMessageCount: 0,
     );
   }
 
@@ -281,6 +355,13 @@ class LiveChatState {
     bool? isBridgeOffline,
     bool? isUsingCachedMessages,
     String? messageSource,
+    bool? realtimeConnected,
+    Set<String>? typingUserIds,
+    String? draftText,
+    Object? replyingTo = _unset,
+    List<ChatMessage>? messageSearchResults,
+    bool? isChatFocused,
+    int? unfocusedNewMessageCount,
   }) {
     return LiveChatState(
       selectedAccount: selectedAccount == _unset
@@ -305,12 +386,26 @@ class LiveChatState {
       isUsingCachedMessages:
           isUsingCachedMessages ?? this.isUsingCachedMessages,
       messageSource: messageSource ?? this.messageSource,
+      realtimeConnected: realtimeConnected ?? this.realtimeConnected,
+      typingUserIds: typingUserIds ?? this.typingUserIds,
+      draftText: draftText ?? this.draftText,
+      replyingTo: replyingTo == _unset
+          ? this.replyingTo
+          : replyingTo as ChatMessage?,
+      messageSearchResults: messageSearchResults ?? this.messageSearchResults,
+      isChatFocused: isChatFocused ?? this.isChatFocused,
+      unfocusedNewMessageCount:
+          unfocusedNewMessageCount ?? this.unfocusedNewMessageCount,
     );
   }
 }
 
 class LiveChatNotifier extends StateNotifier<LiveChatState> {
   final LiveChatRepository _repository;
+  StreamSubscription<LiveChatEvent>? _eventSubscription;
+  Timer? _eventRefreshDebounce;
+  Timer? _draftDebounce;
+  DateTime _lastTypingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   LiveChatNotifier(this._repository) : super(LiveChatState.initial()) {
     loadAccounts();
@@ -370,6 +465,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       );
       if (loadSelectedMessages && conversations.isNotEmpty) {
         await loadMessages(selected.id);
+        _subscribeToEvents(selected);
+        await _loadDraft(selected);
       }
     } else {
       state = state.copyWith(
@@ -461,13 +558,31 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       ),
       hasMoreMessages: true,
       isUsingCachedMessages: cachedMessages.isNotEmpty,
+      replyingTo: null,
+      typingUserIds: <String>{},
     );
-    await _repository.clearFailedMessages(conversation.id);
+    _subscribeToEvents(conversation);
+    await _loadDraft(conversation);
     await Future.wait([
       loadMessages(conversation.id),
       _repository.markRead(conversation.id),
       fetchCrmCustomerForConversation(conversation),
     ]);
+  }
+
+  Future<void> _loadDraft(Conversation conversation) async {
+    try {
+      final content = await _repository.getDraft(
+        ConversationTarget(
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          threadType: conversation.threadType,
+        ),
+      );
+      if (state.selectedConversation?.id == conversation.id) {
+        state = state.copyWith(draftText: content);
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchCrmCustomerForConversation(
@@ -638,7 +753,6 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final messages = (response['data'] as List)
         .whereType<Map>()
         .map((item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)))
-        .where((message) => message.status != 'failed')
         .toList();
     final selected = state.selectedConversation;
     if (selected == null || selected.id != conversationId) return;
@@ -708,6 +822,10 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   String _messageKey(ChatMessage message) {
+    if (message.clientMessageId != null &&
+        message.clientMessageId!.isNotEmpty) {
+      return 'client:${message.clientMessageId}';
+    }
     if (message.zaloMsgId != null && message.zaloMsgId!.isNotEmpty) {
       return 'zalo:${message.zaloMsgId}';
     }
@@ -716,6 +834,265 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   Future<void> sendMessage(String text) async {
+    final conversation = state.selectedConversation;
+    if (conversation == null || text.trim().isEmpty) return;
+    final clientMessageId = 'flutter_${DateTime.now().microsecondsSinceEpoch}';
+    final reply = state.replyingTo;
+    final optimistic = ChatMessage(
+      id: clientMessageId,
+      senderId: conversation.accountId,
+      senderName: 'Ban',
+      message: text.trim(),
+      direction: 'outbound',
+      status: 'sending',
+      timestamp: DateTime.now(),
+      clientMessageId: clientMessageId,
+      quote: reply == null
+          ? null
+          : {
+              'messageId': reply.zaloMsgId ?? reply.id,
+              'clientMessageId': reply.clientMessageId,
+              'content': reply.message,
+              'senderId': reply.senderId,
+            },
+    );
+    _replaceSelected(
+      conversation.copyWith(messages: [...conversation.messages, optimistic]),
+    );
+    state = state.copyWith(isSending: true, errorMessage: null);
+    try {
+      final response = await _repository.sendRichMessage(
+        conversation.id,
+        text.trim(),
+        clientMessageId: clientMessageId,
+        quote: optimistic.quote,
+      );
+      if (response['success'] == true) {
+        await loadMessages(conversation.id);
+        state = state.copyWith(
+          isSending: false,
+          replyingTo: null,
+          draftText: '',
+        );
+        await updateDraft('');
+        return;
+      }
+      _setOptimisticFailed(
+        clientMessageId,
+        (response['error'] ?? response['message'] ?? 'Gui tin nhan that bai.')
+            .toString(),
+        localMessageId: response['localMessageId']?.toString(),
+      );
+    } catch (error) {
+      _setOptimisticFailed(clientMessageId, error.toString());
+    }
+  }
+
+  Future<void> sendLink(String url, {String title = ''}) async {
+    final conversation = state.selectedConversation;
+    final normalized = url.trim();
+    if (conversation == null || normalized.isEmpty) return;
+    state = state.copyWith(isSending: true, errorMessage: null);
+    final response = await _repository.sendRichMessage(
+      conversation.id,
+      title.trim().isEmpty ? normalized : title.trim(),
+      clientMessageId: 'flutter_${DateTime.now().microsecondsSinceEpoch}',
+      messageType: 'link',
+      link: {'url': normalized, 'href': normalized, 'title': title.trim()},
+    );
+    if (response['success'] == true) {
+      await loadMessages(conversation.id);
+      state = state.copyWith(isSending: false);
+    } else {
+      if (response['localMessageId'] != null) {
+        await loadMessages(conversation.id);
+      }
+      state = state.copyWith(
+        isSending: false,
+        errorMessage: (response['error'] ?? 'Gui lien ket that bai.')
+            .toString(),
+      );
+    }
+  }
+
+  Future<void> sendSticker(Map<String, dynamic> sticker) async {
+    final conversation = state.selectedConversation;
+    if (conversation == null || sticker.isEmpty) return;
+    state = state.copyWith(isSending: true, errorMessage: null);
+    final response = await _repository.sendRichMessage(
+      conversation.id,
+      '',
+      clientMessageId: 'flutter_${DateTime.now().microsecondsSinceEpoch}',
+      messageType: 'sticker',
+      sticker: sticker,
+    );
+    if (response['success'] == true) {
+      await loadMessages(conversation.id);
+      state = state.copyWith(isSending: false);
+    } else {
+      state = state.copyWith(
+        isSending: false,
+        errorMessage: (response['error'] ?? 'Gui sticker that bai.').toString(),
+      );
+    }
+  }
+
+  void _setOptimisticFailed(
+    String clientMessageId,
+    String error, {
+    String? localMessageId,
+  }) {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    _replaceSelected(
+      conversation.copyWith(
+        messages: conversation.messages
+            .map(
+              (message) => message.clientMessageId == clientMessageId
+                  ? message.copyWith(
+                      id: localMessageId,
+                      status: 'failed',
+                      errorText: error,
+                    )
+                  : message,
+            )
+            .toList(),
+      ),
+    );
+    state = state.copyWith(isSending: false, errorMessage: error);
+  }
+
+  Future<void> retryMessage(ChatMessage message) async {
+    final conversation = state.selectedConversation;
+    if (conversation == null || message.id.isEmpty) return;
+    _replaceSelected(
+      conversation.copyWith(
+        messages: conversation.messages
+            .map(
+              (item) => item.id == message.id
+                  ? item.copyWith(status: 'sending', errorText: '')
+                  : item,
+            )
+            .toList(),
+      ),
+    );
+    try {
+      final response = await _repository.retryMessage(message.id);
+      if (response['success'] == true) {
+        await loadMessages(conversation.id);
+      } else {
+        _setOptimisticFailed(
+          message.clientMessageId ?? message.id,
+          (response['error'] ?? 'Gui lai that bai.').toString(),
+        );
+      }
+    } catch (error) {
+      _setOptimisticFailed(
+        message.clientMessageId ?? message.id,
+        error.toString(),
+      );
+    }
+  }
+
+  Future<void> reactToMessage(ChatMessage message, String reaction) async {
+    if (message.id.isEmpty) return;
+    final response = await _repository.reactToMessage(message.id, reaction);
+    if (response['success'] == true) {
+      final selected = state.selectedConversation;
+      if (selected != null) await loadMessages(selected.id);
+    }
+  }
+
+  void replyTo(ChatMessage? message) {
+    state = state.copyWith(replyingTo: message);
+  }
+
+  Future<void> updateDraft(String content) async {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    state = state.copyWith(draftText: content);
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        await _repository.saveDraft(
+          ConversationTarget(
+            accountId: conversation.accountId,
+            threadId: conversation.threadId,
+            threadType: conversation.threadType,
+          ),
+          content,
+        );
+      } catch (_) {}
+    });
+  }
+
+  Future<void> notifyTyping() async {
+    final conversation = state.selectedConversation;
+    if (conversation == null ||
+        DateTime.now().difference(_lastTypingSentAt) <
+            const Duration(seconds: 3)) {
+      return;
+    }
+    _lastTypingSentAt = DateTime.now();
+    try {
+      await _repository.sendTyping(
+        ConversationTarget(
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          threadType: conversation.threadType,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> searchMessages(String query) async {
+    final selected = state.selectedConversation;
+    if (query.trim().isEmpty) {
+      state = state.copyWith(messageSearchResults: []);
+      return;
+    }
+    final response = await _repository.searchMessages(
+      query.trim(),
+      accountId: selected?.accountId,
+      threadId: selected?.threadId,
+    );
+    if (response['success'] == true && response['data'] is List) {
+      state = state.copyWith(
+        messageSearchResults: (response['data'] as List)
+            .whereType<Map>()
+            .map(
+              (item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList(),
+      );
+    }
+  }
+
+  Future<void> openSearchResult(ChatMessage message) async {
+    final selected = state.selectedConversation;
+    if (selected == null) return;
+    final response = await _repository.messagesAround(message.id);
+    if (response['success'] != true || response['data'] is! List) return;
+    final messages =
+        (response['data'] as List)
+            .whereType<Map>()
+            .map(
+              (item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _replaceSelected(selected.copyWith(messages: messages));
+  }
+
+  void setChatFocused(bool focused) {
+    state = state.copyWith(
+      isChatFocused: focused,
+      unfocusedNewMessageCount: focused ? 0 : state.unfocusedNewMessageCount,
+    );
+  }
+
+  // ignore: unused_element
+  Future<void> _sendMessageLegacy(String text) async {
     final conversation = state.selectedConversation;
     if (conversation == null || text.trim().isEmpty) return;
     state = state.copyWith(isSending: true, errorMessage: null);
@@ -787,6 +1164,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       await loadMessages(conversation.id);
       state = state.copyWith(isSending: false);
     } else {
+      if (response['localMessageId'] != null) {
+        await loadMessages(conversation.id);
+      }
       state = state.copyWith(
         isSending: false,
         errorMessage: (response['message'] ?? 'Gửi file thất bại.').toString(),
@@ -814,6 +1194,68 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       );
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    _eventRefreshDebounce?.cancel();
+    _draftDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToEvents(Conversation conversation) {
+    _eventSubscription?.cancel();
+    state = state.copyWith(realtimeConnected: false, typingUserIds: <String>{});
+    _eventSubscription = _repository
+        .watchEvents(
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+        )
+        .listen(
+          _handleRealtimeEvent,
+          onError: (_) => state = state.copyWith(realtimeConnected: false),
+          onDone: () => state = state.copyWith(realtimeConnected: false),
+        );
+  }
+
+  void _handleRealtimeEvent(LiveChatEvent event) {
+    if (event.type == 'bridge.connected') {
+      state = state.copyWith(realtimeConnected: true);
+      return;
+    }
+    final selected = state.selectedConversation;
+    if (selected == null ||
+        (event.threadId.isNotEmpty && event.threadId != selected.threadId)) {
+      return;
+    }
+    if (event.type == 'typing.started' || event.type == 'typing.stopped') {
+      final userId = (event.data['userId'] ?? '').toString();
+      final typing = <String>{...state.typingUserIds};
+      if (event.type == 'typing.started' && userId.isNotEmpty) {
+        typing.add(userId);
+      } else {
+        typing.remove(userId);
+      }
+      state = state.copyWith(realtimeConnected: true, typingUserIds: typing);
+      return;
+    }
+    if (event.type == 'group.updated' || event.type == 'friend.updated') {
+      state = state.copyWith(realtimeConnected: true);
+      loadConversations(silent: true);
+      return;
+    }
+    state = state.copyWith(realtimeConnected: true);
+    if (event.type == 'message.created' && !state.isChatFocused) {
+      state = state.copyWith(
+        unfocusedNewMessageCount: state.unfocusedNewMessageCount + 1,
+      );
+    }
+    _eventRefreshDebounce?.cancel();
+    _eventRefreshDebounce = Timer(const Duration(milliseconds: 120), () {
+      final current = state.selectedConversation;
+      if (current != null) loadMessages(current.id);
+    });
   }
 
   void _replaceSelected(Conversation updated) {
@@ -865,6 +1307,34 @@ String _stringFrom(Map<String, dynamic> json, List<String> keys) {
     if (text.isNotEmpty) return text;
   }
   return '';
+}
+
+Map<String, dynamic>? _mapFromJsonField(Object? value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  if (value is String && value.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+List<Map<String, dynamic>> _mapListFromJsonField(Object? value) {
+  Object? decoded = value;
+  if (value is String && value.isNotEmpty) {
+    try {
+      decoded = jsonDecode(value);
+    } catch (_) {
+      return const [];
+    }
+  }
+  if (decoded is! List) return const [];
+  return decoded
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList();
 }
 
 String _formatConversationPreview(

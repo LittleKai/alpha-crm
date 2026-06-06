@@ -89,12 +89,21 @@ class LiveChatCache {
             'id': id,
             'conversationId': conversationId,
             'providerMessageId': msg['providerMessageId'],
+            'clientMessageId': msg['clientMessageId'],
             'senderId': msg['senderId'],
             'senderName': msg['senderName'],
             'direction': msg['direction'],
             'messageType': msg['messageType'],
             'content': msg['content'],
             'status': msg['status'],
+            'errorText': msg['errorText'],
+            'quoteJson': msg['quoteJson'] ?? _encodeNullable(msg['quote']),
+            'mentionsJson':
+                msg['mentionsJson'] ?? _encodeNullable(msg['mentions']),
+            'stylesJson': msg['stylesJson'] ?? _encodeNullable(msg['styles']),
+            'metadataJson':
+                msg['metadataJson'] ?? _encodeNullable(msg['metadata']),
+            'recalledContent': msg['recalledContent'],
             'attachments': msg['attachments'] != null
                 ? jsonEncode(msg['attachments'])
                 : null,
@@ -124,6 +133,10 @@ class LiveChatCache {
         msg['sentAt'] ??
         DateTime.now().toIso8601String();
     return 'local_${msg['senderId']}_$timestamp';
+  }
+
+  String? _encodeNullable(Object? value) {
+    return value == null ? null : jsonEncode(value);
   }
 
   /// Get messages from cache

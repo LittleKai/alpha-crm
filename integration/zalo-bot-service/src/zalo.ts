@@ -49,6 +49,28 @@ export async function recallMessage(req: ZaloRecallMessageRequest): Promise<{ su
   return channel.recallMessage(req);
 }
 
+export async function sendTyping(
+  accountId: string,
+  threadId: string,
+  threadType: 'user' | 'group',
+): Promise<boolean> {
+  if (!channel.sendTyping) return false;
+  return channel.sendTyping(accountId, threadId, threadType);
+}
+
+export async function reactMessage(request: {
+  accountId: string;
+  threadId: string;
+  threadType: 'user' | 'group';
+  msgId: string;
+  reaction: string;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!channel.reactMessage) {
+    return { success: false, error: 'Reaction is not supported on current channel.' };
+  }
+  return channel.reactMessage(request);
+}
+
 export async function getAllGroups(): Promise<any[]> {
   if (!channel.getAllGroups) return [];
   return channel.getAllGroups();
@@ -78,6 +100,27 @@ export async function initializeZalo(): Promise<void> {
   if (channel.startListener) {
     console.log('[zalo] Initializing and starting Zalo listener on boot...');
     await channel.startListener();
+  }
+}
+
+let listenerRecovery: Promise<void> | null = null;
+
+export async function recoverZaloListener(): Promise<void> {
+  if (!channel.startListener) {
+    return;
+  }
+  if (!listenerRecovery) {
+    listenerRecovery = channel.startListener().finally(() => {
+      listenerRecovery = null;
+    });
+  }
+  return listenerRecovery;
+}
+
+export async function stopZaloListener(): Promise<void> {
+  await listenerRecovery?.catch(() => undefined);
+  if (channel.stopListener) {
+    await channel.stopListener();
   }
 }
 

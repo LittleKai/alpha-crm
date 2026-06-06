@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
@@ -34,6 +34,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final state = ref.watch(dashboardProvider);
     final notifier = ref.read(dashboardProvider.notifier);
     final customersState = ref.watch(customersProvider);
+    final zaloState = ref.watch(zaloIntegrationProvider);
 
     return Scaffold(
       body: state.isLoading && state.overview == null
@@ -55,6 +56,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   children: [
                     _buildHeader(state),
                     const SizedBox(height: AppSpacing.l),
+                    if (!zaloState.isLoading && zaloState.accounts.isEmpty) ...[
+                      _buildZaloOnboardingBanner(),
+                      const SizedBox(height: AppSpacing.l),
+                    ],
                     if (state.overview != null) ...[
                       _buildSubscriptionWarning(state),
                       const SizedBox(height: AppSpacing.l),
@@ -82,6 +87,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildZaloOnboardingBanner() {
+    return InkWell(
+      key: const ValueKey('dashboard_zalo_onboarding_banner'),
+      onTap: () => context.go(AppRoutes.settings),
+      borderRadius: AppSpacing.borderRadiusM,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: AppSpacing.borderRadiusM,
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.add_link_rounded,
+              color: AppColors.primary,
+              size: 30,
+            ),
+            const SizedBox(width: AppSpacing.m),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kết nối tài khoản Zalo để bắt đầu',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Mở Cài đặt hệ thống để quét mã và thêm tài khoản Zalo trên máy tính này.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeader(DashboardState state) {
     return Row(
       children: [
@@ -105,87 +158,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildSubscriptionWarning(DashboardState state) {
     final sub = state.overview?['subscription'];
     final isActive = sub != null && sub['active'] == true;
-    final zaloState = ref.watch(zaloIntegrationProvider);
-    final hasDeviceLimitError =
-        zaloState.agentError != null &&
-        (zaloState.agentError!.contains('giới hạn thiết bị') ||
-            zaloState.agentError!.contains('thiết bị cũ') ||
-            zaloState.agentError!.contains('thiết bị hoạt động') ||
-            zaloState.agentError!.contains('device limit') ||
-            zaloState.agentError!.contains('limit exceeded'));
-
-    if (isActive && !hasDeviceLimitError) return const SizedBox.shrink();
+    if (isActive) return const SizedBox.shrink();
 
     final authState = ref.watch(crmAuthProvider);
-
-    if (hasDeviceLimitError) {
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.m),
-        decoration: BoxDecoration(
-          color: AppColors.warningSoft,
-          borderRadius: AppSpacing.borderRadiusM,
-          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              color: AppColors.warning,
-              size: 28,
-            ),
-            const SizedBox(width: AppSpacing.s),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Phát hiện Zalo Bot đang hoạt động trên một thiết bị khác!',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.warningText,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'Gói cước Alpha CRM của bạn đã được gia hạn thành công. Tuy nhiên, hệ thống ghi nhận thiết bị khác đang chiếm quyền hoạt động của tài khoản này.\n'
-                    'Để kích hoạt Zalo bot trên thiết bị này, vui lòng thoát ứng dụng hiện tại, truy cập Bảng quản trị trên Web để hủy liên kết thiết bị cũ, sau đó khởi động lại ứng dụng.',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.warningText.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.m),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppButton(
-                  text: 'Thoát ứng dụng',
-                  variant: AppButtonVariant.destructive,
-                  height: 32,
-                  onPressed: () {
-                    exit(0);
-                  },
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                AppButton(
-                  text: 'Kiểm tra lại',
-                  variant: AppButtonVariant.outline,
-                  height: 32,
-                  onPressed: () async {
-                    await ref
-                        .read(zaloIntegrationProvider.notifier)
-                        .checkConnection();
-                    await ref.read(dashboardProvider.notifier).loadDashboard();
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),

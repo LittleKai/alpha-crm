@@ -28,7 +28,8 @@ class LiveChatScreen extends ConsumerStatefulWidget {
   ConsumerState<LiveChatScreen> createState() => _LiveChatScreenState();
 }
 
-class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
+class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _tagController = TextEditingController();
@@ -49,7 +50,25 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startPolling();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    final newMessageCount = ref
+        .read(liveChatProvider)
+        .unfocusedNewMessageCount;
+    ref.read(liveChatProvider.notifier).setChatFocused(resumed);
+    if (resumed && newMessageCount > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$newMessageCount tin nhắn mới')),
+        );
+      });
+    }
   }
 
   void _startPolling() {
@@ -57,16 +76,19 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
       if (mounted) {
         final state = ref.read(liveChatProvider);
         final selected = state.selectedConversation;
-        if (selected != null) {
+        if (selected != null && !state.realtimeConnected) {
           ref.read(liveChatProvider.notifier).refreshSelectedMessages();
         }
-        ref.read(liveChatProvider.notifier).loadConversations(silent: true);
+        if (!state.realtimeConnected) {
+          ref.read(liveChatProvider.notifier).loadConversations(silent: true);
+        }
       }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
     _messageController.dispose();
     _searchController.dispose();
@@ -94,6 +116,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
         _scrollMessagesToBottom();
         _tagController.text = selected.tag;
         _notesController.text = selected.notes;
+        _messageController.text = state.draftText;
         final cust = selected.crmCustomer;
         if (cust != null) {
           _nameController.text = cust.name;
@@ -108,6 +131,9 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
           _sourceController.clear();
           _statusController.clear();
         }
+      }
+      if (_messageController.text.isEmpty && state.draftText.isNotEmpty) {
+        _messageController.text = state.draftText;
       }
       final currentMessageCount = selected.messages.length;
       if (currentMessageCount != _lastMessageCount) {
@@ -751,6 +777,11 @@ class _ConversationPanel extends ConsumerWidget {
                     ),
                     const SizedBox(width: AppSpacing.s),
                     IconButton(
+                      tooltip: 'Tìm trong tin nhắn',
+                      icon: const Icon(Icons.search),
+                      onPressed: () => _showMessageSearch(context, ref),
+                    ),
+                    IconButton(
                       tooltip: 'Thông tin khách hàng',
                       icon: Icon(
                         showContactPanel
@@ -853,11 +884,63 @@ class _ConversationPanel extends ConsumerWidget {
               color: AppColors.errorSoft,
               width: double.infinity,
               child: Text(
-                'Bridge offline, chi xem duoc metadata/recent summary',
+                'Local Bridge đang offline. Chỉ xem được tóm tắt và dữ liệu từ bộ nhớ đệm.',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.errorText,
                 ),
                 textAlign: TextAlign.center,
+              ),
+            ),
+          if (state.typingUserIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.m,
+                AppSpacing.s,
+                AppSpacing.m,
+                0,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Khách hàng đang nhập...',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ),
+          if (state.replyingTo != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(
+                AppSpacing.m,
+                AppSpacing.s,
+                AppSpacing.m,
+                0,
+              ),
+              padding: const EdgeInsets.all(AppSpacing.s),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.reply, size: 18),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text(
+                      state.replyingTo!.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Hủy trả lời',
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => notifier.replyTo(null),
+                  ),
+                ],
               ),
             ),
           Padding(
@@ -866,14 +949,18 @@ class _ConversationPanel extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: Icon(
-                    Icons.attach_file,
-                    color: AppColors.textSecondary,
-                  ),
+                  icon: Icon(Icons.attach_file, color: AppColors.textSecondary),
                   tooltip: 'Đính kèm file/ảnh/video',
                   onPressed: state.isSending || state.isBridgeOffline
                       ? null
                       : () => _pickAndSendFile(notifier),
+                ),
+                IconButton(
+                  icon: Icon(Icons.link, color: AppColors.textSecondary),
+                  tooltip: 'Gửi liên kết',
+                  onPressed: state.isSending || state.isBridgeOffline
+                      ? null
+                      : () => _showSendLinkDialog(context, notifier),
                 ),
                 Expanded(
                   child: TextField(
@@ -887,6 +974,10 @@ class _ConversationPanel extends ConsumerWidget {
                           : 'Nhập tin nhắn hoặc /1, /hello...',
                       border: const OutlineInputBorder(),
                     ),
+                    onChanged: (value) {
+                      notifier.updateDraft(value);
+                      notifier.notifyTyping();
+                    },
                     onSubmitted: (_) => _send(quickTemplates),
                   ),
                 ),
@@ -929,32 +1020,158 @@ class _ConversationPanel extends ConsumerWidget {
     if (text.isEmpty) return;
     final resolved = resolveQuickReplyShortcut(text, quickTemplates);
     messageController.clear();
+    notifier.updateDraft('');
     notifier.sendMessage(resolved ?? text);
   }
 
   Future<void> _pickAndSendFile(LiveChatNotifier notifier) async {
     final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
+      allowMultiple: true,
       type: FileType.any,
     );
     if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    if (file.path == null) return;
+    final paths = result.files
+        .map((file) => file.path)
+        .whereType<String>()
+        .toList();
+    if (paths.isEmpty) return;
 
-    final ext = file.extension?.toLowerCase() ?? '';
+    final extensions = result.files
+        .map((file) => file.extension?.toLowerCase() ?? '')
+        .toList();
     String messageType = 'file';
-    if (['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(ext)) {
+    if (extensions.every(
+      (ext) => ['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(ext),
+    )) {
       messageType = 'image';
-    } else if (['mp4', 'mov', 'avi', 'webm'].contains(ext)) {
+    } else if (extensions.length == 1 &&
+        ['mp4', 'mov', 'avi', 'webm'].contains(extensions.single)) {
       messageType = 'video';
+    } else if (extensions.length == 1 &&
+        ['mp3', 'wav', 'm4a', 'aac', 'ogg'].contains(extensions.single)) {
+      messageType = 'voice';
     }
 
     await notifier.sendAttachment(
-      [file.path!],
+      paths,
       content: messageController.text.trim(),
       messageType: messageType,
     );
     messageController.clear();
+    notifier.updateDraft('');
+  }
+
+  void _showMessageSearch(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final results = ref.watch(
+            liveChatProvider.select((value) => value.messageSearchResults),
+          );
+          return AlertDialog(
+            title: const Text('Tìm trong tin nhắn'),
+            content: SizedBox(
+              width: 520,
+              height: 360,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Nhập nội dung cần tìm',
+                    ),
+                    onChanged: ref
+                        .read(liveChatProvider.notifier)
+                        .searchMessages,
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: results.length,
+                      itemBuilder: (context, index) {
+                        final message = results[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            message.message,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            DateFormat(
+                              'dd/MM/yyyy HH:mm',
+                            ).format(message.timestamp),
+                          ),
+                          onTap: () async {
+                            await ref
+                                .read(liveChatProvider.notifier)
+                                .openSearchResult(message);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Đóng'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showSendLinkDialog(
+    BuildContext context,
+    LiveChatNotifier notifier,
+  ) async {
+    final urlController = TextEditingController();
+    final titleController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Gửi liên kết'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: urlController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'URL'),
+            ),
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Tiêu đề'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Gửi'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && urlController.text.trim().isNotEmpty) {
+      await notifier.sendLink(urlController.text, title: titleController.text);
+    }
+    urlController.dispose();
+    titleController.dispose();
   }
 }
 
@@ -1189,11 +1406,14 @@ class _MessageBubble extends ConsumerWidget {
     Widget avatarWidget;
     if (!isMine) {
       final isGroup = conversation.threadType == 'group';
-      final avatarUrl = isGroup && message.senderAvatarUrl != null && message.senderAvatarUrl!.isNotEmpty 
-          ? message.senderAvatarUrl! 
+      final avatarUrl =
+          isGroup &&
+              message.senderAvatarUrl != null &&
+              message.senderAvatarUrl!.isNotEmpty
+          ? message.senderAvatarUrl!
           : conversation.customerAvatar;
-      final fallbackText = isGroup && message.senderName.isNotEmpty 
-          ? message.senderName 
+      final fallbackText = isGroup && message.senderName.isNotEmpty
+          ? message.senderName
           : conversation.customerName;
 
       avatarWidget = _buildAvatar(
@@ -1263,17 +1483,92 @@ class _MessageBubble extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (message.quote != null) ...[
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: AppSpacing.s),
+                          padding: const EdgeInsets.all(AppSpacing.s),
+                          decoration: BoxDecoration(
+                            color: textColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusS,
+                            ),
+                          ),
+                          child: Text(
+                            (message.quote!['content'] ?? 'Tin nhắn đã trả lời')
+                                .toString(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.caption.copyWith(
+                              color: textColor.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ],
                       _buildMessageContent(context, textColor),
                       const SizedBox(height: 4),
-                      Text(
-                        '${DateFormat('dd/MM HH:mm').format(message.timestamp)} ${message.status}',
-                        style: AppTextStyles.caption.copyWith(
-                          color: textColor.withValues(alpha: 0.75),
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            DateFormat('dd/MM HH:mm').format(message.timestamp),
+                            style: AppTextStyles.caption.copyWith(
+                              color: textColor.withValues(alpha: 0.75),
+                            ),
+                          ),
+                          if (isMine) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              message.status == 'seen'
+                                  ? Icons.done_all
+                                  : message.status == 'failed'
+                                  ? Icons.error_outline
+                                  : message.status == 'sending' ||
+                                        message.status == 'queued'
+                                  ? Icons.schedule
+                                  : Icons.done,
+                              size: 14,
+                              color: message.status == 'failed'
+                                  ? AppColors.errorText
+                                  : textColor.withValues(alpha: 0.75),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
+                if (message.reactions.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 4,
+                      children: message.reactions
+                          .map(
+                            (reaction) => Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                (reaction['reaction'] ?? '').toString(),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                if (message.status == 'failed')
+                  TextButton.icon(
+                    onPressed: () => ref
+                        .read(liveChatProvider.notifier)
+                        .retryMessage(message),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(
+                      message.errorText.isEmpty
+                          ? 'Gửi lại'
+                          : 'Gửi lại: ${message.errorText}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1282,8 +1577,7 @@ class _MessageBubble extends ConsumerWidget {
       ),
     );
 
-    // Add recall context menu for outbound non-deleted messages
-    if (isMine && !message.isDeleted && message.status != 'recalled') {
+    if (!message.isDeleted) {
       return GestureDetector(
         onSecondaryTapUp: (details) =>
             _showRecallMenu(context, ref, details.globalPosition),
@@ -1310,18 +1604,43 @@ class _MessageBubble extends ConsumerWidget {
       ),
       items: [
         const PopupMenuItem<String>(
-          value: 'recall',
+          value: 'reply',
           child: Row(
             children: [
-              Icon(Icons.undo, size: 18, color: Colors.red),
+              Icon(Icons.reply, size: 18),
               SizedBox(width: 8),
-              Text('Thu hồi tin nhắn', style: TextStyle(color: Colors.red)),
+              Text('Trả lời'),
             ],
           ),
         ),
+        const PopupMenuItem<String>(
+          value: 'heart',
+          child: Row(
+            children: [
+              Icon(Icons.favorite_outline, size: 18),
+              SizedBox(width: 8),
+              Text('Thả tim'),
+            ],
+          ),
+        ),
+        if (message.isMine && message.status != 'recalled')
+          const PopupMenuItem<String>(
+            value: 'recall',
+            child: Row(
+              children: [
+                Icon(Icons.undo, size: 18, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Thu hồi tin nhắn', style: TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
       ],
     ).then((value) {
-      if (value == 'recall') {
+      if (value == 'reply') {
+        ref.read(liveChatProvider.notifier).replyTo(message);
+      } else if (value == 'heart') {
+        ref.read(liveChatProvider.notifier).reactToMessage(message, 'heart');
+      } else if (value == 'recall') {
         ref.read(liveChatProvider.notifier).recallMessage(message.id).then((
           success,
         ) {
@@ -1557,6 +1876,35 @@ class _MessageBubble extends ConsumerWidget {
                   ),
                 );
               },
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (message.contentType == 'poll' || message.contentType == 'system') {
+      final isPoll = message.contentType == 'poll';
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.s),
+        decoration: BoxDecoration(
+          color: textColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+          border: Border.all(color: textColor.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isPoll ? Icons.poll_outlined : Icons.info_outline,
+              color: textColor,
+              size: 18,
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Flexible(
+              child: Text(
+                message.message,
+                style: AppTextStyles.body.copyWith(color: textColor),
+              ),
             ),
           ],
         ),

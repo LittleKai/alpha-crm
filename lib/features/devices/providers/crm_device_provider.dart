@@ -131,12 +131,29 @@ Map<String, dynamic> buildPairingConfirmPayload(String input) {
   return {'qrToken': cleanInput};
 }
 
+class RemoteDisconnectRequest {
+  final String path;
+  final Map<String, dynamic> body;
+
+  const RemoteDisconnectRequest({required this.path, required this.body});
+}
+
+RemoteDisconnectRequest buildRemoteDisconnectRequest({String? mobileUserId}) {
+  return RemoteDisconnectRequest(
+    path: '/crm/pairing/revoke',
+    body: {
+      if (mobileUserId != null && mobileUserId.isNotEmpty)
+        'mobileUserId': mobileUserId,
+    },
+  );
+}
+
 List<dynamic> _readPairedMobileUsers(Map<dynamic, dynamic>? pcDevice) {
   final newDevices = pcDevice?['pairedMobileDevices'];
   if (newDevices is List && newDevices.isNotEmpty) {
     return newDevices;
   }
-  
+
   final value = pcDevice?['pairedMobileUserIds'];
   if (value is List) return value;
   return const [];
@@ -199,7 +216,7 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
       state = state.copyWith(
         isLoading: false,
         errorText:
-            'Chưa tìm thấy thiết bị máy chủ nào. Vui lòng chạy "npm run crm:register-device" trên máy chủ để đăng ký trước khi ghép đôi.',
+            'Chưa tìm thấy máy tính Windows đang hoạt động. Vui lòng đăng nhập Alpha CRM trên máy tính trước khi tạo mã Remote.',
       );
       return false;
     }
@@ -262,7 +279,7 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
         }
       }
     } catch (_) {}
-    
+
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return 'Thiết bị Android';
@@ -275,15 +292,12 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
 
   Future<bool> confirmPairing(String input) async {
     state = state.copyWith(isLoading: true, errorText: null);
-    
+
     final payload = buildPairingConfirmPayload(input);
     payload['platform'] = getDevicePlatform();
     payload['displayName'] = getDeviceDisplayName();
 
-    final response = await CrmCloudApi.post(
-      '/crm/pairing/confirm',
-      payload,
-    );
+    final response = await CrmCloudApi.post('/crm/pairing/confirm', payload);
 
     if (response['success'] == true) {
       await checkPairingStatus();
@@ -309,29 +323,27 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
     });
   }
 
-  Future<void> unpairDevice([String? targetDeviceId]) async {
-    final idToUnpair = targetDeviceId ?? state.deviceId;
-    if (idToUnpair == null) {
-      state = state.copyWith(
-        errorText: 'Không tìm thấy ID thiết bị để hủy ghép đôi.',
-      );
-      return;
-    }
+  Future<bool> disconnectCurrentMobileRemote() async {
+    await _disconnectRemote();
+    return state.errorText == null;
+  }
 
+  Future<bool> revokePairedMobile(String mobileUserId) async {
+    await _disconnectRemote(mobileUserId);
+    return state.errorText == null;
+  }
+
+  Future<void> _disconnectRemote([String? targetDeviceId]) async {
+    final request = buildRemoteDisconnectRequest(mobileUserId: targetDeviceId);
     state = state.copyWith(isLoading: true, errorText: null);
-    final response = await CrmCloudApi.post(
-      '/crm/devices/$idToUnpair/disable',
-      {},
-    );
+    final response = await CrmCloudApi.post(request.path, request.body);
     if (response['success'] == true) {
-      if (idToUnpair == state.deviceId) {
-        state = const CrmDeviceState();
-      }
       await checkPairingStatus();
     } else {
       state = state.copyWith(
         isLoading: false,
-        errorText: response['message'] ?? 'Không thể hủy ghép đôi thiết bị.',
+        errorText:
+            response['message'] ?? 'Không thể ngắt kết nối Remote di động.',
       );
     }
   }

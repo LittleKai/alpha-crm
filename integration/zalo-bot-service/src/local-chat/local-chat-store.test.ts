@@ -189,10 +189,20 @@ describe('LocalChatStore', () => {
     assert.equal(img!.mimeType, 'image/jpeg');
     assert.equal(img!.sizeBytes, 102400);
     assert.equal(JSON.parse(img!.metadataJson).width, 800);
+    assert.equal(img!.status, 'pending');
 
     const file = attachments!.find((a) => a.kind === 'file');
     assert.ok(file);
     assert.equal(file!.name, 'doc.pdf');
+
+    store.updateAttachmentDownload(img!.id, {
+      status: 'ready',
+      localPath: 'D:/cache/photo.jpg',
+      checksum: 'sha256',
+      downloadedAt: '2026-06-06T12:00:00.000Z',
+    });
+    const refreshed = store.getMessages(conv!.id).attachments.get(msgId);
+    assert.equal(refreshed?.find((item) => item.id === img!.id)?.status, 'ready');
   });
 
   // -------------------------------------------------------------------------
@@ -316,5 +326,150 @@ describe('LocalChatStore', () => {
     const result = store.getMessagesByThread('acc1', 'thread1');
     assert.ok(result);
     assert.equal(result!.messages.length, 1);
+  });
+
+  it('reconciles an outbound self echo by client message id', () => {
+    const messageId = store.insertOutboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread1',
+      threadType: 'user',
+      content: 'Optimistic message',
+      clientMessageId: 'cli-1',
+    });
+
+    const reconciled = store.reconcileOutboundMessage({
+      accountId: 'acc1',
+      clientMessageId: 'cli-1',
+      providerMessageId: 'provider-1',
+      status: 'sent',
+    });
+
+    assert.equal(reconciled, messageId);
+    const result = store.getMessagesByThread('acc1', 'thread1');
+    assert.equal(result?.messages.length, 1);
+    assert.equal(result?.messages[0].clientMessageId, 'cli-1');
+    assert.equal(result?.messages[0].providerMessageId, 'provider-1');
+  });
+
+  it('persists receipts and reactions against provider message ids', () => {
+    const messageId = store.insertOutboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread1',
+      threadType: 'user',
+      content: 'Track engagement',
+      clientMessageId: 'cli-2',
+    });
+    store.updateMessageStatus(messageId, 'sent', 'provider-2');
+
+    assert.equal(
+      store.upsertReceipt({
+        accountId: 'acc1',
+        providerMessageId: 'provider-2',
+        userId: 'customer-1',
+        status: 'seen',
+        timestamp: '2026-06-06T10:00:00.000Z',
+      }),
+      true,
+    );
+    assert.equal(
+      store.upsertReaction({
+        accountId: 'acc1',
+        providerMessageId: 'provider-2',
+        userId: 'customer-1',
+        reaction: 'heart',
+        timestamp: '2026-06-06T10:01:00.000Z',
+      }),
+      true,
+    );
+
+    assert.deepEqual(store.getReceipts(messageId), [
+      {
+        messageId,
+        userId: 'customer-1',
+        status: 'seen',
+        timestamp: '2026-06-06T10:00:00.000Z',
+      },
+    ]);
+    assert.deepEqual(store.getReactions(messageId), [
+      {
+        messageId,
+        userId: 'customer-1',
+        reaction: 'heart',
+        timestamp: '2026-06-06T10:01:00.000Z',
+      },
+    ]);
+  });
+
+  it('saves drafts and history state per account thread', () => {
+    store.saveDraft('acc1', 'thread1', 'Noi dung dang viet');
+    assert.equal(store.getDraft('acc1', 'thread1'), 'Noi dung dang viet');
+
+    store.setHistoryState('acc1', 'thread1', {
+      oldestTimestamp: '2026-01-01T00:00:00.000Z',
+      hasMore: true,
+      loading: false,
+      lastError: '',
+    });
+    assert.deepEqual(store.getHistoryState('acc1', 'thread1'), {
+      oldestTimestamp: '2026-01-01T00:00:00.000Z',
+      hasMore: true,
+      loading: false,
+      lastError: '',
+    });
+  });
+
+  it('searches messages and returns a window around a result', () => {
+    for (let i = 0; i < 5; i++) {
+      store.upsertInboundMessage({
+        accountId: 'acc1',
+        threadId: 'thread1',
+        threadType: 'user',
+        senderId: 'customer-1',
+        senderName: 'Customer',
+        content: i === 2 ? 'Hoa don thang sau' : `Message ${i}`,
+        messageType: 'text',
+        providerMessageId: `search-${i}`,
+        timestamp: `2026-06-06T10:0${i}:00.000Z`,
+      });
+    }
+
+    const results = store.searchMessages('Hoa don', {
+      accountId: 'acc1',
+      threadId: 'thread1',
+    });
+    assert.equal(results.length, 1);
+
+    const around = store.getMessagesAround(results[0].conversationId, results[0].id, 1);
+    assert.equal(around.messages.length, 3);
+    assert.equal(around.messages[1].id, results[0].id);
+  });
+
+  it('stores history batches in one transaction', () => {
+    const ids = store.upsertInboundMessages([
+      {
+        accountId: 'acc1',
+        threadId: 'thread1',
+        threadType: 'user',
+        senderId: 'customer-1',
+        senderName: 'Customer',
+        content: 'Old 1',
+        messageType: 'text',
+        providerMessageId: 'batch-1',
+        timestamp: '2025-01-01T00:00:00.000Z',
+      },
+      {
+        accountId: 'acc1',
+        threadId: 'thread1',
+        threadType: 'user',
+        senderId: 'customer-1',
+        senderName: 'Customer',
+        content: 'Old 2',
+        messageType: 'text',
+        providerMessageId: 'batch-2',
+        timestamp: '2025-01-01T00:01:00.000Z',
+      },
+    ]);
+    assert.equal(ids.length, 2);
+    assert.equal(store.getMessagesByThread('acc1', 'thread1')?.messages.length, 2);
   });
 });

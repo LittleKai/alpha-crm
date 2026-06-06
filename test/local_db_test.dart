@@ -11,19 +11,24 @@ void main() {
   group('LocalDb', () {
     test('opens in-memory database and creates tables', () async {
       final db = await LocalDb.getInMemoryInstance();
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
-      
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
+
       final tableNames = tables.map((t) => t['name'] as String).toList();
       expect(tableNames, contains('cache_entries'));
       expect(tableNames, contains('live_chat_conversations'));
       expect(tableNames, contains('live_chat_messages'));
       expect(tableNames, contains('media_cache'));
+      expect(tableNames, contains('live_chat_drafts'));
+      expect(tableNames, contains('live_chat_receipts'));
+      expect(tableNames, contains('live_chat_reactions'));
     });
 
     test('cleanupExpiredCache removes expired entries', () async {
       final db = await LocalDb.getInMemoryInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
-      
+
       // Insert one active, one expired
       await db.insert('cache_entries', {
         'key': 'active',

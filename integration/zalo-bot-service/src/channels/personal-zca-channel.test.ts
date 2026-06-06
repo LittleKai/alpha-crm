@@ -6,6 +6,8 @@ import {
   PersonalZcaChannel,
   accountPool,
   normalizeInboundMessageForTest,
+  normalizeReceiptEventForTest,
+  normalizeUndoEventForTest,
   setLoginPoolInitializedForTest,
 } from './personal-zca-channel.js';
 
@@ -70,4 +72,46 @@ test('sendMessage preserves zca error code in returned error text', async () => 
   assert.match(result.error ?? '', /Tham số không hợp lệ/);
   accountPool.clear();
   setLoginPoolInitializedForTest(false);
+});
+
+test('normalizes undo events from nested Zalo payloads', () => {
+  const event = normalizeUndoEventForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    {
+      type: ThreadType.Group,
+      threadId: 'group-1',
+      data: {
+        content: {
+          globalMsgId: 'global-undo-1',
+          cliMsgId: 'client-undo-1',
+        },
+      },
+    },
+  );
+
+  assert.equal(event?.type, 'message.recalled');
+  assert.equal(event?.threadId, 'group-1');
+  assert.equal(event?.providerMessageId, 'global-undo-1');
+  assert.equal(event?.clientMessageId, 'client-undo-1');
+});
+
+test('normalizes seen receipt payloads with reader identities', () => {
+  const events = normalizeReceiptEventForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    'seen',
+    {
+      type: ThreadType.User,
+      threadId: 'customer-1',
+      data: {
+        msgIds: ['msg-1', 'msg-2'],
+        uid: 'customer-1',
+        ts: 1780000000,
+      },
+    },
+  );
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0].type, 'message.seen');
+  assert.equal(events[0].providerMessageId, 'msg-1');
+  assert.equal(events[0].userId, 'customer-1');
 });

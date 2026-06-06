@@ -13,6 +13,25 @@ Flutter (UI) → HTTP → zalo-bot-service → ZaloChannel adapter → Zalo API
 
 Flutter side chỉ gọi HTTP đến service này, không trực tiếp gọi Zalo API.
 
+## Phiên CRM một PC
+
+Flutter Windows đồng bộ JWT sau khi cloud login thành công. Service chỉ khởi
+động agent, Zalo listener, heartbeat, command polling và local sync sau khi
+phiên được xác minh.
+
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/local/auth/sync` | Xác minh JWT/user, đăng ký hoặc thay thế PC và khởi động runtime |
+| POST | `/local/auth/logout` | Dừng runtime, disable phiên PC best-effort và xóa hai file phiên CRM |
+| GET | `/local/events` | SSE phát `session.revoked` cho Flutter |
+
+`409 DEVICE_ALREADY_ACTIVE` yêu cầu Flutter xác nhận trước khi force replace.
+Chỉ `403 DEVICE_REVOKED` mới làm local service thu hồi phiên. Lỗi mạng không
+đăng xuất người dùng.
+
+Thu hồi phiên chỉ xóa `crm_token.json` và `.data/agent/device-secret.json`.
+SQLite, Zalo credentials, settings, conversations và history được giữ nguyên.
+
 ## Mục đích
 
 - **Enforcement boundary**: Credentials Zalo (cookie, IMEI, token) lưu phía backend, không lộ ra client
@@ -87,6 +106,7 @@ Current scope:
 | Script | Mô tả |
 |--------|-------|
 | `npm run build` | Compile TypeScript |
+| `npm test` | Build và chạy toàn bộ Node tests |
 | `npm start` | Chạy service |
 | `npm run dev` | Watch mode |
 | `npm run zalo:login-personal` | CLI bootstrap đăng nhập personal Zalo |
@@ -95,14 +115,15 @@ Current scope:
 
 This service acts as the source of truth for full Live Chat message bodies when Local-First mode is enabled.
 
-Configure in .env:
-\\\env
+Configure in `.env`:
+
+```env
 LOCAL_FIRST_LIVE_CHAT=true
 LOCAL_CHAT_DB_PATH=.data/live-chat/live-chat.sqlite
-\\\
+```
 
 When enabled:
-- Inbound messages are captured fully into the local \etter-sqlite3\ database before cloud sync.
+- Inbound messages are captured fully into the local `better-sqlite3` database before cloud sync.
 - Only a metadata summary (lastMessagePreview, timestamps, unreadCount) is sent to the cloud.
-- The Flutter client queries \/local/conversations/:id/messages\ and sends via \/local/messages/send\ directly, avoiding cloud payload overhead.
+- The Flutter client queries `/local/conversations/:id/messages` and sends via `/local/messages/send` directly, avoiding cloud payload overhead.
 

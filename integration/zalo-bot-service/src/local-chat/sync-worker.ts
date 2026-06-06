@@ -1,29 +1,45 @@
 import { getLocalChatStore } from './index.js';
 import { getAgentCredentials } from '../agent/agent-identity.js';
 import { reportInboundMessageMetadata, reportInboundMessage } from '../agent/cloud-api.js';
+import { isDeviceRevokedError } from '../agent/cloud-api.js';
 
 const SYNC_INTERVAL_MS = 5000; // Poll every 5 seconds
 const MAX_RETRY_COUNT = 10;
 
 let _timer: NodeJS.Timeout | null = null;
 let _isRunning = false;
+let _enabled = false;
+let _revocationHandler: ((reason: string) => void | Promise<void>) | null = null;
+
+export function setSyncRevocationHandler(
+  handler: ((reason: string) => void | Promise<void>) | null,
+): void {
+  _revocationHandler = handler;
+}
+
+export function isBackgroundSyncRunning(): boolean {
+  return _timer !== null;
+}
 
 export function startBackgroundSync(): void {
   if (_timer) return;
+  _enabled = true;
   console.log('[sync-worker] Starting background sync worker...');
   _timer = setInterval(processSyncQueue, SYNC_INTERVAL_MS);
 }
 
 export function stopBackgroundSync(): void {
+  _enabled = false;
   if (_timer) {
     clearInterval(_timer);
     _timer = null;
     console.log('[sync-worker] Stopped background sync worker.');
   }
+  _isRunning = false;
 }
 
 async function processSyncQueue(): Promise<void> {
-  if (_isRunning) return;
+  if (_isRunning || !_enabled) return;
   
   const store = getLocalChatStore();
   if (!store) return;
@@ -37,6 +53,7 @@ async function processSyncQueue(): Promise<void> {
   _isRunning = true;
 
   for (const actionRow of actions) {
+    if (!_enabled) break;
     try {
       const payload = JSON.parse(actionRow.payloadJson);
       
@@ -95,9 +112,15 @@ async function processSyncQueue(): Promise<void> {
       }
 
       // Mark complete
+      if (!_enabled) break;
       store.markSyncActionComplete(actionRow.id);
       console.log(`[sync-worker] Synced action ${actionRow.action} (ID: ${actionRow.id}) successfully.`);
     } catch (err: any) {
+      if (isDeviceRevokedError(err)) {
+        stopBackgroundSync();
+        await _revocationHandler?.('This PC session was replaced by another Windows PC.');
+        break;
+      }
       console.error(`[sync-worker] Failed to sync action ${actionRow.id}:`, err.message);
       if (actionRow.retryCount >= MAX_RETRY_COUNT) {
         console.error(`[sync-worker] Action ${actionRow.id} exceeded max retries. Marking failed forever.`);

@@ -7,10 +7,10 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node scripts/run-tests.mjs",
     "start": "node dist/server.js",
     "dev": "tsc && node --watch dist/server.js",
-    "zalo:login-personal": "tsc && node dist/personal-login.js",
-    "crm:register-device": "tsc && node dist/agent/register-device.js"
+    "zalo:login-personal": "tsc && node dist/personal-login.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

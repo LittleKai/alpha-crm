@@ -7,9 +7,16 @@
 import { resolve } from 'path';
 import { config, projectRoot } from '../config.js';
 import { LocalChatStore } from './local-chat-store.js';
-import { setUndoMessageHandler, setStatusMessageHandler } from '../channels/personal-zca-channel.js';
+import {
+  setAuxiliaryEventHandler,
+  setUndoMessageHandler,
+  setStatusMessageHandler,
+} from '../channels/personal-zca-channel.js';
+import { localChatEvents } from './local-chat-events.js';
+import { LocalChatMediaWorker } from './local-chat-media-worker.js';
 
 let _store: LocalChatStore | null = null;
+let _mediaWorker: LocalChatMediaWorker | null = null;
 
 /**
  * Returns the shared LocalChatStore instance, or null if local-first is disabled.
@@ -20,6 +27,11 @@ export function getLocalChatStore(): LocalChatStore | null {
   if (!_store) {
     const dbPath = resolve(projectRoot, config.localChatDbPath);
     _store = new LocalChatStore(dbPath);
+    _mediaWorker = new LocalChatMediaWorker(
+      _store,
+      resolve(projectRoot, '.data', 'local-chat-media'),
+    );
+    _mediaWorker.start();
     console.log(`[local-chat] Initialized SQLite store at ${dbPath}`);
 
     // Wire undo handler so listener recall events update local DB
@@ -40,6 +52,76 @@ export function getLocalChatStore(): LocalChatStore | null {
         _store.updateMessageStatusByProviderId(zaloMsgId, status);
       }
     });
+
+    setAuxiliaryEventHandler((event) => {
+      if (!_store) return;
+      _store.appendZaloEvent({
+        type: event.type,
+        accountId: event.accountId,
+        threadId: event.threadId,
+        data: {
+          ...event.data,
+          providerMessageId: event.providerMessageId,
+          clientMessageId: event.clientMessageId,
+          userId: event.userId,
+          reaction: event.reaction,
+        },
+        timestamp: event.timestamp,
+      });
+      if (
+        (event.type === 'message.seen' ||
+          event.type === 'message.delivered') &&
+        event.providerMessageId
+      ) {
+        _store.upsertReceipt({
+          accountId: event.accountId,
+          providerMessageId: event.providerMessageId,
+          userId: event.userId || event.threadId,
+          status: event.type === 'message.seen' ? 'seen' : 'delivered',
+          timestamp: event.timestamp,
+        });
+      } else if (
+        event.type === 'message.reaction' &&
+        event.providerMessageId
+      ) {
+        _store.upsertReaction({
+          accountId: event.accountId,
+          providerMessageId: event.providerMessageId,
+          userId: event.userId || event.threadId,
+          reaction: event.reaction || '',
+          timestamp: event.timestamp,
+        });
+      } else if (
+        event.type === 'message.recalled' ||
+        event.type === 'message.deleted'
+      ) {
+        if (event.providerMessageId) {
+          _store.markMessageDeletedByProviderMsgId(event.providerMessageId);
+        } else if (event.clientMessageId) {
+          const row = _store.db
+            .prepare(
+              `SELECT id FROM messages
+               WHERE accountId = ? AND clientMessageId = ?`,
+            )
+            .get(event.accountId, event.clientMessageId) as
+            | { id: string }
+            | undefined;
+          if (row) _store.markMessageDeleted(row.id);
+        }
+      }
+      localChatEvents.publish({
+        type: event.type,
+        accountId: event.accountId,
+        threadId: event.threadId,
+        data: {
+          ...event.data,
+          providerMessageId: event.providerMessageId,
+          clientMessageId: event.clientMessageId,
+          userId: event.userId,
+          reaction: event.reaction,
+        },
+      });
+    });
   }
   return _store;
 }
@@ -49,10 +131,13 @@ export function getLocalChatStore(): LocalChatStore | null {
  */
 export function closeLocalChatStore(): void {
   if (_store) {
+    _mediaWorker?.stop();
+    _mediaWorker = null;
     _store.close();
     _store = null;
     setUndoMessageHandler(null);
     setStatusMessageHandler(null);
+    setAuxiliaryEventHandler(null);
     console.log('[local-chat] SQLite store closed.');
   }
 }

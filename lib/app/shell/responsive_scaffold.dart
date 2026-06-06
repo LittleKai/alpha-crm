@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
 import '../../shared/widgets/update_dialog.dart';
 import '../../features/settings/providers/update_provider.dart';
-import '../theme/app_colors.dart';
 import 'app_sidebar.dart';
 import 'app_topbar.dart';
 import 'app_shell_providers.dart';

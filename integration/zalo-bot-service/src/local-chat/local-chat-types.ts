@@ -32,8 +32,15 @@ export interface LocalMessage {
   content: string;
   messageType: string;
   providerMessageId: string;
+  clientMessageId: string;
   zaloMsgId: string;
   status: string;
+  errorText: string;
+  quoteJson: string;
+  mentionsJson: string;
+  stylesJson: string;
+  metadataJson: string;
+  recalledContent: string;
   isDeleted: boolean;
   receivedAt: string;
   sentAt: string;
@@ -51,6 +58,10 @@ export interface LocalAttachment {
   mimeType: string;
   sizeBytes: number;
   metadataJson: string;
+  status: string;
+  checksum: string;
+  errorText: string;
+  downloadedAt: string;
   createdAt: string;
 }
 
@@ -68,7 +79,12 @@ export interface InboundMessageInput {
   content: string;
   messageType: string;
   providerMessageId: string;
+  clientMessageId?: string;
   timestamp: string;
+  quote?: Record<string, unknown>;
+  mentions?: unknown[];
+  styles?: unknown[];
+  metadata?: Record<string, unknown>;
   attachments?: AttachmentInput[];
 }
 
@@ -78,6 +94,11 @@ export interface OutboundMessageInput {
   threadType: 'user' | 'group';
   content: string;
   messageType?: string;
+  clientMessageId?: string;
+  quote?: Record<string, unknown>;
+  mentions?: unknown[];
+  styles?: unknown[];
+  metadata?: Record<string, unknown>;
   attachments?: AttachmentInput[];
 }
 
@@ -94,4 +115,25 @@ export interface AttachmentInput {
 export interface MessagePage {
   messages: LocalMessage[];
   attachments: Map<string, LocalAttachment[]>;
+}
+
+export interface MessageReceipt {
+  messageId: string;
+  userId: string;
+  status: 'delivered' | 'seen';
+  timestamp: string;
+}
+
+export interface MessageReaction {
+  messageId: string;
+  userId: string;
+  reaction: string;
+  timestamp: string;
+}
+
+export interface HistoryState {
+  oldestTimestamp: string;
+  hasMore: boolean;
+  loading: boolean;
+  lastError: string;
 }

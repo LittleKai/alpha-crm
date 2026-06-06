@@ -113,18 +113,36 @@ void main() {
       );
     },
   );
+
+  test('failed optimistic message keeps the local id for retry', () async {
+    final repository = _FakeLiveChatRepository()..failNextSend = true;
+    final notifier = LiveChatNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+    await notifier.loadConversations(loadSelectedMessages: true);
+
+    await notifier.sendMessage('That bai');
+    final failed = notifier.state.selectedConversation!.messages.last;
+    expect(failed.id, 'local-failed-1');
+    expect(failed.status, 'failed');
+
+    await notifier.retryMessage(failed);
+    expect(repository.retriedMessageId, 'local-failed-1');
+  });
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
-  _FakeLiveChatRepository() : super(
-    localFirstEnabled: false,
-    cache: LiveChatCache(),
-    localApi: LiveChatLocalBridgeApi(baseUrl: ''),
-  );
+  _FakeLiveChatRepository()
+    : super(
+        localFirstEnabled: false,
+        cache: LiveChatCache(),
+        localApi: LiveChatLocalBridgeApi(baseUrl: ''),
+      );
 
   int getConversationsCalls = 0;
   int getMessagesCalls = 0;
   int sendMessageCalls = 0;
+  bool failNextSend = false;
+  String? retriedMessageId;
 
   final conversation = Conversation(
     id: 'conv-1',
@@ -220,6 +238,14 @@ class _FakeLiveChatRepository extends LiveChatRepository {
     String message,
   ) async {
     sendMessageCalls += 1;
+    if (failNextSend) {
+      failNextSend = false;
+      return {
+        'success': false,
+        'localMessageId': 'local-failed-$sendMessageCalls',
+        'error': 'network error',
+      };
+    }
     _messages.add({
       '_id': 'msg-send-$sendMessageCalls',
       'senderId': 'operator',
@@ -230,5 +256,11 @@ class _FakeLiveChatRepository extends LiveChatRepository {
       'createdAt': '2026-06-03T08:01:00.000Z',
     });
     return {'success': true};
+  }
+
+  @override
+  Future<Map<String, dynamic>> retryMessage(String messageId) async {
+    retriedMessageId = messageId;
+    return {'success': false, 'error': 'still offline'};
   }
 }

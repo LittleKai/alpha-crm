@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
+import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_dialog.dart';
+import '../../models/crm_login_result.dart';
 import '../../providers/crm_auth_provider.dart';
 
 class CrmLoginScreen extends ConsumerStatefulWidget {
@@ -28,12 +31,51 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref
+    final result = await ref
         .read(crmAuthProvider.notifier)
         .login(_emailController.text.trim(), _passwordController.text);
 
-    if (success && mounted) {
+    if (result is CrmLoginSuccess && mounted) {
       context.go('/dashboard');
+      return;
+    }
+
+    if (result is CrmLoginDeviceConflict && mounted) {
+      final deviceName = result.device.displayName ?? 'máy tính cũ';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AppDialog(
+          title: 'Đăng xuất máy tính cũ?',
+          icon: Icons.desktop_windows_rounded,
+          subtitle:
+              'Tài khoản đang hoạt động trên $deviceName. '
+              'Bạn có muốn đăng xuất máy cũ để dùng trên máy này không?',
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+            ),
+            AppDialogAction(
+              text: 'Đăng xuất máy cũ',
+              variant: AppButtonVariant.destructive,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+            ),
+          ],
+          child: const SizedBox.shrink(),
+        ),
+      );
+      if (!mounted) return;
+      if (confirmed == true) {
+        final replacement = await ref
+            .read(crmAuthProvider.notifier)
+            .confirmDeviceReplacement();
+        if (replacement is CrmLoginSuccess && mounted) {
+          context.go('/dashboard');
+        }
+      } else {
+        await ref.read(crmAuthProvider.notifier).cancelPendingLogin();
+      }
     }
   }
 
@@ -58,7 +100,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               elevation: 8,
-              shadowColor: Colors.black.withOpacity(0.08),
+              shadowColor: Colors.black.withValues(alpha: 0.08),
               child: Container(
                 width: 420,
                 padding: const EdgeInsets.all(32.0),
@@ -124,7 +166,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                             color: AppColors.errorSoft,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: AppColors.error.withOpacity(0.2),
+                              color: AppColors.error.withValues(alpha: 0.2),
                             ),
                           ),
                           child: Row(
@@ -154,6 +196,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                       Text('Địa chỉ Email', style: AppTextStyles.label),
                       const SizedBox(height: 8),
                       TextFormField(
+                        key: const Key('crm-email'),
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
@@ -182,6 +225,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                       Text('Mật khẩu', style: AppTextStyles.label),
                       const SizedBox(height: 8),
                       TextFormField(
+                        key: const Key('crm-password'),
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.done,
@@ -216,6 +260,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                       const SizedBox(height: 32),
 
                       ElevatedButton(
+                        key: const Key('crm-login-submit'),
                         onPressed: authState.isLoading ? null : _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,

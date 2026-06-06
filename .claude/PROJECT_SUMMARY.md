@@ -1,6 +1,12 @@
 # Project Summary
 
-**Last Updated:** 2026-06-06T09:33:00+07:00
+**Last Updated:** 2026-06-06T20:47:12+07:00
+
+**Session:** #80 - Hoàn tất toàn bộ Phase 1-4 của `ALPHA_CRM_REFACTOR_PLAN.md` và hợp nhất an toàn với pipeline Live Chat P0-P2 hiện có. Cloud áp dụng một PC Windows hoạt động cho mỗi subscription, hỗ trợ thay thế PC cũ bằng transaction/secret rotation, nhận diện `DEVICE_REVOKED`, và tách Mobile Remote khỏi trạng thái PC. Local Node chỉ khởi động runtime sau `/local/auth/sync`, phát revoke qua SSE, dừng campaign/sync/listener nhưng chỉ xóa hai file phiên CRM; batch history, self-echo reconciliation và local-first Live Chat được giữ nguyên. Flutter xử lý conflict bằng `AppDialog`, đồng bộ local session trước khi authenticated, tự quay về login khi revoke, giữ QR Remote và thêm Zalo onboarding. Xác minh trên working tree tích hợp: 43/43 Node tests, 79/79 Flutter tests, 16/16 cloud tests và Web build/Wasm dry run thành công; analyzer không có warning/error, còn 69 info lint nền.
+
+**Session:** #79 - Hoàn tất triển khai toàn bộ P0-P2 từ `docs/specs/zalo-message-processing-gap-vs-deplao.md`. Backend Zalo Local Bridge có normalizer undo/delete/receipt/typing/reaction/group/friend/system, `clientMessageId` chống self-echo, schema receipt/reaction/draft/history/media/event log, batch lịch sử, worker tải media, SSE replay/filter, API mark-read/retry/reaction/typing/search/around/draft và outbound nâng cao. Flutter Live Chat chuyển sang SSE với polling dự phòng, optimistic send, hiển thị lỗi/gửi lại, receipt/reaction/typing, quote, draft, tìm kiếm, link và nhiều attachment; sqflite nâng lên schema v2. Xác minh: TypeScript build thành công, 31 Node tests và toàn bộ 72 Flutter tests đều vượt qua; `flutter analyze` không có lỗi biên dịch, còn 21 info lint nền của dự án.
+
+**Session:** #78 - Đã nghiên cứu cách xử lý tin nhắn Zalo của Alpha CRM và đối chiếu với `D:\Dev\2.reference_pj\Zalo-ref\deplao-builder`. Thêm `docs/specs/zalo-message-processing-gap-vs-deplao.md` bằng tiếng Việt, phân loại rõ các phần đã có, mới có một phần và chưa có. Tài liệu xác nhận nền tảng local-first cho văn bản, tệp, lịch sử và thu hồi đã tồn tại; đồng thời ghi lại các phần còn thiếu về realtime, chuẩn hóa ID thu hồi, typing, receipt chi tiết, reaction, sự kiện nhóm/bạn bè, định dạng gửi nâng cao, đối soát self-echo, vòng đời media và trải nghiệm operator. Facebook được loại khỏi phạm vi nghiên cứu.
 
 **Session:** #77 - Resolved dark mode and light mode theme rendering and transition issues in AOT/production environments. Changed `AppColors` properties to dynamic getters and removed the obsolete `ThemeColor` class. Fixed the light mode transition regression by hardcoding explicit light mode color constants inside `AppTheme.lightTheme` (decoupling it from dynamic `AppColors` getters) and synchronizing `AppColors.isDarkMode` early in the build phase of `main.dart`. Updated `app_sidebar.dart` to make inactive text/icon colors white-ish, active text colors pure white, and group/header labels highly legible in dark mode. Styled the `_ZaloPreview` widget dynamically in `bulk_messaging_screen.dart` with a dark viewport background, slate bubble background, and white text to ensure contrast in dark mode. Verified with 100% passing tests (68/68).
 
@@ -145,6 +151,7 @@ docs/
     implementation-plan.md                       Phased integration plan
     deplao-feature-integration-spec.md           Features integrated from Deplao
     crm-domain-contract-gap.md                   Gap analysis for future domain models
+    zalo-message-processing-gap-vs-deplao.md     Zalo Live Chat handling parity audit against Deplao
     n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
@@ -191,6 +198,7 @@ docs/
 | `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
 | `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
 | `docs/specs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
+| `docs/specs/zalo-message-processing-gap-vs-deplao.md` | Phân tích phần xử lý tin nhắn Zalo còn thiếu | Đối chiếu Live Chat của Alpha CRM với pipeline Zalo của Deplao; ghi rõ các phần realtime, lưu trữ, gửi tin, media và UI còn thiếu hoặc mới triển khai một phần. Không bao gồm Facebook. |
 | `docs/specs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
 | `docs/specs/implementation-plan.md` | Reference integration plan | Documents the phased implementation plan, impacted files, risks, and verification checklist. |
 | `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |

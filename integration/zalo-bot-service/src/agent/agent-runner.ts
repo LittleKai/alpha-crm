@@ -1,312 +1,388 @@
-import os from 'os';
-import fs from 'fs';
-import { getAgentCredentials, getMachineFingerprint, saveAgentCredentials, getCrmToken, getCrmTokenPath } from './agent-identity.js';
-import { fetchManagedGroups, fetchNextCommand, reportCommandResult, reportInboundMessage, reportInboundMessageMetadata, sendHeartbeat, registerDevice } from './cloud-api.js';
+import type { AgentCredentials } from './agent-identity.js';
+import {
+  fetchManagedGroups,
+  fetchNextCommand,
+  isDeviceRevokedError,
+  reportCommandResult,
+  reportInboundMessage,
+  reportInboundMessageMetadata,
+  sendHeartbeat,
+} from './cloud-api.js';
 import { executeCommand } from './command-executor.js';
 import { getZaloStatus } from '../zalo.js';
 import { config } from '../config.js';
-import { setInboundMessageHandler, type ZaloInboundMessageEvent } from '../channels/types.js';
+import {
+  setInboundMessageBatchHandler,
+  setInboundMessageHandler,
+  type ZaloInboundMessageEvent,
+} from '../channels/types.js';
 import { dispatchN8nEvent } from '../integrations/n8n-event-dispatcher.js';
 import { getLocalChatStore } from '../local-chat/index.js';
+import { localChatEvents } from '../local-chat/local-chat-events.js';
+
+type RevocationHandler = (reason: string) => void | Promise<void>;
 
 let running = false;
-let pollingIntervalTimer: NodeJS.Timeout | null = null;
-let heartbeatIntervalTimer: NodeJS.Timeout | null = null;
-let autoRegisterTimeoutTimer: NodeJS.Timeout | null = null;
-let autoRegisterFailCount = 0;
-let tokenWatcherActive = false;
-export let lastRegistrationError: string | null = null;
-
-// Track polling details
+let pollingTimer: NodeJS.Timeout | null = null;
+let heartbeatTimer: NodeJS.Timeout | null = null;
+let revocationHandler: RevocationHandler | null = null;
 let pollErrorCount = 0;
 const BASE_POLL_DELAY_MS = 5000;
 const MAX_POLL_DELAY_MS = 60000;
+const HEARTBEAT_INTERVAL_MS = 10000;
 let currentPollDelayMs = BASE_POLL_DELAY_MS;
 let managedGroupCache: { expiresAt: number; keys: Set<string> } = {
   expiresAt: 0,
-  keys: new Set()
+  keys: new Set(),
 };
 
-/**
- * Starts the outbound CRM agent background loops
- */
-export function startAgentRunner(): void {
+export function setAgentRevocationHandler(handler: RevocationHandler | null): void {
+  revocationHandler = handler;
+}
+
+export function isAgentRunnerRunning(): boolean {
+  return running;
+}
+
+export function startAgentRunner(credentials: AgentCredentials): void {
   if (config.crmAgentMode !== 'enabled') {
     console.log('[agent-runner] Agent runner mode is disabled in config.');
     return;
   }
-
   if (running) {
-    console.warn('[agent-runner] Agent runner is already running.');
     return;
   }
-
-  const credentials = getAgentCredentials();
-  if (!credentials) {
-    console.log('[agent-runner] ⚠️ Không tìm thấy thông tin xác thực thiết bị (.data/agent/device-secret.json). Đang quét crm_token.json...');
-    attemptAutoRegistration();
-    return;
-  }
-
-  console.log('\n=========================================');
-  console.log(` Starting Alpha CRM Outbound Agent Channel `);
-  console.log(` Device ID: ${credentials.deviceId}`);
-  console.log(` Target Cloud API: ${config.crmCloudApiUrl}`);
-  console.log('=========================================\n');
 
   running = true;
-  lastRegistrationError = null; // Clear error if credentials load successfully
-  setInboundMessageHandler((event) => handleInboundMessageEvent(credentials.deviceId, credentials.agentSecret, event));
-
-  // 1. Start heartbeat loop (every 30s)
-  runHeartbeatLoop(credentials.deviceId, credentials.agentSecret);
-  heartbeatIntervalTimer = setInterval(
-    () => runHeartbeatLoop(credentials.deviceId, credentials.agentSecret),
-    30000
+  pollErrorCount = 0;
+  currentPollDelayMs = BASE_POLL_DELAY_MS;
+  managedGroupCache = { expiresAt: 0, keys: new Set() };
+  setInboundMessageHandler((event) =>
+    handleInboundMessageEvent(credentials, event),
+  );
+  setInboundMessageBatchHandler((events) =>
+    handleInboundMessageBatch(credentials, events),
   );
 
-  // 2. Start polling loop
-  scheduleNextPoll(credentials.deviceId, credentials.agentSecret);
+  void runHeartbeat(credentials);
+  heartbeatTimer = setInterval(() => {
+    void runHeartbeat(credentials);
+  }, HEARTBEAT_INTERVAL_MS);
+  scheduleNextPoll(credentials);
 }
 
-/**
- * Watches the crm_token.json file for changes to wake up from sleep instantly.
- */
-function watchCrmToken(tokenPath: string): void {
-  if (tokenWatcherActive) return;
-  tokenWatcherActive = true;
-  
-  fs.watchFile(tokenPath, { interval: 5000 }, (curr, prev) => {
-    if (curr.mtimeMs !== prev.mtimeMs) {
-      console.log('[agent-runner] 🔄 Phát hiện file crm_token.json thay đổi (Đăng nhập mới hoặc cập nhật gói cước). Đang kích hoạt kiểm tra đăng ký ngay lập tức...');
-      
-      // If there is an active auto-register timeout timer, cancel it
-      if (autoRegisterTimeoutTimer) {
-        clearTimeout(autoRegisterTimeoutTimer);
-        autoRegisterTimeoutTimer = null;
-      }
-      
-      // Reset fail count and try registering immediately
-      autoRegisterFailCount = 0;
-      attemptAutoRegistration();
-    }
-  });
-}
-
-/**
- * Attempts to automatically register the device using active CRM token.
- * Retries under the hood if token is missing or registration fails.
- */
-async function attemptAutoRegistration(): Promise<void> {
-  const tokenPath = getCrmTokenPath();
-  if (tokenPath) {
-    watchCrmToken(tokenPath);
-  }
-
-  try {
-    const token = getCrmToken();
-    if (token) {
-      console.log('[agent-runner] Phát hiện token hoạt động từ crm_token.json. Đang tự động đăng ký thiết bị...');
-      const fingerprint = getMachineFingerprint();
-      const hostname = os.hostname() || 'Agent PC';
-      const displayName = `Windows ${process.arch} (${hostname})`;
-      
-      console.log(`[agent-runner] Đang đăng ký với tên hiển thị "${displayName}"...`);
-      const result = await registerDevice(token, displayName, fingerprint);
-      console.log(`[agent-runner] ✅ Tự động đăng ký thành công! Device ID: ${result.deviceId}`);
-      
-      lastRegistrationError = null; // Clear on success
-      autoRegisterFailCount = 0;
-      saveAgentCredentials(result.deviceId, result.agentSecret);
-      
-      // Clear auto-register check timer if scheduled
-      if (autoRegisterTimeoutTimer) {
-        clearTimeout(autoRegisterTimeoutTimer);
-        autoRegisterTimeoutTimer = null;
-      }
-      
-      // Start the main loops
-      startAgentRunner();
-      return;
-    }
-  } catch (err: any) {
-    autoRegisterFailCount++;
-    lastRegistrationError = err.message; // Save registration failure error
-    console.error('[agent-runner] ❌ Tự động đăng ký thiết bị thất bại:', err.message);
-
-    // If the error is due to inactive/expired subscription, suspend retries for 30 minutes to prevent spamming
-    if (err.message.includes('Yêu cầu gói đăng ký') || err.message.includes('hết hạn')) {
-      console.log('[agent-runner] ⏸️ Phát hiện tài khoản chưa kích hoạt hoặc đã hết hạn gói cước CRM.');
-      console.log('[agent-runner] Tạm ngưng tự động đăng ký để tránh spam Cloud API. Hệ thống sẽ thử lại sau mỗi 30 phút.');
-
-      if (!autoRegisterTimeoutTimer && running === false) {
-        autoRegisterTimeoutTimer = setTimeout(() => {
-          autoRegisterTimeoutTimer = null;
-          attemptAutoRegistration();
-        }, 30 * 60 * 1000); // 30 minutes
-      }
-      return;
-    }
-  }
-
-  // Calculate exponential backoff retry delay (10s, 20s, 40s, 80s, up to 5 minutes maximum)
-  const backoffDelayMs = Math.min(10000 * Math.pow(2, Math.min(autoRegisterFailCount - 1, 5)), 5 * 60 * 1000);
-
-  if (!autoRegisterTimeoutTimer && running === false) {
-    autoRegisterTimeoutTimer = setTimeout(() => {
-      autoRegisterTimeoutTimer = null;
-      attemptAutoRegistration();
-    }, backoffDelayMs);
-    console.log(`[agent-runner] Sẽ thử tự động đăng ký lại sau ${backoffDelayMs / 1000} giây (Số lần thất bại liên tiếp: ${autoRegisterFailCount})`);
-  }
-}
-
-/**
- * Stop background agent runner loops cleanly
- */
 export function stopAgentRunner(): void {
+  if (!running && !pollingTimer && !heartbeatTimer) {
+    setInboundMessageHandler(null);
+    setInboundMessageBatchHandler(null);
+    return;
+  }
   running = false;
   setInboundMessageHandler(null);
-  if (pollingIntervalTimer) {
-    clearTimeout(pollingIntervalTimer);
-    pollingIntervalTimer = null;
+  setInboundMessageBatchHandler(null);
+  if (pollingTimer) {
+    clearTimeout(pollingTimer);
+    pollingTimer = null;
   }
-  if (heartbeatIntervalTimer) {
-    clearInterval(heartbeatIntervalTimer);
-    heartbeatIntervalTimer = null;
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
   }
-  if (autoRegisterTimeoutTimer) {
-    clearTimeout(autoRegisterTimeoutTimer);
-    autoRegisterTimeoutTimer = null;
-  }
-  console.log('[agent-runner] Outbound Agent Channel stopped.');
+  console.log('[agent-runner] Outbound agent stopped.');
 }
 
-
-async function getManagedGroupKeys(deviceId: string, agentSecret: string): Promise<Set<string>> {
+async function getManagedGroupKeys(
+  credentials: AgentCredentials,
+): Promise<Set<string>> {
   const now = Date.now();
-  if (managedGroupCache.expiresAt > now) return managedGroupCache.keys;
+  if (managedGroupCache.expiresAt > now) {
+    return managedGroupCache.keys;
+  }
 
-  const groups = await fetchManagedGroups(deviceId, agentSecret);
-  const keys = new Set(groups.map((group) => `${group.accountId}:${group.groupId}`));
+  const groups = await fetchManagedGroups(
+    credentials.deviceId,
+    credentials.agentSecret,
+  );
+  const keys = new Set(
+    groups.map((group) => `${group.accountId}:${group.groupId}`),
+  );
   managedGroupCache = { expiresAt: now + 60000, keys };
   return keys;
 }
 
-async function handleInboundMessageEvent(
-  deviceId: string,
-  agentSecret: string,
-  event: ZaloInboundMessageEvent
+async function handleInboundMessageBatch(
+  credentials: AgentCredentials,
+  events: ZaloInboundMessageEvent[],
 ): Promise<void> {
+  if (!running) {
+    return;
+  }
   try {
-    if (event.threadType === 'group') {
-      const managedKeys = await getManagedGroupKeys(deviceId, agentSecret);
-      if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) return;
+    const managedKeys = events.some((event) => event.threadType === 'group')
+      ? await getManagedGroupKeys(credentials)
+      : new Set<string>();
+    const accepted = events.filter(
+      (event) =>
+        event.threadType !== 'group' ||
+        managedKeys.has(`${event.accountId}:${event.threadId}`),
+    );
+    if (accepted.length === 0 || !running) {
+      return;
     }
 
-    // Local-first: persist full message locally before cloud sync
     const localStore = getLocalChatStore();
     if (localStore) {
-      try {
-        localStore.upsertInboundMessage({
+      const ids = localStore.upsertInboundMessages(
+        accepted.map((event) => ({
           accountId: event.accountId,
           threadId: event.threadId,
           threadType: event.threadType,
           senderId: event.senderId,
           senderName: event.senderName || '',
           avatarUrl: event.avatarUrl,
+          senderAvatarUrl: event.senderAvatarUrl,
+          groupName: event.groupName,
           content: event.content,
           messageType: event.messageType,
           providerMessageId: event.providerMessageId,
+          clientMessageId: event.clientMessageId,
+          quote: event.quote,
+          mentions: event.mentions,
+          styles: event.styles,
+          metadata: event.metadata,
           timestamp: event.timestamp,
+        })),
+      );
+      accepted.forEach((event, index) => {
+        localChatEvents.publish({
+          type: 'message.created',
+          accountId: event.accountId,
+          threadId: event.threadId,
+          data: {
+            messageId: ids[index],
+            providerMessageId: event.providerMessageId,
+            clientMessageId: event.clientMessageId,
+            history: true,
+          },
         });
-      } catch (localErr: any) {
-        console.error('[agent-runner] Local store write failed — skipping cloud report to preserve data ownership:', localErr.message);
+      });
+      await Promise.all(
+        accepted.map((event) =>
+          reportInboundMessageMetadata(
+            credentials.deviceId,
+            credentials.agentSecret,
+            event,
+          ),
+        ),
+      );
+    } else {
+      await Promise.all(
+        accepted.map((event) =>
+          reportInboundMessage(
+            credentials.deviceId,
+            credentials.agentSecret,
+            event,
+          ),
+        ),
+      );
+    }
+    await Promise.all(
+      accepted.map((event) => dispatchN8nEvent('zalo.message.inbound', event)),
+    );
+  } catch (error) {
+    if (await handleCloudFailure(error)) {
+      return;
+    }
+    console.warn(
+      '[agent-runner] Failed to persist inbound history batch:',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+async function handleInboundMessageEvent(
+  credentials: AgentCredentials,
+  event: ZaloInboundMessageEvent,
+): Promise<void> {
+  if (!running) {
+    return;
+  }
+  try {
+    if (event.threadType === 'group') {
+      const managedKeys = await getManagedGroupKeys(credentials);
+      if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) {
+        return;
+      }
+    }
+
+    const localStore = getLocalChatStore();
+    if (localStore) {
+      try {
+        const reconciledId =
+          event.senderId === event.accountId && event.clientMessageId
+            ? localStore.reconcileOutboundMessage({
+                accountId: event.accountId,
+                clientMessageId: event.clientMessageId,
+                providerMessageId: event.providerMessageId,
+                status: 'sent',
+              })
+            : undefined;
+        const localMessageId =
+          reconciledId ||
+          localStore.upsertInboundMessage({
+            accountId: event.accountId,
+            threadId: event.threadId,
+            threadType: event.threadType,
+            senderId: event.senderId,
+            senderName: event.senderName || '',
+            avatarUrl: event.avatarUrl,
+            senderAvatarUrl: event.senderAvatarUrl,
+            groupName: event.groupName,
+            content: event.content,
+            messageType: event.messageType,
+            providerMessageId: event.providerMessageId,
+            clientMessageId: event.clientMessageId,
+            quote: event.quote,
+            mentions: event.mentions,
+            styles: event.styles,
+            metadata: event.metadata,
+            timestamp: event.timestamp,
+          });
+        localChatEvents.publish({
+          type: reconciledId ? 'message.updated' : 'message.created',
+          accountId: event.accountId,
+          threadId: event.threadId,
+          data: {
+            messageId: localMessageId,
+            providerMessageId: event.providerMessageId,
+            clientMessageId: event.clientMessageId,
+          },
+        });
+      } catch (error: any) {
+        console.error(
+          '[agent-runner] Local store write failed; cloud report skipped:',
+          error.message,
+        );
         return;
       }
 
-      // Send metadata-only to cloud
-      await reportInboundMessageMetadata(deviceId, agentSecret, event);
+      await reportInboundMessageMetadata(
+        credentials.deviceId,
+        credentials.agentSecret,
+        event,
+      );
     } else {
-      // Legacy full-payload path when local-first is disabled
-      await reportInboundMessage(deviceId, agentSecret, event);
+      await reportInboundMessage(
+        credentials.deviceId,
+        credentials.agentSecret,
+        event,
+      );
     }
 
     await dispatchN8nEvent('zalo.message.inbound', event);
-  } catch (err: any) {
-    console.warn('[agent-runner] Failed to report inbound message:', err.message);
+  } catch (error: any) {
+    if (await handleCloudFailure(error)) {
+      return;
+    }
+    console.warn('[agent-runner] Failed to report inbound message:', error.message);
   }
 }
 
-/**
- * Executes a single heartbeat tick
- */
-async function runHeartbeatLoop(deviceId: string, agentSecret: string): Promise<void> {
-  if (!running) return;
+async function runHeartbeat(credentials: AgentCredentials): Promise<void> {
+  if (!running) {
+    return;
+  }
   try {
     const zaloStatus = getZaloStatus();
-    const statusStr = zaloStatus.connected ? 'online' : 'offline';
-    await sendHeartbeat(deviceId, agentSecret, {
-      status: statusStr,
+    await sendHeartbeat(credentials.deviceId, credentials.agentSecret, {
+      status: zaloStatus.connected ? 'online' : 'offline',
       appVersion: '0.2.0',
-      agentVersion: '0.2.0'
+      agentVersion: '0.2.0',
     });
-    console.log(`[agent-runner] Heartbeat sent successfully. Zalo status: ${statusStr}`);
-  } catch (err: any) {
-    console.error(`[agent-runner] Heartbeat failed:`, err.message);
+  } catch (error: any) {
+    if (await handleCloudFailure(error)) {
+      return;
+    }
+    console.warn('[agent-runner] Heartbeat failed; session retained:', error.message);
   }
 }
 
-/**
- * Schedules the next poll step
- */
-function scheduleNextPoll(deviceId: string, agentSecret: string): void {
-  if (!running) return;
-  pollingIntervalTimer = setTimeout(async () => {
-    await runPollStep(deviceId, agentSecret);
-    scheduleNextPoll(deviceId, agentSecret);
+function scheduleNextPoll(credentials: AgentCredentials): void {
+  if (!running) {
+    return;
+  }
+  pollingTimer = setTimeout(async () => {
+    await runPollStep(credentials);
+    if (running) {
+      scheduleNextPoll(credentials);
+    }
   }, currentPollDelayMs);
 }
 
-/**
- * Performs a single command poll, executes if command found, and reports the outcome
- */
-async function runPollStep(deviceId: string, agentSecret: string): Promise<void> {
+async function runPollStep(credentials: AgentCredentials): Promise<void> {
+  if (!running) {
+    return;
+  }
   try {
-    const command = await fetchNextCommand(deviceId, agentSecret);
-    
-    // Connection succeeded, reset backoff
+    const command = await fetchNextCommand(
+      credentials.deviceId,
+      credentials.agentSecret,
+    );
     pollErrorCount = 0;
     currentPollDelayMs = BASE_POLL_DELAY_MS;
-
-    if (!command) {
-      // No commands queued, quiet poll
+    if (!command || !running) {
       return;
     }
 
-    console.log(`\n[agent-runner] 📥 Nhận lệnh mới từ Cloud: "${command.type}" (ID: ${command._id})`);
-    
     try {
-      // Execute the command locally
-      const result = await executeCommand(command, deviceId, agentSecret);
-      
-      console.log(`[agent-runner] Lệnh "${command.type}" xử lý thành công.`);
-      
-      // Report success back to cloud
-      await reportCommandResult(deviceId, agentSecret, command._id, true, result);
-    } catch (execErr: any) {
-      console.error(`[agent-runner] Lệnh "${command.type}" xử lý thất bại:`, execErr.message);
-      
-      // Report failure back to cloud
-      await reportCommandResult(deviceId, agentSecret, command._id, false, undefined, execErr.message);
+      const result = await executeCommand(
+        command,
+        credentials.deviceId,
+        credentials.agentSecret,
+      );
+      if (running) {
+        await reportCommandResult(
+          credentials.deviceId,
+          credentials.agentSecret,
+          command._id,
+          true,
+          result,
+        );
+      }
+    } catch (executionError: any) {
+      if (running) {
+        await reportCommandResult(
+          credentials.deviceId,
+          credentials.agentSecret,
+          command._id,
+          false,
+          undefined,
+          executionError.message,
+        );
+      }
     }
-
-    // Since we just processed a command, trigger next poll step immediately to see if there are more
-    currentPollDelayMs = 500; // instant follow-up
-  } catch (err: any) {
-    pollErrorCount++;
-    // Exponential backoff logic: double the delay up to max cap
-    currentPollDelayMs = Math.min(BASE_POLL_DELAY_MS * Math.pow(2, pollErrorCount - 1), MAX_POLL_DELAY_MS);
-    console.warn(`[agent-runner] Polling failed (${err.message}). Retrying in ${currentPollDelayMs / 1000}s...`);
+    currentPollDelayMs = 500;
+  } catch (error: any) {
+    if (await handleCloudFailure(error)) {
+      return;
+    }
+    pollErrorCount += 1;
+    currentPollDelayMs = Math.min(
+      BASE_POLL_DELAY_MS * Math.pow(2, pollErrorCount - 1),
+      MAX_POLL_DELAY_MS,
+    );
+    console.warn(
+      `[agent-runner] Poll failed; retrying in ${currentPollDelayMs / 1000}s:`,
+      error.message,
+    );
   }
+}
+
+async function handleCloudFailure(error: unknown): Promise<boolean> {
+  if (!isDeviceRevokedError(error)) {
+    return false;
+  }
+  stopAgentRunner();
+  await revocationHandler?.('This PC session was replaced by another Windows PC.');
+  return true;
 }

@@ -13,14 +13,13 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { config } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
-import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, initializeZalo, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
+import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
 import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync, mkdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { projectRoot } from './config.js';
 import { Zalo, LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance } from './channels/personal-zca-channel.js';
-import { startAgentRunner, lastRegistrationError } from './agent/agent-runner.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
 import { startPairingSession } from './agent/cloud-api.js';
 import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSettings } from './integrations/integration-store.js';
@@ -28,9 +27,18 @@ import { N8nClient } from './integrations/n8n-client.js';
 import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
 import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
-import { startBackgroundSync } from './local-chat/sync-worker.js';
+import { handleLocalSessionRoute } from './local-session/local-session-api.js';
+import {
+  sessionCoordinator,
+  sessionEventHub,
+  shutdownSessionRuntime,
+} from './local-session/session-runtime.js';
 
 const VERSION = '0.2.0';
+
+if (!['127.0.0.1', 'localhost', '::1'].includes(config.localBindHost)) {
+  throw new Error('LOCAL_BIND_HOST must be a loopback address.');
+}
 
 interface PendingSession {
   id: string;
@@ -133,6 +141,18 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (await handleLocalSessionRoute(
+    method,
+    url,
+    req,
+    res,
+    json,
+    sessionCoordinator,
+    sessionEventHub,
+  )) {
+    return;
+  }
+
   // Handle local-first Live Chat APIs
   if (handleLocalRoute(method, url, req, res, json, readBody)) {
     return;
@@ -151,7 +171,7 @@ const server = createServer(async (req, res) => {
         mode: config.crmAgentMode,
         registered: credentials !== null,
         deviceId: credentials ? credentials.deviceId : null,
-        error: lastRegistrationError || null
+        error: null
       },
       zalo: {
         channel: config.channelMode,
@@ -1032,16 +1052,7 @@ function listenOnPort(port: number): void {
       console.error('[server] Failed to write active-port.json:', writeErr);
     }
 
-    try {
-      await initializeZalo();
-      console.log('[server] Zalo integration initialized successfully.');
-      // Start outbound agent connection loops
-      startAgentRunner();
-      // Start local-first background sync to cloud
-      startBackgroundSync();
-    } catch (err) {
-      console.error('[server] Failed to initialize Zalo integration:', err);
-    }
+    console.log('[server] Waiting for Flutter session sync before starting CRM runtime.');
   });
 
   server.on('error', (err: any) => {
@@ -1056,3 +1067,18 @@ function listenOnPort(port: number): void {
 }
 
 listenOnPort(config.localBindPort);
+
+let shuttingDown = false;
+async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  await shutdownSessionRuntime();
+  server.close(() => process.exit(0));
+}
+
+process.on('SIGINT', () => {
+  void shutdown();
+});
+process.on('SIGTERM', () => {
+  void shutdown();
+});

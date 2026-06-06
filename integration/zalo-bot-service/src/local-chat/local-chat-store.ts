@@ -14,7 +14,10 @@ import type {
   InboundMessageInput,
   OutboundMessageInput,
   AttachmentInput,
+  HistoryState,
   MessagePage,
+  MessageReaction,
+  MessageReceipt,
 } from './local-chat-types.js';
 
 export class LocalChatStore {
@@ -117,6 +120,55 @@ export class LocalChatStore {
         nextRetryAt TEXT NOT NULL,
         createdAt TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS message_receipts (
+        messageId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        status TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        PRIMARY KEY (messageId, userId, status),
+        FOREIGN KEY (messageId) REFERENCES messages(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        messageId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        reaction TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        PRIMARY KEY (messageId, userId),
+        FOREIGN KEY (messageId) REFERENCES messages(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_drafts (
+        accountId TEXT NOT NULL,
+        threadId TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (accountId, threadId)
+      );
+
+      CREATE TABLE IF NOT EXISTS history_state (
+        accountId TEXT NOT NULL,
+        threadId TEXT NOT NULL,
+        oldestTimestamp TEXT NOT NULL DEFAULT '',
+        hasMore INTEGER NOT NULL DEFAULT 1,
+        loading INTEGER NOT NULL DEFAULT 0,
+        lastError TEXT NOT NULL DEFAULT '',
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (accountId, threadId)
+      );
+
+      CREATE TABLE IF NOT EXISTS zalo_event_log (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        accountId TEXT NOT NULL DEFAULT '',
+        threadId TEXT NOT NULL DEFAULT '',
+        dataJson TEXT NOT NULL DEFAULT '{}',
+        timestamp TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_zalo_event_thread_time
+        ON zalo_event_log(accountId, threadId, timestamp);
     `);
 
     // ── Incremental migrations (idempotent) ──
@@ -126,10 +178,33 @@ export class LocalChatStore {
     } catch {
       // Column already exists — ignore
     }
+    const additionalColumns = [
+      ['messages', "clientMessageId TEXT NOT NULL DEFAULT ''"],
+      ['messages', "errorText TEXT NOT NULL DEFAULT ''"],
+      ['messages', "quoteJson TEXT NOT NULL DEFAULT '{}'"],
+      ['messages', "mentionsJson TEXT NOT NULL DEFAULT '[]'"],
+      ['messages', "stylesJson TEXT NOT NULL DEFAULT '[]'"],
+      ['messages', "metadataJson TEXT NOT NULL DEFAULT '{}'"],
+      ['messages', "recalledContent TEXT NOT NULL DEFAULT ''"],
+      ['attachments', "status TEXT NOT NULL DEFAULT 'ready'"],
+      ['attachments', "checksum TEXT NOT NULL DEFAULT ''"],
+      ['attachments', "errorText TEXT NOT NULL DEFAULT ''"],
+      ['attachments', "downloadedAt TEXT NOT NULL DEFAULT ''"],
+    ] as const;
+    for (const [table, definition] of additionalColumns) {
+      try {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+      } catch {
+        // Column already exists.
+      }
+    }
+
     // Add index on providerMessageId for fast undo lookups
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_msg_provider_id
         ON messages(providerMessageId) WHERE providerMessageId != '';
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_account_client
+        ON messages(accountId, clientMessageId) WHERE clientMessageId != '';
     `);
   }
 
@@ -224,6 +299,23 @@ export class LocalChatStore {
         .get(input.accountId, input.providerMessageId) as { id: string } | undefined;
       if (existing) return existing.id;
     }
+    if (input.clientMessageId) {
+      const existing = this.db
+        .prepare(
+          'SELECT id FROM messages WHERE accountId = ? AND clientMessageId = ?',
+        )
+        .get(input.accountId, input.clientMessageId) as
+        | { id: string }
+        | undefined;
+      if (existing) {
+        this.updateMessageStatus(
+          existing.id,
+          'sent',
+          input.providerMessageId || undefined,
+        );
+        return existing.id;
+      }
+    }
 
     // For group chats, use groupName as display name; for 1:1, use senderName
     const displayName = input.threadType === 'group'
@@ -246,9 +338,11 @@ export class LocalChatStore {
         `INSERT INTO messages
          (id, conversationId, accountId, threadId, threadType, direction,
           senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
-          zaloMsgId, status, isDeleted, receivedAt, sentAt, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?, '', 'delivered', 0,
-                 ?, '', ?, ?)`,
+          clientMessageId, zaloMsgId, status, errorText, quoteJson, mentionsJson,
+          stylesJson, metadataJson, recalledContent, isDeleted, receivedAt, sentAt,
+          createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?, ?, '', 'delivered', '',
+                 ?, ?, ?, ?, '', 0, ?, '', ?, ?)`,
       )
       .run(
         id,
@@ -262,6 +356,11 @@ export class LocalChatStore {
         input.content,
         input.messageType || 'text',
         input.providerMessageId || '',
+        input.clientMessageId || '',
+        JSON.stringify(input.quote || {}),
+        JSON.stringify(input.mentions || []),
+        JSON.stringify(input.styles || []),
+        JSON.stringify(input.metadata || {}),
         input.timestamp || now,
         now,
         now,
@@ -293,8 +392,35 @@ export class LocalChatStore {
 
     this.enqueueSyncAction('sync_message', { messageId: id });
     this.enqueueSyncAction('sync_conversation', { conversationId });
+    this.db
+      .prepare(
+        `UPDATE history_state SET
+           oldestTimestamp = CASE
+             WHEN oldestTimestamp = '' OR oldestTimestamp > ? THEN ?
+             ELSE oldestTimestamp
+           END,
+           loading = 0,
+           lastError = '',
+           updatedAt = ?
+         WHERE accountId = ? AND threadId = ?`,
+      )
+      .run(
+        input.timestamp || now,
+        input.timestamp || now,
+        now,
+        input.accountId,
+        input.threadId,
+      );
 
     return id;
+  }
+
+  upsertInboundMessages(inputs: InboundMessageInput[]): string[] {
+    const insertBatch = this.db.transaction(
+      (items: InboundMessageInput[]) =>
+        items.map((item) => this.upsertInboundMessage(item)),
+    );
+    return insertBatch(inputs);
   }
 
   // ---------------------------------------------------------------------------
@@ -321,9 +447,11 @@ export class LocalChatStore {
         `INSERT INTO messages
          (id, conversationId, accountId, threadId, threadType, direction,
           senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
-          zaloMsgId, status, isDeleted, receivedAt, sentAt, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'outbound', '', '', '', ?, ?, '', '', 'queued', 0,
-                 '', ?, ?, ?)`,
+          clientMessageId, zaloMsgId, status, errorText, quoteJson, mentionsJson,
+          stylesJson, metadataJson, recalledContent, isDeleted, receivedAt, sentAt,
+          createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, 'outbound', '', '', '', ?, ?, '', ?, '', 'queued', '',
+                 ?, ?, ?, ?, '', 0, '', ?, ?, ?)`,
       )
       .run(
         id,
@@ -333,6 +461,11 @@ export class LocalChatStore {
         input.threadType,
         input.content,
         input.messageType || 'text',
+        input.clientMessageId || '',
+        JSON.stringify(input.quote || {}),
+        JSON.stringify(input.mentions || []),
+        JSON.stringify(input.styles || []),
+        JSON.stringify(input.metadata || {}),
         now,
         now,
         now,
@@ -373,19 +506,20 @@ export class LocalChatStore {
     messageId: string,
     status: string,
     providerMessageId?: string,
+    errorText = '',
   ): void {
     const now = new Date().toISOString();
     if (providerMessageId) {
       this.db
         .prepare(
-          `UPDATE messages SET status = ?, providerMessageId = ?,
+          `UPDATE messages SET status = ?, providerMessageId = ?, errorText = ?,
            sentAt = ?, updatedAt = ? WHERE id = ?`,
         )
-        .run(status, providerMessageId, now, now, messageId);
+        .run(status, providerMessageId, errorText, now, now, messageId);
     } else {
       this.db
-        .prepare('UPDATE messages SET status = ?, updatedAt = ? WHERE id = ?')
-        .run(status, now, messageId);
+        .prepare('UPDATE messages SET status = ?, errorText = ?, updatedAt = ? WHERE id = ?')
+        .run(status, errorText, now, messageId);
     }
     this.enqueueSyncAction('sync_message', { messageId });
   }
@@ -405,6 +539,28 @@ export class LocalChatStore {
     if (result) {
       this.enqueueSyncAction('sync_message', { messageId: result.id });
     }
+  }
+
+  reconcileOutboundMessage(input: {
+    accountId: string;
+    clientMessageId: string;
+    providerMessageId?: string;
+    status?: string;
+  }): string | undefined {
+    if (!input.clientMessageId) return undefined;
+    const row = this.db
+      .prepare(
+        `SELECT id FROM messages
+         WHERE accountId = ? AND clientMessageId = ? AND direction = 'outbound'`,
+      )
+      .get(input.accountId, input.clientMessageId) as { id: string } | undefined;
+    if (!row) return undefined;
+    this.updateMessageStatus(
+      row.id,
+      input.status || 'sent',
+      input.providerMessageId,
+    );
+    return row.id;
   }
 
   // ---------------------------------------------------------------------------
@@ -494,6 +650,250 @@ export class LocalChatStore {
     return this.getMessages(conv.id, options);
   }
 
+  getMessage(messageId: string): LocalMessage | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM messages WHERE id = ?')
+      .get(messageId) as any;
+    return row ? this._mapMessage(row) : undefined;
+  }
+
+  searchMessages(
+    query: string,
+    options: {
+      accountId?: string;
+      threadId?: string;
+      limit?: number;
+    } = {},
+  ): LocalMessage[] {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const where = ['content LIKE ?', 'isDeleted = 0'];
+    const params: unknown[] = [`%${trimmed}%`];
+    if (options.accountId) {
+      where.push('accountId = ?');
+      params.push(options.accountId);
+    }
+    if (options.threadId) {
+      where.push('threadId = ?');
+      params.push(options.threadId);
+    }
+    const limit = Math.min(options.limit || 50, 200);
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM messages WHERE ${where.join(' AND ')}
+         ORDER BY createdAt DESC LIMIT ?`,
+      )
+      .all(...params, limit) as any[];
+    return rows.map((row) => this._mapMessage(row));
+  }
+
+  getMessagesAround(
+    conversationId: string,
+    messageId: string,
+    radius = 15,
+  ): MessagePage {
+    const center = this.db
+      .prepare(
+        'SELECT createdAt FROM messages WHERE id = ? AND conversationId = ?',
+      )
+      .get(messageId, conversationId) as { createdAt: string } | undefined;
+    if (!center) return { messages: [], attachments: new Map() };
+
+    const before = this.db
+      .prepare(
+        `SELECT * FROM messages
+         WHERE conversationId = ? AND createdAt < ?
+         ORDER BY createdAt DESC LIMIT ?`,
+      )
+      .all(conversationId, center.createdAt, radius) as any[];
+    const current = this.db
+      .prepare('SELECT * FROM messages WHERE id = ?')
+      .get(messageId) as any;
+    const after = this.db
+      .prepare(
+        `SELECT * FROM messages
+         WHERE conversationId = ? AND createdAt > ?
+         ORDER BY createdAt ASC LIMIT ?`,
+      )
+      .all(conversationId, center.createdAt, radius) as any[];
+    const messages = [
+      ...before.reverse(),
+      current,
+      ...after,
+    ].filter(Boolean).map((row) => this._mapMessage(row));
+    return this._loadAttachments(messages);
+  }
+
+  upsertReceipt(input: {
+    accountId: string;
+    providerMessageId: string;
+    userId: string;
+    status: 'delivered' | 'seen';
+    timestamp: string;
+  }): boolean {
+    const message = this.db
+      .prepare(
+        `SELECT id FROM messages
+         WHERE accountId = ? AND providerMessageId = ?`,
+      )
+      .get(input.accountId, input.providerMessageId) as { id: string } | undefined;
+    if (!message) return false;
+    this.db
+      .prepare(
+        `INSERT INTO message_receipts (messageId, userId, status, timestamp)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(messageId, userId, status)
+         DO UPDATE SET timestamp = excluded.timestamp`,
+      )
+      .run(message.id, input.userId, input.status, input.timestamp);
+    this.updateMessageStatusByProviderId(
+      input.providerMessageId,
+      input.status,
+    );
+    return true;
+  }
+
+  getReceipts(messageId: string): MessageReceipt[] {
+    return this.db
+      .prepare(
+        `SELECT messageId, userId, status, timestamp
+         FROM message_receipts WHERE messageId = ?
+         ORDER BY timestamp ASC`,
+      )
+      .all(messageId) as MessageReceipt[];
+  }
+
+  upsertReaction(input: {
+    accountId: string;
+    providerMessageId: string;
+    userId: string;
+    reaction: string;
+    timestamp: string;
+  }): boolean {
+    const message = this.db
+      .prepare(
+        `SELECT id FROM messages
+         WHERE accountId = ? AND providerMessageId = ?`,
+      )
+      .get(input.accountId, input.providerMessageId) as { id: string } | undefined;
+    if (!message) return false;
+    if (!input.reaction) {
+      this.db
+        .prepare(
+          'DELETE FROM message_reactions WHERE messageId = ? AND userId = ?',
+        )
+        .run(message.id, input.userId);
+      return true;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO message_reactions (messageId, userId, reaction, timestamp)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(messageId, userId)
+         DO UPDATE SET reaction = excluded.reaction, timestamp = excluded.timestamp`,
+      )
+      .run(message.id, input.userId, input.reaction, input.timestamp);
+    return true;
+  }
+
+  getReactions(messageId: string): MessageReaction[] {
+    return this.db
+      .prepare(
+        `SELECT messageId, userId, reaction, timestamp
+         FROM message_reactions WHERE messageId = ?
+         ORDER BY timestamp ASC`,
+      )
+      .all(messageId) as MessageReaction[];
+  }
+
+  saveDraft(accountId: string, threadId: string, content: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO chat_drafts (accountId, threadId, content, updatedAt)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(accountId, threadId)
+         DO UPDATE SET content = excluded.content, updatedAt = excluded.updatedAt`,
+      )
+      .run(accountId, threadId, content, new Date().toISOString());
+  }
+
+  getDraft(accountId: string, threadId: string): string {
+    const row = this.db
+      .prepare(
+        'SELECT content FROM chat_drafts WHERE accountId = ? AND threadId = ?',
+      )
+      .get(accountId, threadId) as { content: string } | undefined;
+    return row?.content || '';
+  }
+
+  setHistoryState(
+    accountId: string,
+    threadId: string,
+    state: HistoryState,
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO history_state
+         (accountId, threadId, oldestTimestamp, hasMore, loading, lastError, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(accountId, threadId) DO UPDATE SET
+           oldestTimestamp = excluded.oldestTimestamp,
+           hasMore = excluded.hasMore,
+           loading = excluded.loading,
+           lastError = excluded.lastError,
+           updatedAt = excluded.updatedAt`,
+      )
+      .run(
+        accountId,
+        threadId,
+        state.oldestTimestamp,
+        state.hasMore ? 1 : 0,
+        state.loading ? 1 : 0,
+        state.lastError,
+        new Date().toISOString(),
+      );
+  }
+
+  appendZaloEvent(input: {
+    type: string;
+    accountId: string;
+    threadId: string;
+    data?: Record<string, unknown>;
+    timestamp: string;
+  }): string {
+    const id = randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO zalo_event_log
+         (id, type, accountId, threadId, dataJson, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        input.type,
+        input.accountId,
+        input.threadId,
+        JSON.stringify(input.data || {}),
+        input.timestamp,
+      );
+    return id;
+  }
+
+  getHistoryState(accountId: string, threadId: string): HistoryState {
+    const row = this.db
+      .prepare(
+        `SELECT oldestTimestamp, hasMore, loading, lastError
+         FROM history_state WHERE accountId = ? AND threadId = ?`,
+      )
+      .get(accountId, threadId) as any;
+    return {
+      oldestTimestamp: row?.oldestTimestamp || '',
+      hasMore: row ? row.hasMore === 1 : true,
+      loading: row ? row.loading === 1 : false,
+      lastError: row?.lastError || '',
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Recall / delete
   // ---------------------------------------------------------------------------
@@ -502,7 +902,8 @@ export class LocalChatStore {
     const now = new Date().toISOString();
     const result = this.db
       .prepare(
-        'UPDATE messages SET isDeleted = 1, content = ?, updatedAt = ? WHERE id = ?',
+        `UPDATE messages SET isDeleted = 1, recalledContent = content,
+         content = ?, updatedAt = ? WHERE id = ?`,
       )
       .run('[Tin nhắn đã thu hồi]', now, messageId);
     if (result.changes > 0) {
@@ -519,7 +920,8 @@ export class LocalChatStore {
     const now = new Date().toISOString();
     const result = this.db
       .prepare(
-        `UPDATE messages SET isDeleted = 1, content = ?, updatedAt = ?
+        `UPDATE messages SET isDeleted = 1, recalledContent = content,
+         content = ?, updatedAt = ?
          WHERE providerMessageId = ? AND providerMessageId != '' RETURNING id`,
       )
       .get('[Tin nhắn đã thu hồi]', now, providerMessageId) as { id: string } | undefined;
@@ -661,6 +1063,49 @@ export class LocalChatStore {
       .run(nextRetryAt, id);
   }
 
+  listPendingAttachments(limit = 10): LocalAttachment[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM attachments
+         WHERE status IN ('pending', 'failed')
+           AND url LIKE 'http%'
+           AND localPath = ''
+         ORDER BY createdAt ASC LIMIT ?`,
+      )
+      .all(limit) as any[];
+    return rows.map((row) => this._mapAttachment(row));
+  }
+
+  updateAttachmentDownload(
+    attachmentId: string,
+    update: {
+      status: 'pending' | 'downloading' | 'ready' | 'failed';
+      localPath?: string;
+      checksum?: string;
+      errorText?: string;
+      downloadedAt?: string;
+    },
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE attachments SET
+           status = ?,
+           localPath = COALESCE(?, localPath),
+           checksum = COALESCE(?, checksum),
+           errorText = ?,
+           downloadedAt = COALESCE(?, downloadedAt)
+         WHERE id = ?`,
+      )
+      .run(
+        update.status,
+        update.localPath ?? null,
+        update.checksum ?? null,
+        update.errorText || '',
+        update.downloadedAt ?? null,
+        attachmentId,
+      );
+  }
+
   // ---------------------------------------------------------------------------
   // Health
   // ---------------------------------------------------------------------------
@@ -702,20 +1147,28 @@ export class LocalChatStore {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(
       `INSERT INTO attachments
-       (id, messageId, kind, name, url, localPath, mimeType, sizeBytes, metadataJson, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, messageId, kind, name, url, localPath, mimeType, sizeBytes,
+        metadataJson, status, checksum, errorText, downloadedAt, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', ?)`,
     );
     for (const a of attachments) {
+      const id = randomUUID();
+      const url = a.url || '';
+      const localPath = a.localPath || '';
+      const status = !localPath && /^https?:\/\//i.test(url)
+        ? 'pending'
+        : 'ready';
       stmt.run(
-        randomUUID(),
+        id,
         messageId,
         a.kind || '',
         a.name || '',
-        a.url || '',
-        a.localPath || '',
+        url,
+        localPath,
         a.mimeType || '',
         a.sizeBytes || 0,
         a.metadata ? JSON.stringify(a.metadata) : '{}',
+        status,
         now,
       );
     }
@@ -735,8 +1188,15 @@ export class LocalChatStore {
       content: row.content,
       messageType: row.messageType,
       providerMessageId: row.providerMessageId,
+      clientMessageId: row.clientMessageId || '',
       zaloMsgId: row.zaloMsgId,
       status: row.status,
+      errorText: row.errorText || '',
+      quoteJson: row.quoteJson || '{}',
+      mentionsJson: row.mentionsJson || '[]',
+      stylesJson: row.stylesJson || '[]',
+      metadataJson: row.metadataJson || '{}',
+      recalledContent: row.recalledContent || '',
       isDeleted: row.isDeleted === 1,
       receivedAt: row.receivedAt,
       sentAt: row.sentAt,
@@ -756,7 +1216,30 @@ export class LocalChatStore {
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
       metadataJson: row.metadataJson,
+      status: row.status || 'ready',
+      checksum: row.checksum || '',
+      errorText: row.errorText || '',
+      downloadedAt: row.downloadedAt || '',
       createdAt: row.createdAt,
     };
+  }
+
+  private _loadAttachments(messages: LocalMessage[]): MessagePage {
+    const attachments = new Map<string, LocalAttachment[]>();
+    if (messages.length === 0) return { messages, attachments };
+    const ids = messages.map((message) => message.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM attachments WHERE messageId IN (${placeholders})`,
+      )
+      .all(...ids) as any[];
+    for (const row of rows) {
+      const attachment = this._mapAttachment(row);
+      const list = attachments.get(attachment.messageId) || [];
+      list.push(attachment);
+      attachments.set(attachment.messageId, list);
+    }
+    return { messages, attachments };
   }
 }

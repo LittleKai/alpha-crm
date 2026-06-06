@@ -38,6 +38,10 @@ void main() {
         find.byKey(const ValueKey('dashboard_campaign_status_section')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('dashboard_zalo_onboarding_banner')),
+        findsOneWidget,
+      );
 
       expect(tester.takeException(), isNull);
     },

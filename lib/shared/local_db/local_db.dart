@@ -47,6 +47,13 @@ class LocalDb {
             await db.execute(script);
           }
         },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            for (final script in LocalDbSchema.version2Scripts) {
+              await db.execute(script);
+            }
+          }
+        },
       ),
     );
   }

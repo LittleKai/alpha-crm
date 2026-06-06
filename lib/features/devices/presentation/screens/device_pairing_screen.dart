@@ -48,7 +48,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hủy Ghép Đôi Thiết Bị'),
+        title: const Text('Ngắt kết nối Remote'),
         content: Text(
           'Bạn có chắc chắn muốn hủy ghép đôi thiết bị "${dev.displayName}" không? Điện thoại này sẽ không thể đồng bộ chiến dịch tự động qua PC này nữa.',
         ),
@@ -67,7 +67,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     );
 
     if (confirmed == true && mounted) {
-      ref.read(crmDeviceProvider.notifier).unpairDevice(dev.id);
+      ref.read(crmDeviceProvider.notifier).revokePairedMobile(dev.id);
     }
   }
 
@@ -356,7 +356,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text('Hủy Ghép Đôi Thiết Bị'),
+                        title: const Text('Ngắt kết nối Remote'),
                         content: const Text(
                           'Cảnh báo: Nếu hủy ghép đôi thiết bị này, bạn sẽ không thể đồng bộ dữ liệu chiến dịch tự động qua Zalo cá nhân được nữa.',
                         ),
@@ -370,7 +370,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                               Navigator.pop(context);
                               ref
                                   .read(crmDeviceProvider.notifier)
-                                  .unpairDevice();
+                                  .disconnectCurrentMobileRemote();
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.error,
@@ -399,7 +399,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       color: AppColors.errorText,
                     ),
                   )
-                : const Text('Hủy Ghép Đôi Thiết Bị Hiện Tại'),
+                : const Text('Ngắt kết nối Remote'),
           ),
         ],
       );
@@ -483,7 +483,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Hủy kết nối thiết bị này',
+                    tooltip: 'Ngắt kết nối Remote này',
                     icon: const Icon(
                       Icons.link_off_rounded,
                       color: AppColors.error,

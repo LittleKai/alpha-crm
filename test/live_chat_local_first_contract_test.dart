@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_contracts.dart';
+import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_event.dart';
 import 'package:alpha_crm/features/messaging/live_chat/providers/live_chat_provider.dart';
 
 void main() {
@@ -64,6 +65,32 @@ void main() {
   group('localRecallMessagePath', () {
     test('builds recall path with message id', () {
       expect(localRecallMessagePath('msg42'), '/local/messages/msg42/recall');
+    });
+  });
+
+  group('LiveChatSseDecoder', () {
+    test('parses named events and JSON data', () {
+      final decoder = LiveChatSseDecoder();
+      final events = <LiveChatEvent>[];
+      events.addAll(decoder.addLine('id: event-1'));
+      events.addAll(decoder.addLine('event: message.updated'));
+      events.addAll(
+        decoder.addLine(
+          'data: {"accountId":"acc-1","threadId":"thread-1","data":{"messageId":"msg-1"}}',
+        ),
+      );
+      events.addAll(decoder.addLine(''));
+
+      expect(events, hasLength(1));
+      expect(events.single.id, 'event-1');
+      expect(events.single.type, 'message.updated');
+      expect(events.single.data['messageId'], 'msg-1');
+    });
+
+    test('turns the connected SSE comment into bridge.connected', () {
+      final decoder = LiveChatSseDecoder();
+      final events = decoder.addLine(': connected');
+      expect(events.single.type, 'bridge.connected');
     });
   });
 
@@ -215,6 +242,26 @@ void main() {
       });
       expect(msg.message, 'from local bridge');
       expect(msg.zaloMsgId, 'zl_100');
+    });
+
+    test('parses client id, send error, quote and reactions', () {
+      final msg = ChatMessage.fromJson({
+        'id': 'local-rich',
+        'content': 'hello',
+        'direction': 'outbound',
+        'status': 'failed',
+        'clientMessageId': 'cli-1',
+        'errorText': 'network error',
+        'quoteJson': '{"messageId":"quoted-1","content":"old"}',
+        'reactions': [
+          {'userId': 'u1', 'reaction': 'heart'},
+        ],
+        'createdAt': '2026-06-06T10:00:00Z',
+      });
+      expect(msg.clientMessageId, 'cli-1');
+      expect(msg.errorText, 'network error');
+      expect(msg.quote?['messageId'], 'quoted-1');
+      expect(msg.reactions.single['reaction'], 'heart');
     });
   });
 }

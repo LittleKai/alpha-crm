@@ -14,9 +14,10 @@ import type {
   ZaloRecallMessageRequest,
   ZaloFriend,
   ZaloGroupMember,
+  ZaloAuxiliaryEvent,
   ZaloInboundMessageEvent,
 } from './types.js';
-import { emitInboundMessage } from './types.js';
+import { emitInboundMessage, emitInboundMessages } from './types.js';
 import { createProxyAgent, redactProxyUrl } from '../integrations/proxy-helper.js';
 
 // zca-js imports
@@ -57,6 +58,23 @@ let _statusMessageHandler: StatusMessageHandler | null = null;
 
 export function setStatusMessageHandler(handler: StatusMessageHandler | null): void {
   _statusMessageHandler = handler;
+}
+
+type AuxiliaryEventHandler = (event: ZaloAuxiliaryEvent) => void | Promise<void>;
+let _auxiliaryEventHandler: AuxiliaryEventHandler | null = null;
+
+export function setAuxiliaryEventHandler(
+  handler: AuxiliaryEventHandler | null,
+): void {
+  _auxiliaryEventHandler = handler;
+}
+
+async function emitAuxiliaryEvent(
+  event: ZaloAuxiliaryEvent | null,
+): Promise<void> {
+  if (event && _auxiliaryEventHandler) {
+    await _auxiliaryEventHandler(event);
+  }
 }
 
 export function setLoginPoolInitializedForTest(value: boolean): void {
@@ -194,6 +212,119 @@ function toStringValue(value: unknown): string {
   return '';
 }
 
+function normalizeTimestamp(value: unknown): string {
+  const raw = Number(value ?? Date.now());
+  const milliseconds = Number.isFinite(raw)
+    ? raw > 100000000000 ? raw : raw * 1000
+    : Date.now();
+  return new Date(milliseconds).toISOString();
+}
+
+function normalizeThread(
+  instance: Pick<ZaloAccountInstance, 'uId'>,
+  event: any,
+): { threadId: string; threadType: 'user' | 'group' } {
+  const data = event?.data ?? event ?? {};
+  const nested = data?.content && typeof data.content === 'object'
+    ? data.content
+    : {};
+  const rawType = data.threadType ?? event?.threadType ?? event?.type;
+  const threadType =
+    rawType === ThreadType.Group ||
+    data.isGroup === true ||
+    Boolean(data.groupId) ||
+    String(rawType || '').toLowerCase().includes('group')
+      ? 'group'
+      : 'user';
+  const senderId = toStringValue(
+    data.uidFrom ?? data.fromUid ?? data.userId ?? data.uid,
+  );
+  const candidate = toStringValue(
+    data.threadId ??
+    event?.threadId ??
+    data.groupId ??
+    nested.threadId ??
+    data.idTo,
+  );
+  const threadId = threadType === 'user' && candidate === instance.uId
+    ? senderId
+    : candidate || senderId;
+  return { threadId, threadType };
+}
+
+function normalizeUndoEvent(
+  instance: Pick<ZaloAccountInstance, 'uId'>,
+  event: any,
+): ZaloAuxiliaryEvent | null {
+  const data = event?.data ?? event ?? {};
+  const content = data?.content && typeof data.content === 'object'
+    ? data.content
+    : {};
+  const providerMessageId = toStringValue(
+    content.globalMsgId ??
+    content.msgId ??
+    data.globalMsgId ??
+    data.msgId ??
+    event?.msgId,
+  );
+  const clientMessageId = toStringValue(
+    content.cliMsgId ?? data.cliMsgId ?? event?.cliMsgId,
+  );
+  const thread = normalizeThread(instance, event);
+  if ((!providerMessageId && !clientMessageId) || !thread.threadId) return null;
+  return {
+    type: 'message.recalled',
+    accountId: instance.uId,
+    ...thread,
+    providerMessageId,
+    clientMessageId,
+    timestamp: normalizeTimestamp(data.ts ?? event?.ts),
+  };
+}
+
+function normalizeReceiptEvents(
+  instance: Pick<ZaloAccountInstance, 'uId'>,
+  status: 'seen' | 'delivered',
+  event: any,
+): ZaloAuxiliaryEvent[] {
+  const data = event?.data ?? event ?? {};
+  const thread = normalizeThread(instance, event);
+  const ids = [
+    ...(Array.isArray(data.msgIds) ? data.msgIds : []),
+    ...(Array.isArray(data.messageIds) ? data.messageIds : []),
+    data.msgId,
+    data.globalMsgId,
+    event?.msgId,
+  ].map(toStringValue).filter(Boolean);
+  const uniqueIds = [...new Set(ids)];
+  const userId = toStringValue(
+    data.uid ?? data.uidFrom ?? data.userId ?? data.fromUid,
+  );
+  return uniqueIds.map((providerMessageId) => ({
+    type: status === 'seen' ? 'message.seen' : 'message.delivered',
+    accountId: instance.uId,
+    ...thread,
+    providerMessageId,
+    userId,
+    timestamp: normalizeTimestamp(data.ts ?? event?.ts),
+  }));
+}
+
+export function normalizeUndoEventForTest(
+  instance: Pick<ZaloAccountInstance, 'uId' | 'label'>,
+  event: any,
+): ZaloAuxiliaryEvent | null {
+  return normalizeUndoEvent(instance, event);
+}
+
+export function normalizeReceiptEventForTest(
+  instance: Pick<ZaloAccountInstance, 'uId' | 'label'>,
+  status: 'seen' | 'delivered',
+  event: any,
+): ZaloAuxiliaryEvent[] {
+  return normalizeReceiptEvents(instance, status, event);
+}
+
 function normalizeImageUrl(value: unknown): string {
   const url = toStringValue(value).trim();
   if (url.startsWith('//')) return `https:${url}`;
@@ -311,18 +442,24 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
                 ? 'gif'
                 : rawType.includes('location')
                   ? 'location'
-                  : rawType.includes('contact')
+              : rawType.includes('contact')
                     ? 'contact_card'
+                    : rawType.includes('reminder')
+                      ? 'reminder'
+                      : rawType.includes('poll')
+                        ? 'poll'
+                        : rawType.includes('system') ||
+                            rawType.includes('pin')
+                          ? 'system'
                     : richContent
                       ? 'link'
                       : 'text';
   let content = extractInboundContent(data, messageType);
   if (!content) content = `[${messageType}]`;
 
-  const rawTimestamp = Number(data.ts ?? data.timestamp ?? data.time ?? Date.now());
-  const timestampMs = Number.isFinite(rawTimestamp)
-    ? rawTimestamp > 100000000000 ? rawTimestamp : rawTimestamp * 1000
-    : Date.now();
+  const timestamp = normalizeTimestamp(
+    data.ts ?? data.timestamp ?? data.time,
+  );
 
   // Try to find the sender's avatar from event data
   let avatarUrl = normalizeImageUrl(data.avatar || data.avt || data.avatarUrl || data.senderAvatar || '');
@@ -356,9 +493,23 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     senderAvatarUrl: avatarUrl, // per-sender avatar for group chat display
     content,
     messageType,
-    providerMessageId: toStringValue(data.msgId ?? data.cliMsgId ?? data.messageId ?? data.id) ||
-      `zca_${instance.uId}_${threadId}_${timestampMs}`,
-    timestamp: new Date(timestampMs).toISOString(),
+    providerMessageId: toStringValue(
+      data.msgId ?? data.globalMsgId ?? data.messageId ?? data.id,
+    ) || `zca_${instance.uId}_${threadId}_${Date.parse(timestamp)}`,
+    clientMessageId: toStringValue(data.cliMsgId),
+    quote: data.quote,
+    mentions: Array.isArray(data.mentions) ? data.mentions : [],
+    styles: Array.isArray(data.styles) ? data.styles : [],
+    metadata: {
+      ...(typeof data.metadata === 'object' ? data.metadata : {}),
+      rawType,
+      ...(messageType === 'system' ||
+      messageType === 'poll' ||
+      messageType === 'reminder'
+        ? { systemPayload: data }
+        : {}),
+    },
+    timestamp,
   };
 }
 
@@ -470,10 +621,26 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
       listener.removeAllListeners("message");
       listener.removeAllListeners("undo");
       listener.removeAllListeners("group_event");
+      listener.removeAllListeners("seen");
+      listener.removeAllListeners("seen_messages");
+      listener.removeAllListeners("delivered_messages");
+      listener.removeAllListeners("typing");
+      listener.removeAllListeners("reaction");
+      listener.removeAllListeners("message_deleted");
+      listener.removeAllListeners("delete");
 
       listener.on("friend_event", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
         console.log(`[PersonalZcaChannel - ${instance.label}] Event friend_event received:`, JSON.stringify(event));
+        await emitAuxiliaryEvent({
+          type: 'friend.updated',
+          accountId: instance.uId,
+          threadId: toStringValue(event?.data?.fromUid ?? event?.data?.userId),
+          threadType: 'user',
+          userId: toStringValue(event?.data?.fromUid ?? event?.data?.userId),
+          timestamp: normalizeTimestamp(event?.data?.ts ?? event?.ts),
+          data: event?.data ?? {},
+        });
 
         if (event.type === FriendEventType.REQUEST && !event.isSelf) {
           const senderId = event.data?.fromUid;
@@ -497,15 +664,28 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
       // ── Undo (message recall) event ──
       listener.on("undo", async (data: any) => {
         instance.lastEventAt = new Date().toISOString();
-        const msgId = data?.data?.msgId ?? data?.msgId;
-        if (msgId) {
-          console.log(`[PersonalZcaChannel - ${instance.label}] Undo event for msgId: ${msgId}`);
-          // Delegate to the local chat store via the undo handler
-          if (_undoMessageHandler) {
-            await _undoMessageHandler(instance.uId, String(msgId));
+        const event = normalizeUndoEvent(instance, data);
+        if (event) {
+          console.log(`[PersonalZcaChannel - ${instance.label}] Undo event for msgId: ${event.providerMessageId || event.clientMessageId}`);
+          await emitAuxiliaryEvent(event);
+          if (_undoMessageHandler && event.providerMessageId) {
+            await _undoMessageHandler(instance.uId, event.providerMessageId);
           }
         }
       });
+
+      const handleDelete = async (data: any): Promise<void> => {
+        instance.lastEventAt = new Date().toISOString();
+        const recalled = normalizeUndoEvent(instance, data);
+        if (recalled) {
+          await emitAuxiliaryEvent({
+            ...recalled,
+            type: 'message.deleted',
+          });
+        }
+      };
+      listener.on("message_deleted", handleDelete);
+      listener.on("delete", handleDelete);
 
       // ── Group events (member add/remove, rename) ──
       listener.on("group_event", async (event: any) => {
@@ -521,39 +701,77 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
           groupNameCache.delete(groupId);
           groupsCache.delete(instance.uId);
         }
+        await emitAuxiliaryEvent({
+          type: 'group.updated',
+          accountId: instance.uId,
+          threadId: toStringValue(groupId),
+          threadType: 'group',
+          timestamp: normalizeTimestamp(event?.data?.ts ?? event?.ts),
+          data: event?.data ?? {},
+        });
       });
 
       // ── Seen, Delivered, Typing events ──
-      listener.on("seen_messages", async (data: any) => {
+      const handleReceipt = async (
+        status: 'seen' | 'delivered',
+        data: any,
+      ): Promise<void> => {
         instance.lastEventAt = new Date().toISOString();
-        const msgId = data?.data?.msgId ?? data?.msgId;
-        if (msgId) {
-          console.log(`[PersonalZcaChannel - ${instance.label}] Seen event for msgId: ${msgId}`);
-          if (_statusMessageHandler) await _statusMessageHandler(instance.uId, String(msgId), 'seen');
+        for (const event of normalizeReceiptEvents(instance, status, data)) {
+          await emitAuxiliaryEvent(event);
+          if (_statusMessageHandler && event.providerMessageId) {
+            await _statusMessageHandler(
+              instance.uId,
+              event.providerMessageId,
+              status,
+            );
+          }
         }
-      });
-
-      listener.on("delivered_messages", async (data: any) => {
-        instance.lastEventAt = new Date().toISOString();
-        const msgId = data?.data?.msgId ?? data?.msgId;
-        if (msgId) {
-          console.log(`[PersonalZcaChannel - ${instance.label}] Delivered event for msgId: ${msgId}`);
-          if (_statusMessageHandler) await _statusMessageHandler(instance.uId, String(msgId), 'delivered');
-        }
-      });
+      };
+      listener.on("seen", (data: any) => handleReceipt('seen', data));
+      listener.on("seen_messages", (data: any) => handleReceipt('seen', data));
+      listener.on("delivered_messages", (data: any) => handleReceipt('delivered', data));
 
       listener.on("typing", async (data: any) => {
         instance.lastEventAt = new Date().toISOString();
-        const threadId = data?.data?.threadId ?? data?.threadId ?? data?.uidFrom;
+        const payload = data?.data ?? data ?? {};
+        const thread = normalizeThread(instance, data);
+        const threadId = thread.threadId;
         const isTyping = data?.data?.isTyping ?? data?.isTyping;
         console.log(`[PersonalZcaChannel - ${instance.label}] Typing event in threadId: ${threadId}, isTyping: ${isTyping}`);
-        // Can be forwarded to frontend via local API/socket in the future
+        await emitAuxiliaryEvent({
+          type: isTyping === false ? 'typing.stopped' : 'typing.started',
+          accountId: instance.uId,
+          ...thread,
+          userId: toStringValue(payload.uidFrom ?? payload.userId),
+          timestamp: normalizeTimestamp(payload.ts),
+        });
+      });
+
+      listener.on("reaction", async (data: any) => {
+        const payload = data?.data ?? data ?? {};
+        const thread = normalizeThread(instance, data);
+        await emitAuxiliaryEvent({
+          type: 'message.reaction',
+          accountId: instance.uId,
+          ...thread,
+          providerMessageId: toStringValue(
+            payload.msgId ?? payload.globalMsgId,
+          ),
+          userId: toStringValue(payload.uidFrom ?? payload.userId),
+          reaction: toStringValue(
+            payload.reaction ?? payload.reactionType ?? payload.icon,
+          ),
+          timestamp: normalizeTimestamp(payload.ts),
+          data: payload,
+        });
       });
 
       listener.on("old_messages", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
         const msgs = event?.data?.msgs ?? event?.messages ?? [];
         console.log(`[PersonalZcaChannel - ${instance.label}] Received ${msgs.length} old messages.`);
+        const batch: ZaloInboundMessageEvent[] = [];
         for (const msg of msgs) {
           try {
             const inbound = normalizeInboundMessage(instance, msg);
@@ -571,11 +789,12 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
                const groupName = await resolveGroupName(instance.api, inbound.threadId);
                if (groupName) inbound.groupName = groupName;
             }
-            await emitInboundMessage(inbound);
+            batch.push(inbound);
           } catch (err) {
             console.error(`[PersonalZcaChannel - ${instance.label}] Error processing old message:`, err);
           }
         }
+        await emitInboundMessages(batch);
       });
 
       listener.on("message", async (event: any) => {
@@ -609,6 +828,29 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         await emitInboundMessage(inbound);
       });
 
+      // ── Connection closed (e.g. Kicked from phone or Duplicate Login) ──
+      listener.on("closed", async (code: number, reason: string) => {
+        console.warn(`[PersonalZcaChannel - ${instance.label}] Listener closed. Code: ${code}, Reason: ${reason}`);
+        if (code === 3000 || code === 3003) { // 3000: Duplicate, 3003: Kicked
+          console.error(`[PersonalZcaChannel - ${instance.label}] Kicked by server or duplicate login. Marking as disconnected.`);
+
+          instance.listenerRunning = false;
+
+          // Import local chat store to update DB
+          try {
+            const { getLocalChatStore } = await import('../local-chat/index.js');
+            const store = getLocalChatStore();
+            if (store) {
+              store.db.prepare('UPDATE accounts SET status = ? WHERE id = ?').run('DISCONNECTED_EXPIRED', instance.uId);
+            }
+          } catch (e) {
+            console.error('Failed to update account status in DB:', e);
+          }
+
+          await stopListenerForInstance(instance);
+        }
+      });
+
       listener.start();
       instance.listenerRunning = true;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener started.`);
@@ -628,6 +870,13 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
       listener.removeAllListeners("message");
       listener.removeAllListeners("undo");
       listener.removeAllListeners("group_event");
+      listener.removeAllListeners("seen");
+      listener.removeAllListeners("seen_messages");
+      listener.removeAllListeners("delivered_messages");
+      listener.removeAllListeners("typing");
+      listener.removeAllListeners("reaction");
+      listener.removeAllListeners("message_deleted");
+      listener.removeAllListeners("delete");
       instance.listenerRunning = false;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
     }
@@ -704,17 +953,35 @@ export class PersonalZcaChannel implements ZaloChannel {
       const hasAttachments = attachments.length > 0;
       console.log(`[PersonalZcaChannel] sendMessage params: recipientId=${recipientId}, threadType=${req.threadType}(${threadType}), message="${messageText.substring(0, 50)}", attachments=${hasAttachments ? attachments.length : 0}`);
 
-      // Build message content for zca-js
-      const messageContent: any = { msg: messageText };
+      // Build the richest payload supported by the installed zca-js version.
+      const messageContent: any = {
+        msg: messageText,
+        ...(req.clientMessageId ? { cliMsgId: req.clientMessageId } : {}),
+        ...(req.quote ? { quote: req.quote } : {}),
+        ...(req.mentions ? { mentions: req.mentions } : {}),
+        ...(req.styles ? { styles: req.styles } : {}),
+      };
       if (hasAttachments) {
         messageContent.attachments = attachments;
       }
 
-      const result = await selectedInstance.api.sendMessage(
-        messageContent,
-        recipientId,
-        threadType,
-      );
+      const api = selectedInstance.api as any;
+      let result: any;
+      if (req.messageType === 'sticker' && req.sticker && api.sendSticker) {
+        result = await api.sendSticker(req.sticker, recipientId, threadType);
+      } else if (req.messageType === 'link' && req.link && api.sendLink) {
+        result = await api.sendLink(req.link, recipientId, threadType);
+      } else if (req.messageType === 'video' && req.video && api.sendVideo) {
+        result = await api.sendVideo(req.video, recipientId, threadType);
+      } else if (req.messageType === 'voice' && req.voice && api.sendVoice) {
+        result = await api.sendVoice(req.voice, recipientId, threadType);
+      } else {
+        result = await selectedInstance.api.sendMessage(
+          messageContent,
+          recipientId,
+          threadType,
+        );
+      }
 
       // zca-js sendMessage returns { message: SendMessageResult | null, attachment: SendMessageResult[] }
       const msgResult = (result as any)?.message ?? result;
@@ -776,6 +1043,67 @@ export class PersonalZcaChannel implements ZaloChannel {
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Unknown recall error',
+      };
+    }
+  }
+
+  async sendTyping(
+    accountId: string,
+    threadId: string,
+    threadType: 'user' | 'group',
+  ): Promise<boolean> {
+    await ensureLoginPool();
+    const instance = accountPool.get(accountId);
+    const api = instance?.api as any;
+    if (!api?.sendTypingEvent) return false;
+    await api.sendTypingEvent(
+      threadId,
+      threadType === 'group' ? ThreadType.Group : ThreadType.User,
+    );
+    return true;
+  }
+
+  async reactMessage(request: {
+    accountId: string;
+    threadId: string;
+    threadType: 'user' | 'group';
+    msgId: string;
+    reaction: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      await ensureLoginPool();
+      const instance = accountPool.get(request.accountId);
+      const api = instance?.api as any;
+      if (!api) throw new Error('Zalo account is not connected.');
+      const threadType = request.threadType === 'group'
+        ? ThreadType.Group
+        : ThreadType.User;
+      if (api.addReaction) {
+        await api.addReaction(
+          request.reaction,
+          {
+            msgId: request.msgId,
+            uidFrom: instance?.uId,
+            idTo: request.threadId,
+          },
+          request.threadId,
+          threadType,
+        );
+      } else if (api.sendReaction) {
+        await api.sendReaction(
+          request.reaction,
+          request.msgId,
+          request.threadId,
+          threadType,
+        );
+      } else {
+        throw new Error('Reaction is not supported by the installed zca-js version.');
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Reaction failed.',
       };
     }
   }

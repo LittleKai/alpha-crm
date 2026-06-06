@@ -18,6 +18,18 @@ import {
 // Local campaign tracking
 const runningCampaigns = new Set<string>();
 const cancelledCampaigns = new Set<string>();
+let cancelAllCampaigns = false;
+
+export function requestCancelAllCampaigns(): void {
+  cancelAllCampaigns = true;
+  for (const campaignId of runningCampaigns) {
+    cancelledCampaigns.add(campaignId);
+  }
+}
+
+export function resetCampaignCancellation(): void {
+  cancelAllCampaigns = false;
+}
 
 export interface Command {
   _id: string;
@@ -228,7 +240,7 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
     let latestResult: any = null;
 
     // Check for cancellation before each send
-    if (cancelledCampaigns.has(campaignId)) {
+    if (cancelAllCampaigns || cancelledCampaigns.has(campaignId)) {
       console.log(`[command-executor] [Background] Chiến dịch ${campaignId} đã bị hủy bởi người dùng.`);
       latestResult = {
         customerId: recipient.customerId,

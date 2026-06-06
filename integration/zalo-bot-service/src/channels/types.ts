@@ -21,6 +21,15 @@ export interface ZaloSendMessageRequest {
   messageType?: 'text' | 'template' | 'image' | 'file' | 'sticker' | 'video' | 'voice' | 'gif' | 'link' | 'rich';
   /** File paths or URLs for attachments (images, videos, files) */
   attachments?: string[];
+  clientMessageId?: string;
+  quote?: Record<string, unknown>;
+  mentions?: Array<Record<string, unknown>>;
+  styles?: Array<Record<string, unknown>>;
+  link?: Record<string, unknown>;
+  sticker?: Record<string, unknown>;
+  video?: Record<string, unknown>;
+  voice?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ZaloSendMessageResult {
@@ -80,18 +89,59 @@ export interface ZaloInboundMessageEvent {
     | 'link'
     | 'location'
     | 'contact_card'
+    | 'reminder'
+    | 'poll'
+    | 'system'
     | 'rich'
     | 'unknown';
   providerMessageId: string;
+  clientMessageId?: string;
+  quote?: Record<string, unknown>;
+  mentions?: unknown[];
+  styles?: unknown[];
+  metadata?: Record<string, unknown>;
   timestamp: string;
 }
 
+export interface ZaloAuxiliaryEvent {
+  type:
+    | 'message.recalled'
+    | 'message.deleted'
+    | 'message.delivered'
+    | 'message.seen'
+    | 'message.reaction'
+    | 'typing.started'
+    | 'typing.stopped'
+    | 'group.updated'
+    | 'friend.updated'
+    | 'system.message';
+  accountId: string;
+  threadId: string;
+  threadType: 'user' | 'group';
+  providerMessageId?: string;
+  clientMessageId?: string;
+  userId?: string;
+  reaction?: string;
+  timestamp: string;
+  data?: Record<string, unknown>;
+}
+
 type InboundMessageHandler = (event: ZaloInboundMessageEvent) => void | Promise<void>;
+type InboundMessageBatchHandler = (
+  events: ZaloInboundMessageEvent[],
+) => void | Promise<void>;
 
 let inboundMessageHandler: InboundMessageHandler | null = null;
+let inboundMessageBatchHandler: InboundMessageBatchHandler | null = null;
 
 export function setInboundMessageHandler(handler: InboundMessageHandler | null): void {
   inboundMessageHandler = handler;
+}
+
+export function setInboundMessageBatchHandler(
+  handler: InboundMessageBatchHandler | null,
+): void {
+  inboundMessageBatchHandler = handler;
 }
 
 export async function emitInboundMessage(event: ZaloInboundMessageEvent): Promise<void> {
@@ -99,10 +149,31 @@ export async function emitInboundMessage(event: ZaloInboundMessageEvent): Promis
   await inboundMessageHandler(event);
 }
 
+export async function emitInboundMessages(
+  events: ZaloInboundMessageEvent[],
+): Promise<void> {
+  if (events.length === 0) return;
+  if (inboundMessageBatchHandler) {
+    await inboundMessageBatchHandler(events);
+    return;
+  }
+  for (const event of events) {
+    await emitInboundMessage(event);
+  }
+}
+
 export interface ZaloChannel {
   getStatus(): ZaloChannelStatus;
   sendMessage(req: ZaloSendMessageRequest, isTestMode?: boolean): Promise<ZaloSendMessageResult>;
   recallMessage?(req: ZaloRecallMessageRequest): Promise<{ success: boolean; error?: string }>;
+  sendTyping?(accountId: string, threadId: string, threadType: 'user' | 'group'): Promise<boolean>;
+  reactMessage?(request: {
+    accountId: string;
+    threadId: string;
+    threadType: 'user' | 'group';
+    msgId: string;
+    reaction: string;
+  }): Promise<{ success: boolean; error?: string }>;
   handleWebhookEvent?(event: Record<string, unknown>): void;
   startListener?(): Promise<void>;
   stopListener?(): Promise<void>;
