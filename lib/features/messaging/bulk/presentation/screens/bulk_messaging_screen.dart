@@ -23,7 +23,6 @@ import '../../../../groups/providers/invite_to_group_provider.dart';
 import '../../../../groups/providers/scan_members_provider.dart';
 import '../../../../customers/providers/customers_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
-import '../../../../../mock/mock_campaigns.dart';
 
 class BulkMessagingScreen extends ConsumerStatefulWidget {
   const BulkMessagingScreen({super.key});
@@ -347,15 +346,7 @@ class _Header extends ConsumerWidget {
                   ? null
                   : (val) {
                       if (val == 'all_accounts') {
-                        notifier.selectAccount(
-                          const ZaloAccount(
-                            id: 'all_accounts',
-                            name: 'Toàn bộ tài khoản',
-                            phone: '',
-                            type: 'all',
-                            isConnected: true,
-                          ),
-                        );
+                        notifier.selectAccount(bulkAllAccountsOption);
                       } else if (val != null) {
                         final acc = state.accounts.firstWhere(
                           (a) => a.id == val,
@@ -456,12 +447,11 @@ class _TargetPanel extends ConsumerWidget {
       );
     } else if (selectedTab == 1) {
       final groupsState = ref.watch(managedGroupsProvider);
-      final accountId = ref.watch(bulkMessagingProvider).selectedAccount?.id;
+      final selectedAccount = ref.watch(bulkMessagingProvider).selectedAccount;
+      final accountId = bulkAccountFilterId(selectedAccount);
       // Synchronize account selection
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (accountId != null &&
-            accountId != 'all_accounts' &&
-            groupsState.selectedAccountId != accountId) {
+        if (groupsState.selectedAccountId != accountId) {
           ref
               .read(managedGroupsProvider.notifier)
               .setSelectedAccountId(accountId);
@@ -471,8 +461,7 @@ class _TargetPanel extends ConsumerWidget {
       final groupItems = groupsState.groups
           .where(
             (g) =>
-                accountId == null ||
-                accountId == 'all_accounts' ||
+                accountId.isEmpty ||
                 g.accountId == accountId ||
                 (accountId.length >= 4 &&
                     g.name.startsWith(
@@ -532,7 +521,7 @@ class _TargetPanel extends ConsumerWidget {
         text: 'Tải lại nhóm',
         icon: Icons.sync,
         variant: AppButtonVariant.outline,
-        onPressed: () => ref.read(managedGroupsProvider.notifier).refresh(),
+        onPressed: () => ref.read(managedGroupsProvider.notifier).syncGroups(),
       );
     } else if (selectedTab == 2) {
       final friendsState = ref.watch(inviteToGroupProvider);
@@ -545,15 +534,12 @@ class _TargetPanel extends ConsumerWidget {
 
       // Synchronize account selection and load friends
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final currentAccount = ref
-            .read(bulkMessagingProvider)
-            .selectedAccount
-            ?.id;
+        final currentAccount = bulkAccountFilterId(
+          ref.read(bulkMessagingProvider).selectedAccount,
+        );
         final inviteNotifier = ref.read(inviteToGroupProvider.notifier);
 
-        if (currentAccount != null &&
-            currentAccount != 'all_accounts' &&
-            friendsState.selectedAccountId != currentAccount) {
+        if ((friendsState.selectedAccountId ?? '') != currentAccount) {
           inviteNotifier.setAccount(currentAccount);
           inviteNotifier.loadFriends();
         } else if (friendsState.friends.isEmpty && !friendsState.isRunning) {
@@ -1606,13 +1592,12 @@ class _ZaloPreview extends StatelessWidget {
   const _ZaloPreview({required this.message});
 
   List<TextSpan> _parseFormattedText(String text) {
-    String processed = ZaloTextFormatter.resolveVariablesAndSpintax(
+    final processed = ZaloTextFormatter.renderZaloPreview(
       text,
       name: 'Anh/Chị Khách Hàng',
       phone: '0901234567',
       group: 'Nhóm Zalo Demo',
     );
-    processed = ZaloTextFormatter.formatMarkdownToUnicode(processed);
 
     return [TextSpan(text: processed)];
   }
@@ -1623,12 +1608,8 @@ class _ZaloPreview extends StatelessWidget {
     final viewportBg = isDark
         ? const Color(0xFF0F172A)
         : const Color(0xFFDDEAF8);
-    final bubbleBg = isDark
-        ? const Color(0xFF1E293B)
-        : Colors.white;
-    final bubbleTextColor = isDark
-        ? Colors.white
-        : AppColors.textPrimary;
+    final bubbleBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final bubbleTextColor = isDark ? Colors.white : AppColors.textPrimary;
 
     return AppCard(
       child: Column(

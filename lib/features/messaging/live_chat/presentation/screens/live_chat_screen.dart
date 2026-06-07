@@ -19,6 +19,9 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../content/providers/templates_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/live_chat_provider.dart';
+import '../../utils/live_chat_attachment_view.dart';
+import '../../utils/live_chat_local_image_stub.dart'
+    if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
 
 class LiveChatScreen extends ConsumerStatefulWidget {
@@ -57,9 +60,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final resumed = state == AppLifecycleState.resumed;
-    final newMessageCount = ref
-        .read(liveChatProvider)
-        .unfocusedNewMessageCount;
+    final newMessageCount = ref.read(liveChatProvider).unfocusedNewMessageCount;
     ref.read(liveChatProvider.notifier).setChatFocused(resumed);
     if (resumed && newMessageCount > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1397,6 +1398,42 @@ class _MessageBubble extends ConsumerWidget {
     );
   }
 
+  void _showLocalImagePreviewDialog(BuildContext context, String path) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: InteractiveViewer(
+                child: buildLiveChatLocalImage(
+                  path,
+                  fit: BoxFit.contain,
+                  errorWidget: const Text(
+                    'KhĂ´ng thá»ƒ xem áº£nh lá»›n',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isMine = message.isMine;
@@ -1673,6 +1710,51 @@ class _MessageBubble extends ConsumerWidget {
       );
     }
 
+    final attachmentView = resolveLiveChatAttachmentView(message);
+    if (attachmentView?.kind == LiveChatAttachmentKind.image) {
+      final image = attachmentView!;
+      final errorWidget = Container(
+        padding: const EdgeInsets.all(AppSpacing.s),
+        color: Colors.black12,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image_outlined, color: Colors.grey),
+            const SizedBox(width: 8),
+            Text('KhĂ´ng thá»ƒ táº£i áº£nh', style: TextStyle(color: textColor)),
+          ],
+        ),
+      );
+      return InkWell(
+        onTap: image.hasRemoteUrl
+            ? () => _showImagePreviewDialog(context, image.url)
+            : image.hasLocalPath
+            ? () => _showLocalImagePreviewDialog(context, image.localPath)
+            : null,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: image.hasRemoteUrl
+              ? CachedNetworkImage(
+                  imageUrl: image.url,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => const SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => errorWidget,
+                )
+              : buildLiveChatLocalImage(
+                  image.localPath,
+                  fit: BoxFit.contain,
+                  errorWidget: errorWidget,
+                ),
+        ),
+      );
+    }
+
     final imageUrl = _getImageUrl(message);
     if (imageUrl != null) {
       return InkWell(
@@ -1700,6 +1782,60 @@ class _MessageBubble extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+      );
+    }
+
+    if (attachmentView?.kind == LiveChatAttachmentKind.file) {
+      final file = attachmentView!;
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.s),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    file.displayName,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (file.sizeLabel.isNotEmpty)
+                    Text(
+                      file.sizeLabel,
+                      style: AppTextStyles.caption.copyWith(
+                        color: textColor.withValues(alpha: 0.6),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (file.hasRemoteUrl)
+              IconButton(
+                icon: const Icon(Icons.download, size: 20),
+                color: textColor,
+                onPressed: () async {
+                  final uri = Uri.tryParse(file.url);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+          ],
         ),
       );
     }

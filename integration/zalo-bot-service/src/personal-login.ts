@@ -11,8 +11,9 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { config, projectRoot } from './config.js';
-import { Zalo, LoginQRCallbackEventType } from 'zca-js';
+import { LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
+import { createZaloClient } from './channels/personal-zca-channel.js';
 
 async function main(): Promise<void> {
   const credPath = resolve(projectRoot, config.personalCredentialsPath);
@@ -30,10 +31,7 @@ async function main(): Promise<void> {
   console.log(`[login] Credentials will be saved to: ${credPath}`);
   console.log('');
 
-  const zalo = new Zalo({
-    selfListen: config.personalSelfListen,
-    logging: true,
-  });
+  const zalo = createZaloClient();
 
   const callback: LoginQRCallback = (event: LoginQRCallbackEvent) => {
     switch (event.type) {

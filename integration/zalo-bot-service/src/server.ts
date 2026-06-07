@@ -17,9 +17,9 @@ import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGrou
 import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync, mkdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { projectRoot } from './config.js';
-import { Zalo, LoginQRCallbackEventType } from 'zca-js';
+import { LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
-import { addAccountInstance } from './channels/personal-zca-channel.js';
+import { addAccountInstance, createZaloClient } from './channels/personal-zca-channel.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
 import { startPairingSession } from './agent/cloud-api.js';
 import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSettings } from './integrations/integration-store.js';
@@ -403,10 +403,7 @@ const server = createServer(async (req, res) => {
 
       console.log(`[server - ${sessionId}] Starting QR authentication...`);
 
-      const zalo = new Zalo({
-        selfListen: config.personalSelfListen,
-        logging: true,
-      });
+      const zalo = createZaloClient();
 
       pendingSessions.set(sessionId, {
         id: sessionId,

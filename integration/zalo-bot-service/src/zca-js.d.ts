@@ -36,6 +36,9 @@ declare module 'zca-js' {
     apiType?: number;
     apiVersion?: string;
     agent?: import('http').Agent;
+    imageMetadataGetter?: (
+      filePath: string,
+    ) => Promise<{ width: number; height: number; size: number }>;
   }
 
   export enum ThreadType {
@@ -88,6 +91,30 @@ declare module 'zca-js' {
     idTo: string;
   }
 
+  export interface UndoPayload {
+    msgId: string;
+    cliMsgId: string;
+  }
+
+  export interface DeleteMessageDestination {
+    data: {
+      cliMsgId: string;
+      msgId: string;
+      uidFrom: string;
+    };
+    threadId: string;
+    type?: ThreadType;
+  }
+
+  export interface AddReactionDestination {
+    data: {
+      msgId: string;
+      cliMsgId: string;
+    };
+    threadId: string;
+    type: ThreadType;
+  }
+
   export class API {
     sendMessage(
       content: MessageContent | string,
@@ -99,6 +126,19 @@ declare module 'zca-js' {
       threadId: string,
       type?: ThreadType,
     ): Promise<any>;
+    undo(payload: UndoPayload, threadId: string, type?: ThreadType): Promise<any>;
+    deleteMessage(
+      destination: DeleteMessageDestination,
+      onlyMe?: boolean,
+    ): Promise<any>;
+    addReaction(
+      reaction: string,
+      destination: AddReactionDestination,
+    ): Promise<any>;
+    sendLink(options: any, threadId: string, type?: ThreadType): Promise<any>;
+    sendSticker(sticker: any, threadId: string, type?: ThreadType): Promise<any>;
+    sendVideo(options: any, threadId: string, type?: ThreadType): Promise<any>;
+    sendVoice(options: any, threadId: string, type?: ThreadType): Promise<any>;
     listener: Listener;
     acceptFriendRequest(senderId: string): Promise<any>;
     leaveGroup(groupId: string, silent?: boolean): Promise<any>;

@@ -191,7 +191,117 @@ function accountIdFromCredentialsPath(filePath: string): string | undefined {
   return match?.[1];
 }
 
-function createZaloClient(accountId?: string): Zalo {
+function readPngMetadata(data: Buffer): { width: number; height: number } | null {
+  if (
+    data.length >= 24 &&
+    data[0] === 0x89 &&
+    data[1] === 0x50 &&
+    data[2] === 0x4e &&
+    data[3] === 0x47 &&
+    data.toString('ascii', 12, 16) === 'IHDR'
+  ) {
+    return {
+      width: data.readUInt32BE(16),
+      height: data.readUInt32BE(20),
+    };
+  }
+  return null;
+}
+
+function readGifMetadata(data: Buffer): { width: number; height: number } | null {
+  if (
+    data.length >= 10 &&
+    (data.toString('ascii', 0, 6) === 'GIF87a' ||
+      data.toString('ascii', 0, 6) === 'GIF89a')
+  ) {
+    return {
+      width: data.readUInt16LE(6),
+      height: data.readUInt16LE(8),
+    };
+  }
+  return null;
+}
+
+function readJpegMetadata(data: Buffer): { width: number; height: number } | null {
+  if (data.length < 4 || data[0] !== 0xff || data[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < data.length) {
+    if (data[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = data[offset + 1];
+    const segmentLength = data.readUInt16BE(offset + 2);
+    if (segmentLength < 2) return null;
+    const isSof =
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      ![0xc4, 0xc8, 0xcc].includes(marker);
+    if (isSof && offset + 8 < data.length) {
+      return {
+        height: data.readUInt16BE(offset + 5),
+        width: data.readUInt16BE(offset + 7),
+      };
+    }
+    offset += 2 + segmentLength;
+  }
+  return null;
+}
+
+function readWebpMetadata(data: Buffer): { width: number; height: number } | null {
+  if (
+    data.length < 30 ||
+    data.toString('ascii', 0, 4) !== 'RIFF' ||
+    data.toString('ascii', 8, 12) !== 'WEBP'
+  ) {
+    return null;
+  }
+  const chunk = data.toString('ascii', 12, 16);
+  if (chunk === 'VP8X' && data.length >= 30) {
+    return {
+      width: data.readUIntLE(24, 3) + 1,
+      height: data.readUIntLE(27, 3) + 1,
+    };
+  }
+  if (chunk === 'VP8 ' && data.length >= 30) {
+    return {
+      width: data.readUInt16LE(26) & 0x3fff,
+      height: data.readUInt16LE(28) & 0x3fff,
+    };
+  }
+  if (chunk === 'VP8L' && data.length >= 25) {
+    const bits = data.readUInt32LE(21);
+    return {
+      width: (bits & 0x3fff) + 1,
+      height: ((bits >> 14) & 0x3fff) + 1,
+    };
+  }
+  return null;
+}
+
+async function readImageMetadata(filePath: string): Promise<{
+  width: number;
+  height: number;
+  size: number;
+}> {
+  const data = readFileSync(filePath);
+  const dimensions =
+    readPngMetadata(data) ||
+    readGifMetadata(data) ||
+    readJpegMetadata(data) ||
+    readWebpMetadata(data);
+  if (!dimensions || !dimensions.width || !dimensions.height) {
+    throw new Error(`Unsupported image metadata format: ${filePath}`);
+  }
+  return {
+    ...dimensions,
+    size: data.length,
+  };
+}
+
+export const readImageMetadataForTest = readImageMetadata;
+
+export function createZaloClient(accountId?: string): Zalo {
   const settings = accountId ? readAccountSettings()[accountId] : undefined;
   const agent = settings?.proxy ? createProxyAgent(settings.proxy) : undefined;
   if (agent && settings?.proxy) {
@@ -202,6 +312,7 @@ function createZaloClient(accountId?: string): Zalo {
   return new Zalo({
     selfListen: config.personalSelfListen,
     logging: true,
+    imageMetadataGetter: readImageMetadata,
     ...(agent ? { agent } : {}),
   });
 }
@@ -512,6 +623,76 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
     timestamp,
   };
 }
+
+function normalizeNumericMessageId(value: unknown, fallback: string): string {
+  const raw = toStringValue(value).trim();
+  if (/^\d+$/.test(raw)) return raw;
+  return fallback;
+}
+
+function normalizeQuoteForZca(
+  quote: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!quote || Object.keys(quote).length === 0) return undefined;
+  const msgId = toStringValue(
+    quote.msgId ??
+      quote.messageId ??
+      quote.providerMessageId ??
+      quote.zaloMsgId,
+  ).trim();
+  if (!msgId) return undefined;
+  const content = quote.content ?? quote.message ?? quote.text ?? '';
+  const tsRaw = Number(quote.ts ?? quote.timestamp ?? Date.now());
+  return {
+    content: typeof content === 'string' ? content : stringifyRecord(content),
+    msgType: toStringValue(
+      quote.msgType ?? quote.messageType ?? quote.contentType,
+    ) || 'webchat',
+    propertyExt: quote.propertyExt ?? '',
+    uidFrom: toStringValue(quote.uidFrom ?? quote.senderId),
+    msgId,
+    cliMsgId: normalizeNumericMessageId(
+      quote.cliMsgId ?? quote.clientMessageId,
+      msgId,
+    ),
+    ts: Number.isFinite(tsRaw) ? tsRaw : Date.now(),
+    ttl: Number(quote.ttl ?? 0),
+  };
+}
+
+function normalizeZcaReaction(reaction: string): string {
+  const trimmed = reaction.trim();
+  const lower = trimmed.toLowerCase();
+  const normalized = lower.replace(/[_\s-]+/g, '');
+  const map: Record<string, string> = {
+    heart: '/-heart',
+    love: '/-heart',
+    yeuthich: '/-heart',
+    favourite: '/-heart',
+    favorite: '/-heart',
+    '❤️': '/-heart',
+    '❤': '/-heart',
+    '/-heart': '/-heart',
+    like: '/-strong',
+    thumbsup: '/-strong',
+    strong: '/-strong',
+    '👍': '/-strong',
+    '/-strong': '/-strong',
+    haha: ':>',
+    laugh: ':>',
+    wow: ':o',
+    cry: ':-((',
+    sad: '--b',
+    angry: ':-h',
+    none: '',
+    cancel: '',
+    remove: '',
+    '': '',
+  };
+  return map[normalized] ?? map[lower] ?? trimmed;
+}
+
+export const normalizeZcaReactionForTest = normalizeZcaReaction;
 
 export function normalizeInboundMessageForTest(
   instance: Pick<ZaloAccountInstance, 'uId' | 'label'>,
@@ -954,10 +1135,11 @@ export class PersonalZcaChannel implements ZaloChannel {
       console.log(`[PersonalZcaChannel] sendMessage params: recipientId=${recipientId}, threadType=${req.threadType}(${threadType}), message="${messageText.substring(0, 50)}", attachments=${hasAttachments ? attachments.length : 0}`);
 
       // Build the richest payload supported by the installed zca-js version.
+      const quote = normalizeQuoteForZca(req.quote);
       const messageContent: any = {
         msg: messageText,
         ...(req.clientMessageId ? { cliMsgId: req.clientMessageId } : {}),
-        ...(req.quote ? { quote: req.quote } : {}),
+        ...(quote ? { quote } : {}),
         ...(req.mentions ? { mentions: req.mentions } : {}),
         ...(req.styles ? { styles: req.styles } : {}),
       };
@@ -1024,17 +1206,26 @@ export class PersonalZcaChannel implements ZaloChannel {
       console.log(`[PersonalZcaChannel] recallMessage: msgId=${req.msgId}, threadId=${req.threadId}`);
 
       const threadType = req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
-      await selectedInstance.api.undoMessage(
-        {
-          msgId: req.msgId,
-          cliMsgId: req.cliMsgId || `recall_${Date.now()}`,
-          msgType: 1,
-          uidFrom: selectedInstance.uId,
-          idTo: req.threadId,
-        },
-        req.threadId,
-        threadType,
-      );
+      const msgId = String(req.msgId || '').trim();
+      const cliMsgId = normalizeNumericMessageId(req.cliMsgId, msgId);
+      const api = selectedInstance.api as any;
+      if (api.undo) {
+        await api.undo({ msgId, cliMsgId }, req.threadId, threadType);
+      } else if (api.undoMessage) {
+        await api.undoMessage(
+          {
+            msgId,
+            cliMsgId,
+            msgType: 1,
+            uidFrom: selectedInstance.uId,
+            idTo: req.threadId,
+          },
+          req.threadId,
+          threadType,
+        );
+      } else {
+        throw new Error('Recall is not supported by the installed zca-js version.');
+      }
 
       console.log(`[PersonalZcaChannel] recallMessage success`);
       return { success: true };
@@ -1078,21 +1269,28 @@ export class PersonalZcaChannel implements ZaloChannel {
       const threadType = request.threadType === 'group'
         ? ThreadType.Group
         : ThreadType.User;
+      const reaction = normalizeZcaReaction(request.reaction);
+      const msgId = String(request.msgId || '').trim();
+      const cliMsgId = normalizeNumericMessageId(
+        (request as { cliMsgId?: string }).cliMsgId,
+        msgId,
+      );
       if (api.addReaction) {
         await api.addReaction(
-          request.reaction,
+          reaction,
           {
-            msgId: request.msgId,
-            uidFrom: instance?.uId,
-            idTo: request.threadId,
+            data: {
+              msgId,
+              cliMsgId,
+            },
+            threadId: request.threadId,
+            type: threadType,
           },
-          request.threadId,
-          threadType,
         );
       } else if (api.sendReaction) {
         await api.sendReaction(
-          request.reaction,
-          request.msgId,
+          reaction,
+          msgId,
           request.threadId,
           threadType,
         );

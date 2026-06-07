@@ -2,6 +2,7 @@ import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_repository
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_cache.dart';
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import 'package:alpha_crm/features/messaging/live_chat/providers/live_chat_provider.dart';
+import 'package:alpha_crm/features/messaging/live_chat/utils/live_chat_attachment_view.dart';
 import 'package:alpha_crm/mock/mock_accounts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -79,6 +80,44 @@ void main() {
     },
   );
 
+  test('Conversation.fromJson formats nested attachment preview JSON', () {
+    final conversation = Conversation.fromJson({
+      '_id': 'conv-file',
+      'accountId': 'acc-1',
+      'threadId': 'thread-1',
+      'displayName': 'Le Vuong',
+      'lastMessagePreview':
+          '{"direction":"outbound","content":"{\\"title\\":\\"SPEC.md\\",\\"description\\":\\"Markdown spec\\",\\"params\\":\\"{\\\\\\"fileExt\\\\\\":\\\\\\"md\\\\\\",\\\\\\"fileSize\\\\\\":\\\\\\"2048\\\\\\"}\\"}"}',
+      'updatedAt': '2026-06-03T08:00:00.000Z',
+    });
+
+    expect(conversation.lastMessage.contains('{'), isFalse);
+    expect(conversation.lastMessage.contains('SPEC.md'), isFalse);
+  });
+
+  test('attachment view resolves local image attachments', () {
+    final message = ChatMessage.fromJson({
+      '_id': 'msg-image',
+      'content': '',
+      'messageType': 'image',
+      'attachments': [
+        {
+          'kind': 'image',
+          'name': 'photo.png',
+          'localPath': r'D:\tmp\photo.png',
+          'url': r'D:\tmp\photo.png',
+        },
+      ],
+      'createdAt': '2026-06-03T08:00:00.000Z',
+    });
+
+    final view = resolveLiveChatAttachmentView(message);
+
+    expect(view?.kind, LiveChatAttachmentKind.image);
+    expect(view?.displayName, 'photo.png');
+    expect(view?.localPath, r'D:\tmp\photo.png');
+  });
+
   test('SystemSettings persists theme mode and per-account nicknames', () {
     final settings = MockAccounts.defaultSettings.copyWith(
       appThemeMode: 'dark',
@@ -128,6 +167,19 @@ void main() {
     await notifier.retryMessage(failed);
     expect(repository.retriedMessageId, 'local-failed-1');
   });
+
+  test('LiveChatNotifier keeps group conversations when managed list is empty', () async {
+    final repository = _FakeLiveChatRepository()..includeGroupConversation = true;
+    final notifier = LiveChatNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+
+    await notifier.loadConversations(loadSelectedMessages: false);
+
+    expect(
+      notifier.state.conversations.where((item) => item.threadType == 'group'),
+      isNotEmpty,
+    );
+  });
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
@@ -142,6 +194,7 @@ class _FakeLiveChatRepository extends LiveChatRepository {
   int getMessagesCalls = 0;
   int sendMessageCalls = 0;
   bool failNextSend = false;
+  bool includeGroupConversation = false;
   String? retriedMessageId;
 
   final conversation = Conversation(
@@ -198,19 +251,31 @@ class _FakeLiveChatRepository extends LiveChatRepository {
     int limit = 30,
   }) async {
     getConversationsCalls += 1;
+    final data = <Map<String, dynamic>>[
+      {
+        '_id': conversation.id,
+        'accountId': conversation.accountId,
+        'threadId': conversation.threadId,
+        'threadType': conversation.threadType,
+        'displayName': conversation.customerName,
+        'lastMessagePreview': conversation.lastMessage,
+        'updatedAt': conversation.lastMessageTime.toIso8601String(),
+      },
+    ];
+    if (includeGroupConversation) {
+      data.add({
+        '_id': 'conv-group-1',
+        'accountId': 'acc-1',
+        'threadId': 'group-1',
+        'threadType': 'group',
+        'displayName': 'testza',
+        'lastMessagePreview': 'Xin chao nhom',
+        'updatedAt': '2026-06-03T08:02:00.000Z',
+      });
+    }
     return {
       'success': true,
-      'data': [
-        {
-          '_id': conversation.id,
-          'accountId': conversation.accountId,
-          'threadId': conversation.threadId,
-          'threadType': conversation.threadType,
-          'displayName': conversation.customerName,
-          'lastMessagePreview': conversation.lastMessage,
-          'updatedAt': conversation.lastMessageTime.toIso8601String(),
-        },
-      ],
+      'data': data,
     };
   }
 

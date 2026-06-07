@@ -519,6 +519,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         managedKeys.add('$accountId:$groupId');
       }
     }
+    if (managedKeys.isEmpty) return conversations;
 
     return conversations.where((conversation) {
       if (conversation.threadType != 'group') return true;
@@ -851,9 +852,18 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           ? null
           : {
               'messageId': reply.zaloMsgId ?? reply.id,
+              'msgId': reply.zaloMsgId ?? reply.id,
               'clientMessageId': reply.clientMessageId,
+              'cliMsgId': reply.clientMessageId,
               'content': reply.message,
               'senderId': reply.senderId,
+              'uidFrom': reply.senderId,
+              'messageType': reply.contentType,
+              'msgType': reply.contentType == 'text'
+                  ? 'webchat'
+                  : reply.contentType,
+              'timestamp': reply.timestamp.millisecondsSinceEpoch,
+              'ts': reply.timestamp.millisecondsSinceEpoch,
             },
     );
     _replaceSelected(
@@ -1360,6 +1370,11 @@ String _formatConversationPreview(
             ?.toString();
         final decodedPreview = _previewForType(decodedType?.toLowerCase());
         if (decodedPreview != null) return '$prefix$decodedPreview';
+        final structuredPreview = _previewForStructuredContent(decoded);
+        if (structuredPreview != null) return '$prefix$structuredPreview';
+        final nestedContent = _mapFromJsonField(decoded['content']);
+        final nestedPreview = _previewForStructuredContent(nestedContent);
+        if (nestedPreview != null) return '$prefix$nestedPreview';
 
         final params = decoded['params'];
         if (params is Map &&
@@ -1392,6 +1407,56 @@ String _formatConversationPreview(
   }
 
   return rawMessage;
+}
+
+String? _previewForStructuredContent(Map<String, dynamic>? decoded) {
+  if (decoded == null) return null;
+  final decodedType = (decoded['messageType'] ?? decoded['contentType'])
+      ?.toString()
+      .toLowerCase();
+  final typedPreview = _previewForType(decodedType);
+  if (typedPreview != null) return typedPreview;
+
+  final params = decoded['params'];
+  if (params is Map &&
+      (params['fileExt'] != null ||
+          params['fType'] == 1 ||
+          params['fileName'] != null)) {
+    return _previewForType('file');
+  }
+  if (params is String && params.trim().startsWith('{')) {
+    try {
+      final parsedParams = jsonDecode(params);
+      if (parsedParams is Map &&
+          (parsedParams['fileExt'] != null ||
+              parsedParams['fType'] == 1 ||
+              parsedParams['fileName'] != null)) {
+        return _previewForType('file');
+      }
+    } catch (_) {}
+  }
+
+  final fileName =
+      decoded['fileName']?.toString() ??
+      decoded['name']?.toString() ??
+      decoded['title']?.toString() ??
+      '';
+  if (RegExp(r'\.[a-z0-9]{1,8}$', caseSensitive: false).hasMatch(fileName) &&
+      (decoded['description'] != null || decoded['params'] != null)) {
+    return _previewForType('file');
+  }
+
+  final href =
+      decoded['href']?.toString() ??
+      decoded['url']?.toString() ??
+      decoded['thumb']?.toString() ??
+      '';
+  final title = decoded['title']?.toString() ?? '';
+  final description = decoded['description']?.toString() ?? '';
+  if (href.isNotEmpty || title.isNotEmpty || description.isNotEmpty) {
+    return _previewForType('link');
+  }
+  return null;
 }
 
 String? _previewForType(String? type) {

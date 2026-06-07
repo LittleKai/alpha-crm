@@ -1,3 +1,5 @@
+import 'dart:math';
+
 class ZaloTextFormatter {
   static String formatMarkdownToUnicode(String text) {
     String result = text;
@@ -30,14 +32,29 @@ class ZaloTextFormatter {
     String? name,
     String? phone,
     String? group,
+    bool randomizeSpintax = true,
+    Random? random,
   }) {
     String result = text;
     if (name != null) result = result.replaceAll('{{tên}}', name);
     if (phone != null) result = result.replaceAll('{{sdt}}', phone);
     if (group != null) result = result.replaceAll('{{nhóm}}', group);
 
+    if (name != null) {
+      result = result.replaceAll(
+        RegExp(r'\{\{\s*(tên|ten)\s*\}\}', caseSensitive: false),
+        name,
+      );
+    }
+    if (group != null) {
+      result = result.replaceAll(
+        RegExp(r'\{\{\s*(nhóm|nhom)\s*\}\}', caseSensitive: false),
+        group,
+      );
+    }
+
     // Resolve Spintax {A|B|C}
-    final spintaxRegex = RegExp(r'\{([^{}]+)\}');
+    final spintaxRegex = RegExp(r'\{([^{}]*\|[^{}]*)\}');
     while (spintaxRegex.hasMatch(result)) {
       result = result.replaceAllMapped(spintaxRegex, (match) {
         final options = match.group(1)!.split('|');
@@ -46,11 +63,27 @@ class ZaloTextFormatter {
         // let's just pick the first option for consistency in preview, or maybe pick random?
         // Let's use the first one for preview, or random for sending.
         // I will use random.
-        options.shuffle();
-        return options.first;
+        if (!randomizeSpintax) return options.first;
+        return options[(random ?? Random()).nextInt(options.length)];
       });
     }
     return result;
+  }
+
+  static String renderZaloPreview(
+    String text, {
+    String name = 'Anh/Chị Khách Hàng',
+    String phone = '0901234567',
+    String group = 'Nhóm Zalo Demo',
+  }) {
+    final resolved = resolveVariablesAndSpintax(
+      text,
+      name: name,
+      phone: phone,
+      group: group,
+      randomizeSpintax: false,
+    );
+    return formatMarkdownToUnicode(resolved);
   }
 
   static String _toUnicodeFormat(String text, Map<String, String> map) {

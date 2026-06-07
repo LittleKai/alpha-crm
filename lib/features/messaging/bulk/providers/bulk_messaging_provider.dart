@@ -11,6 +11,75 @@ import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../zalo_integration/data/zalo_integration_api.dart';
 import '../data/bulk_campaign_repository.dart';
 
+const bulkAllAccountsId = 'all_accounts';
+
+const bulkAllAccountsOption = ZaloAccount(
+  id: bulkAllAccountsId,
+  name: 'Toàn bộ tài khoản',
+  phone: '',
+  type: 'all',
+  isConnected: true,
+);
+
+const Object _unsetSelectedAccount = Object();
+
+List<ZaloAccount> _mapBulkAccounts(List<ZaloConnectedAccount> accounts) {
+  final seenIds = <String>{};
+  return accounts
+      .map(
+        (acc) => ZaloAccount(
+          id: acc.id,
+          name: acc.label,
+          phone: acc.id,
+          type: 'Cá nhân',
+          isConnected: acc.connected,
+        ),
+      )
+      .where((acc) => seenIds.add(acc.id))
+      .toList();
+}
+
+@visibleForTesting
+List<ZaloAccount> mapBulkAccountsForTest(List<ZaloConnectedAccount> accounts) =>
+    _mapBulkAccounts(accounts);
+
+ZaloAccount? _resolveBulkSelectedAccount(
+  ZaloAccount? current,
+  List<ZaloAccount> accounts,
+) {
+  if (current?.id == bulkAllAccountsId) return bulkAllAccountsOption;
+  if (accounts.isEmpty) return null;
+
+  if (current != null) {
+    for (final account in accounts) {
+      if (account.id == current.id) return account;
+    }
+  }
+
+  return accounts.firstWhere(
+    (a) => a.isConnected,
+    orElse: () => accounts.first,
+  );
+}
+
+String _bulkAccountFilterId(ZaloAccount? account) {
+  if (account == null || account.id == bulkAllAccountsId) return '';
+  return account.id;
+}
+
+String bulkAccountFilterId(ZaloAccount? account) =>
+    _bulkAccountFilterId(account);
+
+@visibleForTesting
+ZaloAccount? resolveBulkSelectedAccountForTest(
+  ZaloAccount? current,
+  List<ZaloAccount> accounts,
+) => _resolveBulkSelectedAccount(current, accounts);
+
+@visibleForTesting
+String bulkAccountFilterIdForTest(ZaloAccount? account) =>
+    bulkAccountFilterId(account);
+
 class BulkMessagingState {
   final int
   selectedTab; // 0: Theo SĐT, 1: Vào nhóm, 2: Cho bạn bè, 3: Theo nhãn
@@ -79,7 +148,7 @@ class BulkMessagingState {
     int? minDelay,
     int? maxDelay,
     String? messageText,
-    ZaloAccount? selectedAccount,
+    Object? selectedAccount = _unsetSelectedAccount,
     List<ZaloAccount>? accounts,
     bool? isSending,
     List<LogItem>? logs,
@@ -101,7 +170,9 @@ class BulkMessagingState {
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
       messageText: messageText ?? this.messageText,
-      selectedAccount: selectedAccount ?? this.selectedAccount,
+      selectedAccount: identical(selectedAccount, _unsetSelectedAccount)
+          ? this.selectedAccount
+          : selectedAccount as ZaloAccount?,
       accounts: accounts ?? this.accounts,
       isSending: isSending ?? this.isSending,
       logs: logs ?? this.logs,
@@ -149,12 +220,10 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
       state = state.copyWith(
         accounts: newAccounts,
-        selectedAccount: state.selectedAccount == null && newAccounts.isNotEmpty
-            ? newAccounts.firstWhere(
-                (a) => a.isConnected,
-                orElse: () => newAccounts.first,
-              )
-            : state.selectedAccount,
+        selectedAccount: _resolveBulkSelectedAccount(
+          state.selectedAccount,
+          newAccounts,
+        ),
       );
     });
 
@@ -177,10 +246,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
 
       state = state.copyWith(
         accounts: initialAccounts,
-        selectedAccount: initialAccounts.firstWhere(
-          (a) => a.isConnected,
-          orElse: () => initialAccounts.first,
-        ),
+        selectedAccount: _resolveBulkSelectedAccount(null, initialAccounts),
       );
     }
   }
@@ -357,14 +423,8 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     );
 
     try {
-      final formattedMessage = ZaloTextFormatter.resolveVariablesAndSpintax(
-        state.messageText.trim(),
-        name: 'Khách hàng', // Fallback if backend doesn't resolve per user
-        phone: '',
-        group: '',
-      );
       final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(
-        formattedMessage,
+        state.messageText.trim(),
       );
 
       final templateResp = await _repository.createTemplate({
@@ -400,7 +460,8 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         'manualRecipients': recipients
             .map((r) => {'phone': r, 'name': ''})
             .toList(),
-        if (state.selectedAccount != null)
+        if (state.selectedAccount != null &&
+            state.selectedAccount!.id != bulkAllAccountsId)
           'selectedAccountId': state.selectedAccount!.id,
         'rateLimit': {
           'minDelaySeconds': state.minDelay,
