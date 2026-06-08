@@ -44,6 +44,8 @@ export const accountPool = new Map<string, ZaloAccountInstance>();
 let loginError: string | null = null;
 let poolInitialized = false;
 
+type InboundAttachment = NonNullable<ZaloInboundMessageEvent['attachments']>[number];
+
 // Undo (message recall) handler — set by the local-chat integration
 type UndoMessageHandler = (accountId: string, zaloMsgId: string) => void | Promise<void>;
 let _undoMessageHandler: UndoMessageHandler | null = null;
@@ -312,9 +314,11 @@ export function createZaloClient(accountId?: string): Zalo {
   return new Zalo({
     selfListen: config.personalSelfListen,
     logging: true,
+    listenAllGroups: true, // Thêm tuỳ chọn để nhận đầy đủ tin nhắn từ tất cả các nhóm (kể cả nhóm tắt thông báo)
+    listenMutedGroups: true,
     imageMetadataGetter: readImageMetadata,
     ...(agent ? { agent } : {}),
-  });
+  } as any);
 }
 
 function toStringValue(value: unknown): string {
@@ -448,6 +452,159 @@ function hasRichPreviewKeys(value: unknown): boolean {
   return Boolean(data.href || data.url || data.thumb || data.thumbnail || data.fileUrl || data.fileName);
 }
 
+function parseRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === 'string' && value.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function extensionMimeType(fileExt: string, kind: string): string {
+  const ext = fileExt.toLowerCase().replace(/^\./, '');
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    zip: 'application/zip',
+    mp4: 'video/mp4',
+    mp3: 'audio/mpeg',
+  };
+  return map[ext] || (kind === 'image' ? 'image/jpeg' : '');
+}
+
+function numericSize(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = toStringValue(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function attachmentKindFromMessageType(
+  messageType: ZaloInboundMessageEvent['messageType'],
+  data: Record<string, unknown>,
+): string {
+  if (messageType === 'image' || messageType === 'gif') return 'image';
+  if (messageType === 'video') return 'video';
+  if (messageType === 'voice') return 'voice';
+  if (messageType === 'file') return 'file';
+  const raw = String(data.msgType ?? data.type ?? '').toLowerCase();
+  if (raw.includes('photo') || raw.includes('image')) return 'image';
+  if (raw.includes('video')) return 'video';
+  if (raw.includes('voice') || raw.includes('audio')) return 'voice';
+  return 'file';
+}
+
+function extractAttachmentFromRecord(
+  value: unknown,
+  messageType: ZaloInboundMessageEvent['messageType'],
+): InboundAttachment | null {
+  const record = parseRecord(value);
+  if (!record) return null;
+  const params = parseRecord(record.params) || {};
+  const kind = attachmentKindFromMessageType(messageType, record);
+  const fileName = firstNonEmptyString(
+    record.fileName,
+    record.name,
+    record.title,
+    params.fileName,
+    params.name,
+  );
+  const fileExt = firstNonEmptyString(
+    record.fileExt,
+    record.ext,
+    params.fileExt,
+    params.ext,
+  );
+  const url = normalizeImageUrl(
+    record.href ??
+      record.url ??
+      record.fileUrl ??
+      record.oriUrl ??
+      record.originUrl ??
+      record.downloadUrl ??
+      record.hdUrl ??
+      record.thumb ??
+      record.thumbnail,
+  );
+  const thumbnailUrl = normalizeImageUrl(
+    record.thumb ?? record.thumbnail ?? record.previewUrl ?? params.thumb,
+  );
+  if (!url && !thumbnailUrl && !fileName) return null;
+  return {
+    kind,
+    ...(fileName ? { name: fileName } : {}),
+    ...(url || thumbnailUrl ? { url: url || thumbnailUrl } : {}),
+    ...(extensionMimeType(fileExt, kind)
+      ? { mimeType: extensionMimeType(fileExt, kind) }
+      : {}),
+    ...(numericSize(record.fileSize ?? record.size ?? params.fileSize ?? params.size)
+      ? {
+          sizeBytes: numericSize(
+            record.fileSize ?? record.size ?? params.fileSize ?? params.size,
+          ),
+        }
+      : {}),
+    metadata: {
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(fileExt ? { fileExt } : {}),
+    },
+  };
+}
+
+function extractInboundAttachments(
+  data: Record<string, any>,
+  messageType: ZaloInboundMessageEvent['messageType'],
+): InboundAttachment[] {
+  const candidates = [
+    data.attachments,
+    data.attach,
+    data.content,
+    data.params,
+  ];
+  const attachments: NonNullable<ZaloInboundMessageEvent['attachments']> = [];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const values = Array.isArray(candidate) ? candidate : [candidate];
+    for (const value of values) {
+      const attachment = extractAttachmentFromRecord(value, messageType);
+      if (!attachment) continue;
+      const key = `${attachment.kind}:${attachment.url || ''}:${attachment.name || ''}`;
+      if (
+        !attachments.some(
+          (item) => `${item.kind}:${item.url || ''}:${item.name || ''}` === key,
+        )
+      ) {
+        attachments.push(attachment);
+      }
+    }
+  }
+  return attachments;
+}
+
 function extractStringFromRecord(value: unknown, keys: string[]): string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
   const data = value as Record<string, unknown>;
@@ -565,7 +722,11 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
                     : richContent
                       ? 'link'
                       : 'text';
+  const attachments = extractInboundAttachments(data, messageType);
   let content = extractInboundContent(data, messageType);
+  if (attachments.length > 0 && messageType !== 'text' && messageType !== 'link') {
+    content = `[${messageType}]`;
+  }
   if (!content) content = `[${messageType}]`;
 
   const timestamp = normalizeTimestamp(
@@ -620,6 +781,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
         ? { systemPayload: data }
         : {}),
     },
+    attachments,
     timestamp,
   };
 }
@@ -628,6 +790,28 @@ function normalizeNumericMessageId(value: unknown, fallback: string): string {
   const raw = toStringValue(value).trim();
   if (/^\d+$/.test(raw)) return raw;
   return fallback;
+}
+
+function createZaloClientMessageId(seed?: unknown): string {
+  const normalized = normalizeNumericMessageId(seed, '');
+  if (normalized) return normalized;
+  const embeddedNumericId = toStringValue(seed).match(/\d{10,}/)?.[0] || '';
+  return embeddedNumericId || String(Date.now());
+}
+
+async function runWithFixedDateNow<T>(
+  clientMessageId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const fixed = Number(clientMessageId);
+  if (!Number.isFinite(fixed)) return fn();
+  const originalDateNow = Date.now;
+  Date.now = () => fixed;
+  try {
+    return await fn();
+  } finally {
+    Date.now = originalDateNow;
+  }
 }
 
 function normalizeQuoteForZca(
@@ -1032,7 +1216,7 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         }
       });
 
-      listener.start();
+      (listener as any).start({ listenAllGroups: true, listenMuted: true, retryOnClose: true });
       instance.listenerRunning = true;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener started.`);
     }
@@ -1136,9 +1320,11 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       // Build the richest payload supported by the installed zca-js version.
       const quote = normalizeQuoteForZca(req.quote);
+      const zcaClientMessageId = createZaloClientMessageId(
+        req.clientMessageId,
+      );
       const messageContent: any = {
         msg: messageText,
-        ...(req.clientMessageId ? { cliMsgId: req.clientMessageId } : {}),
         ...(quote ? { quote } : {}),
         ...(req.mentions ? { mentions: req.mentions } : {}),
         ...(req.styles ? { styles: req.styles } : {}),
@@ -1158,22 +1344,37 @@ export class PersonalZcaChannel implements ZaloChannel {
       } else if (req.messageType === 'voice' && req.voice && api.sendVoice) {
         result = await api.sendVoice(req.voice, recipientId, threadType);
       } else {
-        result = await selectedInstance.api.sendMessage(
-          messageContent,
-          recipientId,
-          threadType,
+        result = await runWithFixedDateNow(
+          zcaClientMessageId,
+          () => selectedInstance.api.sendMessage(
+            messageContent,
+            recipientId,
+            threadType,
+          ),
         );
       }
 
       // zca-js sendMessage returns { message: SendMessageResult | null, attachment: SendMessageResult[] }
       const msgResult = (result as any)?.message ?? result;
-      const msgId = msgResult?.msgId ?? (result as any)?.msgId ?? `personal_${Date.now()}`;
+      const attachmentMessageIds = Array.isArray((result as any)?.attachment)
+        ? (result as any).attachment
+            .map((item: any) => item?.msgId)
+            .filter((item: unknown) => item != null)
+            .map(String)
+        : [];
+      const msgId =
+        msgResult?.msgId ??
+        (result as any)?.msgId ??
+        attachmentMessageIds[0] ??
+        `personal_${Date.now()}`;
 
       console.log(`[PersonalZcaChannel] sendMessage result:`, JSON.stringify(result)?.substring(0, 200));
 
       return {
         success: true,
-        messageId: msgId,
+        messageId: String(msgId),
+        clientMessageId: zcaClientMessageId,
+        attachmentMessageIds,
       };
     } catch (err) {
       console.error(`[PersonalZcaChannel] sendMessage error:`, err);
@@ -1207,7 +1408,12 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       const threadType = req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
       const msgId = String(req.msgId || '').trim();
-      const cliMsgId = normalizeNumericMessageId(req.cliMsgId, msgId);
+      const cliMsgId = normalizeNumericMessageId(req.cliMsgId, '');
+      if (!cliMsgId) {
+        throw new Error(
+          'Missing Zalo client message ID (cliMsgId) required for recall.',
+        );
+      }
       const api = selectedInstance.api as any;
       if (api.undo) {
         await api.undo({ msgId, cliMsgId }, req.threadId, threadType);
@@ -1259,6 +1465,7 @@ export class PersonalZcaChannel implements ZaloChannel {
     threadId: string;
     threadType: 'user' | 'group';
     msgId: string;
+    cliMsgId?: string;
     reaction: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
@@ -1272,9 +1479,14 @@ export class PersonalZcaChannel implements ZaloChannel {
       const reaction = normalizeZcaReaction(request.reaction);
       const msgId = String(request.msgId || '').trim();
       const cliMsgId = normalizeNumericMessageId(
-        (request as { cliMsgId?: string }).cliMsgId,
-        msgId,
+        request.cliMsgId,
+        '',
       );
+      if (!cliMsgId) {
+        throw new Error(
+          'Missing Zalo client message ID (cliMsgId) required for reaction.',
+        );
+      }
       if (api.addReaction) {
         await api.addReaction(
           reaction,
