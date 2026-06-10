@@ -262,20 +262,31 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   }
 
   Future<void> setManaged(ManagedZaloGroup group, bool isManaged) async {
-    final response = await _repository.updateManaged(
-      group.id,
-      isManaged: isManaged,
-      summaryCadence: group.summaryCadence,
-      notes: group.notes,
-    );
-    if (response['success'] == true) {
-      final updated = group.copyWith(isManaged: isManaged);
+    final targetGroups = state.groups.where((g) => g.groupId == group.groupId).toList();
+    bool anySuccess = false;
+
+    for (final g in targetGroups) {
+      final response = await _repository.updateManaged(
+        g.id,
+        isManaged: isManaged,
+        summaryCadence: g.summaryCadence,
+        notes: g.notes,
+      );
+      if (response['success'] == true) {
+        anySuccess = true;
+      }
+    }
+
+    if (anySuccess) {
       state = state.copyWith(
-        groups: state.groups
-            .map((item) => item.id == group.id ? updated : item)
-            .toList(),
-        selectedGroup: state.selectedGroup?.id == group.id
-            ? updated
+        groups: state.groups.map((item) {
+          if (item.groupId == group.groupId) {
+            return item.copyWith(isManaged: isManaged);
+          }
+          return item;
+        }).toList(),
+        selectedGroup: state.selectedGroup?.groupId == group.groupId
+            ? state.selectedGroup?.copyWith(isManaged: isManaged)
             : state.selectedGroup,
       );
     }

@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-06 +07:00
+**Last Updated:** 2026-06-08 +07:00
 
 ---
 
@@ -13,6 +13,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-08 - Zalo Image URL Expiration & Local-First Image Rendering Fallback
+
+- Symptom: Images in the Live Chat tab failed to display after a few hours/days, rendering the "Không thể tải ảnh" (Unable to load image) error widget.
+- Root cause: Zalo remote image URLs expire quickly. Although the Node.js background media worker (`LocalChatMediaWorker`) successfully downloaded a local copy of each image to `.data/local-chat-media/`, the Flutter client only checked if the attachment had a remote URL (`image.hasRemoteUrl`), and unconditionally attempted to load it using `CachedNetworkImage`, ignoring the cached local path when the remote load failed.
+- Fix summary: Introduced `liveChatLocalFileExists` helper in the platform-specific local image stubs/implementations to verify file presence on disk. Updated `_buildMessageContent` in `live_chat_screen.dart` to check if a valid local copy exists (`useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath)`) and render the local image using `buildLiveChatLocalImage`, falling back to `CachedNetworkImage` only if the local file is not found. Fixed string encoding typos from `'KhĂ´ng thá»ƒ...'` to `'Không thể...'` in the error widgets.
+- Rule: Always check and prioritize loading media from `image.localPath` if it exists on the local filesystem before falling back to remote URLs, as Zalo CDN URLs are short-lived.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/utils/live_chat_local_image_io.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/utils/live_chat_local_image_stub.dart`.
 
 ### 2026-06-06 - Dart AOT Compilation Bypasses Overridden Getters on Custom Color Subclasses
 

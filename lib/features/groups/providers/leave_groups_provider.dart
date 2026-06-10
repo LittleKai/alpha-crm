@@ -165,9 +165,6 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
       print('[LeaveGroupsNotifier] Exception in reloadGroups: $e\n$stack');
     }
 
-    // Fallback to mock groups if backend is not connected
-    await Future.delayed(const Duration(milliseconds: 800));
-
     final integrationState = _ref.read(zaloIntegrationProvider);
     String? autoAccountId = state.selectedAccountId;
     if (autoAccountId == null && integrationState.accounts.isNotEmpty) {
@@ -176,7 +173,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
 
     state = state.copyWith(
       isLoadingGroups: false,
-      groups: MockGroups.myGroups,
+      groups: const [],
       selectedAccountId: autoAccountId,
     );
   }

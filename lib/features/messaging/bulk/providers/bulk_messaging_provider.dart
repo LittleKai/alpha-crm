@@ -11,16 +11,6 @@ import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../zalo_integration/data/zalo_integration_api.dart';
 import '../data/bulk_campaign_repository.dart';
 
-const bulkAllAccountsId = 'all_accounts';
-
-const bulkAllAccountsOption = ZaloAccount(
-  id: bulkAllAccountsId,
-  name: 'Toàn bộ tài khoản',
-  phone: '',
-  type: 'all',
-  isConnected: true,
-);
-
 const Object _unsetSelectedAccount = Object();
 
 List<ZaloAccount> _mapBulkAccounts(List<ZaloConnectedAccount> accounts) {
@@ -47,7 +37,6 @@ ZaloAccount? _resolveBulkSelectedAccount(
   ZaloAccount? current,
   List<ZaloAccount> accounts,
 ) {
-  if (current?.id == bulkAllAccountsId) return bulkAllAccountsOption;
   if (accounts.isEmpty) return null;
 
   if (current != null) {
@@ -63,7 +52,7 @@ ZaloAccount? _resolveBulkSelectedAccount(
 }
 
 String _bulkAccountFilterId(ZaloAccount? account) {
-  if (account == null || account.id == bulkAllAccountsId) return '';
+  if (account == null) return '';
   return account.id;
 }
 
@@ -460,8 +449,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         'manualRecipients': recipients
             .map((r) => {'phone': r, 'name': ''})
             .toList(),
-        if (state.selectedAccount != null &&
-            state.selectedAccount!.id != bulkAllAccountsId)
+        if (state.selectedAccount != null)
           'selectedAccountId': state.selectedAccount!.id,
         'rateLimit': {
           'minDelaySeconds': state.minDelay,

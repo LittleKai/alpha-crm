@@ -35,6 +35,9 @@ export interface ZaloSendMessageRequest {
 export interface ZaloSendMessageResult {
   success: boolean;
   messageId?: string;
+  /** Zalo client message id (cliMsgId/clientId) required by undo/reaction APIs */
+  clientMessageId?: string;
+  attachmentMessageIds?: string[];
   error?: string;
 }
 
@@ -100,6 +103,15 @@ export interface ZaloInboundMessageEvent {
   mentions?: unknown[];
   styles?: unknown[];
   metadata?: Record<string, unknown>;
+  attachments?: Array<{
+    kind: string;
+    name?: string;
+    url?: string;
+    localPath?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    metadata?: Record<string, unknown>;
+  }>;
   timestamp: string;
 }
 
@@ -172,6 +184,7 @@ export interface ZaloChannel {
     threadId: string;
     threadType: 'user' | 'group';
     msgId: string;
+    cliMsgId?: string;
     reaction: string;
   }): Promise<{ success: boolean; error?: string }>;
   handleWebhookEvent?(event: Record<string, unknown>): void;

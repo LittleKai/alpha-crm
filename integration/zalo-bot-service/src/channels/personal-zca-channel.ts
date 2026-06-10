@@ -314,11 +314,9 @@ export function createZaloClient(accountId?: string): Zalo {
   return new Zalo({
     selfListen: config.personalSelfListen,
     logging: true,
-    listenAllGroups: true, // Thêm tuỳ chọn để nhận đầy đủ tin nhắn từ tất cả các nhóm (kể cả nhóm tắt thông báo)
-    listenMutedGroups: true,
     imageMetadataGetter: readImageMetadata,
     ...(agent ? { agent } : {}),
-  } as any);
+  });
 }
 
 function toStringValue(value: unknown): string {
@@ -1097,21 +1095,6 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
       listener.on("seen_messages", (data: any) => handleReceipt('seen', data));
       listener.on("delivered_messages", (data: any) => handleReceipt('delivered', data));
 
-      listener.on("typing", async (data: any) => {
-        instance.lastEventAt = new Date().toISOString();
-        const payload = data?.data ?? data ?? {};
-        const thread = normalizeThread(instance, data);
-        const threadId = thread.threadId;
-        const isTyping = data?.data?.isTyping ?? data?.isTyping;
-        console.log(`[PersonalZcaChannel - ${instance.label}] Typing event in threadId: ${threadId}, isTyping: ${isTyping}`);
-        await emitAuxiliaryEvent({
-          type: isTyping === false ? 'typing.stopped' : 'typing.started',
-          accountId: instance.uId,
-          ...thread,
-          userId: toStringValue(payload.uidFrom ?? payload.userId),
-          timestamp: normalizeTimestamp(payload.ts),
-        });
-      });
 
       listener.on("reaction", async (data: any) => {
         const payload = data?.data ?? data ?? {};
@@ -1216,7 +1199,7 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         }
       });
 
-      (listener as any).start({ listenAllGroups: true, listenMuted: true, retryOnClose: true });
+      listener.start();
       instance.listenerRunning = true;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener started.`);
     }

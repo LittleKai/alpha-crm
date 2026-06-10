@@ -224,13 +224,13 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
       return ['Tổng quan'];
     }
     if (route.startsWith('/customers')) {
-      return ['CRM Zalo', 'Khách hàng', 'CRM Khách hàng'];
+      return ['Alpha CRM', 'Khách hàng', 'CRM Khách hàng'];
     }
     if (route.startsWith('/content/templates')) {
-      return ['CRM Zalo', 'Chiến dịch', 'Tin nhắn mẫu'];
+      return ['Alpha CRM', 'Chiến dịch', 'Tin nhắn mẫu'];
     }
     if (route.startsWith('/workflows')) {
-      return ['CRM Zalo', 'Tự động hóa', 'Kho workflow mẫu'];
+      return ['Alpha CRM', 'Tự động hóa', 'Kho workflow mẫu'];
     }
     if (route.startsWith('/messaging/bulk')) {
       return ['Chức năng nhắn tin', 'Gửi tin hàng loạt'];

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_messages.dart';
 import '../../../shared/models/crm_template.dart';
@@ -80,21 +79,12 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
           .toList();
       state = state.copyWith(templates: loaded, isLoading: false);
     } else {
-      if (kDebugMode) {
-        state = state.copyWith(
-          templates: MockMessages.sampleTemplates,
-          isLoading: false,
-          errorMessage:
-              'Lỗi tải đám mây (Dữ liệu mẫu chế độ phát triển): ${response['message']}',
-        );
-      } else {
-        state = state.copyWith(
-          templates: const [],
-          isLoading: false,
-          errorMessage:
-              response['message'] ?? 'Không thể tải mẫu tin từ đám mây.',
-        );
-      }
+      state = state.copyWith(
+        templates: const [],
+        isLoading: false,
+        errorMessage:
+            response['message'] ?? 'Không thể tải mẫu tin từ đám mây.',
+      );
     }
   }
 

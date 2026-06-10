@@ -204,14 +204,16 @@ class _Header extends ConsumerWidget {
   }
 }
 
-class _GroupsList extends StatelessWidget {
+class _GroupsList extends ConsumerWidget {
   final ManagedGroupsState state;
   final ManagedGroupsNotifier notifier;
 
   const _GroupsList({required this.state, required this.notifier});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectedAccounts = ref.watch(zaloIntegrationProvider).accounts;
+
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.s),
       child: state.groups.isEmpty
@@ -223,40 +225,99 @@ class _GroupsList extends StatelessWidget {
                   'Bấm Đồng bộ để hệ thống tải danh sách nhóm Zalo.',
               height: 360,
             )
-          : ListView.separated(
-              itemCount: state.groups.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final group = state.groups[index];
-                final selected = group.id == state.selectedGroup?.id;
-                final hasAvatar =
-                    group.avatarUrl.isNotEmpty &&
-                    group.avatarUrl.startsWith('http');
-                return ListTile(
-                  selected: selected,
-                  selectedTileColor: AppColors.primarySoft,
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.surfaceMuted,
-                    backgroundImage: hasAvatar
-                        ? NetworkImage(group.avatarUrl)
-                        : null,
-                    child: !hasAvatar
-                        ? const Icon(Icons.groups_outlined)
-                        : null,
-                  ),
-                  title: Text(
-                    group.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    '${group.memberCount} thành viên - ${group.accountId}',
-                  ),
-                  trailing: Switch(
-                    value: group.isManaged,
-                    onChanged: (value) => notifier.setManaged(group, value),
-                  ),
-                  onTap: () => notifier.selectGroup(group),
+          : Builder(
+              builder: (context) {
+                final mergedGroupsMap = <String, ManagedZaloGroup>{};
+                final groupAccountsMap = <String, List<ZaloConnectedAccount>>{};
+                
+                for (final group in state.groups) {
+                  final gid = group.groupId;
+                  if (!mergedGroupsMap.containsKey(gid)) {
+                    mergedGroupsMap[gid] = group;
+                    groupAccountsMap[gid] = [];
+                  }
+                  
+                  ZaloConnectedAccount account;
+                  try {
+                    account = connectedAccounts.firstWhere((a) => a.id == group.accountId);
+                  } catch (_) {
+                    account = ZaloConnectedAccount(
+                      id: group.accountId,
+                      label: group.accountId,
+                      connected: false,
+                      listenerRunning: false,
+                      avatarUrl: '',
+                    );
+                  }
+                  
+                  if (!groupAccountsMap[gid]!.any((a) => a.id == account.id)) {
+                    groupAccountsMap[gid]!.add(account);
+                  }
+                }
+                
+                final mergedGroups = mergedGroupsMap.values.toList();
+
+                return ListView.separated(
+                  itemCount: mergedGroups.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final group = mergedGroups[index];
+                    final accounts = groupAccountsMap[group.groupId] ?? [];
+                    final selected = group.groupId == state.selectedGroup?.groupId;
+                    final hasAvatar =
+                        group.avatarUrl.isNotEmpty &&
+                        group.avatarUrl.startsWith('http');
+                    
+                    final cleanName = group.name.replaceFirst(RegExp(r'^\[.*?\]\s*'), '');
+
+                    return ListTile(
+                      selected: selected,
+                      selectedTileColor: AppColors.primarySoft,
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: hasAvatar
+                            ? NetworkImage(group.avatarUrl)
+                            : null,
+                        child: !hasAvatar
+                            ? const Icon(Icons.groups_outlined)
+                            : null,
+                      ),
+                      title: Text(
+                        cleanName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        children: [
+                          Text('${group.memberCount} thành viên - '),
+                          ...accounts.map((acc) {
+                            final accCleanName = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (acc.avatarUrl.isNotEmpty)
+                                  CircleAvatar(
+                                    radius: 7,
+                                    backgroundImage: NetworkImage(acc.avatarUrl),
+                                  )
+                                else
+                                  const Icon(Icons.account_circle, size: 14),
+                                const SizedBox(width: 4),
+                                Text(accCleanName, style: const TextStyle(fontSize: 12)),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
+                      trailing: Switch(
+                        value: group.isManaged,
+                        onChanged: (value) => notifier.setManaged(group, value),
+                      ),
+                      onTap: () => notifier.selectGroup(group),
+                    );
+                  },
                 );
               },
             ),

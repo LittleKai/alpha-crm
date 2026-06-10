@@ -17,8 +17,8 @@ void main() {
     // Let GoRouter resolve initial route and pump
     await tester.pumpAndSettle();
 
-    // Verify that the branding 'CRM ZALO' exists
-    expect(find.text('CRM ZALO'), findsOneWidget);
+    // Verify that the branding 'ALPHA CRM' exists
+    expect(find.text('ALPHA CRM'), findsOneWidget);
 
     // Verify that we are on the dashboard (it appears twice: in Sidebar and in Header)
     expect(find.text('Tổng quan chiến dịch'), findsNWidgets(2));

@@ -268,36 +268,12 @@ class _Header extends ConsumerWidget {
           SizedBox(
             width: 240,
             child: AppSelectField<String>(
-              value: state.selectedAccount?.id == 'all_accounts'
-                  ? 'all_accounts'
-                  : accounts.any((acc) => acc.id == state.selectedAccount?.id)
+              value: accounts.any((acc) => acc.id == state.selectedAccount?.id)
                   ? state.selectedAccount?.id
                   : (accounts.isNotEmpty ? accounts.first.id : null),
               hintText: 'Chọn tài khoản Zalo...',
-              items: [
-                DropdownMenuItem(
-                  value: 'all_accounts',
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: AppColors.primarySoft,
-                        child: Icon(
-                          Icons.people,
-                          size: 14,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      SizedBox(width: AppSpacing.s),
-                      Text(
-                        'Toàn bộ tài khoản',
-                        style: AppTextStyles.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                ...accounts.map((acc) {
-                  final cleanLabel = acc.name.replaceAll(
+              items: accounts.map((acc) {
+                final cleanLabel = acc.name.replaceAll(
                     RegExp(r'\s*\([^)]*\)$'),
                     '',
                   );
@@ -341,13 +317,10 @@ class _Header extends ConsumerWidget {
                     ),
                   );
                 }).toList(),
-              ],
               onChanged: state.isSending || state.isPolling
                   ? null
                   : (val) {
-                      if (val == 'all_accounts') {
-                        notifier.selectAccount(bulkAllAccountsOption);
-                      } else if (val != null) {
+                      if (val != null) {
                         final acc = state.accounts.firstWhere(
                           (a) => a.id == val,
                         );
@@ -955,7 +928,7 @@ class _ManualPhoneEmpty extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.l),
           Text(
-            'CRM ZALO - GỬI SĐT THỦ CÔNG',
+            'ALPHA CRM - GỬI SĐT THỦ CÔNG',
             style: AppTextStyles.sectionTitle,
             textAlign: TextAlign.center,
           ),

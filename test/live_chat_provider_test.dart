@@ -118,6 +118,46 @@ void main() {
     expect(view?.localPath, r'D:\tmp\photo.png');
   });
 
+  test('attachment view resolves legacy string image paths', () {
+    final message = ChatMessage.fromJson({
+      '_id': 'msg-image-string',
+      'content': '[image]',
+      'messageType': 'image',
+      'attachments': [r'D:\tmp\photo.png'],
+      'createdAt': '2026-06-03T08:00:00.000Z',
+    });
+
+    final view = resolveLiveChatAttachmentView(message);
+
+    expect(view?.kind, LiveChatAttachmentKind.image);
+    expect(view?.displayName, 'photo.png');
+    expect(view?.localPath, r'D:\tmp\photo.png');
+  });
+
+  test('attachment view falls back for media placeholders', () {
+    final image = ChatMessage.fromJson({
+      '_id': 'msg-image-placeholder',
+      'content': '[image]',
+      'messageType': 'image',
+      'createdAt': '2026-06-03T08:00:00.000Z',
+    });
+    final file = ChatMessage.fromJson({
+      '_id': 'msg-file-placeholder',
+      'content': '[file]',
+      'messageType': 'file',
+      'createdAt': '2026-06-03T08:00:00.000Z',
+    });
+
+    expect(
+      resolveLiveChatAttachmentView(image)?.kind,
+      LiveChatAttachmentKind.image,
+    );
+    expect(
+      resolveLiveChatAttachmentView(file)?.kind,
+      LiveChatAttachmentKind.file,
+    );
+  });
+
   test('SystemSettings persists theme mode and per-account nicknames', () {
     final settings = MockAccounts.defaultSettings.copyWith(
       appThemeMode: 'dark',
@@ -168,18 +208,41 @@ void main() {
     expect(repository.retriedMessageId, 'local-failed-1');
   });
 
-  test('LiveChatNotifier keeps group conversations when managed list is empty', () async {
-    final repository = _FakeLiveChatRepository()..includeGroupConversation = true;
-    final notifier = LiveChatNotifier(repository);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'LiveChatNotifier keeps group conversations when managed list is empty',
+    () async {
+      final repository = _FakeLiveChatRepository()
+        ..includeGroupConversation = true;
+      final notifier = LiveChatNotifier(repository);
+      await Future<void>.delayed(Duration.zero);
 
-    await notifier.loadConversations(loadSelectedMessages: false);
+      await notifier.loadConversations(loadSelectedMessages: false);
 
-    expect(
-      notifier.state.conversations.where((item) => item.threadType == 'group'),
-      isNotEmpty,
-    );
-  });
+      expect(
+        notifier.state.conversations.where(
+          (item) => item.threadType == 'group',
+        ),
+        isNotEmpty,
+      );
+    },
+  );
+
+  test(
+    'LiveChatNotifier reports reaction API failures instead of throwing',
+    () async {
+      final repository = _FakeLiveChatRepository()..failReaction = true;
+      final notifier = LiveChatNotifier(repository);
+      await Future<void>.delayed(Duration.zero);
+      await notifier.loadConversations(loadSelectedMessages: true);
+
+      await notifier.reactToMessage(
+        notifier.state.selectedConversation!.messages.first,
+        'heart',
+      );
+
+      expect(notifier.state.errorMessage, contains('Thả cảm xúc thất bại'));
+    },
+  );
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
@@ -194,6 +257,7 @@ class _FakeLiveChatRepository extends LiveChatRepository {
   int getMessagesCalls = 0;
   int sendMessageCalls = 0;
   bool failNextSend = false;
+  bool failReaction = false;
   bool includeGroupConversation = false;
   String? retriedMessageId;
 
@@ -273,10 +337,7 @@ class _FakeLiveChatRepository extends LiveChatRepository {
         'updatedAt': '2026-06-03T08:02:00.000Z',
       });
     }
-    return {
-      'success': true,
-      'data': data,
-    };
+    return {'success': true, 'data': data};
   }
 
   @override
@@ -327,5 +388,16 @@ class _FakeLiveChatRepository extends LiveChatRepository {
   Future<Map<String, dynamic>> retryMessage(String messageId) async {
     retriedMessageId = messageId;
     return {'success': false, 'error': 'still offline'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> reactToMessage(
+    String messageId,
+    String reaction,
+  ) async {
+    if (failReaction) {
+      throw Exception('providerMessageId and reaction are required.');
+    }
+    return {'success': true};
   }
 }

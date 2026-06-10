@@ -1414,7 +1414,7 @@ class _MessageBubble extends ConsumerWidget {
                   path,
                   fit: BoxFit.contain,
                   errorWidget: const Text(
-                    'KhĂ´ng thá»ƒ xem áº£nh lá»›n',
+                    'Không thể xem ảnh lớn',
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -1713,6 +1713,7 @@ class _MessageBubble extends ConsumerWidget {
     final attachmentView = resolveLiveChatAttachmentView(message);
     if (attachmentView?.kind == LiveChatAttachmentKind.image) {
       final image = attachmentView!;
+      final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
       final errorWidget = Container(
         padding: const EdgeInsets.all(AppSpacing.s),
         color: Colors.black12,
@@ -1721,19 +1722,27 @@ class _MessageBubble extends ConsumerWidget {
           children: [
             const Icon(Icons.broken_image_outlined, color: Colors.grey),
             const SizedBox(width: 8),
-            Text('KhĂ´ng thá»ƒ táº£i áº£nh', style: TextStyle(color: textColor)),
+            Text('Không thể tải ảnh', style: TextStyle(color: textColor)),
           ],
         ),
       );
       return InkWell(
-        onTap: image.hasRemoteUrl
+        onTap: useLocal
+            ? () => _showLocalImagePreviewDialog(context, image.localPath)
+            : image.hasRemoteUrl
             ? () => _showImagePreviewDialog(context, image.url)
             : image.hasLocalPath
             ? () => _showLocalImagePreviewDialog(context, image.localPath)
             : null,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: image.hasRemoteUrl
+          child: useLocal
+              ? buildLiveChatLocalImage(
+                  image.localPath,
+                  fit: BoxFit.contain,
+                  errorWidget: errorWidget,
+                )
+              : image.hasRemoteUrl
               ? CachedNetworkImage(
                   imageUrl: image.url,
                   fit: BoxFit.contain,

@@ -496,37 +496,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<List<Conversation>> _filterManagedGroupConversations(
     List<Conversation> conversations,
   ) async {
-    final hasGroups = conversations.any(
-      (conversation) => conversation.threadType == 'group',
-    );
-    if (!hasGroups) return conversations;
-
-    final response = await _repository.getManagedGroups(
-      accountId: state.selectedAccount?.id,
-    );
-    if (response['success'] != true || response['data'] is! List) {
-      return conversations;
-    }
-
-    final managedKeys = <String>{};
-    for (final item in response['data'] as List) {
-      if (item is! Map) continue;
-      final json = Map<String, dynamic>.from(item);
-      if (json['isManaged'] != true) continue;
-      final accountId = (json['accountId'] ?? '').toString();
-      final groupId = (json['groupId'] ?? '').toString();
-      if (accountId.isNotEmpty && groupId.isNotEmpty) {
-        managedKeys.add('$accountId:$groupId');
-      }
-    }
-    if (managedKeys.isEmpty) return conversations;
-
-    return conversations.where((conversation) {
-      if (conversation.threadType != 'group') return true;
-      return managedKeys.contains(
-        '${conversation.accountId}:${conversation.threadId}',
-      );
-    }).toList();
+    // Luôn hiển thị tất cả các group (mặc định bật)
+    return conversations;
   }
 
   Future<void> selectAccount(LiveChatAccount? account) async {
@@ -1006,10 +977,22 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
 
   Future<void> reactToMessage(ChatMessage message, String reaction) async {
     if (message.id.isEmpty) return;
-    final response = await _repository.reactToMessage(message.id, reaction);
-    if (response['success'] == true) {
-      final selected = state.selectedConversation;
-      if (selected != null) await loadMessages(selected.id);
+    try {
+      final response = await _repository.reactToMessage(message.id, reaction);
+      if (response['success'] == true) {
+        final selected = state.selectedConversation;
+        if (selected != null) await loadMessages(selected.id);
+      } else {
+        state = state.copyWith(
+          errorMessage:
+              (response['message'] ??
+                      response['error'] ??
+                      'Thả cảm xúc thất bại.')
+                  .toString(),
+        );
+      }
+    } catch (error) {
+      state = state.copyWith(errorMessage: 'Thả cảm xúc thất bại: $error');
     }
   }
 
@@ -1188,19 +1171,30 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null) return false;
     state = state.copyWith(isSending: true, errorMessage: null);
-    final response = await _repository.recallMessage(
-      conversation.id,
-      messageId,
-    );
-    if (response['success'] == true) {
-      await loadMessages(conversation.id);
-      state = state.copyWith(isSending: false);
-      return true;
-    } else {
+    try {
+      final response = await _repository.recallMessage(
+        conversation.id,
+        messageId,
+      );
+      if (response['success'] == true) {
+        await loadMessages(conversation.id);
+        state = state.copyWith(isSending: false);
+        return true;
+      } else {
+        state = state.copyWith(
+          isSending: false,
+          errorMessage:
+              (response['message'] ??
+                      response['error'] ??
+                      'Thu hồi tin nhắn thất bại.')
+                  .toString(),
+        );
+        return false;
+      }
+    } catch (error) {
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['message'] ?? 'Thu hồi tin nhắn thất bại.')
-            .toString(),
+        errorMessage: 'Thu hồi tin nhắn thất bại: $error',
       );
       return false;
     }
@@ -1306,7 +1300,13 @@ final _emptyConversation = Conversation(
 
 DateTime _dateFrom(Object? value) {
   if (value == null) return DateTime.now();
-  return DateTime.tryParse(value.toString()) ?? DateTime.now();
+  final valStr = value.toString();
+  final ts = int.tryParse(valStr);
+  if (ts != null && ts > 1000000000000) {
+    return DateTime.fromMillisecondsSinceEpoch(ts).toLocal();
+  }
+  final parsed = DateTime.tryParse(valStr);
+  return parsed != null ? parsed.toLocal() : DateTime.now();
 }
 
 String _stringFrom(Map<String, dynamic> json, List<String> keys) {

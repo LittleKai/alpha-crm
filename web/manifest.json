@@ -1,11 +1,11 @@
 {
-    "name": "alpha_crm",
-    "short_name": "alpha_crm",
+    "name": "Alpha CRM",
+    "short_name": "Alpha CRM",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Alpha CRM - Phần mềm marketing Zalo và chăm sóc khách hàng.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

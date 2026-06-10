@@ -30,7 +30,11 @@ LiveChatAttachmentView? resolveLiveChatAttachmentView(ChatMessage message) {
   if (attachment != null) {
     return _viewFromAttachmentMap(attachment, message.contentType);
   }
-  return _viewFromLegacyJson(message);
+  final stringAttachment = _firstAttachmentString(message.attachments);
+  if (stringAttachment.isNotEmpty) {
+    return _viewFromPath(stringAttachment, message.contentType);
+  }
+  return _viewFromLegacyJson(message) ?? _viewFromMessageType(message);
 }
 
 Map<String, dynamic>? _firstAttachmentMap(Object? value) {
@@ -41,6 +45,17 @@ Map<String, dynamic>? _firstAttachmentMap(Object? value) {
   }
   if (value is Map) return Map<String, dynamic>.from(value);
   return null;
+}
+
+String _firstAttachmentString(Object? value) {
+  if (value is List) {
+    for (final item in value) {
+      final text = item?.toString().trim() ?? '';
+      if (text.isNotEmpty && item is! Map) return text;
+    }
+  }
+  if (value is String) return value.trim();
+  return '';
 }
 
 LiveChatAttachmentView? _viewFromAttachmentMap(
@@ -72,6 +87,46 @@ LiveChatAttachmentView? _viewFromAttachmentMap(
     url: url,
     localPath: localPath,
     sizeLabel: _formatSize(data['sizeBytes']),
+  );
+}
+
+LiveChatAttachmentView _viewFromPath(String path, String contentType) {
+  final isImage = contentType == 'image' || _looksLikeImagePath(path);
+  return LiveChatAttachmentView(
+    kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
+    displayName: Uri.decodeComponent(
+      _basename(path).isEmpty
+          ? (isImage ? 'Hinh anh' : 'Tep dinh kem')
+          : _basename(path),
+    ),
+    url: path.startsWith('http://') || path.startsWith('https://') ? path : '',
+    localPath: path.startsWith('http://') || path.startsWith('https://')
+        ? ''
+        : path,
+  );
+}
+
+LiveChatAttachmentView? _viewFromMessageType(ChatMessage message) {
+  final type = message.contentType.toLowerCase();
+  if (type != 'image' &&
+      type != 'gif' &&
+      type != 'file' &&
+      type != 'video' &&
+      type != 'voice') {
+    return null;
+  }
+  final trimmed = message.message.trim();
+  final isImage = type == 'image' || type == 'gif';
+  final displayName =
+      trimmed.isNotEmpty &&
+          trimmed != '[image]' &&
+          trimmed != '[file]' &&
+          trimmed != '[video]'
+      ? trimmed
+      : (isImage ? 'Hinh anh' : 'Tep dinh kem');
+  return LiveChatAttachmentView(
+    kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
+    displayName: displayName,
   );
 }
 

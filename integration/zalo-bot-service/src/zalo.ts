@@ -63,6 +63,7 @@ export async function reactMessage(request: {
   threadId: string;
   threadType: 'user' | 'group';
   msgId: string;
+  cliMsgId?: string;
   reaction: string;
 }): Promise<{ success: boolean; error?: string }> {
   if (!channel.reactMessage) {

@@ -77,11 +77,11 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
 
   InviteToGroupNotifier(this._ref)
     : super(
-        InviteToGroupState(
+        const InviteToGroupState(
           isRunning: false,
           logs: [],
-          friends: MockGroups.sampleFriends,
-          groups: MockGroups.myGroups,
+          friends: [],
+          groups: [],
           selectedFriendIds: {},
         ),
       );
@@ -172,8 +172,8 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
       }
     }
 
-    // Mock fallback
-    state = state.copyWith(friends: MockGroups.sampleFriends);
+    // No fallback - keep list empty
+    state = state.copyWith(friends: const []);
   }
 
   Future<void> loadGroups() async {
@@ -203,8 +203,8 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
       }
     }
 
-    // Fallback to mock
-    state = state.copyWith(groups: MockGroups.myGroups);
+    // No fallback - keep list empty
+    state = state.copyWith(groups: const []);
   }
 
   void startInviteCampaign() {

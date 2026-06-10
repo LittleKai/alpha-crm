@@ -141,7 +141,7 @@ test('reads PNG dimensions for zca-js imageMetadataGetter', async () => {
   }
 });
 
-test('recallMessage uses zca-js undo API with numeric cliMsgId fallback', async () => {
+test('recallMessage uses zca-js undo API with the stored Zalo cliMsgId', async () => {
   accountPool.clear();
   setLoginPoolInitializedForTest(true);
   let captured: any;
@@ -163,14 +163,14 @@ test('recallMessage uses zca-js undo API with numeric cliMsgId fallback', async 
     threadId: 'target-1',
     threadType: 'user',
     msgId: '7908682591079',
-    cliMsgId: 'flutter_1780761273591',
+    cliMsgId: '1780761273591',
   });
 
   assert.equal(result.success, true);
   assert.deepEqual(captured, {
     payload: {
       msgId: '7908682591079',
-      cliMsgId: '7908682591079',
+      cliMsgId: '1780761273591',
     },
     threadId: 'target-1',
     type: ThreadType.User,
@@ -201,6 +201,7 @@ test('reactMessage maps UI heart reaction to zca-js HEART reaction destination',
     threadId: 'target-1',
     threadType: 'user',
     msgId: '123456789',
+    cliMsgId: '1780761273591',
     reaction: 'heart',
   });
 
@@ -209,7 +210,7 @@ test('reactMessage maps UI heart reaction to zca-js HEART reaction destination',
   assert.deepEqual(captured.dest, {
     data: {
       msgId: '123456789',
-      cliMsgId: '123456789',
+      cliMsgId: '1780761273591',
     },
     threadId: 'target-1',
     type: ThreadType.User,

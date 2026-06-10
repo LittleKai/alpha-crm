@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_contacts.dart';
 import '../../../shared/models/crm_customer.dart';
@@ -148,22 +147,13 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
           .toList();
       state = state.copyWith(contacts: loaded, isLoading: false);
     } else {
-      if (kDebugMode) {
-        state = state.copyWith(
-          contacts: MockContacts.sampleContacts,
-          isLoading: false,
-          errorMessage:
-              'Lỗi tải đám mây (Dữ liệu mẫu chế độ phát triển): ${response['message']}',
-        );
-      } else {
-        state = state.copyWith(
-          contacts: const [],
-          isLoading: false,
-          errorMessage:
-              response['message'] ??
-              'Không thể tải dữ liệu khách hàng từ đám mây.',
-        );
-      }
+      state = state.copyWith(
+        contacts: const [],
+        isLoading: false,
+        errorMessage:
+            response['message'] ??
+            'Không thể tải dữ liệu khách hàng từ đám mây.',
+      );
     }
   }
 

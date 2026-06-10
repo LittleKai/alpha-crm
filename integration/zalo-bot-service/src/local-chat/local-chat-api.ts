@@ -205,6 +205,23 @@ function serializeMessagePage(page: ReturnType<NonNullable<ReturnType<typeof get
   return { data: page.messages, attachments };
 }
 
+function serializeLocalMessageWithAttachments(
+  store: NonNullable<ReturnType<typeof getLocalChatStore>>,
+  messageId: string,
+): Record<string, unknown> | undefined {
+  const message = store.getMessage(messageId);
+  if (!message) return undefined;
+  const attachments = store.db
+    .prepare('SELECT * FROM attachments WHERE messageId = ?')
+    .all(messageId);
+  return {
+    ...message,
+    attachments,
+    receipts: store.getReceipts(messageId),
+    reactions: store.getReactions(messageId),
+  };
+}
+
 function handleLocalMessageSearch(
   url: string,
   req: IncomingMessage,
@@ -616,14 +633,20 @@ async function handleLocalSend(
     const result = await sendMessage(sendReq, false);
 
     if (result.success) {
-      store.updateMessageStatus(localMsgId, 'sent', result.messageId);
+      store.updateMessageStatus(
+        localMsgId,
+        'sent',
+        result.messageId,
+        '',
+        result.clientMessageId,
+      );
       localChatEvents.publish({
         type: 'message.updated',
         accountId,
         threadId: recipientId,
         data: {
           messageId: localMsgId,
-          clientMessageId,
+          clientMessageId: result.clientMessageId || clientMessageId,
           providerMessageId: result.messageId,
           status: 'sent',
         },
@@ -632,6 +655,9 @@ async function handleLocalSend(
         success: true,
         localMessageId: localMsgId,
         providerMessageId: result.messageId,
+        clientMessageId: result.clientMessageId,
+        attachmentMessageIds: result.attachmentMessageIds,
+        data: serializeLocalMessageWithAttachments(store, localMsgId),
       }, req);
     } else {
       store.updateMessageStatus(
@@ -779,14 +805,20 @@ async function handleLocalSendAttachment(
     const result = await sendMessage(sendReq, false);
 
     if (result.success) {
-      store.updateMessageStatus(localMsgId, 'sent', result.messageId);
+      store.updateMessageStatus(
+        localMsgId,
+        'sent',
+        result.messageId,
+        '',
+        result.clientMessageId,
+      );
       localChatEvents.publish({
         type: 'message.updated',
         accountId,
         threadId: recipientId,
         data: {
           messageId: localMsgId,
-          clientMessageId,
+          clientMessageId: result.clientMessageId || clientMessageId,
           providerMessageId: result.messageId,
           status: 'sent',
         },
@@ -795,6 +827,9 @@ async function handleLocalSendAttachment(
         success: true,
         localMessageId: localMsgId,
         providerMessageId: result.messageId,
+        clientMessageId: result.clientMessageId,
+        attachmentMessageIds: result.attachmentMessageIds,
+        data: serializeLocalMessageWithAttachments(store, localMsgId),
       }, req);
     } else {
       store.updateMessageStatus(
@@ -817,6 +852,7 @@ async function handleLocalSendAttachment(
         success: false,
         localMessageId: localMsgId,
         error: result.error || 'Attachment send failed.',
+        data: serializeLocalMessageWithAttachments(store, localMsgId),
       }, req);
     }
   } catch (err: any) {
@@ -840,6 +876,7 @@ async function handleLocalSendAttachment(
       success: false,
       localMessageId: localMsgId,
       error: err.message || 'Attachment send failed.',
+      data: serializeLocalMessageWithAttachments(store, localMsgId),
     }, req);
   }
 }
@@ -959,7 +996,13 @@ async function handleLocalRetry(
     attachments: attachments.map((item) => item.path).filter(Boolean),
   });
   if (result.success) {
-    store.updateMessageStatus(messageId, 'sent', result.messageId);
+    store.updateMessageStatus(
+      messageId,
+      'sent',
+      result.messageId,
+      '',
+      result.clientMessageId,
+    );
   } else {
     store.updateMessageStatus(
       messageId,
@@ -975,6 +1018,7 @@ async function handleLocalRetry(
     data: {
       messageId,
       providerMessageId: result.messageId,
+      clientMessageId: result.clientMessageId,
       status: result.success ? 'sent' : 'failed',
       error: result.error,
     },
@@ -983,6 +1027,8 @@ async function handleLocalRetry(
     success: result.success,
     localMessageId: messageId,
     providerMessageId: result.messageId,
+    clientMessageId: result.clientMessageId,
+    attachmentMessageIds: result.attachmentMessageIds,
     error: result.error,
   }, req);
 }
@@ -1011,6 +1057,7 @@ async function handleLocalReaction(
     threadId: message.threadId,
     threadType: message.threadType,
     msgId: message.providerMessageId,
+    cliMsgId: message.clientMessageId || undefined,
     reaction,
   });
   if (result.success) {

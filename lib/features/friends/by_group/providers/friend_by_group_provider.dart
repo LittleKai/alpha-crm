@@ -194,10 +194,10 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         state = state.copyWith(isScanning: false, errorText: e.toString());
       }
     } else {
-      // Mock fallback
       state = state.copyWith(
-        members: MockGroups.flutterGroupMembers,
+        members: const [],
         isScanning: false,
+        errorText: 'Zalo backend chưa kết nối.',
       );
     }
   }
@@ -232,10 +232,11 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         state = state.copyWith(isScanning: false, errorText: e.toString());
       }
     } else {
-      // Mock fallback
-      List<ScannedMember> loadedMembers = MockGroups.flutterGroupMembers;
-      if (groupId == 'g2') loadedMembers = MockGroups.startupGroupMembers;
-      state = state.copyWith(members: loadedMembers, isScanning: false);
+      state = state.copyWith(
+        members: const [],
+        isScanning: false,
+        errorText: 'Zalo backend chưa kết nối.',
+      );
     }
   }
 

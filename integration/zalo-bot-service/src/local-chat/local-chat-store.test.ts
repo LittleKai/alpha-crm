@@ -205,6 +205,42 @@ describe('LocalChatStore', () => {
     assert.equal(refreshed?.find((item) => item.id === img!.id)?.status, 'ready');
   });
 
+  it('stores clean media previews instead of truncating raw JSON content', () => {
+    const rawJson = JSON.stringify({
+      title: '',
+      description: '',
+      href: 'https://example.com/photo',
+      thumb: 'https://example.com/photo.jpg',
+      params: { fileName: 'photo.jpg', fType: 1 },
+    });
+
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread1',
+      threadType: 'user',
+      senderId: 'sender1',
+      senderName: 'User',
+      content: rawJson.repeat(8),
+      messageType: 'image',
+      providerMessageId: 'pmsg_preview_img',
+      timestamp: '2024-06-01T12:00:00Z',
+      attachments: [
+        {
+          kind: 'image',
+          name: 'photo.jpg',
+          url: 'https://example.com/photo.jpg',
+          mimeType: 'image/jpeg',
+        },
+      ],
+    });
+
+    const conv = store.getConversationByThread('acc1', 'thread1');
+    assert.ok(conv);
+    assert.doesNotMatch(conv!.lastMessagePreview, /^\{"direction".*\{"title"/);
+    const preview = JSON.parse(conv!.lastMessagePreview);
+    assert.equal(preview.content, '[Hình ảnh]');
+  });
+
   // -------------------------------------------------------------------------
   // Outbound message insert and status update
   // -------------------------------------------------------------------------
@@ -228,6 +264,29 @@ describe('LocalChatStore', () => {
     const page2 = store.getMessages(conv!.id);
     assert.equal(page2.messages[0].status, 'sent');
     assert.equal(page2.messages[0].providerMessageId, 'zalo_msg_123');
+  });
+
+  it('updates outbound clientMessageId with the Zalo cliMsgId after send', () => {
+    const msgId = store.insertOutboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread1',
+      threadType: 'user',
+      content: 'Recallable message',
+      clientMessageId: 'flutter-local-id',
+    });
+
+    store.updateMessageStatus(
+      msgId,
+      'sent',
+      '7913484203301',
+      '',
+      '1780903418815',
+    );
+
+    const conv = store.getConversationByThread('acc1', 'thread1');
+    const page = store.getMessages(conv!.id);
+    assert.equal(page.messages[0].providerMessageId, '7913484203301');
+    assert.equal(page.messages[0].clientMessageId, '1780903418815');
   });
 
   // -------------------------------------------------------------------------

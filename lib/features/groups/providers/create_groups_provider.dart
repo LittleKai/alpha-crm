@@ -117,8 +117,8 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
       }
     }
 
-    // Mock fallback
-    state = state.copyWith(friends: MockGroups.sampleFriends);
+    // No fallback - keep list empty
+    state = state.copyWith(friends: const []);
   }
 
   void setGroupNames(String val) {

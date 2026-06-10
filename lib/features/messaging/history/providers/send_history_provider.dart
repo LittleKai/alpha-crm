@@ -104,22 +104,13 @@ class SendHistoryNotifier extends StateNotifier<SendHistoryState> {
           .toList();
       state = state.copyWith(records: loaded, isLoading: false);
     } else {
-      if (kDebugMode) {
-        state = state.copyWith(
-          records: MockCampaignsData.sampleSendHistory,
-          isLoading: false,
-          errorMessage:
-              'Lỗi tải đám mây (Dữ liệu mẫu chế độ phát triển): ${response['message']}',
-        );
-      } else {
-        state = state.copyWith(
-          records: const [],
-          isLoading: false,
-          errorMessage:
-              response['message'] ??
-              'Không thể tải lịch sử gửi tin từ đám mây.',
-        );
-      }
+      state = state.copyWith(
+        records: const [],
+        isLoading: false,
+        errorMessage:
+            response['message'] ??
+            'Không thể tải lịch sử gửi tin từ đám mây.',
+      );
     }
   }
 

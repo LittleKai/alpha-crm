@@ -20,6 +20,82 @@ import type {
   MessageReceipt,
 } from './local-chat-types.js';
 
+function parsePreviewRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === 'string' && value.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function cleanPreviewText(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 100 ? `${trimmed.slice(0, 100)}...` : trimmed;
+}
+
+function previewForType(messageType?: string): string | null {
+  const type = (messageType || '').toLowerCase();
+  if (type === 'image' || type === 'gif') return '[Hình ảnh]';
+  if (type === 'file') return '[Tệp đính kèm]';
+  if (type === 'sticker') return '[Sticker]';
+  if (type === 'video') return '[Video]';
+  if (type === 'voice' || type === 'audio') return '[Tin nhắn thoại]';
+  if (type === 'link' || type === 'rich') return 'Liên kết';
+  return null;
+}
+
+function previewForStructuredContent(content: unknown): string | null {
+  const record = parsePreviewRecord(content);
+  if (!record) return null;
+  const typed = previewForType(
+    String(record.messageType || record.contentType || ''),
+  );
+  if (typed) return typed;
+  const params = parsePreviewRecord(record.params);
+  if (
+    params &&
+    (params.fileExt != null || params.fileName != null || params.fType === 1)
+  ) {
+    return '[Tệp đính kèm]';
+  }
+  const title = String(record.title || '').trim();
+  const description = String(record.description || '').trim();
+  const href = String(record.href || record.url || '').trim();
+  if (title || description || href) {
+    return title || description || 'Liên kết';
+  }
+  return null;
+}
+
+function buildMessagePreview(input: {
+  content: string;
+  messageType?: string;
+  attachments?: AttachmentInput[];
+}): string {
+  if (input.attachments?.some((item) => item.kind === 'image')) {
+    return '[Hình ảnh]';
+  }
+  if (input.attachments?.length) {
+    return '[Tệp đính kèm]';
+  }
+  const typed = previewForType(input.messageType);
+  if (typed) return typed;
+  const structured = previewForStructuredContent(input.content);
+  if (structured) return cleanPreviewText(structured);
+  if (/^https?:\/\//i.test(input.content.trim())) return 'Liên kết';
+  return cleanPreviewText(input.content);
+}
+
 export class LocalChatStore {
   private _db: Database.Database;
 
@@ -371,12 +447,7 @@ export class LocalChatStore {
       this._insertAttachments(id, input.attachments);
     }
 
-    // Update conversation preview
-    const previewContent = input.content;
-    const preview =
-      previewContent.length > 100
-        ? previewContent.slice(0, 100) + '...'
-        : previewContent;
+    const preview = buildMessagePreview(input);
     this.db
       .prepare(
         `UPDATE conversations
@@ -475,12 +546,7 @@ export class LocalChatStore {
       this._insertAttachments(id, input.attachments);
     }
 
-    // Update conversation preview
-    const previewContent = input.messageType === 'text' || !input.messageType ? input.content : `[${input.messageType}] ${input.content}`;
-    const preview =
-      previewContent.length > 100
-        ? previewContent.slice(0, 100) + '...'
-        : previewContent;
+    const preview = buildMessagePreview(input);
     this.db
       .prepare(
         `UPDATE conversations
@@ -507,15 +573,39 @@ export class LocalChatStore {
     status: string,
     providerMessageId?: string,
     errorText = '',
+    clientMessageId?: string,
   ): void {
     const now = new Date().toISOString();
-    if (providerMessageId) {
+    if (providerMessageId && clientMessageId) {
+      this.db
+        .prepare(
+          `UPDATE messages SET status = ?, providerMessageId = ?,
+           clientMessageId = ?, errorText = ?, sentAt = ?, updatedAt = ?
+           WHERE id = ?`,
+        )
+        .run(
+          status,
+          providerMessageId,
+          clientMessageId,
+          errorText,
+          now,
+          now,
+          messageId,
+        );
+    } else if (providerMessageId) {
       this.db
         .prepare(
           `UPDATE messages SET status = ?, providerMessageId = ?, errorText = ?,
            sentAt = ?, updatedAt = ? WHERE id = ?`,
         )
         .run(status, providerMessageId, errorText, now, now, messageId);
+    } else if (clientMessageId) {
+      this.db
+        .prepare(
+          `UPDATE messages SET status = ?, clientMessageId = ?,
+           errorText = ?, updatedAt = ? WHERE id = ?`,
+        )
+        .run(status, clientMessageId, errorText, now, messageId);
     } else {
       this.db
         .prepare('UPDATE messages SET status = ?, errorText = ?, updatedAt = ? WHERE id = ?')
@@ -559,6 +649,8 @@ export class LocalChatStore {
       row.id,
       input.status || 'sent',
       input.providerMessageId,
+      '',
+      input.clientMessageId,
     );
     return row.id;
   }

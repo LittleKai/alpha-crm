@@ -144,11 +144,7 @@ class LiveChatLocalBridgeApi {
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      throw Exception('Bridge error: ${response.statusCode}');
+      return _decodeResponse(response);
     } catch (e) {
       throw Exception('Failed to recall via local bridge: $e');
     }

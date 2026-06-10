@@ -167,53 +167,10 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
       }
     }
 
-    // Mock fallback
-    List<ScannedMember> loadedMembers;
-    String? selectedName;
-    int? selectedCount;
-
-    if (groupId == 'g1') {
-      loadedMembers = MockGroups.flutterGroupMembers;
-      selectedName = 'Cộng đồng Flutter Việt Nam';
-      selectedCount = loadedMembers.length;
-    } else if (groupId == 'g2') {
-      loadedMembers = MockGroups.startupGroupMembers;
-      selectedName = 'Hội Khởi nghiệp TPHCM';
-      selectedCount = loadedMembers.length;
-    } else {
-      final dynamicGroup = state.savedGroups
-          .cast<SavedScannedGroup?>()
-          .firstWhere((g) => g?.id == groupId, orElse: () => null);
-      if (dynamicGroup != null) {
-        loadedMembers = MockGroups.flutterGroupMembers;
-        selectedName = dynamicGroup.name;
-        selectedCount = dynamicGroup.memberCount;
-      } else {
-        loadedMembers = const [
-          ScannedMember(
-            id: 'sm_gen1',
-            name: 'Nguyễn Văn Hải',
-            phone: '0901112222',
-            role: 'Thành viên',
-            status: 'Chưa kết bạn',
-          ),
-          ScannedMember(
-            id: 'sm_gen2',
-            name: 'Trần Thị Mai',
-            phone: '0903334444',
-            role: 'Thành viên',
-            status: 'Đã kết bạn',
-          ),
-        ];
-        selectedName = 'Nhóm demo';
-        selectedCount = loadedMembers.length;
-      }
-    }
     state = state.copyWith(
-      members: loadedMembers,
+      members: const [],
       isScanning: false,
-      scannedGroupName: selectedName,
-      scannedTotalMember: selectedCount,
+      errorText: 'Không tải được thành viên nhóm hoặc Zalo backend chưa kết nối.',
     );
   }
 
@@ -293,37 +250,10 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
       }
     }
 
-    // Mock fallback
-    final mockName = 'Cộng đồng Flutter Việt Nam (Demo Link)';
-    final mockMembers = MockGroups.flutterGroupMembers;
-
-    String mockGroupId = 'link_${DateTime.now().millisecondsSinceEpoch}';
-    final regex = RegExp(r'zalo\.me/g/([a-zA-Z0-9_-]+)');
-    final match = regex.firstMatch(url);
-    if (match != null && match.groupCount >= 1) {
-      mockGroupId = match.group(1)!;
-    }
-
-    List<SavedScannedGroup> updatedSaved = List.from(state.savedGroups);
-    if (!updatedSaved.any((g) => g.id == mockGroupId)) {
-      updatedSaved.insert(
-        0,
-        SavedScannedGroup(
-          id: mockGroupId,
-          name: mockName,
-          memberCount: mockMembers.length,
-          avatarUrl: '',
-        ),
-      );
-    }
-
     state = state.copyWith(
-      members: mockMembers,
+      members: const [],
       isScanning: false,
-      scannedGroupName: mockName,
-      scannedTotalMember: mockMembers.length,
-      selectedGroupId: mockGroupId,
-      savedGroups: updatedSaved,
+      errorText: 'Quét nhóm thất bại hoặc Zalo backend chưa kết nối.',
     );
   }
 

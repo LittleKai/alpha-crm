@@ -12,3 +12,7 @@ Widget buildLiveChatLocalImage(
         child: Center(child: Icon(Icons.image_not_supported_outlined)),
       );
 }
+
+bool liveChatLocalFileExists(String path) {
+  return false;
+}

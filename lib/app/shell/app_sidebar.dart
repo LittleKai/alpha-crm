@@ -161,7 +161,7 @@ class AppSidebar extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        'CRM ZALO',
+                        'ALPHA CRM',
                         style: AppTextStyles.cardTitle.copyWith(
                           color: textPrimary,
                           fontWeight: FontWeight.w800,

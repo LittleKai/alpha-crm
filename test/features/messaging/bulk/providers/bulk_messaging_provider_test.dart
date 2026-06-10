@@ -27,20 +27,6 @@ void main() {
 
   test('resolves selected account after account list refresh', () {
     expect(resolveBulkSelectedAccountForTest(acc2, [acc1, acc2]), same(acc2));
-
-    expect(
-      resolveBulkSelectedAccountForTest(
-        const ZaloAccount(
-          id: bulkAllAccountsId,
-          name: 'Toàn bộ tài khoản',
-          phone: '',
-          type: 'all',
-        ),
-        [acc1, acc2],
-      )?.id,
-      bulkAllAccountsId,
-    );
-
     expect(resolveBulkSelectedAccountForTest(acc2, [acc1]), acc1);
     expect(resolveBulkSelectedAccountForTest(acc1, []), isNull);
   });
@@ -48,16 +34,5 @@ void main() {
   test('maps all accounts selection to empty child provider filter', () {
     expect(bulkAccountFilterIdForTest(null), '');
     expect(bulkAccountFilterIdForTest(acc1), 'acc-1');
-    expect(
-      bulkAccountFilterIdForTest(
-        const ZaloAccount(
-          id: bulkAllAccountsId,
-          name: 'Toàn bộ tài khoản',
-          phone: '',
-          type: 'all',
-        ),
-      ),
-      '',
-    );
   });
 }

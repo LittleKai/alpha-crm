@@ -150,6 +150,7 @@ async function handleInboundMessageBatch(
           mentions: event.mentions,
           styles: event.styles,
           metadata: event.metadata,
+          attachments: event.attachments,
           timestamp: event.timestamp,
         })),
       );
@@ -246,6 +247,7 @@ async function handleInboundMessageEvent(
             mentions: event.mentions,
             styles: event.styles,
             metadata: event.metadata,
+            attachments: event.attachments,
             timestamp: event.timestamp,
           });
         localChatEvents.publish({

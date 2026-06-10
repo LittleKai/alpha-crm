@@ -20,3 +20,12 @@ Widget buildLiveChatLocalImage(
     },
   );
 }
+
+bool liveChatLocalFileExists(String path) {
+  if (path.trim().isEmpty) return false;
+  try {
+    return File(path).existsSync();
+  } catch (_) {
+    return false;
+  }
+}

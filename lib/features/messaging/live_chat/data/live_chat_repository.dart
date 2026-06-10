@@ -14,6 +14,8 @@ class LiveChatRepository {
     required this.localApi,
   });
 
+  bool get _preferLocalZaloActions => true;
+
   Future<Map<String, dynamic>> getAccounts() {
     return CrmCloudApi.get('/crm/groups/accounts');
   }
@@ -83,7 +85,7 @@ class LiveChatRepository {
     String? before,
     String? after,
   }) async {
-    if (localFirstEnabled) {
+    if (_preferLocalZaloActions || localFirstEnabled) {
       try {
         final bridgeData = await localApi.getLocalMessages(
           conversationId,
@@ -109,19 +111,24 @@ class LiveChatRepository {
           return {...bridgeData, 'data': messages};
         }
       } catch (e) {
-        // Fallback to cache if bridge is offline
-        final cached = await cache.getMessages(
-          conversationId,
-          limit: limit,
-          before: before,
-          after: after,
-        );
-        return {
-          'success': true,
-          'data': cached,
-          'code': 'LOCAL_BRIDGE_OFFLINE',
-          'message': 'Bridge offline. Showing cached messages.',
-        };
+        if (!localFirstEnabled) {
+          // Fall through to the cloud API below when local storage is only an
+          // opportunistic desktop bridge.
+        } else {
+          // Fallback to cache if bridge is offline
+          final cached = await cache.getMessages(
+            conversationId,
+            limit: limit,
+            before: before,
+            after: after,
+          );
+          return {
+            'success': true,
+            'data': cached,
+            'code': 'LOCAL_BRIDGE_OFFLINE',
+            'message': 'Bridge offline. Showing cached messages.',
+          };
+        }
       }
     }
 
@@ -207,22 +214,35 @@ class LiveChatRepository {
     Map<String, dynamic>? metadata,
     List<String>? attachments,
   }) async {
-    if (!localFirstEnabled) return sendMessage(conversationId, message);
-    return localApi.sendLocalMessage(
-      conversationId,
-      message,
-      clientMessageId: clientMessageId,
-      messageType: messageType,
-      quote: quote,
-      mentions: mentions,
-      styles: styles,
-      link: link,
-      sticker: sticker,
-      video: video,
-      voice: voice,
-      metadata: metadata,
-      attachments: attachments,
-    );
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return sendMessage(conversationId, message);
+    }
+    try {
+      final response = await localApi.sendLocalMessage(
+        conversationId,
+        message,
+        clientMessageId: clientMessageId,
+        messageType: messageType,
+        quote: quote,
+        mentions: mentions,
+        styles: styles,
+        link: link,
+        sticker: sticker,
+        video: video,
+        voice: voice,
+        metadata: metadata,
+        attachments: attachments,
+      );
+      if (response['success'] == true && response['data'] != null) {
+        await cache.saveMessages(conversationId, [
+          Map<String, dynamic>.from(response['data']),
+        ]);
+      }
+      return response;
+    } catch (e) {
+      if (localFirstEnabled) rethrow;
+      return sendMessage(conversationId, message);
+    }
   }
 
   Future<Map<String, dynamic>> updateConversation(
@@ -294,7 +314,7 @@ class LiveChatRepository {
     String content = '',
     String messageType = 'file',
   }) async {
-    if (localFirstEnabled) {
+    if (_preferLocalZaloActions || localFirstEnabled) {
       try {
         final response = await localApi.sendLocalAttachment(
           conversationId,
@@ -346,14 +366,13 @@ class LiveChatRepository {
     String conversationId,
     String messageId,
   ) async {
-    if (localFirstEnabled) {
+    if (_preferLocalZaloActions || localFirstEnabled) {
       try {
         final response = await localApi.recallLocalMessage(messageId);
         // Maybe update local cache to mark as deleted
         return response;
       } catch (e) {
-        // Fallback to cloud queue
-        print('Local bridge error during recallMessage: $e');
+        throw Exception('Thu hoi tin nhan Zalo that bai qua bridge cuc bo: $e');
       }
     }
 

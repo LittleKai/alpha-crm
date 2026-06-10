@@ -177,11 +177,13 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
                   blockTyping: settings['blockTyping'] == true,
                 );
               })
-              .where((acc) => seenIds.add(acc.id))
-              .toList();
-        }
+                .where((acc) => seenIds.add(acc.id))
+                .toList();
+          } else {
+            activeAccounts = state.accounts;
+          }
 
-        final statusAccountId = status['accountId']?.toString() ?? '';
+          final statusAccountId = status['accountId']?.toString() ?? '';
         var displayAccountLabel = status['accountLabel']?.toString();
         if (statusAccountId.isNotEmpty) {
           for (final account in activeAccounts) {
