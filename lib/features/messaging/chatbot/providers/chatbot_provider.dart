@@ -1,9 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/chatbot_repository.dart';
+import '../data/chatbot_local_bridge_api.dart';
 
 final chatbotRepositoryProvider = Provider<ChatbotRepository>((ref) {
   return ChatbotRepository();
+});
+final chatbotLocalBridgeApiProvider = Provider<ChatbotLocalBridgeApi>((ref) {
+  return ChatbotLocalBridgeApi();
 });
 
 const chatbotAiModels = [
@@ -24,6 +28,11 @@ const chatbotDefaultResponseRules =
 
 String normalizeChatbotAiModel(String value) {
   return chatbotAiModels.contains(value) ? value : chatbotDefaultAiModel;
+}
+
+int _normalizeDebounceSeconds(Object? value) {
+  final parsed = int.tryParse(value?.toString() ?? '');
+  return (parsed ?? 5).clamp(2, 15);
 }
 
 class ChatbotRule {
@@ -124,13 +133,18 @@ class ChatbotState {
   final String soulPrompt;
   final String responseRules;
   final double temperature;
+  final int debounceSeconds;
   final bool aiEnabled;
   final String personalAudience;
   final String groupAudience;
+  final List<String> selectedGroupKeys;
   final List<String> knowledgeDocuments;
   final List<ChatbotLogRecord> logs;
   final bool isLoading;
   final String? errorMessage;
+  final ChatbotBridgeStatus? bridgeStatus;
+  final bool isSyncingBridge;
+  final String? bridgeSyncWarning;
 
   const ChatbotState({
     required this.activeTab,
@@ -140,13 +154,18 @@ class ChatbotState {
     required this.soulPrompt,
     required this.responseRules,
     required this.temperature,
+    required this.debounceSeconds,
     required this.aiEnabled,
     required this.personalAudience,
     required this.groupAudience,
+    this.selectedGroupKeys = const [],
     required this.knowledgeDocuments,
     required this.logs,
     required this.isLoading,
     this.errorMessage,
+    this.bridgeStatus,
+    this.isSyncingBridge = false,
+    this.bridgeSyncWarning,
   });
 
   factory ChatbotState.initial() {
@@ -158,13 +177,18 @@ class ChatbotState {
       soulPrompt: chatbotDefaultSoul,
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
+      debounceSeconds: 5,
       aiEnabled: true,
       personalAudience: 'all',
       groupAudience: 'none',
+      selectedGroupKeys: [],
       knowledgeDocuments: [],
       logs: [],
       isLoading: false,
       errorMessage: null,
+      bridgeStatus: null,
+      isSyncingBridge: false,
+      bridgeSyncWarning: null,
     );
   }
 
@@ -176,13 +200,18 @@ class ChatbotState {
     String? soulPrompt,
     String? responseRules,
     double? temperature,
+    int? debounceSeconds,
     bool? aiEnabled,
     String? personalAudience,
     String? groupAudience,
+    List<String>? selectedGroupKeys,
     List<String>? knowledgeDocuments,
     List<ChatbotLogRecord>? logs,
     bool? isLoading,
     String? errorMessage,
+    ChatbotBridgeStatus? bridgeStatus,
+    bool? isSyncingBridge,
+    String? bridgeSyncWarning,
   }) {
     return ChatbotState(
       activeTab: activeTab ?? this.activeTab,
@@ -192,29 +221,71 @@ class ChatbotState {
       soulPrompt: soulPrompt ?? this.soulPrompt,
       responseRules: responseRules ?? this.responseRules,
       temperature: temperature ?? this.temperature,
+      debounceSeconds: debounceSeconds ?? this.debounceSeconds,
       aiEnabled: aiEnabled ?? this.aiEnabled,
       personalAudience: personalAudience ?? this.personalAudience,
       groupAudience: groupAudience ?? this.groupAudience,
+      selectedGroupKeys: selectedGroupKeys ?? this.selectedGroupKeys,
       knowledgeDocuments: knowledgeDocuments ?? this.knowledgeDocuments,
       logs: logs ?? this.logs,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
+      bridgeStatus: bridgeStatus ?? this.bridgeStatus,
+      isSyncingBridge: isSyncingBridge ?? this.isSyncingBridge,
+      bridgeSyncWarning: bridgeSyncWarning,
     );
   }
 }
 
 class ChatbotNotifier extends StateNotifier<ChatbotState> {
   final ChatbotRepository _repository;
+  final ChatbotLocalBridgeApi _bridge;
   bool _isCreatingRule = false;
 
-  ChatbotNotifier(this._repository) : super(ChatbotState.initial()) {
+  ChatbotNotifier(this._repository, {ChatbotLocalBridgeApi? bridge})
+    : _bridge = bridge ?? ChatbotLocalBridgeApi(),
+      super(ChatbotState.initial()) {
     refresh();
   }
 
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
-    await Future.wait([loadSettings(), loadRules(), loadLogs()]);
+    await Future.wait([
+      loadSettings(),
+      loadRules(),
+      loadLogs(),
+      loadBridgeStatus(),
+    ]);
     state = state.copyWith(isLoading: false);
+  }
+
+  Future<void> loadBridgeStatus() async {
+    try {
+      final status = await _bridge.getStatus();
+      state = state.copyWith(
+        bridgeStatus: status,
+        bridgeSyncWarning: status.lastError,
+      );
+    } catch (error) {
+      state = state.copyWith(bridgeSyncWarning: error.toString());
+    }
+  }
+
+  Future<void> syncBridgeNow() async {
+    state = state.copyWith(isSyncingBridge: true, bridgeSyncWarning: null);
+    try {
+      final status = await _bridge.syncNow();
+      state = state.copyWith(
+        isSyncingBridge: false,
+        bridgeStatus: status,
+        bridgeSyncWarning: status.lastError,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isSyncingBridge: false,
+        bridgeSyncWarning: error.toString(),
+      );
+    }
   }
 
   void setActiveTab(int tab) {
@@ -231,6 +302,11 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
             (json['knowledgeSnippets'] as List).map((item) => item.toString()),
           )
         : <String>[];
+    final selectedGroupKeys = json['selectedGroupKeys'] is List
+        ? List<String>.from(
+            (json['selectedGroupKeys'] as List).map((item) => item.toString()),
+          )
+        : <String>[];
     state = state.copyWith(
       aiModel: normalizeChatbotAiModel(
         (json['aiModel'] ?? state.aiModel).toString(),
@@ -243,10 +319,12 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
             (json['temperature'] ?? state.temperature).toString(),
           ) ??
           state.temperature,
+      debounceSeconds: _normalizeDebounceSeconds(json['debounceSeconds']),
       aiEnabled: json['aiEnabled'] != false,
       personalAudience: (json['personalAudience'] ?? state.personalAudience)
           .toString(),
       groupAudience: (json['groupAudience'] ?? state.groupAudience).toString(),
+      selectedGroupKeys: selectedGroupKeys,
       knowledgeDocuments: snippets,
     );
   }
@@ -292,7 +370,11 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           .toList(),
     );
     final response = await _repository.updateRule(id, {'isActive': next});
-    if (response['success'] != true) await loadRules();
+    if (response['success'] != true) {
+      await loadRules();
+    } else {
+      await syncBridgeNow();
+    }
   }
 
   Future<void> addRule(
@@ -312,6 +394,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     );
     if (result['success'] == true) {
       await loadRules();
+      await syncBridgeNow();
     } else {
       state = state.copyWith(
         errorMessage: (result['message'] ?? 'Tạo kịch bản thất bại.')
@@ -327,6 +410,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       state = state.copyWith(
         rules: state.rules.where((rule) => rule.id != id).toList(),
       );
+      await syncBridgeNow();
     }
   }
 
@@ -342,9 +426,11 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     String? soulPrompt,
     String? responseRules,
     double? temperature,
+    int? debounceSeconds,
     bool? aiEnabled,
     String? personalAudience,
     String? groupAudience,
+    List<String>? selectedGroupKeys,
     List<String>? knowledgeDocuments,
   }) {
     return {
@@ -354,8 +440,10 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       'soulPrompt': soulPrompt ?? state.soulPrompt,
       'responseRules': responseRules ?? state.responseRules,
       'temperature': temperature ?? state.temperature,
+      'debounceSeconds': debounceSeconds ?? state.debounceSeconds,
       'personalAudience': personalAudience ?? state.personalAudience,
       'groupAudience': groupAudience ?? state.groupAudience,
+      'selectedGroupKeys': selectedGroupKeys ?? state.selectedGroupKeys,
       'knowledgeSnippets': knowledgeDocuments ?? state.knowledgeDocuments,
     };
   }
@@ -366,6 +454,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     required String soulPrompt,
     required String responseRules,
     required double temperature,
+    required int debounceSeconds,
   }) async {
     state = state.copyWith(
       aiModel: normalizeChatbotAiModel(model),
@@ -373,6 +462,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       soulPrompt: soulPrompt,
       responseRules: responseRules,
       temperature: temperature,
+      debounceSeconds: _normalizeDebounceSeconds(debounceSeconds),
     );
     final response = await _repository.saveSettings(_settingsPayload());
     if (response['success'] != true) {
@@ -380,23 +470,29 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         errorMessage: (response['message'] ?? 'Lưu cấu hình thất bại.')
             .toString(),
       );
+    } else {
+      await syncBridgeNow();
     }
   }
 
   Future<void> setAiEnabled(bool enabled) async {
     state = state.copyWith(aiEnabled: enabled);
-    await _repository.saveSettings(_settingsPayload());
+    final response = await _repository.saveSettings(_settingsPayload());
+    if (response['success'] == true) await syncBridgeNow();
   }
 
   Future<void> updateAudienceConfig({
     String? personalAudience,
     String? groupAudience,
+    List<String>? selectedGroupKeys,
   }) async {
     state = state.copyWith(
       personalAudience: personalAudience,
       groupAudience: groupAudience,
+      selectedGroupKeys: selectedGroupKeys,
     );
-    await _repository.saveSettings(_settingsPayload());
+    final response = await _repository.saveSettings(_settingsPayload());
+    if (response['success'] == true) await syncBridgeNow();
   }
 
   Future<void> addKnowledgeDocument(String name) async {
@@ -405,6 +501,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     await _repository.saveSettings(
       _settingsPayload(knowledgeDocuments: documents),
     );
+    await syncBridgeNow();
   }
 
   Future<void> removeKnowledgeDocument(String name) async {
@@ -415,6 +512,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     await _repository.saveSettings(
       _settingsPayload(knowledgeDocuments: documents),
     );
+    await syncBridgeNow();
   }
 
   Future<Map<String, dynamic>> uploadKnowledgeFile({
@@ -437,5 +535,8 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 final chatbotProvider = StateNotifierProvider<ChatbotNotifier, ChatbotState>((
   ref,
 ) {
-  return ChatbotNotifier(ref.read(chatbotRepositoryProvider));
+  return ChatbotNotifier(
+    ref.read(chatbotRepositoryProvider),
+    bridge: ref.read(chatbotLocalBridgeApiProvider),
+  );
 });

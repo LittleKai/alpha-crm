@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../providers/live_chat_provider.dart';
 
-enum LiveChatAttachmentKind { image, file }
+enum LiveChatAttachmentKind { image, file, video }
 
 class LiveChatAttachmentView {
   final LiveChatAttachmentKind kind;
@@ -10,6 +10,7 @@ class LiveChatAttachmentView {
   final String url;
   final String localPath;
   final String sizeLabel;
+  final String thumbnailUrl;
 
   const LiveChatAttachmentView({
     required this.kind,
@@ -17,6 +18,7 @@ class LiveChatAttachmentView {
     this.url = '',
     this.localPath = '',
     this.sizeLabel = '',
+    this.thumbnailUrl = '',
   });
 
   bool get hasRemoteUrl =>
@@ -64,7 +66,8 @@ LiveChatAttachmentView? _viewFromAttachmentMap(
 ) {
   final kindText = (data['kind'] ?? contentType).toString().toLowerCase();
   final mimeType = (data['mimeType'] ?? '').toString().toLowerCase();
-  final url = (data['url'] ?? data['href'] ?? '').toString();
+  final url = (data['cacheUrl'] ?? data['url'] ?? data['href'] ?? '')
+      .toString();
   final localPath = (data['localPath'] ?? data['path'] ?? '').toString();
   final name = _firstNonEmpty([
     data['name'],
@@ -78,15 +81,38 @@ LiveChatAttachmentView? _viewFromAttachmentMap(
       mimeType.startsWith('image/') ||
       _looksLikeImagePath(localPath) ||
       _looksLikeImagePath(url);
+  final isVideo =
+      contentType == 'video' ||
+      kindText == 'video' ||
+      mimeType.startsWith('video/') ||
+      _looksLikeVideoPath(localPath) ||
+      _looksLikeVideoPath(url);
+  final metadata = data['metadata'] is Map
+      ? Map<String, dynamic>.from(data['metadata'] as Map)
+      : const <String, dynamic>{};
 
   return LiveChatAttachmentView(
-    kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
+    kind: isVideo
+        ? LiveChatAttachmentKind.video
+        : isImage
+        ? LiveChatAttachmentKind.image
+        : LiveChatAttachmentKind.file,
     displayName: name.isEmpty
-        ? (isImage ? 'image' : 'file')
-        : Uri.decodeComponent(name),
+        ? (isVideo
+              ? 'video'
+              : isImage
+              ? 'image'
+              : 'file')
+        : _safeDecodeComponent(name),
     url: url,
     localPath: localPath,
     sizeLabel: _formatSize(data['sizeBytes']),
+    thumbnailUrl: _firstNonEmpty([
+      data['thumbnailUrl'],
+      data['thumb'],
+      metadata['thumbnailUrl'],
+      metadata['thumb'],
+    ]),
   );
 }
 
@@ -94,7 +120,7 @@ LiveChatAttachmentView _viewFromPath(String path, String contentType) {
   final isImage = contentType == 'image' || _looksLikeImagePath(path);
   return LiveChatAttachmentView(
     kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
-    displayName: Uri.decodeComponent(
+    displayName: _safeDecodeComponent(
       _basename(path).isEmpty
           ? (isImage ? 'Hinh anh' : 'Tep dinh kem')
           : _basename(path),
@@ -182,6 +208,21 @@ bool _looksLikeImagePath(String value) {
     r'\.(jpg|jpeg|png|webp|gif)$',
     caseSensitive: false,
   ).hasMatch(value.split('?').first);
+}
+
+bool _looksLikeVideoPath(String value) {
+  return RegExp(
+    r'\.(mp4|mov|m4v|webm|mkv|avi|3gp)$',
+    caseSensitive: false,
+  ).hasMatch(value.split('?').first);
+}
+
+String _safeDecodeComponent(String value) {
+  try {
+    return Uri.decodeComponent(value);
+  } catch (_) {
+    return value;
+  }
 }
 
 String _formatSize(Object? raw) {

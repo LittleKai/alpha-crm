@@ -32,5 +32,8 @@
   "localFirstLiveChat": false,
   "localBridgeBaseUrl": "http://127.0.0.1:8787",
   "liveChatConversationCacheTtlSeconds": 30,
-  "liveChatMessageCacheTtlSeconds": 300
+  "liveChatMessageCacheTtlSeconds": 300,
+  "downloadFolder": "",
+  "liveChatMediaCacheMaxAgeDays": 90,
+  "liveChatMediaCacheMaxGb": 20
 }

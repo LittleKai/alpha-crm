@@ -4,11 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _FakeChatbotRepository extends ChatbotRepository {
   int createRuleCalls = 0;
+  Map<String, dynamic>? savedSettings;
 
   @override
   Future<Map<String, dynamic>> getSettings() async => {
     'success': true,
-    'data': <String, dynamic>{},
+    'data': <String, dynamic>{'debounceSeconds': 8},
   };
 
   @override
@@ -42,6 +43,14 @@ class _FakeChatbotRepository extends ChatbotRepository {
       },
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> saveSettings(
+    Map<String, dynamic> payload,
+  ) async {
+    savedSettings = payload;
+    return {'success': true, 'data': payload};
+  }
 }
 
 void main() {
@@ -73,4 +82,24 @@ void main() {
       expect(repository.createRuleCalls, 1);
     },
   );
+
+  test('loads and saves chatbot debounce duration', () async {
+    final repository = _FakeChatbotRepository();
+    final notifier = ChatbotNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(notifier.state.debounceSeconds, 8);
+
+    await notifier.updateAiConfig(
+      model: chatbotDefaultAiModel,
+      prompt: chatbotDefaultSystemPrompt,
+      soulPrompt: chatbotDefaultSoul,
+      responseRules: chatbotDefaultResponseRules,
+      temperature: 0.7,
+      debounceSeconds: 6,
+    );
+
+    expect(notifier.state.debounceSeconds, 6);
+    expect(repository.savedSettings?['debounceSeconds'], 6);
+  });
 }

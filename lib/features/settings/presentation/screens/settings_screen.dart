@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -114,6 +115,94 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _AppearanceCard(
               themeMode: state.settings.appThemeMode,
               onChanged: notifier.setAppThemeMode,
+            ),
+            const SizedBox(height: AppSpacing.m),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tải xuống và media cache',
+                    style: AppTextStyles.sectionTitle,
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextFormField(
+                    key: ValueKey(state.settings.downloadFolder),
+                    initialValue: state.settings.downloadFolder,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      labelText: 'Thư mục tải xuống',
+                      hintText: kIsWeb
+                          ? 'Dùng thư mục tải xuống của trình duyệt'
+                          : 'Thư mục Downloads mặc định',
+                      suffixIcon: kIsWeb
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.folder_open_outlined),
+                              onPressed: () async {
+                                final path = await FilePicker.platform
+                                    .getDirectoryPath();
+                                if (path != null) {
+                                  notifier.updateDownloadFolder(path);
+                                }
+                              },
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: state
+                              .settings
+                              .liveChatMediaCacheMaxAgeDays
+                              .toString(),
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giữ cache (ngày)',
+                          ),
+                          onChanged: (value) =>
+                              notifier.updateLiveChatMediaCacheMaxAgeDays(
+                                int.tryParse(value) ?? 90,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: state.settings.liveChatMediaCacheMaxGb
+                              .toString(),
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giới hạn cache (GB)',
+                          ),
+                          onChanged: (value) =>
+                              notifier.updateLiveChatMediaCacheMaxGb(
+                                int.tryParse(value) ?? 20,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Text(
+                    kIsWeb
+                        ? 'Web tải file trực tiếp, không mở tab mới. Vị trí lưu do trình duyệt quản lý.'
+                        : 'Mặc định lưu vào Downloads. Media hội thoại được cache trên máy chạy Zalo bridge.',
+                    style: AppTextStyles.caption,
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppButton(
+                      text: 'Lưu cài đặt media',
+                      icon: Icons.save_outlined,
+                      onPressed: notifier.saveSettings,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.m),
             _AccountCard(

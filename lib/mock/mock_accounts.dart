@@ -41,6 +41,9 @@ class SystemSettings {
   final String localBridgeBaseUrl;
   final int liveChatConversationCacheTtlSeconds;
   final int liveChatMessageCacheTtlSeconds;
+  final String downloadFolder;
+  final int liveChatMediaCacheMaxAgeDays;
+  final int liveChatMediaCacheMaxGb;
 
   const SystemSettings({
     required this.proxy,
@@ -77,6 +80,9 @@ class SystemSettings {
     this.localBridgeBaseUrl = 'http://127.0.0.1:8787',
     this.liveChatConversationCacheTtlSeconds = 30,
     this.liveChatMessageCacheTtlSeconds = 300,
+    this.downloadFolder = '',
+    this.liveChatMediaCacheMaxAgeDays = 90,
+    this.liveChatMediaCacheMaxGb = 20,
   });
 
   SystemSettings copyWith({
@@ -114,6 +120,9 @@ class SystemSettings {
     String? localBridgeBaseUrl,
     int? liveChatConversationCacheTtlSeconds,
     int? liveChatMessageCacheTtlSeconds,
+    String? downloadFolder,
+    int? liveChatMediaCacheMaxAgeDays,
+    int? liveChatMediaCacheMaxGb,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -162,6 +171,11 @@ class SystemSettings {
           this.liveChatConversationCacheTtlSeconds,
       liveChatMessageCacheTtlSeconds:
           liveChatMessageCacheTtlSeconds ?? this.liveChatMessageCacheTtlSeconds,
+      downloadFolder: downloadFolder ?? this.downloadFolder,
+      liveChatMediaCacheMaxAgeDays:
+          liveChatMediaCacheMaxAgeDays ?? this.liveChatMediaCacheMaxAgeDays,
+      liveChatMediaCacheMaxGb:
+          liveChatMediaCacheMaxGb ?? this.liveChatMediaCacheMaxGb,
     );
   }
 
@@ -207,6 +221,9 @@ class SystemSettings {
       'liveChatConversationCacheTtlSeconds':
           liveChatConversationCacheTtlSeconds,
       'liveChatMessageCacheTtlSeconds': liveChatMessageCacheTtlSeconds,
+      'downloadFolder': downloadFolder,
+      'liveChatMediaCacheMaxAgeDays': liveChatMediaCacheMaxAgeDays,
+      'liveChatMediaCacheMaxGb': liveChatMediaCacheMaxGb,
     };
   }
 
@@ -267,6 +284,9 @@ class SystemSettings {
           json['liveChatConversationCacheTtlSeconds'] ?? 30,
       liveChatMessageCacheTtlSeconds:
           json['liveChatMessageCacheTtlSeconds'] ?? 300,
+      downloadFolder: json['downloadFolder'] ?? '',
+      liveChatMediaCacheMaxAgeDays: json['liveChatMediaCacheMaxAgeDays'] ?? 90,
+      liveChatMediaCacheMaxGb: json['liveChatMediaCacheMaxGb'] ?? 20,
     );
   }
 }

@@ -252,6 +252,23 @@ class LiveChatRepository {
     return CrmCloudApi.put('/crm/conversations/$conversationId', data);
   }
 
+  Future<Map<String, dynamic>> updateChatbotState(
+    ConversationTarget target, {
+    required bool enabled,
+  }) {
+    if (localFirstEnabled) {
+      return localApi.updateChatbotState(
+        accountId: target.accountId,
+        threadId: target.threadId,
+        mode: enabled ? 'enabled' : 'disabled_by_operator',
+        reason: enabled ? 'operator_reenabled' : 'operator_disabled',
+      );
+    }
+    return CrmCloudApi.put('/crm/conversations/${target.id}', {
+      'chatbotEnabled': enabled,
+    });
+  }
+
   Future<Map<String, dynamic>> markRead(String conversationId) {
     if (localFirstEnabled) return localApi.markRead(conversationId);
     return CrmCloudApi.post('/crm/conversations/$conversationId/read', {});
@@ -270,7 +287,13 @@ class LiveChatRepository {
     String messageId,
     String reaction,
   ) {
-    return localApi.reactToMessage(messageId, reaction);
+    if (localFirstEnabled) {
+      return localApi.reactToMessage(messageId, reaction);
+    }
+    return CrmCloudApi.post(
+      '/crm/messages/${Uri.encodeComponent(messageId)}/reactions',
+      {'reaction': reaction},
+    );
   }
 
   Future<Map<String, dynamic>> sendTyping(ConversationTarget target) {
@@ -314,7 +337,7 @@ class LiveChatRepository {
     String content = '',
     String messageType = 'file',
   }) async {
-    if (_preferLocalZaloActions || localFirstEnabled) {
+    if (localFirstEnabled) {
       try {
         final response = await localApi.sendLocalAttachment(
           conversationId,
@@ -372,7 +395,7 @@ class LiveChatRepository {
         // Maybe update local cache to mark as deleted
         return response;
       } catch (e) {
-        throw Exception('Thu hoi tin nhan Zalo that bai qua bridge cuc bo: $e');
+        throw Exception('Thu hồi tin nhắn Zalo thất bại qua bridge cục bộ: $e');
       }
     }
 
@@ -395,11 +418,13 @@ class LiveChatRepository {
 }
 
 class ConversationTarget {
+  final String id;
   final String accountId;
   final String threadId;
   final String threadType;
 
   const ConversationTarget({
+    this.id = '',
     required this.accountId,
     required this.threadId,
     required this.threadType,

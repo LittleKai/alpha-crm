@@ -1,6 +1,12 @@
 # Project Summary
 
-**Last Updated:** 2026-06-08T23:12:00+07:00
+**Last Updated:** 2026-06-12T00:30:00+07:00
+
+**Session:** #89 - Xây dựng lại chatbot theo kiến trúc hybrid local-first. Bridge Windows lưu inbound vào SQLite, chống trùng/self/history, debounce 3 giây theo hội thoại, kiểm tra audience/handoff/rule/business hours, chỉ gọi cloud khi cần AI, gửi trực tiếp qua `zca-js`, phát SSE và đồng bộ audit idempotent. Cloud cung cấp config/AI/audit cho agent và nhận metadata-only mà không tự gửi reply. Gửi thủ công tự chuyển hội thoại sang `disabled_by_operator`; Flutter hiển thị trạng thái bridge, đồng bộ ngay sau thay đổi cấu hình và toggle chatbot qua local API. Xác minh: Node 87/87, backend CRM 14/14, Flutter focused 18/18.
+
+**Session:** #88 - Sửa phát video Live Chat trên Windows bằng cách thay `video_player` (không có implementation Windows) bằng `media_kit`, `media_kit_video` và thư viện native `media_kit_libs_video`; khởi tạo `MediaKit` tại startup, quản lý vòng đời player/subscription và hiển thị lỗi phát video trên UI. Chuẩn hóa các thông báo Live Chat mới sang tiếng Việt có dấu, gồm tải video/tệp, gửi tin, gửi liên kết, gửi sticker, gửi lại và thu hồi qua bridge cục bộ; thêm test hồi quy ngăn tái sử dụng chuỗi không dấu. Xác minh: toàn bộ 97 Flutter test vượt qua; Windows, Web và Android debug build thành công; analyzer không có error/warning.
+
+**Session:** #87 - Hoàn thiện Live Chat media/actions đa nền tảng. Reaction và recall dùng provider message ID, ẩn reaction trên tin outbound, recall chỉ cập nhật local sau khi API Zalo thành công và bridge tra được cả local/provider ID. Bridge tải media vào cache, phục vụ ảnh/file/video qua HTTP với Range, tự dọn mặc định 90 ngày/20 GB và nhận cấu hình từ Settings. Flutter có tải ảnh/file không mở browser, trang phát/tải video, decode URL lỗi an toàn, dialog tìm kiếm mới và fallback tìm trong tin đã tải. Thêm `video_player`, download adapters Windows/Android/Web và Settings folder/cache. Xác minh: Node 49/49, Flutter 95/95, Web/Windows/Android build thành công; analyzer không có error/warning, còn 69 info lint nền.
 
 **Session:** #86 - Sửa lỗi hiển thị hình ảnh và định dạng tiếng Việt trong tab Live Chat. Cập nhật logic bong bóng tin nhắn ảnh (`_buildMessageContent` trong `live_chat_screen.dart`) để kiểm tra và ưu tiên hiển thị hình ảnh từ đường dẫn cục bộ nếu tệp tin tồn tại trên đĩa (`useLocal` qua helper `liveChatLocalFileExists`), giải quyết vấn đề ảnh không hiển thị do URL từ xa của Zalo hết hạn. Sửa định dạng chữ tiếng Việt chuẩn UTF-8 cho các lỗi hiển thị hình ảnh bị lỗi encoding ('Không thể xem ảnh lớn' và 'Không thể tải ảnh'). Xác minh: `flutter test` pass 92/92; `flutter analyze` không lỗi biên dịch.
 

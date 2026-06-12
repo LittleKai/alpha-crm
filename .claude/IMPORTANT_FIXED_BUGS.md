@@ -1,6 +1,21 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-08 +07:00
+**Last Updated:** 2026-06-12 +07:00
+
+---
+
+## Chatbot inbound không có đường thực thi production
+
+**Nguyên nhân:** Flutter chỉ CRUD cấu hình cloud; route inbound cloud chỉ upsert
+conversation, không chạy rule/AI và không gửi qua phiên Zalo đang hoạt động.
+Payload metadata local-first không có `content` nhưng backend lại bắt buộc trường
+này.
+
+**Khắc phục:** Thêm local chatbot runtime với SQLite state/config/audit, debounce
+3 giây, audience/group mention/quote, handoff, rule theo business hours, AI
+fallback qua cloud và gửi trực tiếp `zca-js`. Thêm agent API config/generate/audit,
+nhánh metadata-only, operator takeover và SSE state. AI/quota/send lỗi chuyển
+handoff, không fallback hoặc tự gửi lại; audit được retry idempotent.
 
 ---
 
@@ -109,3 +124,17 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Fix summary: Modified `copyWith` to default to the current state values, introducing `clearComplianceError: true` and `clearComplianceWarning: true` boolean flags when we explicitly want to clear them. Simplified `_checkCompliance` state updates and updated all log calls to use `LogItem` instead of `String`. Added `ActivityLogPanel` to the `BulkMessagingScreen` UI under the metrics cards.
 - Rule: Do not write `field: field` in State `copyWith` methods to allow clearing fields. Instead, use `field: clearField ? null : (field ?? this.field)` to prevent state changes from accidentally wiping unrelated status properties.
 - Related files: `tools/alpha-crm/lib/features/messaging/bulk/providers/bulk_messaging_provider.dart`, `tools/alpha-crm/lib/features/messaging/bulk/presentation/screens/bulk_messaging_screen.dart`.
+### 2026-06-11 - Windows Video Playback Requires A Windows Plugin Implementation
+
+- Symptom: Mở video trong Live Chat trên Windows làm ứng dụng ném `UnimplementedError: init() has not been implemented` từ `VideoPlayerPlatform.init`.
+- Root cause: Gói `video_player` không cung cấp implementation cho Windows, nên `VideoPlayerController.initialize()` gọi vào implementation mặc định chưa được cài đặt.
+- Fix summary: Thay `video_player` bằng `media_kit`, `media_kit_video` và `media_kit_libs_video`; gọi `MediaKit.ensureInitialized()` khi khởi động và dùng `Player`/`VideoController` trong màn hình video.
+- Rule: Không dùng `video_player` cho tính năng phát video đa nền tảng có Windows. Mọi chuỗi giao diện tiếng Việt mới phải dùng UTF-8 và đầy đủ dấu; duy trì test hồi quy cho các thông báo Live Chat.
+- Related files: `tools/alpha-crm/pubspec.yaml`, `tools/alpha-crm/lib/main.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_video_screen.dart`, `tools/alpha-crm/test/live_chat_video_configuration_test.dart`.
+
+# Live Chat Provider IDs And Media Cache
+
+- Zalo reaction/recall must use `zaloMsgId`/`providerMessageId`; CRM row IDs are not valid provider action IDs.
+- Local bridge action lookup accepts either its SQLite row ID or the provider ID, but successful recall must mark the resolved local row ID deleted only after the Zalo API succeeds.
+- Cached media is exposed through `/local/media/:attachmentId`; video responses must preserve HTTP Range support.
+- Never call `Uri.decodeComponent` on untrusted attachment names without catching malformed percent encoding.

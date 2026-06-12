@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
 import 'app/theme/app_colors.dart';
@@ -10,6 +11,7 @@ import 'shared/utils/zalo_backend_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   // Tự động chạy Zalo Bot backend khi chạy trên máy tính (Desktop)
   await ZaloBackendManager.startBackend();
@@ -65,7 +67,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       ThemeMode.dark => true,
       ThemeMode.light => false,
       ThemeMode.system =>
-        WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark,
     };
     AppColors.isDarkMode = isDark;
 

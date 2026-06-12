@@ -91,6 +91,8 @@ class ChatMessage {
   });
 
   bool get isMine => direction == 'outbound';
+  String get providerActionId =>
+      zaloMsgId?.trim().isNotEmpty == true ? zaloMsgId!.trim() : id;
 
   ChatMessage copyWith({
     String? id,
@@ -284,6 +286,7 @@ class LiveChatState {
   final String draftText;
   final ChatMessage? replyingTo;
   final List<ChatMessage> messageSearchResults;
+  final String highlightedMessageId;
   final bool isChatFocused;
   final int unfocusedNewMessageCount;
 
@@ -308,6 +311,7 @@ class LiveChatState {
     this.draftText = '',
     this.replyingTo,
     this.messageSearchResults = const [],
+    this.highlightedMessageId = '',
     this.isChatFocused = true,
     this.unfocusedNewMessageCount = 0,
   });
@@ -360,6 +364,7 @@ class LiveChatState {
     String? draftText,
     Object? replyingTo = _unset,
     List<ChatMessage>? messageSearchResults,
+    String? highlightedMessageId,
     bool? isChatFocused,
     int? unfocusedNewMessageCount,
   }) {
@@ -393,6 +398,7 @@ class LiveChatState {
           ? this.replyingTo
           : replyingTo as ChatMessage?,
       messageSearchResults: messageSearchResults ?? this.messageSearchResults,
+      highlightedMessageId: highlightedMessageId ?? this.highlightedMessageId,
       isChatFocused: isChatFocused ?? this.isChatFocused,
       unfocusedNewMessageCount:
           unfocusedNewMessageCount ?? this.unfocusedNewMessageCount,
@@ -850,6 +856,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       );
       if (response['success'] == true) {
         await loadMessages(conversation.id);
+        _markOperatorTakeover(conversation);
         state = state.copyWith(
           isSending: false,
           replyingTo: null,
@@ -860,7 +867,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       }
       _setOptimisticFailed(
         clientMessageId,
-        (response['error'] ?? response['message'] ?? 'Gui tin nhan that bai.')
+        (response['error'] ?? response['message'] ?? 'Gửi tin nhắn thất bại.')
             .toString(),
         localMessageId: response['localMessageId']?.toString(),
       );
@@ -883,6 +890,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
     if (response['success'] == true) {
       await loadMessages(conversation.id);
+      _markOperatorTakeover(conversation);
       state = state.copyWith(isSending: false);
     } else {
       if (response['localMessageId'] != null) {
@@ -890,7 +898,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       }
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['error'] ?? 'Gui lien ket that bai.')
+        errorMessage: (response['error'] ?? 'Gửi liên kết thất bại.')
             .toString(),
       );
     }
@@ -909,11 +917,12 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
     if (response['success'] == true) {
       await loadMessages(conversation.id);
+      _markOperatorTakeover(conversation);
       state = state.copyWith(isSending: false);
     } else {
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['error'] ?? 'Gui sticker that bai.').toString(),
+        errorMessage: (response['error'] ?? 'Gửi sticker thất bại.').toString(),
       );
     }
   }
@@ -964,7 +973,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       } else {
         _setOptimisticFailed(
           message.clientMessageId ?? message.id,
-          (response['error'] ?? 'Gui lai that bai.').toString(),
+          (response['error'] ?? 'Gửi lại thất bại.').toString(),
         );
       }
     } catch (error) {
@@ -976,9 +985,12 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   Future<void> reactToMessage(ChatMessage message, String reaction) async {
-    if (message.id.isEmpty) return;
+    if (message.isMine || message.providerActionId.isEmpty) return;
     try {
-      final response = await _repository.reactToMessage(message.id, reaction);
+      final response = await _repository.reactToMessage(
+        message.providerActionId,
+        reaction,
+      );
       if (response['success'] == true) {
         final selected = state.selectedConversation;
         if (selected != null) await loadMessages(selected.id);
@@ -1044,26 +1056,42 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       state = state.copyWith(messageSearchResults: []);
       return;
     }
-    final response = await _repository.searchMessages(
-      query.trim(),
-      accountId: selected?.accountId,
-      threadId: selected?.threadId,
-    );
-    if (response['success'] == true && response['data'] is List) {
-      state = state.copyWith(
-        messageSearchResults: (response['data'] as List)
-            .whereType<Map>()
-            .map(
-              (item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)),
-            )
-            .toList(),
+    if (selected == null) return;
+    try {
+      final response = await _repository.searchMessages(
+        query.trim(),
+        accountId: selected.accountId,
+        threadId: selected.threadId,
       );
+      if (response['success'] == true && response['data'] is List) {
+        state = state.copyWith(
+          messageSearchResults: (response['data'] as List)
+              .whereType<Map>()
+              .map(
+                (item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList(),
+        );
+        return;
+      }
+    } catch (_) {
+      // Fall back to the loaded conversation when the bridge is unavailable.
     }
+    final needle = query.trim().toLowerCase();
+    state = state.copyWith(
+      messageSearchResults: selected.messages
+          .where((message) => message.message.toLowerCase().contains(needle))
+          .toList(),
+    );
   }
 
   Future<void> openSearchResult(ChatMessage message) async {
     final selected = state.selectedConversation;
     if (selected == null) return;
+    if (selected.messages.any((item) => item.id == message.id)) {
+      _highlightSearchResult(message.id);
+      return;
+    }
     final response = await _repository.messagesAround(message.id);
     if (response['success'] != true || response['data'] is! List) return;
     final messages =
@@ -1075,6 +1103,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     _replaceSelected(selected.copyWith(messages: messages));
+    _highlightSearchResult(message.id);
+  }
+
+  void _highlightSearchResult(String messageId) {
+    state = state.copyWith(highlightedMessageId: messageId);
+    Timer(const Duration(seconds: 2), () {
+      if (state.highlightedMessageId == messageId) {
+        state = state.copyWith(highlightedMessageId: '');
+      }
+    });
   }
 
   void setChatFocused(bool focused) {
@@ -1131,12 +1169,24 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> toggleChatbot(bool enabled) async {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
-    final response = await _repository.updateConversation(conversation.id, {
-      'chatbotEnabled': enabled,
-    });
+    final response = await _repository.updateChatbotState(
+      ConversationTarget(
+        id: conversation.id,
+        accountId: conversation.accountId,
+        threadId: conversation.threadId,
+        threadType: conversation.threadType,
+      ),
+      enabled: enabled,
+    );
     if (response['success'] == true) {
       _replaceSelected(conversation.copyWith(chatbotEnabled: enabled));
     }
+  }
+
+  void _markOperatorTakeover(Conversation conversation) {
+    final current = state.selectedConversation;
+    if (current == null || current.id != conversation.id) return;
+    _replaceSelected(current.copyWith(chatbotEnabled: false));
   }
 
   Future<void> sendAttachment(
@@ -1155,6 +1205,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
     if (response['success'] == true) {
       await loadMessages(conversation.id);
+      _markOperatorTakeover(conversation);
       state = state.copyWith(isSending: false);
     } else {
       if (response['localMessageId'] != null) {

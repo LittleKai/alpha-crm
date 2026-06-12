@@ -19,6 +19,7 @@ import {
 import { dispatchN8nEvent } from '../integrations/n8n-event-dispatcher.js';
 import { getLocalChatStore } from '../local-chat/index.js';
 import { localChatEvents } from '../local-chat/local-chat-events.js';
+import { handleChatbotInbound } from '../chatbot/index.js';
 
 type RevocationHandler = (reason: string) => void | Promise<void>;
 
@@ -219,6 +220,14 @@ async function handleInboundMessageEvent(
     const localStore = getLocalChatStore();
     if (localStore) {
       try {
+        const existingProviderMessage = event.providerMessageId
+          ? localStore.db
+              .prepare(
+                `SELECT id FROM messages
+                 WHERE accountId = ? AND providerMessageId = ?`,
+              )
+              .get(event.accountId, event.providerMessageId)
+          : undefined;
         const reconciledId =
           event.senderId === event.accountId && event.clientMessageId
             ? localStore.reconcileOutboundMessage({
@@ -260,6 +269,9 @@ async function handleInboundMessageEvent(
             clientMessageId: event.clientMessageId,
           },
         });
+        if (!reconciledId && !existingProviderMessage) {
+          handleChatbotInbound(event, event.threadType === 'group');
+        }
       } catch (error: any) {
         console.error(
           '[agent-runner] Local store write failed; cloud report skipped:',

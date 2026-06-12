@@ -19,6 +19,7 @@ import '../../../../../shared/widgets/app_table.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
+import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
@@ -237,10 +238,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           ),
                           if (i < drafts.length - 1) ...[
                             const SizedBox(height: AppSpacing.m),
-                            Divider(
-                              height: 1,
-                              color: AppColors.borderSoft,
-                            ),
+                            Divider(height: 1, color: AppColors.borderSoft),
                             const SizedBox(height: AppSpacing.m),
                           ],
                         ],
@@ -1033,6 +1031,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     final soulController = TextEditingController(text: state.soulPrompt);
     final rulesController = TextEditingController(text: state.responseRules);
     var temperature = state.temperature;
+    var debounceSeconds = state.debounceSeconds;
 
     await showDialog<void>(
       context: context,
@@ -1065,6 +1064,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           soulPrompt: soulController.text.trim(),
                           responseRules: rulesController.text.trim(),
                           temperature: temperature,
+                          debounceSeconds: debounceSeconds,
                         )
                         .then((_) {
                           if (mounted) {
@@ -1193,6 +1193,35 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       });
                     },
                   ),
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Chờ khách nhập thêm: $debounceSeconds giây',
+                        style: AppTextStyles.label,
+                      ),
+                      Text(
+                        'Tối đa 12 giây',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: debounceSeconds.toDouble(),
+                    min: 2,
+                    max: 15,
+                    divisions: 13,
+                    activeColor: AppColors.primary,
+                    label: '$debounceSeconds giây',
+                    onChanged: (value) {
+                      setDialogState(() {
+                        debounceSeconds = value.round();
+                      });
+                    },
+                  ),
                 ],
               ),
             );
@@ -1208,6 +1237,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Widget _buildAudienceTargeting(ChatbotState state, ChatbotNotifier notifier) {
+    final managedGroups = ref
+        .watch(managedGroupsProvider)
+        .groups
+        .where((group) => group.isManaged)
+        .toList();
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
@@ -1218,6 +1252,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildBridgeStatus(state, notifier),
+          const SizedBox(height: AppSpacing.m),
           Row(
             children: [
               const Icon(
@@ -1289,8 +1325,73 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             onTap: () =>
                 notifier.updateAudienceConfig(groupAudience: 'selected'),
           ),
+          if (state.groupAudience == 'selected') ...[
+            const SizedBox(height: AppSpacing.s),
+            if (managedGroups.isEmpty)
+              Text(
+                'Chưa có nhóm Zalo nào được đánh dấu quản lý.',
+                style: AppTextStyles.caption.copyWith(color: AppColors.warning),
+              )
+            else
+              ...managedGroups.map((group) {
+                final key = '${group.accountId}:${group.groupId}';
+                final selected = state.selectedGroupKeys.contains(key);
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: selected,
+                  title: Text(group.name),
+                  subtitle: Text(group.accountId),
+                  onChanged: (checked) {
+                    final keys = {...state.selectedGroupKeys};
+                    if (checked == true) {
+                      keys.add(key);
+                    } else {
+                      keys.remove(key);
+                    }
+                    notifier.updateAudienceConfig(
+                      selectedGroupKeys: keys.toList()..sort(),
+                    );
+                  },
+                );
+              }),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildBridgeStatus(ChatbotState state, ChatbotNotifier notifier) {
+    final status = state.bridgeStatus;
+    final healthy =
+        status?.running == true &&
+        (state.bridgeSyncWarning == null || state.bridgeSyncWarning!.isEmpty);
+    final label = healthy
+        ? 'Chatbot local đang hoạt động'
+        : status?.running == true
+        ? 'Cấu hình chatbot chưa đồng bộ'
+        : 'Local bridge đang ngoại tuyến';
+    final color = healthy ? AppColors.success : AppColors.warning;
+    return Row(
+      children: [
+        Icon(
+          healthy ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+          size: 18,
+          color: color,
+        ),
+        const SizedBox(width: AppSpacing.s),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTextStyles.caption.copyWith(color: color),
+          ),
+        ),
+        TextButton(
+          onPressed: state.isSyncingBridge ? null : notifier.syncBridgeNow,
+          child: Text(state.isSyncingBridge ? 'Đang đồng bộ...' : 'Thử lại'),
+        ),
+      ],
     );
   }
 

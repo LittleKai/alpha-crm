@@ -19,7 +19,7 @@ void main() {
           isA<Exception>().having(
             (error) => error.toString(),
             'message',
-            contains('Thu hoi tin nhan Zalo that bai'),
+            contains('Thu hồi tin nhắn Zalo thất bại'),
           ),
         ),
       );
@@ -27,11 +27,11 @@ void main() {
   );
 
   test(
-    'reactToMessage uses local bridge even when local-first setting is off',
+    'reactToMessage forwards provider ID to local bridge in local-first mode',
     () async {
       final localApi = _RecordingReactionLocalApi();
       final repository = LiveChatRepository(
-        localFirstEnabled: false,
+        localFirstEnabled: true,
         cache: LiveChatCache(),
         localApi: localApi,
       );
@@ -41,6 +41,26 @@ void main() {
       expect(response['success'], true);
       expect(localApi.reactedMessageId, 'msg-1');
       expect(localApi.reaction, 'heart');
+    },
+  );
+
+  test(
+    'recallMessage forwards the provider message ID in local-first mode',
+    () async {
+      final localApi = _RecordingRecallLocalApi();
+      final repository = LiveChatRepository(
+        localFirstEnabled: true,
+        cache: LiveChatCache(),
+        localApi: localApi,
+      );
+
+      final response = await repository.recallMessage(
+        'conv-1',
+        'provider-msg-1',
+      );
+
+      expect(response['success'], true);
+      expect(localApi.recalledMessageId, 'provider-msg-1');
     },
   );
 }
@@ -67,6 +87,18 @@ class _RecordingReactionLocalApi extends LiveChatLocalBridgeApi {
   ) async {
     reactedMessageId = messageId;
     this.reaction = reaction;
+    return {'success': true};
+  }
+}
+
+class _RecordingRecallLocalApi extends LiveChatLocalBridgeApi {
+  _RecordingRecallLocalApi() : super(baseUrl: '');
+
+  String? recalledMessageId;
+
+  @override
+  Future<Map<String, dynamic>> recallLocalMessage(String messageId) async {
+    recalledMessageId = messageId;
     return {'success': true};
   }
 }

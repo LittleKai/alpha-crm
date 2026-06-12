@@ -245,6 +245,37 @@ export class LocalChatStore {
 
       CREATE INDEX IF NOT EXISTS idx_zalo_event_thread_time
         ON zalo_event_log(accountId, threadId, timestamp);
+
+      CREATE TABLE IF NOT EXISTS chatbot_conversation_state (
+        conversation_key TEXT PRIMARY KEY,
+        mode TEXT NOT NULL,
+        reason TEXT,
+        inherited INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL,
+        last_processed_message_id TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS chatbot_config_snapshot (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        version TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        synced_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS chatbot_audit_queue (
+        idempotency_key TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        last_error TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS chatbot_processed_message (
+        conversation_key TEXT NOT NULL,
+        provider_message_id TEXT NOT NULL,
+        processed_at INTEGER NOT NULL,
+        PRIMARY KEY (conversation_key, provider_message_id)
+      );
     `);
 
     // ── Incremental migrations (idempotent) ──
@@ -1176,6 +1207,7 @@ export class LocalChatStore {
       checksum?: string;
       errorText?: string;
       downloadedAt?: string;
+      sizeBytes?: number;
     },
   ): void {
     this.db
@@ -1185,7 +1217,8 @@ export class LocalChatStore {
            localPath = COALESCE(?, localPath),
            checksum = COALESCE(?, checksum),
            errorText = ?,
-           downloadedAt = COALESCE(?, downloadedAt)
+           downloadedAt = COALESCE(?, downloadedAt),
+           sizeBytes = COALESCE(?, sizeBytes)
          WHERE id = ?`,
       )
       .run(
@@ -1194,6 +1227,7 @@ export class LocalChatStore {
         update.checksum ?? null,
         update.errorText || '',
         update.downloadedAt ?? null,
+        update.sizeBytes ?? null,
         attachmentId,
       );
   }

@@ -6,11 +6,15 @@ import { localChatEvents } from './local-chat-events.js';
 import type { LocalChatStore } from './local-chat-store.js';
 import type { LocalAttachment } from './local-chat-types.js';
 
-const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 500 * 1024 * 1024;
+const DEFAULT_CACHE_BYTES = 20 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_AGE_DAYS = 90;
 
 export class LocalChatMediaWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private maxCacheBytes = DEFAULT_CACHE_BYTES;
+  private maxAgeDays = DEFAULT_MAX_AGE_DAYS;
 
   constructor(
     private readonly store: LocalChatStore,
@@ -36,9 +40,15 @@ export class LocalChatMediaWorker {
       for (const attachment of this.store.listPendingAttachments(5)) {
         await this.download(attachment);
       }
+      await this.cleanup(this.maxCacheBytes, this.maxAgeDays);
     } finally {
       this.running = false;
     }
+  }
+
+  configure(maxGb: number, maxAgeDays: number): void {
+    this.maxCacheBytes = Math.max(1, maxGb) * 1024 * 1024 * 1024;
+    this.maxAgeDays = Math.max(1, maxAgeDays);
   }
 
   private async download(attachment: LocalAttachment): Promise<void> {
@@ -59,11 +69,11 @@ export class LocalChatMediaWorker {
       }
       const declaredSize = Number(response.headers.get('content-length') || 0);
       if (declaredSize > MAX_MEDIA_BYTES) {
-        throw new Error('Media exceeds the 25 MB local cache limit.');
+        throw new Error('Media exceeds the 500 MB local cache limit.');
       }
       const buffer = Buffer.from(await response.arrayBuffer());
       if (buffer.byteLength > MAX_MEDIA_BYTES) {
-        throw new Error('Media exceeds the 25 MB local cache limit.');
+        throw new Error('Media exceeds the 500 MB local cache limit.');
       }
       await writeFile(temporary, buffer);
       await rename(temporary, target);
@@ -73,6 +83,7 @@ export class LocalChatMediaWorker {
         localPath: target,
         checksum,
         downloadedAt: new Date().toISOString(),
+        sizeBytes: buffer.byteLength,
       });
       this.publish(attachment, 'media.ready', { localPath: target, checksum });
     } catch (error) {
@@ -86,6 +97,48 @@ export class LocalChatMediaWorker {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async cleanup(
+    maxBytes = DEFAULT_CACHE_BYTES,
+    maxAgeDays = DEFAULT_MAX_AGE_DAYS,
+  ): Promise<{ removed: number; freedBytes: number }> {
+    const rows = this.store.db
+      .prepare(
+        `SELECT id, localPath, sizeBytes, downloadedAt, createdAt
+         FROM attachments
+         WHERE status = 'ready' AND localPath != ''
+         ORDER BY COALESCE(downloadedAt, createdAt) ASC`,
+      )
+      .all() as Array<{
+        id: string;
+        localPath: string;
+        sizeBytes: number;
+        downloadedAt: string;
+        createdAt: string;
+      }>;
+    let totalBytes = rows.reduce((sum, row) => sum + Number(row.sizeBytes || 0), 0);
+    let removed = 0;
+    let freedBytes = 0;
+    const cutoff = Date.now() - maxAgeDays * 86400000;
+    for (const row of rows) {
+      const timestamp = Date.parse(row.downloadedAt || row.createdAt);
+      if (timestamp >= cutoff && totalBytes <= maxBytes) continue;
+      await unlink(row.localPath).catch(() => {});
+      this.store.db
+        .prepare(
+          `UPDATE attachments
+           SET localPath = '', status = 'pending', checksum = '',
+               downloadedAt = '', errorText = ''
+           WHERE id = ?`,
+        )
+        .run(row.id);
+      const bytes = Number(row.sizeBytes || 0);
+      totalBytes -= bytes;
+      freedBytes += bytes;
+      removed += 1;
+    }
+    return { removed, freedBytes };
   }
 
   private publish(

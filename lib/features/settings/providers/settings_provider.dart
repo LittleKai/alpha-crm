@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import '../../../mock/mock_accounts.dart';
 import '../../../mock/mock_campaigns.dart';
 
@@ -87,6 +88,31 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   void updateMaxDelay(int value) {
     state = state.copyWith(
       settings: state.settings.copyWith(maxDelay: value),
+      isSaved: false,
+    );
+  }
+
+  void updateDownloadFolder(String value) {
+    state = state.copyWith(
+      settings: state.settings.copyWith(downloadFolder: value),
+      isSaved: false,
+    );
+  }
+
+  void updateLiveChatMediaCacheMaxAgeDays(int value) {
+    state = state.copyWith(
+      settings: state.settings.copyWith(
+        liveChatMediaCacheMaxAgeDays: value.clamp(1, 3650),
+      ),
+      isSaved: false,
+    );
+  }
+
+  void updateLiveChatMediaCacheMaxGb(int value) {
+    state = state.copyWith(
+      settings: state.settings.copyWith(
+        liveChatMediaCacheMaxGb: value.clamp(1, 1024),
+      ),
       isSaved: false,
     );
   }
@@ -355,6 +381,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       errorText: null,
     );
     await _saveSettingsToFile(enforcedSettings);
+    try {
+      await http
+          .post(
+            Uri.parse(
+              '${enforcedSettings.localBridgeBaseUrl}/local/media-cache/settings',
+            ),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'maxGb': enforcedSettings.liveChatMediaCacheMaxGb,
+              'maxAgeDays': enforcedSettings.liveChatMediaCacheMaxAgeDays,
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Settings remain persisted locally; the bridge applies them next save.
+    }
     await Future.delayed(const Duration(milliseconds: 600));
     state = state.copyWith(isLoading: false, isSaved: true);
   }

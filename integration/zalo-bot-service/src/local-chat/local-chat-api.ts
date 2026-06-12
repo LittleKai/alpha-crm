@@ -5,7 +5,8 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { randomUUID } from 'crypto';
-import { getLocalChatStore } from './index.js';
+import { createReadStream, existsSync, statSync } from 'fs';
+import { configureLocalChatMediaCache, getLocalChatStore } from './index.js';
 import { config } from '../config.js';
 import {
   getZaloStatus,
@@ -15,6 +16,12 @@ import {
 } from '../zalo.js';
 import type { ZaloSendMessageRequest } from '../channels/types.js';
 import { localChatEvents, type LocalChatEvent } from './local-chat-events.js';
+import type { LocalMessage } from './local-chat-types.js';
+import {
+  getChatbotConfigSync,
+  getChatbotStore,
+} from '../chatbot/index.js';
+import type { ChatbotConversationMode } from '../chatbot/chatbot-types.js';
 
 type JsonFn = (res: ServerResponse, status: number, data: unknown, req?: IncomingMessage) => void;
 type ReadBodyFn = (req: IncomingMessage) => Promise<string>;
@@ -32,6 +39,27 @@ export function handleLocalRoute(
 ): boolean {
   if (!url.startsWith('/local/')) return false;
 
+  if (method === 'GET' && url === '/local/media-cache') {
+    handleLocalMediaCache(req, res, json);
+    return true;
+  }
+  if (method === 'POST' && url === '/local/media-cache/settings') {
+    void handleLocalMediaCacheSettings(req, res, json, readBody);
+    return true;
+  }
+
+  const mediaMatch = url.match(/^\/local\/media\/([^/?]+)(\/download)?$/);
+  if (method === 'GET' && mediaMatch) {
+    handleLocalMedia(
+      decodeURIComponent(mediaMatch[1]),
+      mediaMatch[2] === '/download',
+      req,
+      res,
+      json,
+    );
+    return true;
+  }
+
   // GET /local/events?accountId=&threadId=
   if (method === 'GET' && /^\/local\/events(\?.*)?$/.test(url)) {
     handleLocalEvents(url, req, res);
@@ -41,6 +69,33 @@ export function handleLocalRoute(
   // GET /local/health
   if (method === 'GET' && url === '/local/health') {
     handleLocalHealth(req, res, json);
+    return true;
+  }
+
+  if (method === 'GET' && url === '/local/chatbot/status') {
+    handleLocalChatbotStatus(req, res, json);
+    return true;
+  }
+  if (method === 'POST' && url === '/local/chatbot/sync') {
+    void handleLocalChatbotSync(req, res, json);
+    return true;
+  }
+
+  const chatbotStateMatch = url.match(
+    /^\/local\/conversations\/([^/?]+)\/chatbot$/,
+  );
+  if (
+    chatbotStateMatch
+    && (method === 'GET' || method === 'PUT')
+  ) {
+    void handleLocalConversationChatbot(
+      method,
+      decodeURIComponent(chatbotStateMatch[1]),
+      req,
+      res,
+      json,
+      readBody,
+    );
     return true;
   }
 
@@ -153,6 +208,175 @@ export function handleLocalRoute(
   return false;
 }
 
+function handleLocalChatbotStatus(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getChatbotStore();
+  const sync = getChatbotConfigSync();
+  const status = sync?.getStatus();
+  json(res, 200, {
+    success: true,
+    data: {
+      running: status?.running === true,
+      configVersion: status?.configVersion ?? null,
+      lastSyncedAt: status?.lastSyncedAt ?? null,
+      lastError: status?.lastError ?? null,
+      pendingAudits: store?.countPendingAudits() ?? 0,
+    },
+  }, req);
+}
+
+async function handleLocalChatbotSync(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): Promise<void> {
+  const sync = getChatbotConfigSync();
+  if (!sync) {
+    json(res, 503, {
+      success: false,
+      error: 'Chatbot runtime is unavailable.',
+    }, req);
+    return;
+  }
+  try {
+    await sync.syncNow();
+    handleLocalChatbotStatus(req, res, json);
+  } catch (error) {
+    json(res, 502, {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      data: sync.getStatus(),
+    }, req);
+  }
+}
+
+async function handleLocalConversationChatbot(
+  method: string,
+  conversationKey: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  const store = getChatbotStore();
+  const localStore = getLocalChatStore();
+  if (!store || !localStore) {
+    json(res, 503, {
+      success: false,
+      error: 'Chatbot runtime is unavailable.',
+    }, req);
+    return;
+  }
+  const parsed = parseConversationKey(conversationKey);
+  if (!parsed) {
+    json(res, 400, {
+      success: false,
+      error: 'Invalid conversation key.',
+    }, req);
+    return;
+  }
+
+  if (method === 'PUT') {
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    } catch {
+      json(res, 400, { success: false, error: 'Invalid JSON body.' }, req);
+      return;
+    }
+    const mode = String(payload.mode ?? '') as ChatbotConversationMode;
+    if (!['enabled', 'handoff', 'disabled_by_operator'].includes(mode)) {
+      json(res, 400, {
+        success: false,
+        error: 'Invalid chatbot conversation mode.',
+      }, req);
+      return;
+    }
+    store.setConversationState(conversationKey, {
+      mode,
+      reason: payload.reason == null ? null : String(payload.reason),
+      inherited: false,
+    });
+    publishConversationChatbotState(conversationKey);
+  }
+
+  const explicit = store.getConversationState(conversationKey);
+  const snapshot = store.getConfigSnapshot();
+  const conversation = localStore.db
+    .prepare(
+      `SELECT threadType FROM conversations
+       WHERE accountId = ? AND threadId = ?`,
+    )
+    .get(parsed.accountId, parsed.threadId) as
+    | { threadType: 'user' | 'group' }
+    | undefined;
+  const effective = explicit
+    ?? (snapshot
+      ? store.getEffectiveConversationState(
+          conversationKey,
+          conversation?.threadType ?? 'user',
+          snapshot,
+        )
+      : undefined);
+  json(res, 200, {
+    success: true,
+    data: {
+      conversationKey,
+      mode: effective?.mode ?? 'disabled_by_operator',
+      reason: effective?.reason ?? 'audience_not_eligible',
+      inherited: effective?.inherited ?? true,
+      effectiveEnabled: effective?.mode === 'enabled',
+    },
+  }, req);
+}
+
+function applyOperatorTakeover(
+  accountId: string,
+  threadId: string,
+  origin: unknown,
+): void {
+  if (!accountId || !threadId || origin === 'chatbot') return;
+  const store = getChatbotStore();
+  if (!store) return;
+  const key = `${accountId}:${threadId}`;
+  store.setConversationState(key, {
+    mode: 'disabled_by_operator',
+    reason: 'manual_operator_reply',
+    inherited: false,
+  });
+  publishConversationChatbotState(key);
+}
+
+function publishConversationChatbotState(conversationKey: string): void {
+  const parsed = parseConversationKey(conversationKey);
+  const state = getChatbotStore()?.getConversationState(conversationKey);
+  if (!parsed || !state) return;
+  localChatEvents.publish({
+    type: 'conversation.chatbot_state',
+    accountId: parsed.accountId,
+    threadId: parsed.threadId,
+    data: {
+      conversationKey,
+      ...state,
+      effectiveEnabled: state.mode === 'enabled',
+    },
+  });
+}
+
+function parseConversationKey(
+  value: string,
+): { accountId: string; threadId: string } | null {
+  const separator = value.indexOf(':');
+  if (separator <= 0 || separator === value.length - 1) return null;
+  return {
+    accountId: value.slice(0, separator),
+    threadId: value.slice(separator + 1),
+  };
+}
+
 function writeSseEvent(res: ServerResponse, event: LocalChatEvent): void {
   res.write(`id: ${event.id}\n`);
   res.write(`event: ${event.type}\n`);
@@ -200,7 +424,7 @@ function serializeMessagePage(page: ReturnType<NonNullable<ReturnType<typeof get
 } {
   const attachments: Record<string, unknown[]> = {};
   for (const [messageId, items] of page.attachments) {
-    attachments[messageId] = items;
+    attachments[messageId] = items.map(serializeAttachment);
   }
   return { data: page.messages, attachments };
 }
@@ -211,15 +435,124 @@ function serializeLocalMessageWithAttachments(
 ): Record<string, unknown> | undefined {
   const message = store.getMessage(messageId);
   if (!message) return undefined;
-  const attachments = store.db
+  const attachments = (store.db
     .prepare('SELECT * FROM attachments WHERE messageId = ?')
-    .all(messageId);
+    .all(messageId) as Record<string, unknown>[]).map(serializeAttachment);
   return {
     ...message,
     attachments,
     receipts: store.getReceipts(messageId),
     reactions: store.getReactions(messageId),
   };
+}
+
+function serializeAttachment(item: object): Record<string, unknown> {
+  const data = item as Record<string, unknown>;
+  return {
+    ...data,
+    cacheUrl: data.status === 'ready' && data.localPath
+      ? `/local/media/${encodeURIComponent(String(data.id))}`
+      : '',
+    downloadUrl: data.status === 'ready' && data.localPath
+      ? `/local/media/${encodeURIComponent(String(data.id))}/download`
+      : '',
+  };
+}
+
+function handleLocalMedia(
+  attachmentId: string,
+  download: boolean,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getLocalChatStore();
+  const attachment = store?.db
+    .prepare('SELECT * FROM attachments WHERE id = ?')
+    .get(attachmentId) as Record<string, unknown> | undefined;
+  const localPath = String(attachment?.localPath || '');
+  if (!attachment || attachment.status !== 'ready' || !localPath || !existsSync(localPath)) {
+    json(res, 404, { success: false, error: 'Cached media not found.' }, req);
+    return;
+  }
+
+  const size = statSync(localPath).size;
+  const mimeType = String(attachment.mimeType || 'application/octet-stream');
+  const safeName = String(attachment.name || `media-${attachmentId}`)
+    .replace(/[\r\n"]/g, '_');
+  const range = req.headers.range;
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader(
+    'Content-Disposition',
+    `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+  );
+
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    const start = match?.[1] ? Number(match[1]) : 0;
+    const end = match?.[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+    if (!match || start < 0 || end < start || start >= size) {
+      res.statusCode = 416;
+      res.setHeader('Content-Range', `bytes */${size}`);
+      res.end();
+      return;
+    }
+    res.statusCode = 206;
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+    res.setHeader('Content-Length', end - start + 1);
+    createReadStream(localPath, { start, end }).pipe(res);
+    return;
+  }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Length', size);
+  createReadStream(localPath).pipe(res);
+}
+
+function handleLocalMediaCache(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, { success: false, error: 'Local-first mode is not enabled.' }, req);
+    return;
+  }
+  const stats = store.db
+    .prepare(
+      `SELECT COUNT(*) AS fileCount,
+              COALESCE(SUM(sizeBytes), 0) AS totalBytes
+       FROM attachments
+       WHERE status = 'ready' AND localPath != ''`,
+    )
+    .get();
+  json(res, 200, {
+    success: true,
+    data: {
+      ...(stats as Record<string, unknown>),
+      maxBytes: 20 * 1024 * 1024 * 1024,
+      maxAgeDays: 90,
+    },
+  }, req);
+}
+
+async function handleLocalMediaCacheSettings(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  const payload = JSON.parse(await readBody(req).catch(() => '{}'));
+  const maxGb = Number(payload.maxGb || 20);
+  const maxAgeDays = Number(payload.maxAgeDays || 90);
+  if (!Number.isFinite(maxGb) || !Number.isFinite(maxAgeDays)) {
+    json(res, 400, { success: false, error: 'Invalid media cache settings.' }, req);
+    return;
+  }
+  configureLocalChatMediaCache(maxGb, maxAgeDays);
+  json(res, 200, { success: true, data: { maxGb, maxAgeDays } }, req);
 }
 
 function handleLocalMessageSearch(
@@ -651,6 +984,7 @@ async function handleLocalSend(
           status: 'sent',
         },
       });
+      applyOperatorTakeover(accountId, recipientId, payload.origin);
       json(res, 200, {
         success: true,
         localMessageId: localMsgId,
@@ -823,6 +1157,7 @@ async function handleLocalSendAttachment(
           status: 'sent',
         },
       });
+      applyOperatorTakeover(accountId, recipientId, payload.origin);
       json(res, 200, {
         success: true,
         localMessageId: localMsgId,
@@ -903,8 +1238,11 @@ async function handleLocalRecall(
   try {
     // Look up the message to get its providerMessageId, accountId, and threadId
     const msgRow = store.db
-      .prepare('SELECT accountId, threadId, threadType, providerMessageId, clientMessageId FROM messages WHERE id = ?')
-      .get(messageId) as { accountId: string; threadId: string; threadType: string; providerMessageId: string; clientMessageId: string } | undefined;
+      .prepare('SELECT id, accountId, threadId, threadType, providerMessageId, clientMessageId FROM messages WHERE id = ?')
+      .get(messageId) as { id: string; accountId: string; threadId: string; threadType: string; providerMessageId: string; clientMessageId: string } | undefined
+      ?? store.db
+        .prepare('SELECT id, accountId, threadId, threadType, providerMessageId, clientMessageId FROM messages WHERE providerMessageId = ? OR zaloMsgId = ? ORDER BY createdAt DESC LIMIT 1')
+        .get(messageId, messageId) as { id: string; accountId: string; threadId: string; threadType: string; providerMessageId: string; clientMessageId: string } | undefined;
 
     if (!msgRow) {
       json(res, 404, { success: false, error: 'Message not found.' }, req);
@@ -928,13 +1266,13 @@ async function handleLocalRecall(
 
     if (recallResult.success) {
       // Mark as deleted locally
-      const deleted = store.markMessageDeleted(messageId);
+      const deleted = store.markMessageDeleted(msgRow.id);
       localChatEvents.publish({
         type: 'message.recalled',
         accountId: msgRow.accountId,
         threadId: msgRow.threadId,
         data: {
-          messageId,
+          messageId: msgRow.id,
           providerMessageId: msgRow.providerMessageId,
           clientMessageId: msgRow.clientMessageId,
         },
@@ -955,7 +1293,9 @@ async function handleLocalRetry(
   json: JsonFn,
 ): Promise<void> {
   const store = getLocalChatStore();
-  const message = store?.getMessage(messageId);
+  const message = store?.getMessage(messageId) ?? (store?.db
+    .prepare('SELECT * FROM messages WHERE providerMessageId = ? OR zaloMsgId = ? ORDER BY createdAt DESC LIMIT 1')
+    .get(messageId, messageId) as LocalMessage | undefined);
   if (!store || !message) {
     json(res, 404, { success: false, error: 'Message not found.' }, req);
     return;

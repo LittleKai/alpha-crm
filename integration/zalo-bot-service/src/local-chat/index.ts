@@ -126,6 +126,14 @@ export function getLocalChatStore(): LocalChatStore | null {
   return _store;
 }
 
+export function configureLocalChatMediaCache(
+  maxGb: number,
+  maxAgeDays: number,
+): void {
+  getLocalChatStore();
+  _mediaWorker?.configure(maxGb, maxAgeDays);
+}
+
 /**
  * Close the store (for graceful shutdown).
  */

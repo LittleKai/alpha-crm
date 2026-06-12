@@ -3,6 +3,12 @@
  * These types represent the SQLite schema for local message storage.
  */
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
 export interface LocalConversation {
   id: string;
   accountId: string;

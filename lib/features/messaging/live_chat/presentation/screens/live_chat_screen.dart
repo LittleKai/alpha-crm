@@ -17,12 +17,15 @@ import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../content/providers/templates_provider.dart';
+import '../../../../settings/providers/settings_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../data/live_chat_download_service.dart';
 import '../../providers/live_chat_provider.dart';
 import '../../utils/live_chat_attachment_view.dart';
 import '../../utils/live_chat_local_image_stub.dart'
     if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
+import 'live_chat_video_screen.dart';
 
 class LiveChatScreen extends ConsumerStatefulWidget {
   const LiveChatScreen({super.key});
@@ -865,6 +868,7 @@ class _ConversationPanel extends ConsumerWidget {
                 return _MessageBubble(
                   message: message,
                   conversation: conversation,
+                  highlighted: state.highlightedMessageId == message.id,
                 );
               },
             ),
@@ -1070,62 +1074,123 @@ class _ConversationPanel extends ConsumerWidget {
           final results = ref.watch(
             liveChatProvider.select((value) => value.messageSearchResults),
           );
-          return AlertDialog(
-            title: const Text('Tìm trong tin nhắn'),
-            content: SizedBox(
+          return Dialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: SizedBox(
               width: 520,
-              height: 360,
+              height: 440,
               child: Column(
                 children: [
-                  TextField(
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Nhập nội dung cần tìm',
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.manage_search,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: Text(
+                            'Tìm trong tin nhắn',
+                            style: AppTextStyles.sectionTitle,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
                     ),
-                    onChanged: ref
-                        .read(liveChatProvider.notifier)
-                        .searchMessages,
                   ),
-                  const SizedBox(height: AppSpacing.s),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: results.length,
-                      itemBuilder: (context, index) {
-                        final message = results[index];
-                        return ListTile(
-                          dense: true,
-                          title: Text(
-                            message.message,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            DateFormat(
-                              'dd/MM/yyyy HH:mm',
-                            ).format(message.timestamp),
-                          ),
-                          onTap: () async {
-                            await ref
-                                .read(liveChatProvider.notifier)
-                                .openSearchResult(message);
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        );
-                      },
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    child: TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Nhập nội dung cần tìm',
+                      ),
+                      onChanged: ref
+                          .read(liveChatProvider.notifier)
+                          .searchMessages,
                     ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${results.length} kết quả',
+                        style: AppTextStyles.caption,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: results.isEmpty
+                        ? const Center(
+                            child: Text('Không tìm thấy tin nhắn phù hợp'),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(AppSpacing.s),
+                            itemCount: results.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final message = results[index];
+                              return ListTile(
+                                dense: true,
+                                title: Text(
+                                  message.message,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  '${message.senderName} • ${DateFormat('dd/MM/yyyy HH:mm').format(message.timestamp)}',
+                                ),
+                                onTap: () async {
+                                  await ref
+                                      .read(liveChatProvider.notifier)
+                                      .openSearchResult(message);
+                                  final current = ref.read(liveChatProvider);
+                                  final selected = current.selectedConversation;
+                                  final index = selected?.messages.indexWhere(
+                                    (item) => item.id == message.id,
+                                  );
+                                  if (index != null &&
+                                      index >= 0 &&
+                                      messageScrollController.hasClients) {
+                                    final max = messageScrollController
+                                        .position
+                                        .maxScrollExtent;
+                                    final count = selected!.messages.length;
+                                    await messageScrollController.animateTo(
+                                      count <= 1
+                                          ? 0
+                                          : max * index / (count - 1),
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Đóng'),
-              ),
-            ],
           );
         },
       ),
@@ -1226,8 +1291,13 @@ class _QuickReplyStrip extends StatelessWidget {
 class _MessageBubble extends ConsumerWidget {
   final ChatMessage message;
   final Conversation conversation;
+  final bool highlighted;
 
-  const _MessageBubble({required this.message, required this.conversation});
+  const _MessageBubble({
+    required this.message,
+    required this.conversation,
+    this.highlighted = false,
+  });
 
   String? _getImageUrl(ChatMessage msg) {
     if (msg.contentType == 'image' && msg.message.isNotEmpty) {
@@ -1516,6 +1586,17 @@ class _MessageBubble extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+                    border: highlighted
+                        ? Border.all(color: AppColors.warning, width: 3)
+                        : null,
+                    boxShadow: highlighted
+                        ? [
+                            BoxShadow(
+                              color: AppColors.warning.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1542,7 +1623,7 @@ class _MessageBubble extends ConsumerWidget {
                           ),
                         ),
                       ],
-                      _buildMessageContent(context, textColor),
+                      _buildMessageContent(context, ref, textColor),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1650,16 +1731,17 @@ class _MessageBubble extends ConsumerWidget {
             ],
           ),
         ),
-        const PopupMenuItem<String>(
-          value: 'heart',
-          child: Row(
-            children: [
-              Icon(Icons.favorite_outline, size: 18),
-              SizedBox(width: 8),
-              Text('Thả tim'),
-            ],
+        if (!message.isMine)
+          const PopupMenuItem<String>(
+            value: 'heart',
+            child: Row(
+              children: [
+                Icon(Icons.favorite_outline, size: 18),
+                SizedBox(width: 8),
+                Text('Thả tim'),
+              ],
+            ),
           ),
-        ),
         if (message.isMine && message.status != 'recalled')
           const PopupMenuItem<String>(
             value: 'recall',
@@ -1678,25 +1760,30 @@ class _MessageBubble extends ConsumerWidget {
       } else if (value == 'heart') {
         ref.read(liveChatProvider.notifier).reactToMessage(message, 'heart');
       } else if (value == 'recall') {
-        ref.read(liveChatProvider.notifier).recallMessage(message.id).then((
-          success,
-        ) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  success ? 'Đã thu hồi tin nhắn.' : 'Thu hồi thất bại.',
-                ),
-                backgroundColor: success ? Colors.green : Colors.red,
-              ),
-            );
-          }
-        });
+        ref
+            .read(liveChatProvider.notifier)
+            .recallMessage(message.providerActionId)
+            .then((success) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success ? 'Đã thu hồi tin nhắn.' : 'Thu hồi thất bại.',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            });
       }
     });
   }
 
-  Widget _buildMessageContent(BuildContext context, Color textColor) {
+  Widget _buildMessageContent(
+    BuildContext context,
+    WidgetRef ref,
+    Color textColor,
+  ) {
     if (message.isDeleted) {
       return Text(
         message.message.isNotEmpty
@@ -1711,9 +1798,46 @@ class _MessageBubble extends ConsumerWidget {
     }
 
     final attachmentView = resolveLiveChatAttachmentView(message);
+    if (attachmentView?.kind == LiveChatAttachmentKind.video) {
+      final video = attachmentView!;
+      return InkWell(
+        onTap: video.hasRemoteUrl
+            ? () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LiveChatVideoScreen(
+                    url: video.url,
+                    fileName: video.displayName,
+                    downloadDirectory: ref
+                        .read(settingsProvider)
+                        .settings
+                        .downloadFolder,
+                  ),
+                ),
+              )
+            : null,
+        child: Container(
+          width: 260,
+          height: 150,
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(8),
+            image: video.thumbnailUrl.isNotEmpty
+                ? DecorationImage(
+                    image: NetworkImage(video.thumbnailUrl),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+          ),
+          child: const Center(
+            child: Icon(Icons.play_circle_fill, color: Colors.white, size: 52),
+          ),
+        ),
+      );
+    }
     if (attachmentView?.kind == LiveChatAttachmentKind.image) {
       final image = attachmentView!;
-      final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+      final useLocal =
+          image.hasLocalPath && liveChatLocalFileExists(image.localPath);
       final errorWidget = Container(
         padding: const EdgeInsets.all(AppSpacing.s),
         color: Colors.black12,
@@ -1726,41 +1850,80 @@ class _MessageBubble extends ConsumerWidget {
           ],
         ),
       );
-      return InkWell(
-        onTap: useLocal
-            ? () => _showLocalImagePreviewDialog(context, image.localPath)
-            : image.hasRemoteUrl
-            ? () => _showImagePreviewDialog(context, image.url)
-            : image.hasLocalPath
-            ? () => _showLocalImagePreviewDialog(context, image.localPath)
-            : null,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: useLocal
-              ? buildLiveChatLocalImage(
-                  image.localPath,
-                  fit: BoxFit.contain,
-                  errorWidget: errorWidget,
-                )
-              : image.hasRemoteUrl
-              ? CachedNetworkImage(
-                  imageUrl: image.url,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => const SizedBox(
-                    width: 100,
-                    height: 100,
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+      return Stack(
+        children: [
+          InkWell(
+            onTap: useLocal
+                ? () => _showLocalImagePreviewDialog(context, image.localPath)
+                : image.hasRemoteUrl
+                ? () => _showImagePreviewDialog(context, image.url)
+                : image.hasLocalPath
+                ? () => _showLocalImagePreviewDialog(context, image.localPath)
+                : null,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: useLocal
+                  ? buildLiveChatLocalImage(
+                      image.localPath,
+                      fit: BoxFit.contain,
+                      errorWidget: errorWidget,
+                    )
+                  : image.hasRemoteUrl
+                  ? CachedNetworkImage(
+                      imageUrl: image.url,
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const SizedBox(
+                        width: 100,
+                        height: 100,
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => errorWidget,
+                    )
+                  : buildLiveChatLocalImage(
+                      image.localPath,
+                      fit: BoxFit.contain,
+                      errorWidget: errorWidget,
                     ),
-                  ),
-                  errorWidget: (context, url, error) => errorWidget,
-                )
-              : buildLiveChatLocalImage(
-                  image.localPath,
-                  fit: BoxFit.contain,
-                  errorWidget: errorWidget,
-                ),
-        ),
+            ),
+          ),
+          if (image.hasRemoteUrl)
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: IconButton.filledTonal(
+                tooltip: 'Tải ảnh',
+                icon: const Icon(Icons.download_outlined, size: 18),
+                onPressed: () async {
+                  final url = image.url.contains('/local/media/')
+                      ? '${image.url}/download'
+                      : image.url;
+                  try {
+                    final path = await const LiveChatDownloadService().download(
+                      url: url,
+                      fileName: image.displayName,
+                      directory: ref
+                          .read(settingsProvider)
+                          .settings
+                          .downloadFolder,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Đã tải ảnh: $path')),
+                      );
+                    }
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Tải ảnh thất bại: $error')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+        ],
       );
     }
 
@@ -1838,9 +2001,29 @@ class _MessageBubble extends ConsumerWidget {
                 icon: const Icon(Icons.download, size: 20),
                 color: textColor,
                 onPressed: () async {
-                  final uri = Uri.tryParse(file.url);
-                  if (uri != null && await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  try {
+                    final url = file.url.contains('/local/media/')
+                        ? '${file.url}/download'
+                        : file.url;
+                    final path = await const LiveChatDownloadService().download(
+                      url: url,
+                      fileName: file.displayName,
+                      directory: ref
+                          .read(settingsProvider)
+                          .settings
+                          .downloadFolder,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Đã tải tệp: $path')),
+                      );
+                    }
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Tải tệp thất bại: $error')),
+                      );
+                    }
                   }
                 },
               ),

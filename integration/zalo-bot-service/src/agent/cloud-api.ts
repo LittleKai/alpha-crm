@@ -39,7 +39,10 @@ export function isDeviceRevokedError(error: unknown): boolean {
     && error.code === 'DEVICE_REVOKED';
 }
 
-async function callCloudApi(path: string, options: RequestInit): Promise<any> {
+export async function callCloudApi(
+  path: string,
+  options: RequestInit,
+): Promise<any> {
   const url = `${config.crmCloudApiUrl}${path}`;
   try {
     const response = await fetch(url, options);
@@ -239,6 +242,7 @@ export async function reportInboundMessageMetadata(
       accountId: event.accountId,
       threadId: event.threadId,
       threadType: event.threadType,
+      senderId: event.senderId || '',
       displayName: event.senderName || '',
       avatarUrl: event.avatarUrl || '',
       lastMessagePreview: preview,

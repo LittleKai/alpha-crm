@@ -74,6 +74,7 @@ class LiveChatLocalBridgeApi {
               'conversationId': conversationId,
               'content': content,
               'messageType': messageType,
+              'origin': 'operator',
               if (clientMessageId != null) 'clientMessageId': clientMessageId,
               if (quote != null) 'quote': quote,
               if (mentions != null) 'mentions': mentions,
@@ -118,6 +119,7 @@ class LiveChatLocalBridgeApi {
               'attachments': attachments,
               if (content != null) 'content': content,
               if (messageType != null) 'messageType': messageType,
+              'origin': 'operator',
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -137,10 +139,11 @@ class LiveChatLocalBridgeApi {
   }
 
   Future<Map<String, dynamic>> recallLocalMessage(String messageId) async {
+    final encodedMessageId = Uri.encodeComponent(messageId);
     try {
       final response = await http
           .post(
-            Uri.parse('$baseUrl/local/messages/$messageId/recall'),
+            Uri.parse('$baseUrl/local/messages/$encodedMessageId/recall'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 5));
@@ -187,6 +190,19 @@ class LiveChatLocalBridgeApi {
     return _post('/local/conversations/$conversationId/mark-read', const {});
   }
 
+  Future<Map<String, dynamic>> updateChatbotState({
+    required String accountId,
+    required String threadId,
+    required String mode,
+    String? reason,
+  }) {
+    final key = Uri.encodeComponent('$accountId:$threadId');
+    return _put('/local/conversations/$key/chatbot', {
+      'mode': mode,
+      if (reason != null) 'reason': reason,
+    });
+  }
+
   Future<Map<String, dynamic>> retryMessage(String messageId) {
     return _post('/local/messages/$messageId/retry', const {});
   }
@@ -195,9 +211,10 @@ class LiveChatLocalBridgeApi {
     String messageId,
     String reaction,
   ) {
-    return _post('/local/messages/$messageId/reactions', {
-      'reaction': reaction,
-    });
+    return _post(
+      '/local/messages/${Uri.encodeComponent(messageId)}/reactions',
+      {'reaction': reaction},
+    );
   }
 
   Future<Map<String, dynamic>> sendTyping({
@@ -255,9 +272,10 @@ class LiveChatLocalBridgeApi {
   }
 
   Future<Map<String, dynamic>> messagesAround(String messageId) async {
+    final encodedMessageId = Uri.encodeComponent(messageId);
     return _decodeResponse(
       await http
-          .get(Uri.parse('$baseUrl/local/messages/$messageId/around'))
+          .get(Uri.parse('$baseUrl/local/messages/$encodedMessageId/around'))
           .timeout(const Duration(seconds: 5)),
     );
   }
@@ -294,11 +312,31 @@ class LiveChatLocalBridgeApi {
     final data = response.body.isEmpty
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-    if (response.statusCode >= 200 && response.statusCode < 300) return data;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return _withAbsoluteMediaUrls(data) as Map<String, dynamic>;
+    }
     throw Exception(
       data['error'] ??
           data['message'] ??
           'Bridge error: ${response.statusCode}',
     );
+  }
+
+  Object? _withAbsoluteMediaUrls(Object? value) {
+    if (value is List) return value.map(_withAbsoluteMediaUrls).toList();
+    if (value is! Map) return value;
+    final result = <String, dynamic>{};
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      final item = entry.value;
+      if ((key == 'cacheUrl' || key == 'downloadUrl') &&
+          item is String &&
+          item.startsWith('/')) {
+        result[key] = '$baseUrl$item';
+      } else {
+        result[key] = _withAbsoluteMediaUrls(item);
+      }
+    }
+    return result;
   }
 }

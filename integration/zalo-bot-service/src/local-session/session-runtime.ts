@@ -35,6 +35,10 @@ import {
 import { ListenerHealthMonitor } from './listener-health.js';
 import { SessionCoordinator } from './session-coordinator.js';
 import { SessionEventHub } from './session-events.js';
+import {
+  startLocalChatbotRuntime,
+  stopLocalChatbotRuntime,
+} from '../chatbot/index.js';
 
 export const sessionEventHub = new SessionEventHub();
 
@@ -71,7 +75,9 @@ export const sessionCoordinator = new SessionCoordinator({
   startRuntime: async (credentials) => {
     stopAgentRunner();
     stopBackgroundSync();
+    stopLocalChatbotRuntime();
     await initializeZalo();
+    startLocalChatbotRuntime(credentials);
     startAgentRunner(credentials);
     startBackgroundSync();
     listenerHealthMonitor.start();
@@ -79,6 +85,7 @@ export const sessionCoordinator = new SessionCoordinator({
   stopRuntime: async () => {
     stopAgentRunner();
     stopBackgroundSync();
+    stopLocalChatbotRuntime();
     listenerHealthMonitor.stop();
     await stopZaloListener();
   },
@@ -93,6 +100,7 @@ setSyncRevocationHandler((reason) => sessionCoordinator.revoke(reason));
 export async function shutdownSessionRuntime(): Promise<void> {
   stopAgentRunner();
   stopBackgroundSync();
+  stopLocalChatbotRuntime();
   listenerHealthMonitor.stop();
   await stopZaloListener();
   sessionEventHub.close();
