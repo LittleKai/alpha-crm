@@ -24,6 +24,7 @@ import '../../features/groups/presentation/screens/leave_groups_screen_placehold
 import '../../features/groups/manage/presentation/screens/managed_groups_screen.dart';
 import '../../features/tasks/presentation/screens/crm_tasks_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/settings/presentation/screens/system_logs_screen.dart';
 import '../../features/auth/presentation/screens/crm_login_screen.dart';
 import '../../features/subscription/presentation/screens/subscription_screen.dart';
 import '../../features/devices/presentation/screens/device_pairing_screen.dart';
@@ -157,6 +158,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.settings,
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.systemLogs,
+            builder: (context, state) => const SystemLogsScreen(),
           ),
         ],
       ),

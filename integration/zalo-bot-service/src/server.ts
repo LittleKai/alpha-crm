@@ -28,6 +28,7 @@ import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workf
 import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
 import { handleLocalSessionRoute } from './local-session/local-session-api.js';
+import { saveClientLog, getClientLogs } from './agent/client-log.js';
 import {
   sessionCoordinator,
   sessionEventHub,
@@ -1015,6 +1016,30 @@ const server = createServer(async (req, res) => {
       json(res, result.success ? 200 : 500, result);
     } catch (err) {
       json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // POST /api/logs/client (Receive from Flutter)
+  if (method === 'POST' && url === '/api/logs/client') {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      saveClientLog(payload);
+      json(res, 200, { success: true });
+    } catch (err) {
+      json(res, 400, { error: 'Invalid log payload' });
+    }
+    return;
+  }
+
+  // GET /api/logs/client (Fetch for Flutter/Web CRM)
+  if (method === 'GET' && url === '/api/logs/client') {
+    try {
+      const logs = getClientLogs();
+      json(res, 200, { success: true, logs });
+    } catch (err) {
+      json(res, 500, { error: 'Failed to read logs' });
     }
     return;
   }

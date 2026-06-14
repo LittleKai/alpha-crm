@@ -135,6 +135,6 @@ export const config: Config = {
   crmAgentSecretPath: process.env['CRM_AGENT_SECRET_PATH'] || '.data/agent/device-secret.json',
   crmAgentMode: (process.env['CRM_AGENT_MODE'] as 'enabled' | 'disabled') || 'enabled',
   // Local-first Live Chat
-  localFirstLiveChat: parseBool(process.env['LOCAL_FIRST_LIVE_CHAT'], false),
+  localFirstLiveChat: parseBool(process.env['LOCAL_FIRST_LIVE_CHAT'], true),
   localChatDbPath: process.env['LOCAL_CHAT_DB_PATH'] || '.data/live-chat/live-chat.sqlite',
 };

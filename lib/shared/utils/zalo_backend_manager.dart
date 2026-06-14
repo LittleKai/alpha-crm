@@ -1,11 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 /// Quản lý tiến trình chạy ngầm Node.js Zalo Bot Service trên môi trường Desktop
 class ZaloBackendManager {
   static Process? _backendProcess;
   static bool _isRunning = false;
+  static int? _activePort;
+
+  /// Cổng đang hoạt động của backend (null nếu chưa dò được)
+  static int? get activePort => _activePort;
 
   /// Khởi động tiến trình chạy ngầm Zalo Bot Service
   static Future<bool> startBackend() async {
@@ -66,6 +71,7 @@ class ZaloBackendManager {
                 debugPrint(
                   "ZaloBackendManager (Development): Phát hiện cổng active manually: $activePort",
                 );
+                _activePort = activePort;
                 await _updateSettingsPort(activePort);
               }
             } catch (e) {
@@ -103,7 +109,6 @@ class ZaloBackendManager {
 
       // Dò tìm cổng active từ file port sinh ra bởi Node.js backend
       final portFile = _getActivePortFile(executablePath);
-      int? activePort;
 
       for (int i = 0; i < 25; i++) {
         // Chờ tối đa 5 giây (25 * 200ms)
@@ -112,7 +117,7 @@ class ZaloBackendManager {
             final content = await portFile.readAsString();
             final data = jsonDecode(content);
             if (data is Map && data['port'] is int) {
-              activePort = data['port'] as int;
+              _activePort = data['port'] as int;
               break;
             }
           } catch (_) {
@@ -122,11 +127,11 @@ class ZaloBackendManager {
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      if (activePort != null) {
+      if (_activePort != null) {
         debugPrint(
-          "ZaloBackendManager: Phát hiện cổng active của Backend: $activePort",
+          "ZaloBackendManager: Phát hiện cổng active của Backend: $_activePort",
         );
-        await _updateSettingsPort(activePort);
+        await _updateSettingsPort(_activePort!);
       } else {
         debugPrint(
           "ZaloBackendManager: Không tìm thấy cổng active của Backend. Sử dụng cổng mặc định.",
@@ -148,6 +153,55 @@ class ZaloBackendManager {
       _isRunning = false;
       return false;
     }
+  }
+
+  /// Chờ cho đến khi backend sẵn sàng phục vụ request (poll GET /health).
+  /// Trả về true nếu backend healthy, false nếu hết thời gian chờ.
+  /// [timeout] tổng thời gian chờ tối đa, mặc định 20 giây.
+  static Future<bool> waitUntilReady({
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+      return false;
+    }
+
+    final port = _activePort ?? 8787;
+    final healthUrl = Uri.parse('http://127.0.0.1:$port/health');
+    final deadline = DateTime.now().add(timeout);
+    final client = http.Client();
+
+    debugPrint(
+      'ZaloBackendManager: Đang chờ backend sẵn sàng tại $healthUrl...',
+    );
+
+    try {
+      while (DateTime.now().isBefore(deadline)) {
+        try {
+          final response = await client
+              .get(healthUrl)
+              .timeout(const Duration(seconds: 3));
+          if (response.statusCode == 200) {
+            final body = jsonDecode(response.body);
+            if (body is Map && body['status'] == 'ok') {
+              debugPrint(
+                'ZaloBackendManager: Backend đã sẵn sàng! (status: ok)',
+              );
+              return true;
+            }
+          }
+        } catch (_) {
+          // Backend chưa sẵn sàng, tiếp tục poll
+        }
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    } finally {
+      client.close();
+    }
+
+    debugPrint(
+      'ZaloBackendManager: Hết thời gian chờ backend sẵn sàng (${timeout.inSeconds}s).',
+    );
+    return false;
   }
 
   /// Xác định file lưu trữ cổng của Backend

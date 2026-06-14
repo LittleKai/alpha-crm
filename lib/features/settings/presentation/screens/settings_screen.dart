@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
@@ -605,13 +607,22 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Cài Đặt', style: AppTextStyles.pageTitle),
+              Text('Cài đặt', style: AppTextStyles.pageTitle),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Quản lý tài khoản Zalo và cấu hình ứng dụng',
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
               ),
             ],
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => context.push(AppRoutes.systemLogs),
+          icon: const Icon(Icons.bug_report_outlined),
+          label: const Text('Xem lỗi hệ thống'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.surface,
+            foregroundColor: AppColors.error,
           ),
         ),
       ],

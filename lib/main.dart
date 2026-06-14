@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -8,13 +9,33 @@ import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
+import 'shared/utils/app_logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
 
+  // Khởi tạo Logger (ghi log ra file + console)
+  final appLogger = AppLogger();
+  await appLogger.init();
+
+  // Bắt các lỗi liên quan đến UI/Framework của Flutter
+  FlutterError.onError = (FlutterErrorDetails details) {
+    appLogger.error('Flutter Framework Error', details.exception, details.stack);
+    FlutterError.presentError(details); // Hiển thị lỗi ra UI (nếu trong debug)
+  };
+
+  // Bắt các lỗi Async / Logic Dart nằm ngoài UI
+  PlatformDispatcher.instance.onError = (error, stack) {
+    appLogger.error('Dart Unhandled Exception', error, stack);
+    return true; // Ngăn không cho crash app nếu có thể
+  };
+
   // Tự động chạy Zalo Bot backend khi chạy trên máy tính (Desktop)
   await ZaloBackendManager.startBackend();
+
+  // Chờ backend sẵn sàng trước khi khởi động Flutter UI (tránh lỗi auth sync)
+  await ZaloBackendManager.waitUntilReady();
 
   runApp(const ProviderScope(child: MyApp()));
 }

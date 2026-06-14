@@ -173,7 +173,8 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       state = const CrmAuthState();
       return;
     }
-    await setTokenAndFetchUser(token);
+    // Token restoration: tolerate local backend being temporarily unavailable
+    await _authenticateToken(token, isRestoration: true);
   }
 
   Future<void> setTokenAndFetchUser(String token) async {
@@ -217,6 +218,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   Future<CrmLoginResult> _authenticateToken(
     String token, {
     bool forceReplace = false,
+    bool isRestoration = false,
   }) async {
     state = const CrmAuthState(isLoading: true);
 
@@ -244,12 +246,22 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         return CrmLoginDeviceConflict(localResult.device);
       }
       if (localResult is LocalAgentUnavailable) {
-        await _tokenStore.deleteToken();
-        final message =
-            'Không thể kết nối dịch vụ CRM trên máy này: '
-            '${localResult.message}';
-        state = CrmAuthState(errorText: message);
-        return CrmLoginFailure(message);
+        if (isRestoration) {
+          // Khi khôi phục phiên cũ, cho phép đăng nhập ngay cả khi backend
+          // chưa sẵn sàng. Retry đồng bộ local agent ở nền sau.
+          debugPrint(
+            '[CrmAuthNotifier] Local agent chưa sẵn sàng khi khôi phục phiên. '
+            'Cho phép đăng nhập và retry ở nền.',
+          );
+          _scheduleLocalAgentRetry(token, profile.user.id);
+        } else {
+          await _tokenStore.deleteToken();
+          final message =
+              'Không thể kết nối dịch vụ CRM trên máy này: '
+              '${localResult.message}';
+          state = CrmAuthState(errorText: message);
+          return CrmLoginFailure(message);
+        }
       }
     }
 
@@ -266,6 +278,39 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     );
     _subscribeToLocalEvents();
     return const CrmLoginSuccess();
+  }
+
+  /// Retry đồng bộ local agent ở nền khi token restoration thành công nhưng
+  /// backend chưa kịp khởi động. Thử tối đa 10 lần, mỗi lần cách 3 giây.
+  void _scheduleLocalAgentRetry(String token, String userId) {
+    int attempt = 0;
+    const maxAttempts = 10;
+    Timer.periodic(const Duration(seconds: 3), (timer) async {
+      attempt++;
+      if (!mounted || attempt > maxAttempts) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final result = await _localAgent.sync(
+          token: token,
+          userId: userId,
+        );
+        if (result is LocalAgentActive) {
+          debugPrint(
+            '[CrmAuthNotifier] Local agent đồng bộ thành công (lần $attempt).',
+          );
+          timer.cancel();
+        } else if (result is LocalAgentConflict) {
+          debugPrint(
+            '[CrmAuthNotifier] Local agent phát hiện conflict khi retry.',
+          );
+          timer.cancel();
+        }
+      } catch (_) {
+        // Tiếp tục retry
+      }
+    });
   }
 
   Future<_CloudProfile?> _loadCloudProfile() async {

@@ -34,4 +34,5 @@ class AppRoutes {
 
   // Settings
   static const String settings = '/settings';
+  static const String systemLogs = '/settings/system-logs';
 }

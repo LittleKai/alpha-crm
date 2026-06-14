@@ -1,6 +1,8 @@
 # Project Summary
 
-**Last Updated:** 2026-06-12T00:30:00+07:00
+**Last Updated:** 2026-06-15T12:00:00+07:00
+
+**Session:** #90 - Sửa 5 lỗi vận hành trong bản build Windows production. (1) Khắc phục tự văng về trang đăng nhập sau khi login thành công: `_authenticateToken` giờ chấp nhận `isRestoration` flag, khi khôi phục token cũ mà local backend chưa sẵn sàng thì cho phép đăng nhập trước và retry đồng bộ local agent ở nền (tối đa 10 lần, mỗi 3 giây). (2) Đảm bảo backend sẵn sàng trước khi Flutter khởi động: thêm `waitUntilReady()` vào `ZaloBackendManager` (poll `GET /health` tối đa 20 giây) và gọi ngay sau `startBackend()` trong `main.dart`. (3) Chặn mở file exe nhiều cửa sổ: thêm Windows Named Mutex `Global\AlphaCRM_SingleInstance` trong `main.cpp`, instance thứ hai sẽ đưa cửa sổ cũ lên foreground rồi thoát. (4) Cửa sổ luôn maximize khi khởi động: gọi `ShowWindow(SW_SHOWMAXIMIZED)` sau `Create()` trong `main.cpp`. (5) Sửa lỗi biên dịch `system_logs_screen.dart` (`AppSpacing.md` → `AppSpacing.m`, import path sai). Xác minh: `flutter test` pass 98/98; `flutter analyze` không error/warning, còn 70 info lint nền.
 
 **Session:** #89 - Xây dựng lại chatbot theo kiến trúc hybrid local-first. Bridge Windows lưu inbound vào SQLite, chống trùng/self/history, debounce 3 giây theo hội thoại, kiểm tra audience/handoff/rule/business hours, chỉ gọi cloud khi cần AI, gửi trực tiếp qua `zca-js`, phát SSE và đồng bộ audit idempotent. Cloud cung cấp config/AI/audit cho agent và nhận metadata-only mà không tự gửi reply. Gửi thủ công tự chuyển hội thoại sang `disabled_by_operator`; Flutter hiển thị trạng thái bridge, đồng bộ ngay sau thay đổi cấu hình và toggle chatbot qua local API. Xác minh: Node 87/87, backend CRM 14/14, Flutter focused 18/18.
 

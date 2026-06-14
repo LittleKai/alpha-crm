@@ -1,15 +1,6 @@
-- Trong backend có thông báo nhận tin nhắn từ group mà sao trên chat list không có?
-
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (link, 434 chars) in group "CỘNG ĐỒNG NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (text, 560 chars) in group "CỘNG ĐỒNG NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (image, 7 chars) in group "CỘNG ĐỒNG 
-NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (image, 7 chars) in group "CỘNG ĐỒNG 
-NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (image, 7 chars) in group "CỘNG ĐỒNG 
-NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-[PersonalZcaChannel - Nguyễn Anh Đức (1945245474113271229)] Message event from 672714419175034134 (image, 7 chars) in group "CỘNG ĐỒNG 
-NƠXH - NHÓM MUA BÁN, TRAO ĐỔI".
-
-- log sau có nghĩa là gì, có cần thiết không? 
-[PersonalZcaChannel - Kai (709694992560717870)] Typing event in threadId: 612284374168545160, isTyping: undefined
+Có các vấn đề trogn Trong file build ra như sau:
+- không biết vì lý do nào đó sau khi tôi đăng nhập thành công 1 lúc thì bị văng về lại trang đăng nhập.
+- Trong lần khởi động đầu tiên thì báo lỗi backend chưa chạy, cần đảm bảo khởi động backend rồi thì mới load đầy đủ flutter, cả trang đăng nhập và cả trang đã đăng nhập thành công.
+- Chặn không cho mở file exe nhiều cửa sổ, chỉ 1 active.
+- Khi khởi động file exe trên nền tảng window, cửa sổ luôn luôn ở chế độ maximize.
+- Check lại giúp tôi hiện tại backend trong file build khi mở file exe flutter được khởi động với đầy đủ như trong chế độ dev không?
