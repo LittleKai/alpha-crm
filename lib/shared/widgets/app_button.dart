@@ -70,7 +70,7 @@ class AppButton extends StatelessWidget {
       disabledForegroundColor: textCol,
       elevation: 0,
       minimumSize: Size(width ?? 80, height),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 8),
       shape: RoundedRectangleBorder(
         borderRadius: AppSpacing.borderRadiusS,
         side: borderSide,
@@ -100,24 +100,31 @@ class AppButton extends StatelessWidget {
             Icon(icon, size: 16, color: textCol),
             const SizedBox(width: AppSpacing.s),
           ],
-          Text(
-            text,
-            style: AppTextStyles.label.copyWith(
-              color: textCol,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.label.copyWith(
+                color: textCol,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
       );
     }
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ElevatedButton(
-        style: buttonStyle,
-        onPressed: isDisabled ? null : onPressed,
-        child: content,
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: 250, // max width to prevent overflow in Wrap and allow Flexible to work safely
+      ),
+      child: SizedBox(
+        width: width,
+        child: ElevatedButton(
+          style: buttonStyle,
+          onPressed: isDisabled ? null : onPressed,
+          child: content,
+        ),
       ),
     );
   }
