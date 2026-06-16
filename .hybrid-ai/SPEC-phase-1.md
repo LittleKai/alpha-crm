@@ -1,31 +1,113 @@
+# SPEC Phase 1 — Flutter: reliable backend launch (`ZaloBackendManager.startBackend`)
+
+## Goal
+
+Rework `ZaloBackendManager.startBackend()` so the production Windows build:
+1. **Reuses** an already-healthy backend instead of spawning a duplicate (reuse-or-replace).
+2. **Launches `node.exe` directly** (single killable process, no console flash) when the bundled
+   service is present, falling back to the existing `.cmd`/`.exe`/`.bat` launcher otherwise.
+3. **Reads `active-port.json` from the correct service directory** in every mode, so dynamic-port
+   detection actually works.
+
+This is the heart of the "backend won't start / starts on the wrong port" fix.
+
+## Context Pack (read this; do not explore further)
+
+**File to modify (only this file):**
+`D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\lib\shared\utils\zalo_backend_manager.dart`
+
+**Existing imports at the top of that file (already present — do not change):**
+```dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'app_logger.dart';
+```
 
-/// Quản lý tiến trình chạy ngầm Node.js Zalo Bot Service trên môi trường Desktop
-class ZaloBackendManager {
-  static Process? _backendProcess;
-  static bool _isRunning = false;
-  static int? _activePort;
+**Existing static fields (already present — keep them, you will ADD one more):**
+```dart
+static Process? _backendProcess;
+static bool _isRunning = false;
+static int? _activePort;
+```
 
+**Production on-disk layout (why the path fix matters):**
+- Launcher `zalo-bot-service.cmd` sits at `<Release>\zalo-bot-service.cmd`.
+- The backend itself is staged at `<Release>\zalo-bot-service\` containing `node.exe`,
+  `dist\server.js`, and `node_modules\`.
+- The running backend writes its chosen port to `<Release>\zalo-bot-service\.data\active-port.json`
+  (this is correct and unchanged on the backend side).
+- The OLD Flutter code read `<Release>\.data\active-port.json` (wrong folder) — that is the bug.
+
+**Backend `/health` response shape (used by the reuse probe):** HTTP 200 with a JSON body whose
+`status` field equals `"ok"`. Example: `{ "status": "ok", "version": "0.2.0", ... }`.
+
+**`_updateSettingsPort(int port)` already exists** in this file and writes
+`zalo_settings.json` → `{ "zaloBackendBaseUrl": "http://127.0.0.1:<port>" }`. Reuse it as-is; do
+not modify it.
+
+**Dev fallback branch (must be preserved):** When no launcher and no bundled `node.exe` are
+found and `kDebugMode` is true, the old code reads a manually-run backend's port file at
+`<cwd>\integration\zalo-bot-service\.data\active-port.json`. Keep this behavior.
+
+## No-Placeholder Contract
+
+This phase must ship working behavior. No TODO-only code, no empty methods, no mock returns.
+
+## Deferred Work
+
+None.
+
+## Steps
+
+### Step 1 — Add a static field to remember the backend's working directory
+
+**File:** `lib/shared/utils/zalo_backend_manager.dart`
+**Location anchor:** Immediately after the existing line `static int? _activePort;`.
+**Action:** Add one static field:
+```dart
   /// Thư mục làm việc của backend đang chạy (chứa dist/ và .data/).
   /// Dùng để đọc đúng .data/active-port.json. Null khi chạy ở chế độ dev thủ công.
   static String? _backendWorkingDir;
+```
+**Do NOT:** rename `_activePort` or any existing field.
 
-  /// Đặt true khi tiến trình backend thoát sớm (dùng để dừng chờ readiness).
-  static bool _backendExited = false;
+### Step 2 — Add a private `/health` probe helper
 
-  /// Thông điệp lỗi khởi động gần nhất (để UI/log tham chiếu). Null nếu không có.
-  static String? _lastStartupError;
+**File:** `lib/shared/utils/zalo_backend_manager.dart`
+**Location anchor:** New method, place it directly **above** the existing
+`static File _getActivePortFile(...)` method.
+**Action:** Add:
+```dart
+  /// Kiểm tra nhanh xem đã có backend khỏe mạnh đang lắng nghe ở [port] chưa.
+  static Future<bool> _probeHealth(int port) async {
+    final client = http.Client();
+    try {
+      final response = await client
+          .get(Uri.parse('http://127.0.0.1:$port/health'))
+          .timeout(const Duration(seconds: 2));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body is Map && body['status'] == 'ok';
+      }
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+```
+**Do NOT:** add new imports (`http`, `dart:convert` are already imported).
 
-  /// Lỗi khởi động backend gần nhất (đọc-only cho UI/log).
-  static String? get lastStartupError => _lastStartupError;
+### Step 3 — Replace the body of `startBackend()`
 
-  /// Cổng đang hoạt động của backend (null nếu chưa dò được)
-  static int? get activePort => _activePort;
-
+**File:** `lib/shared/utils/zalo_backend_manager.dart`
+**Location anchor:** The entire existing method `static Future<bool> startBackend() async { ... }`
+(from its signature through its closing brace). Replace the whole method with the version below.
+The early-return guards and the dev-fallback block are reproduced inside — copy it verbatim.
+**Action:** Replace `startBackend()` with exactly this:
+```dart
   /// Khởi động tiến trình chạy ngầm Zalo Bot Service
   static Future<bool> startBackend() async {
     // 1. Chỉ thực thi trên môi trường Desktop (Windows, macOS, Linux)
@@ -67,14 +149,7 @@ class ZaloBackendManager {
         for (final dir in searchDirs) {
           final candidateServiceDir = '$dir${sep}zalo-bot-service';
           final candidateNode = '$candidateServiceDir${sep}node.exe';
-          // Bản đóng gói chạy bundle esbuild (server.cjs); dev fallback dùng server.js.
-          final candidateServerCjs =
-              '$candidateServiceDir${sep}dist${sep}server.cjs';
-          final candidateServerJs =
-              '$candidateServiceDir${sep}dist${sep}server.js';
-          final candidateServer = await File(candidateServerCjs).exists()
-              ? candidateServerCjs
-              : candidateServerJs;
+          final candidateServer = '$candidateServiceDir${sep}dist${sep}server.js';
           if (await File(candidateNode).exists() &&
               await File(candidateServer).exists()) {
             nodeExePath = candidateNode;
@@ -206,16 +281,10 @@ class ZaloBackendManager {
 
       // 5. Lắng nghe output backend để tiện debug.
       _backendProcess!.stdout.listen((data) {
-        final line = String.fromCharCodes(data).trim();
-        if (line.isEmpty) return;
-        debugPrint("ZaloBot-Log: $line");
-        AppLogger().info("ZaloBot: $line");
+        debugPrint("ZaloBot-Log: ${String.fromCharCodes(data).trim()}");
       });
       _backendProcess!.stderr.listen((data) {
-        final line = String.fromCharCodes(data).trim();
-        if (line.isEmpty) return;
-        debugPrint("ZaloBot-Error-Log: $line");
-        AppLogger().error("ZaloBot stderr: $line");
+        debugPrint("ZaloBot-Error-Log: ${String.fromCharCodes(data).trim()}");
       });
 
       return true;
@@ -225,88 +294,17 @@ class ZaloBackendManager {
       return false;
     }
   }
+```
+**Do NOT:** change `waitUntilReady`, `stopBackend`, or `_updateSettingsPort` in this phase
+(those are Phase 2). Do NOT remove the dev-fallback block. Do NOT add packages.
 
-  /// Chờ cho đến khi backend sẵn sàng phục vụ request (poll GET /health).
-  /// Trả về true nếu backend healthy, false nếu hết thời gian chờ hoặc tiến trình đã thoát.
-  static Future<bool> waitUntilReady({
-    Duration timeout = const Duration(seconds: 20),
-  }) async {
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
-      return false;
-    }
+### Step 4 — Replace `_getActivePortFile` to use the tracked working dir
 
-    // Liveness: nếu tiến trình backend thoát sớm thì dừng chờ ngay.
-    _backendExited = false;
-    _backendProcess?.exitCode.then((code) {
-      _backendExited = true;
-      _isRunning = false;
-      _lastStartupError = 'Tiến trình backend đã thoát sớm với mã $code.';
-      AppLogger().error('ZaloBackendManager: $_lastStartupError');
-    });
-
-    final port = _activePort ?? 8787;
-    final healthUrl = Uri.parse('http://127.0.0.1:$port/health');
-    final deadline = DateTime.now().add(timeout);
-    final client = http.Client();
-
-    debugPrint(
-      'ZaloBackendManager: Đang chờ backend sẵn sàng tại $healthUrl...',
-    );
-
-    try {
-      while (DateTime.now().isBefore(deadline)) {
-        if (_backendExited) {
-          debugPrint('ZaloBackendManager: Backend đã thoát sớm, dừng chờ.');
-          return false;
-        }
-        try {
-          final response = await client
-              .get(healthUrl)
-              .timeout(const Duration(seconds: 3));
-          if (response.statusCode == 200) {
-            final body = jsonDecode(response.body);
-            if (body is Map && body['status'] == 'ok') {
-              debugPrint(
-                'ZaloBackendManager: Backend đã sẵn sàng! (status: ok)',
-              );
-              return true;
-            }
-          }
-        } catch (_) {
-          // Backend chưa sẵn sàng, tiếp tục poll
-        }
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-    } finally {
-      client.close();
-    }
-
-    _lastStartupError =
-        'Hết thời gian chờ backend sẵn sàng (${timeout.inSeconds}s).';
-    debugPrint('ZaloBackendManager: $_lastStartupError');
-    AppLogger().warning('ZaloBackendManager: $_lastStartupError');
-    return false;
-  }
-
-  /// Kiểm tra nhanh xem đã có backend khỏe mạnh đang lắng nghe ở [port] chưa.
-  static Future<bool> _probeHealth(int port) async {
-    final client = http.Client();
-    try {
-      final response = await client
-          .get(Uri.parse('http://127.0.0.1:$port/health'))
-          .timeout(const Duration(seconds: 2));
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        return body is Map && body['status'] == 'ok';
-      }
-      return false;
-    } catch (_) {
-      return false;
-    } finally {
-      client.close();
-    }
-  }
-
+**File:** `lib/shared/utils/zalo_backend_manager.dart`
+**Location anchor:** The entire existing method
+`static File _getActivePortFile(String? executablePath) { ... }`.
+**Action:** Replace it (note the signature loses its parameter) with:
+```dart
   /// Xác định file lưu cổng của Backend: <serviceDir>/.data/active-port.json.
   /// Khi chạy dev thủ công (không có _backendWorkingDir) thì trỏ về
   /// integration/zalo-bot-service/.data/active-port.json dưới thư mục hiện hành.
@@ -321,51 +319,36 @@ class ZaloBackendManager {
       '$currentDir${sep}integration${sep}zalo-bot-service$sep.data${sep}active-port.json',
     );
   }
+```
+**Do NOT:** leave any remaining call to `_getActivePortFile(...)` with an argument — Step 3 already
+calls it with no argument in both places. Verify there are zero callers passing an argument.
 
-  /// Cập nhật cổng Backend vào file zalo_settings.json
-  static Future<void> _updateSettingsPort(int port) async {
-    try {
-      final settingsFile = File('zalo_settings.json');
-      Map<String, dynamic> jsonMap = {};
-      if (await settingsFile.exists()) {
-        final content = await settingsFile.readAsString();
-        jsonMap = jsonDecode(content) as Map<String, dynamic>;
-      }
+## Validation Plan
 
-      jsonMap['zaloBackendBaseUrl'] = 'http://127.0.0.1:$port';
+Run from `D:\Dev\NodeJS\alpha-studio\tools\alpha-crm`:
 
-      final content = const JsonEncoder.withIndent('  ').convert(jsonMap);
-      await settingsFile.writeAsString(content);
-      debugPrint(
-        "ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend: http://127.0.0.1:$port",
-      );
-    } catch (e) {
-      debugPrint(
-        "ZaloBackendManager: Lỗi cập nhật cổng vào zalo_settings.json: $e",
-      );
-    }
-  }
+```bash
+# 1. Static analysis — must be clean (no new error/warning)
+flutter analyze
 
-  /// Tắt tiến trình chạy ngầm khi đóng ứng dụng (diệt cả cây con để tránh node.exe mồ côi).
-  static void stopBackend() {
-    if (_backendProcess != null && _isRunning) {
-      debugPrint(
-        "ZaloBackendManager: Đang ngắt tiến trình chạy ngầm backend...",
-      );
-      final pid = _backendProcess!.pid;
-      // Trên Windows, kill() chỉ giết tiến trình trực tiếp. Khi chạy qua launcher .cmd,
-      // node.exe là tiến trình con và sẽ mồ côi (giữ cổng 8787). taskkill /T /F diệt cả cây.
-      if (Platform.isWindows) {
-        try {
-          Process.runSync('taskkill', ['/PID', '$pid', '/T', '/F']);
-        } catch (e) {
-          debugPrint("ZaloBackendManager: taskkill thất bại: $e");
-        }
-      }
-      _backendProcess!.kill();
-      _backendProcess = null;
-      _isRunning = false;
-      debugPrint("ZaloBackendManager: Đã ngắt tiến trình backend hoàn toàn.");
-    }
-  }
-}
+# 2. Confirm no stale argument-call to the renamed helper remains
+rg "_getActivePortFile\(" lib/shared/utils/zalo_backend_manager.dart
+#    Expect: only calls with empty parentheses _getActivePortFile()
+
+# 3. Confirm the direct-launch and reuse branches exist
+rg -n "Process.start" lib/shared/utils/zalo_backend_manager.dart   # expect node.exe + launcher branches
+rg -n "_probeHealth|_backendWorkingDir" lib/shared/utils/zalo_backend_manager.dart
+
+# 4. Placeholder scan on the touched file
+rg -n "TODO|FIXME|NotImplemented|throw UnimplementedError|placeholder" lib/shared/utils/zalo_backend_manager.dart
+#    Expect: no matches
+```
+
+Behavioral verification (manual, done in the final SPEC verification after Phase 2, because it
+needs a packaged bundle / running app): launch the Windows app, confirm the backend is reached on
+the detected port even when 8787 is pre-occupied, and that a second app launch reuses the running
+backend rather than failing.
+
+## Dependencies
+
+None.

@@ -36,11 +36,31 @@ void main() async {
     return true; // Ngăn không cho crash app nếu có thể
   };
 
-  // Tự động chạy Zalo Bot backend khi chạy trên máy tính (Desktop)
-  await ZaloBackendManager.startBackend();
-
-  // Chờ backend sẵn sàng trước khi khởi động Flutter UI (tránh lỗi auth sync)
-  await ZaloBackendManager.waitUntilReady();
+  // Tự động chạy Zalo Bot backend trên Desktop và chờ sẵn sàng.
+  // Thử tối đa 2 lần để chịu được khởi động chậm hoặc lỗi tạm thời.
+  bool backendReady = false;
+  for (int attempt = 1; attempt <= 2 && !backendReady; attempt++) {
+    final started = await ZaloBackendManager.startBackend();
+    if (!started) {
+      appLogger.warning(
+        'Backend chưa khởi động được (lần $attempt/2). '
+        '${ZaloBackendManager.lastStartupError ?? ''}',
+      );
+      continue;
+    }
+    backendReady = await ZaloBackendManager.waitUntilReady();
+    if (!backendReady) {
+      appLogger.warning(
+        'Backend khởi động nhưng chưa sẵn sàng (lần $attempt/2).',
+      );
+    }
+  }
+  if (!backendReady) {
+    appLogger.error(
+      'Không thể đưa backend vào trạng thái sẵn sàng sau 2 lần thử. '
+      'Ứng dụng vẫn tiếp tục; các tính năng Zalo cục bộ có thể chưa hoạt động.',
+    );
+  }
 
   runApp(const ProviderScope(child: MyApp()));
 }

@@ -332,13 +332,25 @@ export class LocalChatStore {
       .get(accountId, threadId) as { id: string } | undefined;
 
     if (existing) {
-      // Update display info if changed
+      // Only refresh display info when the incoming value is non-empty. Outbound
+      // messages (chatbot/operator replies) carry empty senderName/avatar, so a
+      // blind UPDATE would wipe the name/avatar that an inbound message set.
       this.db
         .prepare(
-          `UPDATE conversations SET displayName = ?, avatarUrl = ?, updatedAt = ?
+          `UPDATE conversations
+           SET displayName = CASE WHEN ? != '' THEN ? ELSE displayName END,
+               avatarUrl   = CASE WHEN ? != '' THEN ? ELSE avatarUrl END,
+               updatedAt = ?
            WHERE id = ?`,
         )
-        .run(displayName || '', avatarUrl || '', new Date().toISOString(), existing.id);
+        .run(
+          displayName || '',
+          displayName || '',
+          avatarUrl || '',
+          avatarUrl || '',
+          new Date().toISOString(),
+          existing.id,
+        );
       return existing.id;
     }
 
@@ -1099,7 +1111,29 @@ export class LocalChatStore {
       .all(...params, limit, offset) as any[];
 
     return {
-      conversations: rows.map((r) => this._mapConversation(r)),
+      conversations: rows.map((r) => {
+        const conv = this._mapConversation(r);
+        // Existing 1:1 conversations created/overwritten by an outbound message
+        // may have an empty name/avatar. Fall back to the most recent inbound
+        // sender so the inbox, header and message avatars render correctly.
+        if (conv.threadType !== 'group' &&
+            (!conv.displayName || !conv.avatarUrl)) {
+          const sender = this.db
+            .prepare(
+              `SELECT senderName, senderAvatarUrl FROM messages
+               WHERE conversationId = ? AND direction = 'inbound' AND senderName != ''
+               ORDER BY createdAt DESC LIMIT 1`,
+            )
+            .get(conv.id) as
+            | { senderName?: string; senderAvatarUrl?: string }
+            | undefined;
+          if (sender) {
+            if (!conv.displayName) conv.displayName = sender.senderName || '';
+            if (!conv.avatarUrl) conv.avatarUrl = sender.senderAvatarUrl || '';
+          }
+        }
+        return conv;
+      }),
       total,
     };
   }

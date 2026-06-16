@@ -50,6 +50,32 @@ class LiveChatLocalBridgeApi {
     }
   }
 
+  Future<Map<String, dynamic>> getLocalConversations({
+    String? accountId,
+    String? search,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/local/conversations').replace(
+        queryParameters: {
+          'limit': limit.toString(),
+          'offset': offset.toString(),
+          if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
+          if (search != null && search.isNotEmpty) 'search': search,
+        },
+      );
+
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      }
+      throw Exception('Bridge error: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Failed to reach local bridge: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> sendLocalMessage(
     String conversationId,
     String content, {

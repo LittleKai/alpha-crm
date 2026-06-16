@@ -224,8 +224,16 @@ class Conversation {
         : const [];
     final name = (json['displayName'] ?? json['threadId'] ?? 'Unknown')
         .toString();
+    // Prefer the cloud conversation id as the stable identity so cloud-keyed
+    // operations (updateConversation tags/notes, cloud markRead) keep working
+    // when the inbox is sourced from the local bridge. Fall back to the local
+    // bridge id (or cloud _id) when the conversation has not synced to cloud.
+    final cloudConversationId = (json['cloudConversationId'] ?? '').toString();
+    final resolvedId = cloudConversationId.isNotEmpty
+        ? cloudConversationId
+        : (json['_id'] ?? json['id'] ?? '').toString();
     return Conversation(
-      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      id: resolvedId,
       accountId: (json['accountId'] ?? '').toString(),
       threadId: (json['threadId'] ?? '').toString(),
       threadType: (json['threadType'] ?? 'user').toString(),
@@ -465,7 +473,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       final selected = _selectedAfterRefresh(conversations);
       state = state.copyWith(
         conversations: conversations,
-        selectedConversation: conversations.isEmpty ? null : selected,
+        selectedConversation: selected.id.isEmpty ? null : selected,
         isLoading: false,
         isRefreshingConversations: false,
       );
@@ -485,7 +493,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
 
   Conversation _selectedAfterRefresh(List<Conversation> conversations) {
     final current = state.selectedConversation;
-    if (current != null) {
+    if (current != null && current.id.isNotEmpty) {
       for (final conversation in conversations) {
         if (conversation.id == current.id) {
           return conversation.copyWith(
@@ -495,6 +503,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           );
         }
       }
+      // The open conversation is not in this (paginated/filtered) batch. Keep it
+      // selected instead of silently jumping to a different conversation.
+      return current;
     }
     return conversations.isEmpty ? _emptyConversation : conversations.first;
   }
@@ -1279,9 +1290,17 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       state = state.copyWith(realtimeConnected: true);
       return;
     }
+    if (event.type == 'conversation.chatbot_state') {
+      _applyChatbotStateEvent(event);
+      state = state.copyWith(realtimeConnected: true);
+      return;
+    }
     final selected = state.selectedConversation;
     if (selected == null ||
-        (event.threadId.isNotEmpty && event.threadId != selected.threadId)) {
+        (event.threadId.isNotEmpty && event.threadId != selected.threadId) ||
+        (event.accountId.isNotEmpty &&
+            selected.accountId.isNotEmpty &&
+            event.accountId != selected.accountId)) {
       return;
     }
     if (event.type == 'typing.started' || event.type == 'typing.stopped') {
@@ -1311,6 +1330,24 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       final current = state.selectedConversation;
       if (current != null) loadMessages(current.id);
     });
+  }
+
+  void _applyChatbotStateEvent(LiveChatEvent event) {
+    final enabled = event.data['effectiveEnabled'] == true ||
+        event.data['mode'] == 'enabled';
+    bool matches(Conversation c) =>
+        c.threadId == event.threadId &&
+        (event.accountId.isEmpty || c.accountId == event.accountId);
+    final selected = state.selectedConversation;
+    final updatedSelected = selected != null && matches(selected)
+        ? selected.copyWith(chatbotEnabled: enabled)
+        : selected;
+    state = state.copyWith(
+      selectedConversation: updatedSelected,
+      conversations: state.conversations
+          .map((c) => matches(c) ? c.copyWith(chatbotEnabled: enabled) : c)
+          .toList(),
+    );
   }
 
   void _replaceSelected(Conversation updated) {
@@ -1371,11 +1408,15 @@ String _stringFrom(Map<String, dynamic> json, List<String> keys) {
 }
 
 Map<String, dynamic>? _mapFromJsonField(Object? value) {
-  if (value is Map) return Map<String, dynamic>.from(value);
+  // Treat an empty object as "absent" so callers (e.g. the reply-quote box,
+  // which renders whenever quote != null) don't fire on a `{}` placeholder.
+  if (value is Map) return value.isEmpty ? null : Map<String, dynamic>.from(value);
   if (value is String && value.isNotEmpty) {
     try {
       final decoded = jsonDecode(value);
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      if (decoded is Map) {
+        return decoded.isEmpty ? null : Map<String, dynamic>.from(decoded);
+      }
     } catch (_) {}
   }
 
@@ -1403,6 +1444,31 @@ String _formatConversationPreview(
   String? messageType,
   String? direction,
 }) {
+  // The local bridge stores lastMessagePreview as an envelope
+  // {"direction","messageType","content"}. Unwrap it once so we format the real
+  // text/type/direction instead of rendering the raw JSON string. Structured
+  // payloads (sticker/file/link JSON inside `content`) fall through to the typed
+  // handling below via the carried messageType.
+  final envelope = rawMessage.trim();
+  if (envelope.startsWith('{') && envelope.endsWith('}')) {
+    try {
+      final decoded = jsonDecode(envelope);
+      if (decoded is Map &&
+          decoded['isDeleted'] != true &&
+          decoded.containsKey('content') &&
+          (decoded.containsKey('direction') ||
+              decoded.containsKey('messageType'))) {
+        return _formatConversationPreview(
+          decoded['content']?.toString() ?? '',
+          messageType:
+              (messageType ?? decoded['messageType'] ?? decoded['contentType'])
+                  ?.toString(),
+          direction: (direction ?? decoded['direction'])?.toString(),
+        );
+      }
+    } catch (_) {}
+  }
+
   final prefix = direction == 'outbound' ? 'Bạn: ' : '';
   final normalizedType = messageType?.trim().toLowerCase();
   final typedPreview = _previewForType(normalizedType);

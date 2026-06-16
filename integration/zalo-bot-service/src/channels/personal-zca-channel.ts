@@ -975,11 +975,16 @@ async function loadCredentialsFile(filePath: string): Promise<void> {
   }
 }
 
+// Tracks accounts whose inbox has been bootstrapped from Zalo recent history
+// (once per process lifetime) so a reconnect does not re-trigger the sync.
+const recentInboxBootstrapDone = new Set<string>();
+
 async function startListenerForInstance(instance: ZaloAccountInstance): Promise<void> {
   if (instance.listenerRunning) return;
   try {
     const listener = instance.api.listener;
     if (listener) {
+      listener.removeAllListeners("connected");
       listener.removeAllListeners("friend_event");
       listener.removeAllListeners("message");
       listener.removeAllListeners("undo");
@@ -1199,6 +1204,26 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         }
       });
 
+      listener.on("connected", () => {
+        console.log(`[PersonalZcaChannel - ${instance.label}] Listener connected.`);
+        // Bootstrap the inbox once per process: ask Zalo for the most recent
+        // messages across all user and group threads. The "old_messages" handler
+        // above upserts them (with name/avatar enrichment), so conversations
+        // populate like a messenger inbox instead of appearing only after a new
+        // live message arrives. Idempotent (dedup by providerMessageId).
+        if (recentInboxBootstrapDone.has(instance.uId)) return;
+        recentInboxBootstrapDone.add(instance.uId);
+        setTimeout(() => {
+          try {
+            (listener as any).requestOldMessages(ThreadType.User, null);
+            (listener as any).requestOldMessages(ThreadType.Group, null);
+            console.log(`[PersonalZcaChannel - ${instance.label}] Requested recent history for inbox bootstrap.`);
+          } catch (err) {
+            console.warn(`[PersonalZcaChannel - ${instance.label}] Inbox bootstrap request failed:`, err);
+          }
+        }, 2000);
+      });
+
       listener.start();
       instance.listenerRunning = true;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener started.`);
@@ -1225,6 +1250,8 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
       listener.removeAllListeners("reaction");
       listener.removeAllListeners("message_deleted");
       listener.removeAllListeners("delete");
+      listener.removeAllListeners("connected");
+      recentInboxBootstrapDone.delete(instance.uId);
       instance.listenerRunning = false;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
     }

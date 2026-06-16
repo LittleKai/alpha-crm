@@ -46,6 +46,73 @@ void main() {
     },
   );
 
+  test('Conversation.fromJson prefers cloudConversationId as the id', () {
+    final synced = Conversation.fromJson({
+      'id': 'local-uuid-1',
+      'cloudConversationId': 'cloud-conv-1',
+      'accountId': 'acc-1',
+      'threadId': 'thread-1',
+      'displayName': 'Le Vuong',
+    });
+    final unsynced = Conversation.fromJson({
+      'id': 'local-uuid-2',
+      'cloudConversationId': '',
+      'accountId': 'acc-1',
+      'threadId': 'thread-2',
+      'displayName': 'Le Vuong',
+    });
+
+    expect(synced.id, 'cloud-conv-1');
+    expect(unsynced.id, 'local-uuid-2');
+  });
+
+  test('ChatMessage.fromJson treats an empty quote object as no quote', () {
+    final noQuote = ChatMessage.fromJson({
+      '_id': 'msg-q1',
+      'senderId': 'user-1',
+      'senderName': 'Le Vuong',
+      'content': 'Bao nhieu',
+      'direction': 'inbound',
+      'quoteJson': '{}',
+      'createdAt': '2026-06-16T12:14:00.000Z',
+    });
+    final withQuote = ChatMessage.fromJson({
+      '_id': 'msg-q2',
+      'senderId': 'user-1',
+      'senderName': 'Le Vuong',
+      'content': 'Tra loi',
+      'direction': 'inbound',
+      'quoteJson': '{"content":"Tin nhan goc"}',
+      'createdAt': '2026-06-16T12:15:00.000Z',
+    });
+
+    expect(noQuote.quote, isNull);
+    expect(withQuote.quote, isNotNull);
+    expect(withQuote.quote!['content'], 'Tin nhan goc');
+  });
+
+  test('Conversation.fromJson unwraps the bridge lastMessagePreview envelope', () {
+    final textPreview = Conversation.fromJson({
+      'id': 'local-uuid-3',
+      'accountId': 'acc-1',
+      'threadId': 'thread-3',
+      'displayName': 'Tan Thanh',
+      'lastMessagePreview':
+          '{"direction":"outbound","messageType":"text","content":"Da chao ban"}',
+    });
+    final stickerPreview = Conversation.fromJson({
+      'id': 'local-uuid-4',
+      'accountId': 'acc-1',
+      'threadId': 'thread-4',
+      'displayName': 'Tan Thanh',
+      'lastMessagePreview':
+          '{"direction":"inbound","messageType":"sticker","content":"{\\"id\\":34840}"}',
+    });
+
+    expect(textPreview.lastMessage, 'Da chao ban');
+    expect(stickerPreview.lastMessage, 'Sticker');
+  });
+
   test('ChatMessage.fromJson reads backend messageType alias', () {
     final message = ChatMessage.fromJson({
       '_id': 'msg-media',
@@ -243,6 +310,25 @@ void main() {
       expect(notifier.state.errorMessage, contains('Thả cảm xúc thất bại'));
     },
   );
+
+  test(
+    'keeps the open conversation selected when it drops out of a silent reload',
+    () async {
+      final repository = _FakeLiveChatRepository();
+      final notifier = LiveChatNotifier(repository);
+      await Future<void>.delayed(Duration.zero);
+
+      await notifier.loadConversations(loadSelectedMessages: true);
+      expect(notifier.state.selectedConversation?.id, 'conv-1');
+
+      // Next reload returns a different batch that excludes conv-1.
+      repository.returnAlternateOnly = true;
+      await notifier.loadConversations(silent: true);
+
+      // The open conversation must NOT jump to conv-2.
+      expect(notifier.state.selectedConversation?.id, 'conv-1');
+    },
+  );
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
@@ -259,6 +345,7 @@ class _FakeLiveChatRepository extends LiveChatRepository {
   bool failNextSend = false;
   bool failReaction = false;
   bool includeGroupConversation = false;
+  bool returnAlternateOnly = false;
   String? retriedMessageId;
 
   final conversation = Conversation(
@@ -315,6 +402,22 @@ class _FakeLiveChatRepository extends LiveChatRepository {
     int limit = 30,
   }) async {
     getConversationsCalls += 1;
+    if (returnAlternateOnly) {
+      return {
+        'success': true,
+        'data': <Map<String, dynamic>>[
+          {
+            '_id': 'conv-2',
+            'accountId': 'acc-1',
+            'threadId': 'thread-2',
+            'threadType': 'user',
+            'displayName': 'Khach hang 2',
+            'lastMessagePreview': 'Moi',
+            'updatedAt': '2026-06-03T09:00:00.000Z',
+          },
+        ],
+      };
+    }
     final data = <Map<String, dynamic>>[
       {
         '_id': conversation.id,

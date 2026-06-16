@@ -34,6 +34,41 @@ class LiveChatRepository {
     String? search,
     int limit = 30,
   }) async {
+    final cacheKey = 'conversations_${accountId}_$search';
+
+    // Local-first: the bridge is the source of truth for inbox ordering and
+    // per-conversation chatbot state. Gate this on the SAME condition as
+    // getMessages/sendMessage (_preferLocalZaloActions || localFirstEnabled) so
+    // the inbox id space matches the message source. If the inbox came from the
+    // cloud while messages load from the bridge, a clicked conversation's cloud
+    // id may not resolve in the bridge (empty cloudConversationId) and the
+    // message panel renders blank. Use a short cache so toggles/new
+    // conversations surface quickly.
+    if (_preferLocalZaloActions || localFirstEnabled) {
+      try {
+        final bridgeData = await localApi.getLocalConversations(
+          accountId: accountId,
+          search: search,
+          limit: limit,
+        );
+        if (bridgeData['success'] == true && bridgeData['data'] is List) {
+          final rawList = (bridgeData['data'] as List)
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+          await cache.saveConversations(
+            cacheKey,
+            rawList,
+            const Duration(seconds: 3),
+          );
+          return {'success': true, 'data': rawList};
+        }
+      } catch (_) {
+        // Bridge offline — fall through to the cloud inbox below.
+      }
+    }
+
+    // Cloud fallback (also used when local-first is disabled).
     final query = <String, String>{'limit': limit.toString()};
     if (accountId != null && accountId.isNotEmpty) {
       query['accountId'] = accountId;
@@ -46,15 +81,11 @@ class LiveChatRepository {
       queryParameters: query,
     ).toString();
 
-    final cacheKey = 'conversations_${accountId}_$search';
-
-    // Check fresh cache first
     final cached = await cache.getFreshConversations(cacheKey);
     if (cached != null) {
       return {'success': true, 'data': cached};
     }
 
-    // Fallback to cloud
     try {
       final response = await CrmCloudApi.get(path);
       if (response['success'] == true && response['data'] is List) {
@@ -68,9 +99,7 @@ class LiveChatRepository {
       }
       return response;
     } catch (e) {
-      // If offline, return anything we have in cache regardless of freshness, marked as offline
       await cache.getFreshConversations(cacheKey);
-      // Actually cache doesn't expose stale. It's okay.
       rethrow;
     }
   }
@@ -269,8 +298,18 @@ class LiveChatRepository {
     });
   }
 
-  Future<Map<String, dynamic>> markRead(String conversationId) {
-    if (localFirstEnabled) return localApi.markRead(conversationId);
+  Future<Map<String, dynamic>> markRead(String conversationId) async {
+    // Route through the bridge whenever it is the inbox/message source so a
+    // local conversation id resolves (the bridge mark-read accepts cloud OR
+    // local id). Fall back to cloud only when the bridge is offline and we are
+    // not in strict local-first mode.
+    if (_preferLocalZaloActions || localFirstEnabled) {
+      try {
+        return await localApi.markRead(conversationId);
+      } catch (_) {
+        if (localFirstEnabled) rethrow;
+      }
+    }
     return CrmCloudApi.post('/crm/conversations/$conversationId/read', {});
   }
 

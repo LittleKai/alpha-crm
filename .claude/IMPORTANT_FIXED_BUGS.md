@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-12 +07:00
+**Last Updated:** 2026-06-16 +07:00
 
 ---
 
@@ -28,6 +28,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-16 - esbuild CJS bundle làm `import.meta.url` rỗng → vỡ `projectRoot`/active-port
+
+- Symptom: Khi bundle backend Node sidecar thành 1 file CJS (`dist/server.cjs`) bằng esbuild, server vẫn boot nhưng `projectRoot` sai → `.data/active-port.json` ghi nhầm chỗ, làm Flutter không dò được cổng (lặp lại đúng class lỗi "backend khởi động không đúng").
+- Root cause: `src/config.ts` tính `projectRoot` từ `fileURLToPath(import.meta.url)`. Ở output `format: 'cjs'`, `import.meta` không tồn tại nên esbuild thay bằng giá trị **rỗng** (cảnh báo `empty-import-meta`), khiến `fileURLToPath('')` cho đường dẫn sai.
+- Fix summary: Trong `scripts/bundle.mjs` thêm `banner.js = "const import_meta_url = require('url').pathToFileURL(__filename).href;"` và `define: { 'import.meta.url': 'import_meta_url' }`. CJS luôn có `__filename`, nên `import.meta.url` trỏ về chính file bundle → `projectRoot` = thư mục service như bản `dist/server.js` chưa bundle.
+- Rule: Mọi lần bundle code ESM dùng `import.meta.url`/`import.meta.dirname` sang CJS bằng esbuild, PHẢI shim `import.meta` qua banner + define, hoặc xuất ESM (`format:'esm'`). Đừng bỏ qua cảnh báo `empty-import-meta` — nó là lỗi runtime ngầm. Luôn smoke-test boot bundle và kiểm tra `active-port.json` rơi đúng `<serviceDir>/.data/`.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/scripts/bundle.mjs`, `.../src/config.ts`, `alpha-studio-backend/scripts/release-to-b2.js` (`stageDependencyClosure`, `verifyStagedBackend`), `tools/alpha-crm/lib/shared/utils/zalo_backend_manager.dart`.
 
 ### 2026-06-08 - Zalo Image URL Expiration & Local-First Image Rendering Fallback
 

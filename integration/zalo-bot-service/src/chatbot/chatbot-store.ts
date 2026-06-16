@@ -101,6 +101,33 @@ export class ChatbotStore {
     return undefined;
   }
 
+  /**
+   * Resolve whether the chatbot is effectively enabled for a conversation.
+   * Combines the explicit per-conversation state with the inherited audience
+   * default. Used by the local conversation-list endpoint so the operator UI
+   * reflects the bridge's source of truth.
+   */
+  resolveConversationEnabled(
+    conversationKey: string,
+    threadType: 'user' | 'group',
+  ): {
+    chatbotEnabled: boolean;
+    chatbotMode: ChatbotConversationMode | null;
+    chatbotReason: string | null;
+  } {
+    const explicit = this.getConversationState(conversationKey);
+    const snapshot = this.getConfigSnapshot();
+    const effective = explicit
+      ?? (snapshot
+        ? this.getEffectiveConversationState(conversationKey, threadType, snapshot)
+        : undefined);
+    return {
+      chatbotEnabled: effective?.mode === 'enabled',
+      chatbotMode: (effective?.mode ?? null) as ChatbotConversationMode | null,
+      chatbotReason: effective?.reason ?? null,
+    };
+  }
+
   markProviderMessageProcessed(
     conversationKey: string,
     providerMessageId: string,

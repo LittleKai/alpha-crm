@@ -12,6 +12,9 @@
 .swiftpm/
 migrate_working_dir/
 
+# Hybrid AI workflow archives
+.hybrid-ai/archive/
+
 # IntelliJ related
 *.iml
 *.ipr

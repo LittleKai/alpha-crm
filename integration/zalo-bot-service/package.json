@@ -7,6 +7,7 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
+    "bundle": "tsc && node scripts/bundle.mjs",
     "test": "npm run build && node scripts/run-tests.mjs",
     "start": "node dist/server.js",
     "dev": "tsc && node --watch dist/server.js",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^20.0.0",
+    "esbuild": "^0.24.2",
     "typescript": "^5.4.0"
   }
 }

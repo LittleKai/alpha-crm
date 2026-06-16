@@ -664,9 +664,27 @@ function handleLocalConversationList(
 
   const result = store.listConversations({ accountId, search, limit, offset });
 
+  const chatbotStore = getChatbotStore();
+  const enriched = result.conversations.map((conv) => {
+    const threadType: 'user' | 'group' =
+      conv.threadType === 'group' ? 'group' : 'user';
+    const resolved = chatbotStore
+      ? chatbotStore.resolveConversationEnabled(
+          `${conv.accountId}:${conv.threadId}`,
+          threadType,
+        )
+      : { chatbotEnabled: false, chatbotMode: null, chatbotReason: null };
+    return {
+      ...conv,
+      chatbotEnabled: resolved.chatbotEnabled,
+      chatbotMode: resolved.chatbotMode,
+      chatbotReason: resolved.chatbotReason,
+    };
+  });
+
   json(res, 200, {
     success: true,
-    data: result.conversations,
+    data: enriched,
     total: result.total,
   }, req);
 }

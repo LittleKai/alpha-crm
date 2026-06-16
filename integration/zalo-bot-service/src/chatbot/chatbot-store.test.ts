@@ -302,6 +302,33 @@ describe('ChatbotStore', () => {
       /Invalid chatbot config snapshot JSON/,
     );
   });
+
+  it('resolveConversationEnabled reports disabled when operator took over', () => {
+    chatbotStore.setConversationState('acc-1:thread-1', {
+      mode: 'disabled_by_operator',
+      reason: 'manual_operator_reply',
+      inherited: false,
+    });
+
+    const resolved = chatbotStore.resolveConversationEnabled('acc-1:thread-1', 'user');
+
+    assert.equal(resolved.chatbotEnabled, false);
+    assert.equal(resolved.chatbotMode, 'disabled_by_operator');
+    assert.equal(resolved.chatbotReason, 'manual_operator_reply');
+  });
+
+  it('resolveConversationEnabled reports enabled when explicitly enabled', () => {
+    chatbotStore.setConversationState('acc-1:thread-2', {
+      mode: 'enabled',
+      reason: null,
+      inherited: false,
+    });
+
+    const resolved = chatbotStore.resolveConversationEnabled('acc-1:thread-2', 'user');
+
+    assert.equal(resolved.chatbotEnabled, true);
+    assert.equal(resolved.chatbotMode, 'enabled');
+  });
 });
 
 function createSnapshot(
