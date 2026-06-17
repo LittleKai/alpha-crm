@@ -2,7 +2,7 @@
 
 **Ngày nghiên cứu:** 2026-06-06  
 **Dự án hiện tại:** `D:\Dev\NodeJS\alpha-studio\tools\alpha-crm`  
-**Dự án tham chiếu:** `D:\Dev\2.reference_pj\Zalo-ref\deplao-builder`  
+**Dự án tham chiếu:** `D:\Dev\2.reference_pj\.Zalo-ref\deplao-builder`  
 **Phạm vi:** Chỉ nghiên cứu xử lý tin nhắn Zalo. Không bao gồm Facebook.
 
 ## Trạng thái triển khai ngày 2026-06-06

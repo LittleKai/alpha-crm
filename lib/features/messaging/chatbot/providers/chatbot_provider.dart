@@ -404,6 +404,37 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     _isCreatingRule = false;
   }
 
+  Future<void> updateRule(
+    String id, {
+    required String keyword,
+    required String response,
+    String? name,
+    String? description,
+  }) async {
+    if (keyword.trim().isEmpty || response.trim().isEmpty) return;
+    final keywords = keyword
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final result = await _repository.updateRule(id, {
+      'name': name?.trim().isNotEmpty == true ? name!.trim() : keyword.trim(),
+      'description': description?.trim() ?? '',
+      'keywords': keywords.isEmpty ? [keyword] : keywords,
+      'response': response.trim(),
+    });
+    if (result['success'] == true) {
+      await loadRules();
+      await syncBridgeNow();
+    } else {
+      state = state.copyWith(
+        errorMessage: (result['message'] ?? 'Cập nhật kịch bản thất bại.')
+            .toString(),
+      );
+    }
+  }
+
+
   Future<void> deleteRule(String id) async {
     final response = await _repository.deleteRule(id);
     if (response['success'] == true) {
@@ -515,16 +546,38 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     await syncBridgeNow();
   }
 
+  Future<void> updateKnowledgeDocument(int index, String name) async {
+    if (index < 0 || index >= state.knowledgeDocuments.length) return;
+    final documents = List<String>.from(state.knowledgeDocuments);
+    documents[index] = name;
+    state = state.copyWith(knowledgeDocuments: documents);
+    await _repository.saveSettings(
+      _settingsPayload(knowledgeDocuments: documents),
+    );
+    await syncBridgeNow();
+  }
+
+
+  /// Upload an operator-attached knowledge file to the LOCAL bridge store. The
+  /// bytes never leave this machine; only the content-hash id goes into config.
   Future<Map<String, dynamic>> uploadKnowledgeFile({
     required String filename,
     required List<int> bytes,
-    required String contentType,
-  }) {
-    return _repository.uploadKnowledgeFile(
-      filename: filename,
-      bytes: bytes,
-      contentType: contentType,
-    );
+  }) async {
+    try {
+      final data = await _bridge.uploadKnowledgeFile(
+        filename: filename,
+        bytes: bytes,
+      );
+      return {'success': true, 'data': data};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Ids of knowledge files present on this machine, for "missing file" warnings.
+  Future<Set<String>> knowledgeFileIdsPresent() {
+    return _bridge.listKnowledgeFileIds();
   }
 
   void clearLogs() {

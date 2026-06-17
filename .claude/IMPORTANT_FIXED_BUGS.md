@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-16 +07:00
+**Last Updated:** 2026-06-17 +07:00
 
 ---
 
@@ -28,6 +28,21 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-17 - Tài khoản Zalo cá nhân mất kết nối ngay sau đăng nhập (duplicate 3000) + UI không báo
+
+- Symptom: Đăng nhập QR xong là phiên rớt ngay, lặp lại nhiều lần; UI không hiện cảnh báo nào (vẫn "đã kết nối"). Một số lần socket chết âm thầm nhưng badge vẫn "đang lắng nghe".
+- Root cause (3 lỗi độc lập trong `personal-zca-channel.ts`):
+  1. `addAccountInstance` **không stop instance cũ** của cùng `uId` trước khi `accountPool.set` ghi đè → websocket realtime cũ vẫn mở → Zalo thấy 2 kết nối cùng tài khoản → force-close code **3000 (DuplicateConnection)**. Mỗi lần đăng nhập lại bỏ rơi thêm 1 socket → cứ đăng nhập là bị đá.
+  2. Bản ghi ngắt rơi vào instance **mồ côi** (đã bị set ghi đè khỏi pool) nên `getAccounts()` không thấy → không có cảnh báo. Thêm vào đó `getStatus().connected = accountPool.size > 0` **bỏ qua** `disconnected_expired` → app vẫn "đã kết nối".
+  3. Handler `closed` **chỉ xử lý mã 3000/3003**; mọi mã khác (rớt mạng 1006…) không set `listenerRunning=false`, không reconnect → socket zombie: UI "đang lắng nghe" nhưng không nhận tin, không có cơ chế phục hồi.
+- Fix summary:
+  1. `addAccountInstance`: nếu `accountPool.has(uId)` → `await stopListenerForInstance(existing)` rồi mới thêm instance mới (diệt tự-trùng).
+  2. `getStatus().connected` = `connectedAccounts.some(acc => acc.status !== 'disconnected_expired')` thay vì `size > 0`.
+  3. Handler `closed`: với MỌI mã → set `listenerRunning=false`. Mã 3000/3003 = `stop` + `disconnected_expired` + lưu `disconnectReason` (không reconnect cookie chết). Mã tạm thời chỉ hạ `listenerRunning=false` và để **`ListenerHealthMonitor` có sẵn** (connected && !listenerRunning → recover mỗi 15s) tự reconnect — không thêm vòng reconnect riêng. Bổ sung `removeAllListeners("closed"/"old_messages")` trong start/stop để tránh double-bind khi reconnect.
+- Rule: Mỗi instance Zalo cá nhân chỉ được có **một** listener websocket sống tại một thời điểm — luôn stop instance cũ trước khi tạo phiên mới cho cùng `uId`. Trạng thái kết nối hiển thị cho UI phải dựa trên account còn sống (`status !== 'disconnected_expired'`), không phải số lượng account trong pool. Không nuốt các mã `closed` khác 3000/3003: tối thiểu hạ `listenerRunning` để health monitor phục hồi và badge phản ánh đúng.
+- Đa tài khoản: `ListenerHealthMonitor` cũ xét ở mức pool (`connected && !some(listenerRunning)`), nên account thứ 2 rớt khi account thứ nhất vẫn chạy sẽ KHÔNG tự reconnect. Đã sửa: thêm `needsListenerRecovery` (account-aware) vào `ZaloChannelStatus`, `getStatus()` tính `some(acc.status !== 'disconnected_expired' && !acc.listenerRunning)`, và `shouldRecoverZaloListener` ưu tiên cờ này (fallback logic cũ cho mock/official). `addAccountInstance` chỉ dọn instance trùng `uId` nên đăng nhập 2 tài khoản khác nhau không đụng nhau. Recovery (`startListener()`) restart mọi instance dừng, instance đang chạy được guard nên không nhân đôi.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `.../src/channels/types.ts`, `.../src/local-session/listener-health.ts`, `.../src/server.ts` (luồng QR login gọi `addAccountInstance`), `tools/alpha-crm/lib/app/shell/app_topbar.dart` (badge cảnh báo per-account), `tools/alpha-crm/lib/features/zalo_integration/providers/zalo_integration_provider.dart`.
 
 ### 2026-06-16 - esbuild CJS bundle làm `import.meta.url` rỗng → vỡ `projectRoot`/active-port
 

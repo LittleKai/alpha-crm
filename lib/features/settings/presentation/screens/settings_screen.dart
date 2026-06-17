@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Directory, Process;
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -44,10 +46,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _stopReportController = TextEditingController();
   final _quietStartController = TextEditingController();
   final _quietEndController = TextEditingController();
+  String? _defaultDownloadsPath;
 
   @override
   void initState() {
     super.initState();
+    _resolveDefaultDownloadsPath();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final settings = ref.read(settingsProvider).settings;
       _minDelayController.text = settings.minDelay.toString();
@@ -69,6 +73,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ref.read(updateProvider.notifier).checkForUpdates();
       }
     });
+  }
+
+  Future<void> _resolveDefaultDownloadsPath() async {
+    try {
+      if (!kIsWeb) {
+        final dir = await getDownloadsDirectory();
+        if (dir != null && mounted) {
+          setState(() {
+            _defaultDownloadsPath = dir.path;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openDownloadFolder(String path) async {
+    final resolvedPath = path.isNotEmpty ? path : _defaultDownloadsPath;
+    if (resolvedPath != null && resolvedPath.isNotEmpty) {
+      final dir = Directory(resolvedPath);
+      if (await dir.exists()) {
+        try {
+          if (Platform.isWindows) {
+            await Process.run('explorer.exe', [resolvedPath]);
+          } else {
+            final uri = Uri.file(resolvedPath);
+            await launchUrl(uri);
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   @override
@@ -119,18 +153,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: notifier.setAppThemeMode,
             ),
             const SizedBox(height: AppSpacing.m),
+            _AccountCard(
+              connectedCount: connectedCount,
+              accounts: zaloState.accounts,
+              showAddButton: !isClient,
+              onAddAccount: () => _showAddAccountQrDialog(context),
+              onConfigureAccount: (account) =>
+                  _showAccountSettingsDialog(context, account),
+              onDeleteAccount: (account) =>
+                  _confirmDeleteAccount(context, ref, account),
+            ),
+            const SizedBox(height: AppSpacing.m),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Tải xuống và media cache',
-                    style: AppTextStyles.sectionTitle,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.download_for_offline_outlined,
+                        color: Color(0xFF14B8A6),
+                        size: 20,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Text(
+                        'Tải xuống và media cache',
+                        style: AppTextStyles.sectionTitle,
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: 'Thiết lập thư mục tải xuống tệp tin/media từ Live Chat và cấu hình giới hạn dung lượng bộ nhớ đệm cục bộ.',
+                        child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.m),
                   TextFormField(
                     key: ValueKey(state.settings.downloadFolder),
-                    initialValue: state.settings.downloadFolder,
+                    initialValue: state.settings.downloadFolder.isNotEmpty
+                        ? state.settings.downloadFolder
+                        : (_defaultDownloadsPath != null
+                            ? 'Mặc định: $_defaultDownloadsPath'
+                            : 'Mặc định (sẽ dùng thư mục Downloads hệ thống)'),
                     readOnly: true,
                     decoration: InputDecoration(
                       labelText: 'Thư mục tải xuống',
@@ -139,15 +203,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           : 'Thư mục Downloads mặc định',
                       suffixIcon: kIsWeb
                           ? null
-                          : IconButton(
-                              icon: const Icon(Icons.folder_open_outlined),
-                              onPressed: () async {
-                                final path = await FilePicker.platform
-                                    .getDirectoryPath();
-                                if (path != null) {
-                                  notifier.updateDownloadFolder(path);
-                                }
-                              },
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Tooltip(
+                                  message: 'Mở thư mục tải xuống hiện tại',
+                                  child: IconButton(
+                                    icon: const Icon(Icons.folder_open_outlined),
+                                    onPressed: () => _openDownloadFolder(state.settings.downloadFolder),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Chọn thư mục tải xuống riêng',
+                                  child: IconButton(
+                                    icon: const Icon(Icons.drive_file_move_outlined),
+                                    onPressed: () async {
+                                      final path = await FilePicker.platform
+                                          .getDirectoryPath();
+                                      if (path != null) {
+                                        notifier.updateDownloadFolder(path);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                   ),
@@ -206,17 +285,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.m),
-            _AccountCard(
-              connectedCount: connectedCount,
-              accounts: zaloState.accounts,
-              showAddButton: !isClient,
-              onAddAccount: () => _showAddAccountQrDialog(context),
-              onConfigureAccount: (account) =>
-                  _showAccountSettingsDialog(context, account),
-              onDeleteAccount: (account) =>
-                  _confirmDeleteAccount(context, ref, account),
-            ),
             if (!isClient) ...[
               const SizedBox(height: AppSpacing.m),
               _TimeSettingsCard(
@@ -246,13 +314,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       children: [
                         const Icon(
                           Icons.security_outlined,
-                          color: AppColors.primary,
+                          color: Color(0xFFEF4444),
                           size: 20,
                         ),
                         const SizedBox(width: AppSpacing.s),
                         Text(
                           'Kiểm soát rủi ro Zalo',
                           style: AppTextStyles.sectionTitle,
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Thiết lập các quy tắc an toàn nâng cao (đồng ý gửi, thời gian im lặng, spintax, cooldown...) nhằm tối thiểu hóa rủi ro tài khoản bị khóa.',
+                          child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
                         ),
                       ],
                     ),
@@ -298,116 +371,87 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       barrierDismissible: true,
       builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-          backgroundColor: AppColors.surface,
-          clipBehavior: Clip.antiAlias,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 800, maxHeight: 750),
-            child: Column(
-              children: [
-                AppBar(
-                  title: Text(
-                    'Cấu hình kiểm soát rủi ro Zalo',
-                    style: AppTextStyles.sectionTitle.copyWith(fontSize: 18),
-                  ),
-                  backgroundColor: AppColors.surface,
-                  foregroundColor: AppColors.textPrimary,
-                  elevation: 0,
-                  automaticallyImplyLeading: false,
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
+        return AppDialog(
+          title: 'Cấu hình kiểm soát rủi ro Zalo',
+          icon: Icons.admin_panel_settings_outlined,
+          width: 800,
+          child: Consumer(
+            builder: (context, ref, child) {
+              final state = ref.watch(settingsProvider);
+              final notifier = ref.read(settingsProvider.notifier);
+              return _RiskControlsCard(
+                settings: state.settings,
+                batchSizeController: _batchSizeController,
+                dailyLimitController: _dailyLimitController,
+                cooldownController: _cooldownController,
+                approvalThresholdController:
+                    _approvalThresholdController,
+                failureRateController: _failureRateController,
+                stopReportController: _stopReportController,
+                quietStartController: _quietStartController,
+                quietEndController: _quietEndController,
+                isLoading: state.isLoading,
+                onChannelModeChanged: notifier.updateZaloChannelMode,
+                onPersonalAutomationChanged:
+                    notifier.updateAllowPersonalAccountAutomation,
+                onProxyUsageChanged: notifier.updateAllowProxyUsage,
+                onFriendAutomationChanged:
+                    notifier.updateAllowFriendAutomation,
+                onGroupAutomationChanged:
+                    notifier.updateAllowGroupAutomation,
+                onRequireConsentChanged:
+                    notifier.updateRequireConsentProof,
+                onRequireInteractionChanged:
+                    notifier.updateRequireRecentInteraction,
+                onDisableSpintaxChanged:
+                    notifier.updateDisableSpintax,
+                onRequireHumanApprovalChanged:
+                    notifier.updateRequireHumanApproval,
+                onBatchSizeChanged: (v) => notifier
+                    .updateMaxBatchSize(int.tryParse(v) ?? 20),
+                onDailyLimitChanged: (v) => notifier
+                    .updateDailySendLimit(int.tryParse(v) ?? 100),
+                onCooldownChanged: (v) =>
+                    notifier.updatePerRecipientCooldownHours(
+                      int.tryParse(v) ?? 24,
                     ),
-                  ],
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppSpacing.l),
-                    child: Consumer(
-                      builder: (context, ref, child) {
-                        final state = ref.watch(settingsProvider);
-                        final notifier = ref.read(settingsProvider.notifier);
-                        return _RiskControlsCard(
-                          settings: state.settings,
-                          batchSizeController: _batchSizeController,
-                          dailyLimitController: _dailyLimitController,
-                          cooldownController: _cooldownController,
-                          approvalThresholdController:
-                              _approvalThresholdController,
-                          failureRateController: _failureRateController,
-                          stopReportController: _stopReportController,
-                          quietStartController: _quietStartController,
-                          quietEndController: _quietEndController,
-                          isLoading: state.isLoading,
-                          onChannelModeChanged: notifier.updateZaloChannelMode,
-                          onPersonalAutomationChanged:
-                              notifier.updateAllowPersonalAccountAutomation,
-                          onProxyUsageChanged: notifier.updateAllowProxyUsage,
-                          onFriendAutomationChanged:
-                              notifier.updateAllowFriendAutomation,
-                          onGroupAutomationChanged:
-                              notifier.updateAllowGroupAutomation,
-                          onRequireConsentChanged:
-                              notifier.updateRequireConsentProof,
-                          onRequireInteractionChanged:
-                              notifier.updateRequireRecentInteraction,
-                          onDisableSpintaxChanged:
-                              notifier.updateDisableSpintax,
-                          onRequireHumanApprovalChanged:
-                              notifier.updateRequireHumanApproval,
-                          onBatchSizeChanged: (v) => notifier
-                              .updateMaxBatchSize(int.tryParse(v) ?? 20),
-                          onDailyLimitChanged: (v) => notifier
-                              .updateDailySendLimit(int.tryParse(v) ?? 100),
-                          onCooldownChanged: (v) =>
-                              notifier.updatePerRecipientCooldownHours(
-                                int.tryParse(v) ?? 24,
-                              ),
-                          onApprovalThresholdChanged: (v) =>
-                              notifier.updateHumanApprovalThreshold(
-                                int.tryParse(v) ?? 20,
-                              ),
-                          onFailureRateChanged: (v) =>
-                              notifier.updateMaxFailureRatePercent(
-                                int.tryParse(v) ?? 10,
-                              ),
-                          onStopReportChanged: (v) => notifier
-                              .updateStopOnReportCount(int.tryParse(v) ?? 1),
-                          onQuietStartChanged: notifier.updateQuietHoursStart,
-                          onQuietEndChanged: notifier.updateQuietHoursEnd,
-                          onSave: () async {
-                            final navigator = Navigator.of(context);
-                            final messenger = ScaffoldMessenger.of(context);
-                            await notifier.saveSettings();
-                            if (mounted) {
-                              navigator.pop();
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Row(
-                                    children: const [
-                                      Icon(
-                                        Icons.check_circle,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: AppSpacing.s),
-                                      Text('Lưu cài đặt rủi ro thành công!'),
-                                    ],
-                                  ),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
-                            }
-                          },
-                        );
-                      },
+                onApprovalThresholdChanged: (v) =>
+                    notifier.updateHumanApprovalThreshold(
+                      int.tryParse(v) ?? 20,
                     ),
-                  ),
-                ),
-              ],
-            ),
+                onFailureRateChanged: (v) =>
+                    notifier.updateMaxFailureRatePercent(
+                      int.tryParse(v) ?? 10,
+                    ),
+                onStopReportChanged: (v) => notifier
+                    .updateStopOnReportCount(int.tryParse(v) ?? 1),
+                onQuietStartChanged: notifier.updateQuietHoursStart,
+                onQuietEndChanged: notifier.updateQuietHoursEnd,
+                onSave: () async {
+                  final navigator = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
+                  await notifier.saveSettings();
+                  if (mounted) {
+                    navigator.pop();
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: const [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: AppSpacing.s),
+                            Text('Lưu cài đặt rủi ro thành công!'),
+                          ],
+                        ),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                },
+              );
+            },
           ),
         );
       },
@@ -548,28 +592,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Hủy liên kết tài khoản?'),
-          content: Text(
-            'Bạn có chắc chắn muốn hủy liên kết tài khoản Zalo ${account.label}? Mọi thông tin đăng nhập trên thiết bị này sẽ bị xóa bỏ.',
-          ),
+        return AppDialog(
+          title: 'Hủy liên kết tài khoản?',
+          icon: Icons.warning_amber_rounded,
+          width: 460,
           actions: [
-            TextButton(
+            AppDialogAction(
+              text: 'Bỏ qua',
+              variant: AppButtonVariant.outline,
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Bỏ qua'),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: AppSpacing.borderRadiusS,
-                ),
-              ),
+            AppDialogAction(
+              text: 'Xóa liên kết',
+              variant: AppButtonVariant.destructive,
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Xóa liên kết'),
             ),
           ],
+          child: Text(
+            'Bạn có chắc chắn muốn hủy liên kết tài khoản Zalo ${account.label}? Mọi thông tin đăng nhập trên thiết bị này sẽ bị xóa bỏ.',
+            style: AppTextStyles.bodyMedium,
+          ),
         );
       },
     );
@@ -601,7 +643,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.settings_outlined, color: AppColors.primary, size: 32),
+        const Icon(Icons.settings_outlined, color: Color(0xFF6366F1), size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -650,12 +692,15 @@ class _AppearanceCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.contrast_outlined,
-                color: AppColors.primary,
+                color: Color(0xFF8B5CF6),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text('Giao diện', style: AppTextStyles.sectionTitle),
+              Text('Giao diện', style: AppTextStyles.sectionTitle),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Cấu hình chế độ hiển thị giao diện của ứng dụng (Sáng, Tối hoặc theo hệ thống).',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
             ],
           ),
@@ -714,14 +759,22 @@ class _AccountCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.notifications_none_outlined, size: 20),
-              const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Tài khoản Zalo',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              const Icon(
+                Icons.account_circle_outlined,
+                color: AppColors.zaloBlue,
+                size: 20,
               ),
+              const SizedBox(width: AppSpacing.s),
+              Text(
+                'Tài khoản Zalo',
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Quản lý danh sách các tài khoản Zalo đang kết nối, trạng thái đồng bộ và cài đặt riêng cho từng tài khoản.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+              ),
+              const Spacer(),
               AppBadge(
                 label: '$connectedCount đang kết nối',
                 variant: connectedCount > 0
@@ -817,19 +870,28 @@ class _AccountCard extends StatelessWidget {
                                 Container(
                                   width: 6,
                                   height: 6,
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.success,
+                                  decoration: BoxDecoration(
+                                    color: acc.isExpired
+                                        ? AppColors.error
+                                        : AppColors.success,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  acc.listenerRunning
-                                      ? 'Đang lắng nghe'
-                                      : 'Sẵn sàng',
+                                  acc.isExpired
+                                      ? 'Mất kết nối'
+                                      : acc.listenerRunning
+                                          ? 'Đang lắng nghe'
+                                          : 'Sẵn sàng',
                                   style: AppTextStyles.caption.copyWith(
                                     fontSize: 10.5,
-                                    color: AppColors.textSecondary,
+                                    color: acc.isExpired
+                                        ? AppColors.error
+                                        : AppColors.textSecondary,
+                                    fontWeight: acc.isExpired
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
                                   ),
                                 ),
                               ],
@@ -837,6 +899,17 @@ class _AccountCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (acc.isExpired)
+                        IconButton(
+                          tooltip: 'Tài khoản mất kết nối — xem nguyên nhân',
+                          icon: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
+                          onPressed: () =>
+                              _showDisconnectReasonDialog(context, acc),
+                        ),
                       IconButton(
                         tooltip: 'Cấu hình tài khoản',
                         icon: Icon(
@@ -877,6 +950,51 @@ class _AccountCard extends StatelessWidget {
       ),
     );
   }
+
+  void _showDisconnectReasonDialog(
+    BuildContext context,
+    ZaloConnectedAccount account,
+  ) {
+    final reason = account.disconnectReason.trim().isNotEmpty
+        ? account.disconnectReason.trim()
+        : 'Phiên đăng nhập Zalo đã bị ngắt. Vui lòng quét QR đăng nhập lại.';
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AppDialog(
+          title: 'Tài khoản mất kết nối',
+          icon: Icons.warning_amber_rounded,
+          width: 500,
+          actions: [
+            AppDialogAction(
+              text: 'Đóng',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            AppDialogAction(
+              text: 'Đăng nhập lại',
+              icon: Icons.qr_code_scanner_rounded,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                onAddAccount();
+              },
+            ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                account.label.replaceAll(RegExp(r'\s*\(\d+\)$'), '').trim(),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: AppSpacing.s),
+              Text(reason, style: AppTextStyles.body),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _TimeSettingsCard extends StatelessWidget {
@@ -910,15 +1028,18 @@ class _TimeSettingsCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.access_time_outlined,
-                color: AppColors.primary,
+                color: Color(0xFFF97316),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Cài đặt thời gian',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              Text(
+                'Cài đặt thời gian',
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Cấu hình khoảng thời gian trễ (delay) ngẫu nhiên giữa các hành động gửi tin tự động để phòng tránh bị Zalo chặn/checkpoint do gửi quá nhanh.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
             ],
           ),
@@ -1010,16 +1131,20 @@ class _ZaloIntegrationCard extends ConsumerWidget {
             children: [
               const Icon(
                 Icons.cloud_outlined,
-                color: AppColors.primary,
+                color: Color(0xFF06B6D4),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Tích hợp Zalo Backend',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              Text(
+                'Tích hợp Zalo Backend',
+                style: AppTextStyles.sectionTitle,
               ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Thông tin kết nối giữa ứng dụng CRM này và Zalo bridge Node.js service (cục bộ hoặc trên cloud).',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+              ),
+              const Spacer(),
               AppBadge(
                 label: integrationState.isConnected
                     ? 'Đã kết nối'
@@ -1145,7 +1270,7 @@ class _ZaloIntegrationCard extends ConsumerWidget {
               text: 'Kiểm tra kết nối',
               icon: Icons.refresh,
               isLoading: integrationState.isLoading,
-              onPressed: integrationNotifier.checkConnection,
+              onPressed: () => integrationNotifier.checkConnection(showLoading: true),
             ),
           ),
         ],
@@ -1225,15 +1350,18 @@ class _RiskControlsCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.security_outlined,
-                color: AppColors.primary,
+                color: Color(0xFFEF4444),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Kiểm soát rủi ro Zalo',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              Text(
+                'Kiểm soát rủi ro Zalo',
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Thiết lập các quy tắc an toàn nâng cao (đồng ý gửi, thời gian im lặng, spintax, cooldown...) nhằm tối thiểu hóa rủi ro tài khoản bị khóa.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
             ],
           ),
@@ -1642,15 +1770,18 @@ class _AdvancedCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.settings_suggest_outlined,
-                color: AppColors.primary,
+                color: Color(0xFF10B981),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Tính năng tự động nâng cao',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              Text(
+                'Tính năng tự động nâng cao',
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Các thiết lập tự động hóa bổ sung như tự động đồng ý kết bạn từ người dùng Zalo.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
             ],
           ),
@@ -1701,16 +1832,20 @@ class _UpdateCard extends ConsumerWidget {
             children: [
               const Icon(
                 Icons.system_update_outlined,
-                color: AppColors.primary,
+                color: Color(0xFFD946EF),
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: Text(
-                  'Cập nhật ứng dụng',
-                  style: AppTextStyles.sectionTitle,
-                ),
+              Text(
+                'Cập nhật ứng dụng',
+                style: AppTextStyles.sectionTitle,
               ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Kiểm tra phiên bản hiện tại và cập nhật lên phiên bản mới nhất của ứng dụng CRM.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+              ),
+              const Spacer(),
               if (state.status == UpdateStatus.available)
                 const AppBadge(
                   label: 'Có bản mới',
@@ -2172,252 +2307,222 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      backgroundColor: AppColors.surface,
-      elevation: 24,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.all(AppSpacing.l),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.qr_code_scanner_rounded,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                const SizedBox(width: AppSpacing.s),
-                Expanded(
-                  child: Text(
-                    'Liên Kết Tài Khoản Zalo',
-                    style: AppTextStyles.sectionTitle.copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+    return AppDialog(
+      title: 'Liên Kết Tài Khoản Zalo',
+      icon: Icons.qr_code_scanner_rounded,
+      width: 420,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_status == 'loading') ...[
+            const SizedBox(
+              height: 180,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 3)),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text(
+              'Đang tạo phiên đăng nhập QR...',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ] else if (_status == 'pending' || _status == 'timeout') ...[
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.s),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: AppSpacing.borderRadiusM,
+                color: Colors.white,
+              ),
+              child: ClipRRect(
+                borderRadius: AppSpacing.borderRadiusS,
+                child: SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ImageFiltered(
+                        imageFilter: ui.ImageFilter.blur(
+                          sigmaX: _status == 'timeout' ? 4.5 : 0.0,
+                          sigmaY: _status == 'timeout' ? 4.5 : 0.0,
+                        ),
+                        child: Image.network(
+                          '${widget.baseUrl}$_qrUrl&t=${DateTime.now().millisecondsSinceEpoch}',
+                          width: 180,
+                          height: 180,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const SizedBox(
+                              width: 180,
+                              height: 180,
+                              child: Center(
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 48,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (_status == 'timeout') ...[
+                        Container(color: const Color(0x14000000)),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 4,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.m,
+                              vertical: AppSpacing.s,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppSpacing.borderRadiusS,
+                            ),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _status = 'loading';
+                              _errorText = null;
+                            });
+                            _startQrSession();
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text(
+                            'Thử lại',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_status == 'pending') ...[
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Text(
+                    'Đang chờ quét mã QR...',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ] else ...[
+                  const Icon(
+                    Icons.timer_off_outlined,
+                    color: AppColors.error,
+                    size: 16,
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Text(
+                    'Mã QR đã hết hạn',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.errorText,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ],
             ),
-            const Divider(),
-            const SizedBox(height: AppSpacing.m),
-            if (_status == 'loading') ...[
-              const SizedBox(
-                height: 180,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 3)),
+            const SizedBox(height: AppSpacing.s),
+            Text(
+              _status == 'pending'
+                  ? 'Mở ứng dụng Zalo trên điện thoại di động và quét mã QR này để đăng nhập liên kết.'
+                  : 'Nhấp vào nút "Thử lại" ở trên để tạo mã QR mới và tiếp tục đăng nhập.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption.copyWith(fontSize: 11.5),
+            ),
+          ] else if (_status == 'success') ...[
+            const SizedBox(
+              height: 180,
+              child: Center(
+                child: Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: AppColors.success,
+                  size: 84,
+                ),
               ),
-              const SizedBox(height: AppSpacing.m),
-              Text(
-                'Đang tạo phiên đăng nhập QR...',
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text(
+              'Liên kết thành công!',
+              style: AppTextStyles.sectionTitle.copyWith(
+                color: AppColors.successText,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Tài khoản mới đang được đồng bộ dữ liệu...',
+              style: AppTextStyles.body.copyWith(fontSize: 12.5),
+            ),
+          ] else if (_status == 'failed') ...[
+            SizedBox(
+              height: 180,
+              child: Center(
+                child: Icon(
+                  Icons.error_outline_rounded,
+                  color: AppColors.error,
+                  size: 64,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text(
+              'Liên kết thất bại',
+              style: AppTextStyles.sectionTitle.copyWith(
+                color: AppColors.errorText,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              child: Text(
+                _errorText ?? 'Đã xảy ra lỗi không xác định.',
+                textAlign: TextAlign.center,
                 style: AppTextStyles.body.copyWith(
+                  fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
               ),
-            ] else if (_status == 'pending' || _status == 'timeout') ...[
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.s),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: AppSpacing.borderRadiusM,
-                  color: Colors.white,
-                ),
-                child: ClipRRect(
+            ),
+            const SizedBox(height: AppSpacing.l),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
                   borderRadius: AppSpacing.borderRadiusS,
-                  child: SizedBox(
-                    width: 180,
-                    height: 180,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: _status == 'timeout' ? 4.5 : 0.0,
-                            sigmaY: _status == 'timeout' ? 4.5 : 0.0,
-                          ),
-                          child: Image.network(
-                            '${widget.baseUrl}$_qrUrl&t=${DateTime.now().millisecondsSinceEpoch}',
-                            width: 180,
-                            height: 180,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const SizedBox(
-                                width: 180,
-                                height: 180,
-                                child: Center(
-                                  child: Icon(
-                                    Icons.broken_image_outlined,
-                                    size: 48,
-                                    color: AppColors.error,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        if (_status == 'timeout') ...[
-                          Container(color: const Color(0x14000000)),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 4,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.m,
-                                vertical: AppSpacing.s,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: AppSpacing.borderRadiusS,
-                              ),
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _status = 'loading';
-                                _errorText = null;
-                              });
-                              _startQrSession();
-                            },
-                            icon: const Icon(Icons.refresh_rounded, size: 18),
-                            label: const Text(
-                              'Thử lại',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.m),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_status == 'pending') ...[
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Text(
-                      'Đang chờ quét mã QR...',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ] else ...[
-                    const Icon(
-                      Icons.timer_off_outlined,
-                      color: AppColors.error,
-                      size: 16,
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Text(
-                      'Mã QR đã hết hạn',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.errorText,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: AppSpacing.s),
-              Text(
-                _status == 'pending'
-                    ? 'Mở ứng dụng Zalo trên điện thoại di động và quét mã QR này để đăng nhập liên kết.'
-                    : 'Nhấp vào nút "Thử lại" ở trên để tạo mã QR mới và tiếp tục đăng nhập.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.caption.copyWith(fontSize: 11.5),
-              ),
-            ] else if (_status == 'success') ...[
-              const SizedBox(
-                height: 180,
-                child: Center(
-                  child: Icon(
-                    Icons.check_circle_outline_rounded,
-                    color: AppColors.success,
-                    size: 84,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.m),
-              Text(
-                'Liên kết thành công!',
-                style: AppTextStyles.sectionTitle.copyWith(
-                  color: AppColors.successText,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Tài khoản mới đang được đồng bộ dữ liệu...',
-                style: AppTextStyles.body.copyWith(fontSize: 12.5),
-              ),
-            ] else if (_status == 'failed') ...[
-              SizedBox(
-                height: 180,
-                child: Center(
-                  child: Icon(
-                    Icons.error_outline_rounded,
-                    color: AppColors.error,
-                    size: 64,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.m),
-              Text(
-                'Liên kết thất bại',
-                style: AppTextStyles.sectionTitle.copyWith(
-                  color: AppColors.errorText,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
-                child: Text(
-                  _errorText ?? 'Đã xảy ra lỗi không xác định.',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.body.copyWith(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.l),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: AppSpacing.borderRadiusS,
-                  ),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _status = 'loading';
-                    _errorText = null;
-                  });
-                  _startQrSession();
-                },
-                child: const Text('Thử lại'),
-              ),
-            ],
-            const SizedBox(height: AppSpacing.m),
+              onPressed: () {
+                setState(() {
+                  _status = 'loading';
+                  _errorText = null;
+                });
+                _startQrSession();
+              },
+              child: const Text('Thử lại'),
+            ),
           ],
-        ),
+          const SizedBox(height: AppSpacing.m),
+        ],
       ),
     );
   }

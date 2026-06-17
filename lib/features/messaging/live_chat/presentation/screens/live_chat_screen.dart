@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
@@ -13,6 +16,7 @@ import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../mock/mock_messages.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
@@ -25,7 +29,9 @@ import '../../utils/live_chat_attachment_view.dart';
 import '../../utils/live_chat_local_image_stub.dart'
     if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
-import 'live_chat_video_screen.dart';
+import '../widgets/live_chat_settings_dialog.dart';
+
+Offset? _lastMessageBubbleTapPosition;
 
 class LiveChatScreen extends ConsumerStatefulWidget {
   const LiveChatScreen({super.key});
@@ -416,6 +422,11 @@ class _Header extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.refresh),
+        ),
+        IconButton(
+          tooltip: 'Cài đặt Live Chat',
+          onPressed: () => showLiveChatSettingsDialog(context, ref),
+          icon: const Icon(Icons.settings_outlined),
         ),
       ],
     );
@@ -830,47 +841,52 @@ class _ConversationPanel extends ConsumerWidget {
               ),
             ),
           Expanded(
-            child: ListView.builder(
-              controller: messageScrollController,
-              padding: const EdgeInsets.all(AppSpacing.m),
-              itemCount:
-                  conversation.messages.length +
-                  (state.hasMoreMessages && conversation.messages.isNotEmpty
-                      ? 1
-                      : 0),
-              itemBuilder: (context, index) {
-                final showLoadOlder =
-                    state.hasMoreMessages && conversation.messages.isNotEmpty;
-                if (showLoadOlder && index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.s),
-                    child: Center(
-                      child: TextButton.icon(
-                        onPressed: state.isLoadingOlderMessages
-                            ? null
-                            : notifier.loadOlderMessages,
-                        icon: state.isLoadingOlderMessages
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.keyboard_arrow_up),
-                        label: const Text('Tải tin cũ hơn'),
+            child: Container(
+              color: AppColors.isDarkMode
+                  ? const Color(0xFF1F2937)
+                  : const Color(0xFFF3F4F6),
+              child: ListView.builder(
+                controller: messageScrollController,
+                padding: const EdgeInsets.all(AppSpacing.m),
+                itemCount:
+                    conversation.messages.length +
+                    (state.hasMoreMessages && conversation.messages.isNotEmpty
+                        ? 1
+                        : 0),
+                itemBuilder: (context, index) {
+                  final showLoadOlder =
+                      state.hasMoreMessages && conversation.messages.isNotEmpty;
+                  if (showLoadOlder && index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                      child: Center(
+                        child: TextButton.icon(
+                          onPressed: state.isLoadingOlderMessages
+                              ? null
+                              : notifier.loadOlderMessages,
+                          icon: state.isLoadingOlderMessages
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.keyboard_arrow_up),
+                          label: const Text('Tải tin cũ hơn'),
+                        ),
                       ),
-                    ),
+                    );
+                  }
+                  final messageIndex = showLoadOlder ? index - 1 : index;
+                  final message = conversation.messages[messageIndex];
+                  return _MessageBubble(
+                    message: message,
+                    conversation: conversation,
+                    highlighted: state.highlightedMessageId == message.id,
                   );
-                }
-                final messageIndex = showLoadOlder ? index - 1 : index;
-                final message = conversation.messages[messageIndex];
-                return _MessageBubble(
-                  message: message,
-                  conversation: conversation,
-                  highlighted: state.highlightedMessageId == message.id,
-                );
-              },
+                },
+              ),
             ),
           ),
           if (state.errorMessage != null)
@@ -960,30 +976,29 @@ class _ConversationPanel extends ConsumerWidget {
                       ? null
                       : () => _pickAndSendFile(notifier),
                 ),
-                IconButton(
-                  icon: Icon(Icons.link, color: AppColors.textSecondary),
-                  tooltip: 'Gửi liên kết',
-                  onPressed: state.isSending || state.isBridgeOffline
-                      ? null
-                      : () => _showSendLinkDialog(context, notifier),
-                ),
                 Expanded(
-                  child: TextField(
-                    controller: messageController,
-                    minLines: 1,
-                    maxLines: 4,
-                    enabled: !state.isBridgeOffline,
-                    decoration: InputDecoration(
-                      hintText: state.isBridgeOffline
-                          ? 'Không thể gửi tin khi Bridge offline'
-                          : 'Nhập tin nhắn hoặc /1, /hello...',
-                      border: const OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      notifier.updateDraft(value);
-                      notifier.notifyTyping();
+                  child: CallbackShortcuts(
+                    bindings: <ShortcutActivator, VoidCallback>{
+                      const SingleActivator(LogicalKeyboardKey.enter): () =>
+                          _send(quickTemplates),
                     },
-                    onSubmitted: (_) => _send(quickTemplates),
+                    child: TextField(
+                      controller: messageController,
+                      minLines: 1,
+                      maxLines: 4,
+                      enabled: !state.isBridgeOffline,
+                      decoration: InputDecoration(
+                        hintText: state.isBridgeOffline
+                            ? 'Không thể gửi tin khi Bridge offline'
+                            : 'Nhập tin nhắn hoặc /1, /hello...',
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        notifier.updateDraft(value);
+                        notifier.notifyTyping();
+                      },
+                      onSubmitted: (_) => _send(quickTemplates),
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s),
@@ -1074,122 +1089,91 @@ class _ConversationPanel extends ConsumerWidget {
           final results = ref.watch(
             liveChatProvider.select((value) => value.messageSearchResults),
           );
-          return Dialog(
-            backgroundColor: AppColors.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: SizedBox(
-              width: 520,
-              height: 440,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(AppSpacing.m),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.manage_search,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: AppSpacing.s),
-                        Expanded(
-                          child: Text(
-                            'Tìm trong tin nhắn',
-                            style: AppTextStyles.sectionTitle,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
+          return AppDialog(
+            title: 'Tìm trong tin nhắn',
+            icon: Icons.manage_search,
+            width: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Nhập nội dung cần tìm',
                   ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.all(AppSpacing.m),
-                    child: TextField(
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Nhập nội dung cần tìm',
-                      ),
-                      onChanged: ref
-                          .read(liveChatProvider.notifier)
-                          .searchMessages,
-                    ),
+                  onChanged: ref
+                      .read(liveChatProvider.notifier)
+                      .searchMessages,
+                ),
+                const SizedBox(height: AppSpacing.s),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${results.length} kết quả',
+                    style: AppTextStyles.caption,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.m,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '${results.length} kết quả',
-                        style: AppTextStyles.caption,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: results.isEmpty
-                        ? const Center(
-                            child: Text('Không tìm thấy tin nhắn phù hợp'),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(AppSpacing.s),
-                            itemCount: results.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final message = results[index];
-                              return ListTile(
-                                dense: true,
-                                title: Text(
-                                  message.message,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  '${message.senderName} • ${DateFormat('dd/MM/yyyy HH:mm').format(message.timestamp)}',
-                                ),
-                                onTap: () async {
-                                  await ref
-                                      .read(liveChatProvider.notifier)
-                                      .openSearchResult(message);
-                                  final current = ref.read(liveChatProvider);
-                                  final selected = current.selectedConversation;
-                                  final index = selected?.messages.indexWhere(
-                                    (item) => item.id == message.id,
+                ),
+                const SizedBox(height: AppSpacing.s),
+                SizedBox(
+                  height: 280,
+                  child: results.isEmpty
+                      ? const Center(
+                          child: Text('Không tìm thấy tin nhắn phù hợp'),
+                        )
+                      : ListView.separated(
+                          padding: EdgeInsets.zero,
+                          itemCount: results.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final message = results[index];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                message.message,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${message.senderName} • ${DateFormat('dd/MM/yyyy HH:mm').format(message.timestamp)}',
+                              ),
+                              onTap: () async {
+                                await ref
+                                    .read(liveChatProvider.notifier)
+                                    .openSearchResult(message);
+                                final current = ref.read(liveChatProvider);
+                                final selected = current.selectedConversation;
+                                final index = selected?.messages.indexWhere(
+                                  (item) => item.id == message.id,
+                                );
+                                if (index != null &&
+                                    index >= 0 &&
+                                    messageScrollController.hasClients) {
+                                  final max = messageScrollController
+                                      .position
+                                      .maxScrollExtent;
+                                  final count = selected!.messages.length;
+                                  await messageScrollController.animateTo(
+                                    count <= 1
+                                        ? 0
+                                        : max * index / (count - 1),
+                                    duration: const Duration(
+                                      milliseconds: 300,
+                                    ),
+                                    curve: Curves.easeOut,
                                   );
-                                  if (index != null &&
-                                      index >= 0 &&
-                                      messageScrollController.hasClients) {
-                                    final max = messageScrollController
-                                        .position
-                                        .maxScrollExtent;
-                                    final count = selected!.messages.length;
-                                    await messageScrollController.animateTo(
-                                      count <= 1
-                                          ? 0
-                                          : max * index / (count - 1),
-                                      duration: const Duration(
-                                        milliseconds: 300,
-                                      ),
-                                      curve: Curves.easeOut,
-                                    );
-                                  }
-                                  if (context.mounted) {
-                                    Navigator.of(context).pop();
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                                }
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
           );
         },
@@ -1197,48 +1181,6 @@ class _ConversationPanel extends ConsumerWidget {
     );
   }
 
-  Future<void> _showSendLinkDialog(
-    BuildContext context,
-    LiveChatNotifier notifier,
-  ) async {
-    final urlController = TextEditingController();
-    final titleController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Gửi liên kết'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: urlController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'URL'),
-            ),
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: 'Tiêu đề'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Gửi'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && urlController.text.trim().isNotEmpty) {
-      await notifier.sendLink(urlController.text, title: titleController.text);
-    }
-    urlController.dispose();
-    titleController.dispose();
-  }
 }
 
 class _QuickReplyStrip extends StatelessWidget {
@@ -1506,9 +1448,70 @@ class _MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final messages = conversation.messages;
+    final messageIndex = messages.indexWhere((m) => m.id == message.id);
+    
+    List<LiveChatAttachmentView> groupMedia = [];
+    bool isGrouped = false;
+    
+    if (messageIndex != -1 && !message.isDeleted) {
+      final currentMedia = resolveLiveChatMediaAttachments(message);
+      if (currentMedia.isNotEmpty) {
+        if (messageIndex > 0) {
+          final prevMsg = messages[messageIndex - 1];
+          if (!prevMsg.isDeleted &&
+              resolveLiveChatMediaAttachments(prevMsg).isNotEmpty &&
+              prevMsg.senderId == message.senderId &&
+              message.timestamp.difference(prevMsg.timestamp).inSeconds.abs() <= 15) {
+            isGrouped = true;
+          }
+        }
+        
+        if (!isGrouped) {
+          groupMedia.addAll(currentMedia);
+          int j = messageIndex + 1;
+          while (j < messages.length) {
+            final nextMsg = messages[j];
+            if (!nextMsg.isDeleted) {
+              final nextMedia = resolveLiveChatMediaAttachments(nextMsg);
+              if (nextMedia.isNotEmpty &&
+                  nextMsg.senderId == message.senderId &&
+                  nextMsg.timestamp.difference(messages[j - 1].timestamp).inSeconds.abs() <= 15) {
+                groupMedia.addAll(nextMedia);
+                j++;
+              } else {
+                break;
+              }
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    if (isGrouped) {
+      return const SizedBox.shrink();
+    }
+
     final isMine = message.isMine;
-    final color = isMine ? AppColors.primary : AppColors.surfaceMuted;
-    final textColor = isMine ? Colors.white : AppColors.textPrimary;
+    final color = isMine
+        ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : const Color(0xFFDBEAFE))
+        : AppColors.surfaceMuted;
+    final textColor = isMine
+        ? (AppColors.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFF1E40AF))
+        : AppColors.textPrimary;
+
+    final bool isBot = message.isFromBot;
+    final Color badgeBg;
+    final Color badgeContentColor;
+    if (isBot) {
+      badgeBg = const Color(0xFFF3E8FF);
+      badgeContentColor = const Color(0xFF7E22CE);
+    } else {
+      badgeBg = const Color(0xFFCCFBF1);
+      badgeContentColor = const Color(0xFF0F766E);
+    }
 
     Widget avatarWidget;
     if (!isMine) {
@@ -1623,11 +1626,46 @@ class _MessageBubble extends ConsumerWidget {
                           ),
                         ),
                       ],
-                      _buildMessageContent(context, ref, textColor),
+                      _buildMessageContent(context, ref, textColor, groupMedia),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (isMine) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    message.isFromBot
+                                        ? Icons.smart_toy
+                                        : Icons.support_agent,
+                                    size: 11,
+                                    color: badgeContentColor,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    message.isFromBot ? 'AI' : 'NV',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: badgeContentColor,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Text(
                             DateFormat('dd/MM HH:mm').format(message.timestamp),
                             style: AppTextStyles.caption.copyWith(
@@ -1722,6 +1760,16 @@ class _MessageBubble extends ConsumerWidget {
       ),
       items: [
         const PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              Icon(Icons.copy, size: 18),
+              SizedBox(width: 8),
+              Text('Sao chép tin nhắn'),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
           value: 'reply',
           child: Row(
             children: [
@@ -1731,7 +1779,7 @@ class _MessageBubble extends ConsumerWidget {
             ],
           ),
         ),
-        if (!message.isMine)
+        if (!message.isDeleted && !message.isMine)
           const PopupMenuItem<String>(
             value: 'heart',
             child: Row(
@@ -1753,9 +1801,42 @@ class _MessageBubble extends ConsumerWidget {
               ],
             ),
           ),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Xóa tin nhắn', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
       ],
     ).then((value) {
-      if (value == 'reply') {
+      if (value == 'copy') {
+        String copyText = message.message;
+        if (message.message.startsWith('{') && message.message.endsWith('}')) {
+          try {
+            final data = jsonDecode(message.message);
+            if (data is Map) {
+              copyText = data['title']?.toString() ??
+                  data['description']?.toString() ??
+                  data['href']?.toString() ??
+                  message.message;
+            }
+          } catch (_) {}
+        }
+        Clipboard.setData(ClipboardData(text: copyText)).then((_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã sao chép tin nhắn vào bộ nhớ tạm.'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        });
+      } else if (value == 'reply') {
         ref.read(liveChatProvider.notifier).replyTo(message);
       } else if (value == 'heart') {
         ref.read(liveChatProvider.notifier).reactToMessage(message, 'heart');
@@ -1775,6 +1856,22 @@ class _MessageBubble extends ConsumerWidget {
                 );
               }
             });
+      } else if (value == 'delete') {
+        ref
+            .read(liveChatProvider.notifier)
+            .deleteMessage(message.id)
+            .then((success) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success ? 'Đã xóa tin nhắn.' : 'Xóa tin nhắn thất bại.',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            });
       }
     });
   }
@@ -1783,6 +1880,7 @@ class _MessageBubble extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Color textColor,
+    List<LiveChatAttachmentView> groupMedia,
   ) {
     if (message.isDeleted) {
       return Text(
@@ -1797,24 +1895,15 @@ class _MessageBubble extends ConsumerWidget {
       );
     }
 
+    if (groupMedia.isNotEmpty) {
+      return _buildImageGrid(context, ref, groupMedia, textColor);
+    }
+
     final attachmentView = resolveLiveChatAttachmentView(message);
     if (attachmentView?.kind == LiveChatAttachmentKind.video) {
       final video = attachmentView!;
       return InkWell(
-        onTap: video.hasRemoteUrl
-            ? () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => LiveChatVideoScreen(
-                    url: video.url,
-                    fileName: video.displayName,
-                    downloadDirectory: ref
-                        .read(settingsProvider)
-                        .settings
-                        .downloadFolder,
-                  ),
-                ),
-              )
-            : null,
+        onTap: () => _showImageGalleryPreviewDialog(context, ref, [video], 0),
         child: Container(
           width: 260,
           height: 150,
@@ -1965,7 +2054,7 @@ class _MessageBubble extends ConsumerWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white24),
+          border: Border.all(color: textColor.withValues(alpha: 0.15)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2039,7 +2128,7 @@ class _MessageBubble extends ConsumerWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white24),
+          border: Border.all(color: textColor.withValues(alpha: 0.15)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2339,9 +2428,431 @@ class _MessageBubble extends ConsumerWidget {
       }
     }
 
-    return Text(
-      message.message,
-      style: AppTextStyles.body.copyWith(color: textColor),
+    return Listener(
+      onPointerDown: (event) => _lastMessageBubbleTapPosition = event.position,
+      child: SelectableText(
+        message.message,
+        style: AppTextStyles.body.copyWith(color: textColor),
+        contextMenuBuilder: (context, editableTextState) {
+          Future.microtask(() {
+            if (context.mounted) {
+              _showRecallMenu(context, ref, _lastMessageBubbleTapPosition);
+            }
+          });
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  Widget _buildImageGrid(
+    BuildContext context,
+    WidgetRef ref,
+    List<LiveChatAttachmentView> images,
+    Color textColor,
+  ) {
+    if (images.isEmpty) return const SizedBox.shrink();
+
+    if (images.length == 1) {
+      return _buildSingleImage(context, ref, images[0], textColor);
+    }
+
+    final totalCount = images.length;
+    final displayCount = totalCount > 6 ? 6 : totalCount;
+    final displayImages = images.sublist(0, displayCount);
+
+    final List<Widget> rows = [];
+    int startIndex = 0;
+
+    if (displayCount % 2 != 0) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: _buildGridImageItem(
+            context,
+            ref,
+            displayImages[0],
+            300,
+            180,
+            index: 0,
+            total: totalCount,
+            allImages: images,
+          ),
+        ),
+      );
+      startIndex = 1;
+    }
+
+    for (int i = startIndex; i < displayCount; i += 2) {
+      final hasNext = i + 1 < displayCount;
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(bottom: i + 2 < displayCount ? 4 : 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildGridImageItem(
+                  context,
+                  ref,
+                  displayImages[i],
+                  148,
+                  148,
+                  index: i,
+                  total: totalCount,
+                  allImages: images,
+                ),
+              ),
+              if (hasNext) ...[
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildGridImageItem(
+                    context,
+                    ref,
+                    displayImages[i + 1],
+                    148,
+                    148,
+                    index: i + 1,
+                    total: totalCount,
+                    allImages: images,
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(width: 4),
+                const Expanded(child: SizedBox.shrink()),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 300,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: rows,
+      ),
+    );
+  }
+
+  Widget _buildGridImageItem(
+    BuildContext context,
+    WidgetRef ref,
+    LiveChatAttachmentView image,
+    double width,
+    double height, {
+    required int index,
+    required int total,
+    required List<LiveChatAttachmentView> allImages,
+  }) {
+    final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+    final errorWidget = Container(
+      width: width,
+      height: height,
+      color: Colors.black12,
+      child: const Center(
+        child: Icon(Icons.broken_image_outlined, color: Colors.grey),
+      ),
+    );
+
+    final isVideo = image.kind == LiveChatAttachmentKind.video;
+
+    Widget imageWidget = isVideo
+        ? Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              image: image.thumbnailUrl.isNotEmpty
+                  ? DecorationImage(
+                      image: NetworkImage(image.thumbnailUrl),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: const Center(
+              child: Icon(Icons.play_circle_fill, color: Colors.white, size: 36),
+            ),
+          )
+        : useLocal
+        ? SizedBox(
+            width: width,
+            height: height,
+            child: buildLiveChatLocalImage(
+              image.localPath,
+              fit: BoxFit.cover,
+              errorWidget: errorWidget,
+            ),
+          )
+        : image.hasRemoteUrl
+        ? CachedNetworkImage(
+            imageUrl: image.url,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              width: width,
+              height: height,
+              color: Colors.black12,
+              child: const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            errorWidget: (context, url, error) => errorWidget,
+          )
+        : SizedBox(
+            width: width,
+            height: height,
+            child: buildLiveChatLocalImage(
+              image.localPath,
+              fit: BoxFit.cover,
+              errorWidget: errorWidget,
+            ),
+          );
+
+    final showOverlay = index == 5 && total > 6;
+
+    return InkWell(
+      onTap: () => _showImageGalleryPreviewDialog(context, ref, allImages, index),
+      child: Stack(
+        children: [
+          imageWidget,
+          if (showOverlay)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: Center(
+                  child: Text(
+                    '+${total - 5}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (image.hasRemoteUrl && !showOverlay)
+            Positioned(
+              right: 2,
+              bottom: 2,
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.download_outlined, size: 14),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    final url = image.url.contains('/local/media/')
+                        ? '${image.url}/download'
+                        : image.url;
+                    try {
+                      final path = await const LiveChatDownloadService().download(
+                        url: url,
+                        fileName: image.displayName,
+                        directory: ref
+                            .read(settingsProvider)
+                            .settings
+                            .downloadFolder,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã tải ảnh: $path')),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tải ảnh thất bại: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleImage(
+    BuildContext context,
+    WidgetRef ref,
+    LiveChatAttachmentView image,
+    Color textColor,
+  ) {
+    if (image.kind == LiveChatAttachmentKind.video) {
+      return Container(
+        constraints: const BoxConstraints(
+          maxWidth: 300,
+          maxHeight: 300,
+        ),
+        child: Stack(
+          children: [
+            InkWell(
+              onTap: () => _showImageGalleryPreviewDialog(context, ref, [image], 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 300,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    image: image.thumbnailUrl.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(image.thumbnailUrl),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.play_circle_fill, color: Colors.white, size: 52),
+                  ),
+                ),
+              ),
+            ),
+            if (image.hasRemoteUrl)
+              Positioned(
+                right: 4,
+                bottom: 4,
+                child: IconButton.filledTonal(
+                  tooltip: 'Tải video',
+                  icon: const Icon(Icons.download_outlined, size: 18),
+                  onPressed: () async {
+                    final url = image.url.contains('/local/media/')
+                        ? '${image.url}/download'
+                        : image.url;
+                    try {
+                      final path = await const LiveChatDownloadService().download(
+                        url: url,
+                        fileName: image.displayName,
+                        directory: ref
+                            .read(settingsProvider)
+                            .settings
+                            .downloadFolder,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã tải video: $path')),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tải video thất bại: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+    final errorWidget = Container(
+      padding: const EdgeInsets.all(AppSpacing.s),
+      color: Colors.black12,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.broken_image_outlined, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text('Không thể tải ảnh', style: TextStyle(color: textColor)),
+        ],
+      ),
+    );
+
+    return Container(
+      constraints: const BoxConstraints(
+        maxWidth: 300,
+        maxHeight: 300,
+      ),
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () => _showImageGalleryPreviewDialog(context, ref, [image], 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: useLocal
+                  ? buildLiveChatLocalImage(
+                      image.localPath,
+                      fit: BoxFit.contain,
+                      errorWidget: errorWidget,
+                    )
+                  : image.hasRemoteUrl
+                  ? CachedNetworkImage(
+                      imageUrl: image.url,
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const SizedBox(
+                        width: 100,
+                        height: 100,
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => errorWidget,
+                    )
+                  : buildLiveChatLocalImage(
+                      image.localPath,
+                      fit: BoxFit.contain,
+                      errorWidget: errorWidget,
+                    ),
+            ),
+          ),
+          if (image.hasRemoteUrl)
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: IconButton.filledTonal(
+                tooltip: 'Tải ảnh',
+                icon: const Icon(Icons.download_outlined, size: 18),
+                onPressed: () async {
+                  final url = image.url.contains('/local/media/')
+                      ? '${image.url}/download'
+                      : image.url;
+                  try {
+                    final path = await const LiveChatDownloadService().download(
+                      url: url,
+                      fileName: image.displayName,
+                      directory: ref
+                          .read(settingsProvider)
+                          .settings
+                          .downloadFolder,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Đã tải ảnh: $path')),
+                      );
+                    }
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Tải ảnh thất bại: $error')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -2712,3 +3223,296 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
     }
   }
 }
+
+void _showImageGalleryPreviewDialog(
+  BuildContext context,
+  WidgetRef ref,
+  List<LiveChatAttachmentView> images,
+  int initialIndex,
+) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return _ImageGalleryDialog(
+        images: images,
+        initialIndex: initialIndex,
+        ref: ref,
+      );
+    },
+  );
+}
+
+class _ImageGalleryDialog extends StatefulWidget {
+  final List<LiveChatAttachmentView> images;
+  final int initialIndex;
+  final WidgetRef ref;
+
+  const _ImageGalleryDialog({
+    required this.images,
+    required this.initialIndex,
+    required this.ref,
+  });
+
+  @override
+  State<_ImageGalleryDialog> createState() => _ImageGalleryDialogState();
+}
+
+class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black.withValues(alpha: 0.9),
+      insetPadding: const EdgeInsets.all(16),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Gallery view
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.images.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final image = widget.images[index];
+              if (image.kind == LiveChatAttachmentKind.video) {
+                return _GalleryVideoItem(
+                  url: image.url,
+                  localPath: image.localPath,
+                );
+              }
+              final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+
+              return GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: InteractiveViewer(
+                  child: Center(
+                    child: useLocal
+                        ? buildLiveChatLocalImage(
+                            image.localPath,
+                            fit: BoxFit.contain,
+                            errorWidget: const Text(
+                              'Không thể xem ảnh lớn',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          )
+                        : image.hasRemoteUrl
+                        ? CachedNetworkImage(
+                            imageUrl: image.url,
+                            fit: BoxFit.contain,
+                            placeholder: (context, url) => const Center(
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                            errorWidget: (context, url, error) => const Text(
+                              'Không thể xem ảnh lớn',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          )
+                        : buildLiveChatLocalImage(
+                            image.localPath,
+                            fit: BoxFit.contain,
+                            errorWidget: const Text(
+                              'Không thể xem ảnh lớn',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                  ),
+                ),
+              );
+            },
+          ),
+          // Top bar details
+          Positioned(
+            top: 16,
+            left: 16,
+            child: Text(
+              '${_currentIndex + 1} / ${widget.images.length}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Download button for current media
+                IconButton(
+                  icon: const Icon(Icons.download, color: Colors.white, size: 26),
+                  tooltip: widget.images[_currentIndex].kind == LiveChatAttachmentKind.video
+                      ? 'Tải video hiện tại'
+                      : 'Tải ảnh hiện tại',
+                  onPressed: () async {
+                    final image = widget.images[_currentIndex];
+                    final isVideo = image.kind == LiveChatAttachmentKind.video;
+                    final mediaTypeLabel = isVideo ? 'video' : 'ảnh';
+                    final url = image.url.contains('/local/media/')
+                        ? '${image.url}/download'
+                        : image.url;
+                    if (!image.hasRemoteUrl) return;
+                    try {
+                      final path = await const LiveChatDownloadService().download(
+                        url: url,
+                        fileName: image.displayName,
+                        directory: widget.ref
+                            .read(settingsProvider)
+                            .settings
+                            .downloadFolder,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã tải $mediaTypeLabel: $path')),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tải $mediaTypeLabel thất bại: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          // Navigation indicators
+          if (_currentIndex > 0)
+            Positioned(
+              left: 16,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white60, size: 36),
+                style: IconButton.styleFrom(backgroundColor: Colors.black38),
+                onPressed: () {
+                  _pageController.previousPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+              ),
+            ),
+          if (_currentIndex < widget.images.length - 1)
+            Positioned(
+              right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 36),
+                style: IconButton.styleFrom(backgroundColor: Colors.black38),
+                onPressed: () {
+                  _pageController.nextPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GalleryVideoItem extends StatefulWidget {
+  final String url;
+  final String localPath;
+  
+  const _GalleryVideoItem({required this.url, this.localPath = ''});
+
+  @override
+  State<_GalleryVideoItem> createState() => _GalleryVideoItemState();
+}
+
+class _GalleryVideoItemState extends State<_GalleryVideoItem> {
+  late final Player _player;
+  late final VideoController _controller;
+  StreamSubscription<String>? _errorSubscription;
+  bool _isLoading = true;
+  String? _playbackError;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = Player();
+    _controller = VideoController(_player);
+    _errorSubscription = _player.stream.error.listen((error) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _playbackError = 'Không thể phát video: $error';
+        });
+      }
+    });
+    unawaited(_initializePlayer());
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      final source = widget.url.isNotEmpty ? widget.url : widget.localPath;
+      await _player.open(Media(source), play: true); // Auto play in fullscreen preview is great!
+    } catch (error) {
+      _playbackError = 'Không thể phát video: $error';
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_errorSubscription?.cancel());
+    unawaited(_player.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_playbackError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _playbackError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Video(controller: _controller, controls: AdaptiveVideoControls),
+      ),
+    );
+  }
+}
+
+

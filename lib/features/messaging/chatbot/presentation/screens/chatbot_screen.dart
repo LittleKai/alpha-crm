@@ -40,6 +40,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   String? _playgroundResponse;
   bool _isPlaying = false;
 
+  // Ids of knowledge files present on this machine (null until first loaded).
+  // Used to flag entries whose local file is missing (e.g. attached elsewhere).
+  Set<String>? _knowledgeIdsPresent;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshKnowledgePresence();
+  }
+
+  Future<void> _refreshKnowledgePresence() async {
+    final ids =
+        await ref.read(chatbotProvider.notifier).knowledgeFileIdsPresent();
+    if (!mounted) return;
+    setState(() => _knowledgeIdsPresent = ids);
+  }
+
   @override
   void dispose() {
     _promptController.dispose();
@@ -84,17 +101,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
-  Future<void> _showCreateRuleDialog(BuildContext context) async {
-    final nameController = TextEditingController();
-    final descriptionController = TextEditingController();
-    final drafts = [_KeywordRuleDraft()];
+  Future<void> _showRuleDialog(BuildContext context, {ChatbotRule? rule}) async {
+    final nameController = TextEditingController(text: rule?.name);
+    final descriptionController = TextEditingController(text: rule?.description);
+    final drafts = rule != null
+        ? [
+            _KeywordRuleDraft()
+              ..keyword.text = rule.keyword
+              ..response.text = rule.response
+          ]
+        : [_KeywordRuleDraft()];
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AppDialog(
-              title: 'Tạo kịch bản chatbot mới',
+              title: rule != null ? 'Chỉnh sửa kịch bản chatbot' : 'Tạo kịch bản chatbot mới',
               icon: Icons.smart_toy_outlined,
               width: 640,
               actions: [
@@ -104,8 +127,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
                 AppDialogAction(
-                  text: 'Tạo kịch bản',
-                  icon: Icons.add_rounded,
+                  text: rule != null ? 'Lưu thay đổi' : 'Tạo kịch bản',
+                  icon: rule != null ? Icons.save_rounded : Icons.add_rounded,
                   onPressed: () async {
                     final validDrafts = drafts
                         .where(
@@ -117,18 +140,28 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     if (validDrafts.isEmpty) return;
 
                     final notifier = ref.read(chatbotProvider.notifier);
-                    for (var i = 0; i < validDrafts.length; i += 1) {
-                      final ruleName = nameController.text.trim().isEmpty
-                          ? validDrafts[i].keyword.text.trim()
-                          : validDrafts.length == 1
-                          ? nameController.text.trim()
-                          : '${nameController.text.trim()} #${i + 1}';
-                      await notifier.addRule(
-                        validDrafts[i].keyword.text,
-                        validDrafts[i].response.text,
-                        name: ruleName,
+                    if (rule != null) {
+                      await notifier.updateRule(
+                        rule.id,
+                        keyword: validDrafts.first.keyword.text,
+                        response: validDrafts.first.response.text,
+                        name: nameController.text,
                         description: descriptionController.text,
                       );
+                    } else {
+                      for (var i = 0; i < validDrafts.length; i += 1) {
+                        final ruleName = nameController.text.trim().isEmpty
+                            ? validDrafts[i].keyword.text.trim()
+                            : validDrafts.length == 1
+                            ? nameController.text.trim()
+                            : '${nameController.text.trim()} #${i + 1}';
+                        await notifier.addRule(
+                          validDrafts[i].keyword.text,
+                          validDrafts[i].response.text,
+                          name: ruleName,
+                          description: descriptionController.text,
+                        );
+                      }
                     }
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
@@ -196,7 +229,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                   ),
                                 ),
                               ),
-                              if (drafts.length > 1)
+                              if (drafts.length > 1 && rule == null)
                                 IconButton(
                                   tooltip: 'Xóa quy tắc',
                                   icon: const Icon(Icons.close_rounded),
@@ -242,19 +275,21 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             const SizedBox(height: AppSpacing.m),
                           ],
                         ],
-                        const SizedBox(height: AppSpacing.m),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: AppButton(
-                            text: 'Thêm quy tắc',
-                            icon: Icons.add_rounded,
-                            variant: AppButtonVariant.outline,
-                            onPressed: () {
-                              drafts.add(_KeywordRuleDraft());
-                              setDialogState(() {});
-                            },
+                        if (rule == null) ...[
+                          const SizedBox(height: AppSpacing.m),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: AppButton(
+                              text: 'Thêm quy tắc',
+                              icon: Icons.add_rounded,
+                              variant: AppButtonVariant.outline,
+                              onPressed: () {
+                                drafts.add(_KeywordRuleDraft());
+                                setDialogState(() {});
+                              },
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -328,15 +363,28 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     responseController.dispose();
   }
 
-  Future<void> _showAddKnowledgeDialog(
+  Future<void> _showKnowledgeDialog(
     BuildContext context,
-    ChatbotNotifier notifier,
-  ) async {
-    final titleController = TextEditingController();
-    final keywordsController = TextEditingController();
-    final contentController = TextEditingController();
-    PlatformFile? pickedFile;
-    Map<String, dynamic>? uploadedFile;
+    ChatbotNotifier notifier, {
+    int? editIndex,
+    String? existingDoc,
+  }) async {
+    final ParsedKnowledgeDoc? parsed = existingDoc != null ? parseKnowledgeDoc(existingDoc) : null;
+    final titleController = TextEditingController(text: parsed?.title);
+    final keywordsController = TextEditingController(text: parsed?.keywords);
+    final contentController = TextEditingController(text: parsed?.content);
+
+    final List<_UploadedFileState> filesList = [];
+    if (parsed != null) {
+      for (final f in parsed.files) {
+        filesList.add(_UploadedFileState(
+          filename: f.name,
+          id: f.id,
+          description: f.description,
+        ));
+      }
+    }
+
     var isUploading = false;
     String? uploadError;
 
@@ -345,52 +393,132 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            Future<void> pickAndUploadFile() async {
+            // Nút "Chọn thêm file" có thể mở nhiều lần để bổ sung; mỗi lần cho
+            // chọn nhiều file, không còn giới hạn 5 file. File sau khi đính kèm
+            // được tự phân vào 4 nhóm (ảnh / video / âm thanh / tệp) theo đuôi.
+            Future<void> pickAndUploadFiles() async {
               final result = await FilePicker.platform.pickFiles(
-                allowMultiple: false,
+                allowMultiple: true,
                 withData: true,
                 type: FileType.any,
               );
               if (result == null || result.files.isEmpty) return;
-              final file = result.files.single;
-              if (file.bytes == null) {
-                setDialogState(() {
-                  pickedFile = file;
-                  uploadedFile = null;
-                  uploadError =
-                      'Không đọc được nội dung file. Hãy chọn file có thể truy cập trực tiếp.';
-                });
-                return;
+
+              setDialogState(() {
+                isUploading = true;
+                uploadError = null;
+              });
+
+              for (final file in result.files) {
+                if (file.bytes == null) {
+                  setDialogState(() {
+                    uploadError = 'Không đọc được file: ${file.name}';
+                  });
+                  continue;
+                }
+
+                final response = await notifier.uploadKnowledgeFile(
+                  filename: file.name,
+                  bytes: file.bytes!,
+                );
+
+                if (response['success'] == true && response['data'] is Map) {
+                  final data = Map<String, dynamic>.from(response['data'] as Map);
+                  final id = data['id']?.toString() ?? '';
+                  setDialogState(() {
+                    filesList.add(_UploadedFileState(
+                      filename: file.name,
+                      id: id,
+                    ));
+                  });
+                } else {
+                  setDialogState(() {
+                    uploadError = (response['message'] ?? 'Upload file ${file.name} thất bại.').toString();
+                  });
+                }
               }
 
               setDialogState(() {
-                pickedFile = file;
-                uploadedFile = null;
-                uploadError = null;
-                isUploading = true;
-              });
-
-              final response = await notifier.uploadKnowledgeFile(
-                filename: file.name,
-                bytes: file.bytes!,
-                contentType: _guessContentType(file.name),
-              );
-
-              setDialogState(() {
                 isUploading = false;
-                if (response['success'] == true && response['data'] is Map) {
-                  uploadedFile = Map<String, dynamic>.from(
-                    response['data'] as Map,
-                  );
-                } else {
-                  uploadError = (response['message'] ?? 'Upload file thất bại.')
-                      .toString();
-                }
               });
             }
 
+            bool isValid() {
+              final title = titleController.text.trim();
+              final content = contentController.text.trim();
+              if (title.isEmpty || content.isEmpty) return false;
+              for (final f in filesList) {
+                if (f.descriptionController.text.trim().isEmpty) {
+                  return false;
+                }
+              }
+              return true;
+            }
+
+            Widget buildFileCard(_UploadedFileState f) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: AppSpacing.s),
+                elevation: 0,
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+                  side: BorderSide(color: AppColors.border),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.s),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _attachmentTypeIcon(_attachmentTypeOf(f.filename)),
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: AppSpacing.s),
+                          Expanded(
+                            child: Text(
+                              f.filename,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close,
+                                color: AppColors.error, size: 18),
+                            onPressed: () {
+                              setDialogState(() {
+                                filesList.remove(f);
+                                f.dispose();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextField(
+                        controller: f.descriptionController,
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: 'Mô tả sơ lược (bắt buộc) *',
+                          hintText:
+                              'VD: Catalogue sản phẩm, Bảng báo giá tháng 6...',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
             return AppDialog(
-              title: 'Thêm tài liệu kiến thức mới',
+              title: editIndex != null ? 'Chỉnh sửa tài liệu kiến thức' : 'Thêm tài liệu kiến thức mới',
               icon: Icons.description_outlined,
               width: 640,
               actions: [
@@ -400,35 +528,41 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
                 AppDialogAction(
-                  text: 'Thêm tài liệu',
-                  icon: Icons.add_rounded,
-                  onPressed: isUploading
+                  text: editIndex != null ? 'Lưu thay đổi' : 'Thêm tài liệu',
+                  icon: editIndex != null ? Icons.save_rounded : Icons.add_rounded,
+                  onPressed: !isValid() || isUploading
                       ? null
                       : () {
                           final title = titleController.text.trim();
                           final keywords = keywordsController.text.trim();
                           final content = contentController.text.trim();
-                          if (title.isEmpty || content.isEmpty) return;
 
-                          final fileUrl = uploadedFile?['publicUrl']
-                              ?.toString();
-                          final fileName =
-                              uploadedFile?['filename']?.toString() ??
-                              pickedFile?.name;
+                          final fileLines = filesList.map((f) {
+                            return '- [File] Tên: ${f.filename} | ID: ${f.id} | Mô tả: ${f.descriptionController.text.trim()}';
+                          }).join('\n');
+
                           final text = [
                             'Tiêu đề tài liệu: $title',
                             if (keywords.isNotEmpty)
                               'Từ khóa kích hoạt: $keywords',
                             'Nội dung kiến thức bắt buộc:\n$content',
-                            if (fileUrl != null && fileUrl.isNotEmpty)
-                              'File/ảnh đính kèm:\n- Tên: $fileName\n- URL: $fileUrl\n- Quy tắc gửi: AI chỉ chọn file/ảnh này khi nội dung khách hỏi khớp từ khóa hoặc nội dung kiến thức; agent Zalo trên máy người dùng sẽ thực hiện gửi file/ảnh thật.',
+                            if (filesList.isNotEmpty)
+                              'Files đính kèm:\n$fileLines\nQuy tắc gửi: AI chỉ chọn file/ảnh phù hợp khi khách hỏi khớp từ khóa hoặc nội dung kiến thức; agent Zalo trên máy người dùng sẽ thực hiện gửi file/ảnh thật.',
                           ].join('\n\n');
 
-                          notifier.addKnowledgeDocument(text).then((_) {
+                          final Future<void> action = editIndex != null
+                              ? notifier.updateKnowledgeDocument(editIndex, text)
+                              : notifier.addKnowledgeDocument(text);
+
+                          action.then((_) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Đã thêm kiến thức: $title'),
+                                  content: Text(
+                                    editIndex != null
+                                        ? 'Đã cập nhật kiến thức: $title'
+                                        : 'Đã thêm kiến thức: $title',
+                                  ),
                                 ),
                               );
                             }
@@ -444,6 +578,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 children: [
                   TextField(
                     controller: titleController,
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Tiêu đề tài liệu *',
                       hintText: 'VD: Chính sách giao hàng',
@@ -453,6 +588,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   const SizedBox(height: AppSpacing.m),
                   TextField(
                     controller: keywordsController,
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Từ khóa kích hoạt',
                       hintText:
@@ -470,8 +606,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   const SizedBox(height: AppSpacing.m),
                   TextField(
                     controller: contentController,
-                    minLines: 7,
-                    maxLines: 12,
+                    onChanged: (_) => setDialogState(() {}),
+                    minLines: 6,
+                    maxLines: 10,
                     decoration: const InputDecoration(
                       labelText: 'Nội dung kiến thức *',
                       hintText:
@@ -484,7 +621,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'File / hình ảnh đính kèm (${uploadedFile == null ? 0 : 1})',
+                        'Tài liệu đính kèm (${filesList.length})',
                         style: AppTextStyles.label,
                       ),
                       AppButton(
@@ -492,7 +629,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         icon: Icons.upload_file_outlined,
                         variant: AppButtonVariant.outline,
                         isLoading: isUploading,
-                        onPressed: isUploading ? null : pickAndUploadFile,
+                        onPressed: isUploading ? null : pickAndUploadFiles,
                       ),
                     ],
                   ),
@@ -504,7 +641,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       borderRadius: AppSpacing.borderRadiusM,
                       border: Border.all(color: AppColors.borderSoft),
                     ),
-                    child: uploadedFile == null
+                    child: filesList.isEmpty
                         ? Text(
                             uploadError ??
                                 'Chưa có file hoặc hình ảnh đính kèm nào cho tài liệu này.',
@@ -515,33 +652,67 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                   : AppColors.errorText,
                             ),
                           )
-                        : Row(
-                            children: [
-                              const Icon(
-                                Icons.insert_drive_file_outlined,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(width: AppSpacing.s),
-                              Expanded(
-                                child: Text(
-                                  '${uploadedFile?['filename'] ?? pickedFile?.name} • ${_formatFileSize(uploadedFile?['size'])}',
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Bỏ file',
-                                icon: const Icon(Icons.close_rounded),
-                                onPressed: () {
-                                  setDialogState(() {
-                                    pickedFile = null;
-                                    uploadedFile = null;
-                                    uploadError = null;
-                                  });
-                                },
-                              ),
-                            ],
+                        : Builder(
+                            builder: (context) {
+                              // Tự phân các file đã đính kèm vào 4 nhóm theo đuôi.
+                              final groups = <KnowledgeAttachmentType,
+                                  List<_UploadedFileState>>{};
+                              for (final f in filesList) {
+                                groups
+                                    .putIfAbsent(
+                                        _attachmentTypeOf(f.filename), () => [])
+                                    .add(f);
+                              }
+                              const order = [
+                                KnowledgeAttachmentType.image,
+                                KnowledgeAttachmentType.video,
+                                KnowledgeAttachmentType.audio,
+                                KnowledgeAttachmentType.file,
+                              ];
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (uploadError != null) ...[
+                                    Text(
+                                      uploadError!,
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.errorText,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.s),
+                                  ],
+                                  for (final type in order)
+                                    if ((groups[type] ?? const [])
+                                        .isNotEmpty) ...[
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: AppSpacing.xs,
+                                          bottom: AppSpacing.xs,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _attachmentTypeIcon(type),
+                                              size: 16,
+                                              color: AppColors.primary,
+                                            ),
+                                            const SizedBox(width: AppSpacing.xs),
+                                            Text(
+                                              '${_attachmentTypeLabel(type)} (${groups[type]!.length})',
+                                              style:
+                                                  AppTextStyles.caption.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      ...groups[type]!.map(buildFileCard),
+                                    ],
+                                ],
+                              );
+                            },
                           ),
                   ),
                 ],
@@ -554,34 +725,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     titleController.dispose();
     keywordsController.dispose();
     contentController.dispose();
-  }
-
-  String _guessContentType(String filename) {
-    final ext = filename.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'webp':
-        return 'image/webp';
-      case 'pdf':
-        return 'application/pdf';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'xls':
-        return 'application/vnd.ms-excel';
-      case 'xlsx':
-        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      case 'txt':
-        return 'text/plain';
-      default:
-        return 'application/octet-stream';
+    for (final f in filesList) {
+      f.dispose();
     }
   }
 
@@ -843,7 +988,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           AppButton(
             text: 'Tạo kịch bản mới',
             icon: Icons.add_rounded,
-            onPressed: () => _showCreateRuleDialog(context),
+            onPressed: () => _showRuleDialog(context),
           ),
       ],
     );
@@ -915,7 +1060,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             AppButton(
               text: 'Tạo kịch bản đầu tiên',
               icon: Icons.add_rounded,
-              onPressed: () => _showCreateRuleDialog(context),
+              onPressed: () => _showRuleDialog(context),
             ),
           ],
         ),
@@ -971,6 +1116,16 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                 notifier.toggleRuleStatus(rule.id),
                           ),
                           IconButton(
+                            tooltip: 'Chỉnh sửa kịch bản',
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            onPressed: () => _showRuleDialog(context, rule: rule),
+                          ),
+                          IconButton(
+                            tooltip: 'Xóa kịch bản',
                             icon: const Icon(
                               Icons.delete_outline,
                               color: AppColors.error,
@@ -1783,7 +1938,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 text: 'Thêm kiến thức',
                 icon: Icons.add_rounded,
                 variant: AppButtonVariant.outline,
-                onPressed: () => _showAddKnowledgeDialog(context, notifier),
+                onPressed: () async {
+                  await _showKnowledgeDialog(context, notifier);
+                  await _refreshKnowledgePresence();
+                },
               ),
             ],
           ),
@@ -1808,6 +1966,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   itemCount: state.knowledgeDocuments.length,
                   itemBuilder: (context, index) {
                     final doc = state.knowledgeDocuments[index];
+                    final parsed = parseKnowledgeDoc(doc);
                     return Card(
                       margin: const EdgeInsets.only(bottom: AppSpacing.s),
                       elevation: 0,
@@ -1816,33 +1975,154 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         borderRadius: BorderRadius.circular(AppSpacing.radiusS),
                         side: BorderSide(color: AppColors.border),
                       ),
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.description,
-                          color: AppColors.primary,
-                          size: 28,
-                        ),
-                        title: Text(
-                          doc,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontWeight: FontWeight.bold,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                        child: ListTile(
+                          leading: const Icon(
+                            Icons.description,
+                            color: AppColors.primary,
+                            size: 28,
                           ),
-                        ),
-                        subtitle: Text(
-                          'Đã cập nhật: ${DateFormat('dd/MM/yyyy').format(DateTime.now())} • Cỡ file: 1.2 MB',
-                          style: AppTextStyles.caption,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: AppColors.error,
+                          title: Text(
+                            parsed.title,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          onPressed: () {
-                            notifier.removeKnowledgeDocument(doc);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Đã xóa tài liệu: $doc')),
-                            );
-                          },
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (parsed.keywords.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const AppBadge(
+                                      label: 'Từ khóa',
+                                      variant: AppBadgeVariant.neutral,
+                                    ),
+                                    const SizedBox(width: AppSpacing.xs),
+                                    Expanded(
+                                      child: Text(
+                                        parsed.keywords,
+                                        style: AppTextStyles.caption.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                parsed.content,
+                                style: AppTextStyles.body.copyWith(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (parsed.files.isNotEmpty) ...[
+                                const SizedBox(height: AppSpacing.xs),
+                                Wrap(
+                                  spacing: AppSpacing.xs,
+                                  runSpacing: AppSpacing.xs,
+                                  children: parsed.files.map((file) {
+                                    final present = _knowledgeIdsPresent;
+                                    final isMissing = present != null &&
+                                        (file.id.isEmpty ||
+                                            !present.contains(file.id));
+                                    final chipColor = isMissing
+                                        ? AppColors.error
+                                        : AppColors.primary;
+                                    return Tooltip(
+                                      message: isMissing
+                                          ? 'File chưa có trên máy này — hãy đính lại để bot gửi được.'
+                                          : (file.description.isNotEmpty
+                                              ? 'Mô tả: ${file.description}'
+                                              : 'Tài liệu đính kèm'),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isMissing
+                                              ? AppColors.error.withValues(alpha: 0.10)
+                                              : AppColors.primarySoft,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isMissing
+                                                ? AppColors.error
+                                                : AppColors.borderSoft,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isMissing
+                                                  ? Icons.warning_amber_rounded
+                                                  : Icons.attach_file,
+                                              size: 10,
+                                              color: chipColor,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              isMissing
+                                                  ? '${file.name} • thiếu file'
+                                                  : file.name,
+                                              style: AppTextStyles.caption.copyWith(
+                                                color: chipColor,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Chỉnh sửa tài liệu',
+                                icon: Icon(
+                                  Icons.edit_outlined,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () async {
+                                  await _showKnowledgeDialog(
+                                    context,
+                                    notifier,
+                                    editIndex: index,
+                                    existingDoc: doc,
+                                  );
+                                  await _refreshKnowledgePresence();
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Xóa tài liệu',
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: AppColors.error,
+                                ),
+                                onPressed: () {
+                                  notifier.removeKnowledgeDocument(doc);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Đã xóa tài liệu: ${parsed.title}')),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -1956,3 +2236,192 @@ class _KeywordRuleDraft {
     response.dispose();
   }
 }
+
+class ParsedKnowledgeDoc {
+  final String title;
+  final String keywords;
+  final String content;
+  final List<ParsedKnowledgeFile> files;
+
+  ParsedKnowledgeDoc({
+    required this.title,
+    required this.keywords,
+    required this.content,
+    required this.files,
+  });
+}
+
+class ParsedKnowledgeFile {
+  final String name;
+  final String description;
+  // Local bridge knowledge-store id. Empty for legacy B2 entries (now missing).
+  final String id;
+
+  ParsedKnowledgeFile({
+    required this.name,
+    required this.description,
+    required this.id,
+  });
+}
+
+ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
+  String title = '';
+  String keywords = '';
+  String content = '';
+  List<ParsedKnowledgeFile> files = [];
+
+  final titleIndex = doc.indexOf('Tiêu đề tài liệu:');
+  final keywordIndex = doc.indexOf('Từ khóa kích hoạt:');
+  final contentIndex = doc.indexOf('Nội dung kiến thức bắt buộc:\n');
+
+  final fileIndexMulti = doc.indexOf('Files đính kèm:\n');
+  final fileIndexSingle = doc.indexOf('File/ảnh đính kèm:\n');
+  final fileIndex = fileIndexMulti != -1 ? fileIndexMulti : fileIndexSingle;
+
+  // Extract title
+  if (titleIndex != -1) {
+    int end = doc.length;
+    if (keywordIndex != -1 && keywordIndex > titleIndex) {
+      end = keywordIndex;
+    } else if (contentIndex != -1 && contentIndex > titleIndex) {
+      end = contentIndex;
+    } else if (fileIndex != -1 && fileIndex > titleIndex) {
+      end = fileIndex;
+    }
+    title = doc.substring(titleIndex + 'Tiêu đề tài liệu:'.length, end).trim();
+  }
+
+  // Extract keywords
+  if (keywordIndex != -1) {
+    int end = doc.length;
+    if (contentIndex != -1 && contentIndex > keywordIndex) {
+      end = contentIndex;
+    } else if (fileIndex != -1 && fileIndex > keywordIndex) {
+      end = fileIndex;
+    }
+    keywords = doc.substring(keywordIndex + 'Từ khóa kích hoạt:'.length, end).trim();
+  }
+
+  // Extract content
+  if (contentIndex != -1) {
+    int end = doc.length;
+    if (fileIndex != -1 && fileIndex > contentIndex) {
+      end = fileIndex;
+    }
+    content = doc.substring(contentIndex + 'Nội dung kiến thức bắt buộc:\n'.length, end).trim();
+  }
+
+  // Extract files
+  if (fileIndex != -1) {
+    final fileSection = doc.substring(fileIndex).trim();
+    final lines = fileSection.split('\n');
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('-')) {
+        if (fileIndexMulti != -1) {
+          // Format: - [File] Tên: [FileName] | ID: [LocalId] | Mô tả: [Description]
+          // Legacy docs used "URL:" (B2) — kept with an empty id so the UI flags
+          // them as missing and prompts a re-attach.
+          final cleanLine = trimmed.substring(1).trim(); // Remove '-'
+          final parts = cleanLine.split('|');
+          String name = '';
+          String id = '';
+          String desc = '';
+          for (final part in parts) {
+            final p = part.trim();
+            if (p.startsWith('[File] Tên:')) {
+              name = p.substring('[File] Tên:'.length).trim();
+            } else if (p.startsWith('Tên:')) {
+              name = p.substring('Tên:'.length).trim();
+            } else if (p.startsWith('ID:')) {
+              id = p.substring('ID:'.length).trim();
+            } else if (p.startsWith('Mô tả:')) {
+              desc = p.substring('Mô tả:'.length).trim();
+            }
+          }
+          if (name.isNotEmpty) {
+            files.add(ParsedKnowledgeFile(name: name, description: desc, id: id));
+          }
+        }
+      }
+    }
+
+    // Legacy single-file format (B2 URL, no local id) — surface it as a missing
+    // entry (empty id) so the operator is prompted to re-attach.
+    if (fileIndexSingle != -1 && files.isEmpty) {
+      String name = '';
+      final lines = fileSection.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.startsWith('- Tên:')) {
+          name = trimmed.substring('- Tên:'.length).trim();
+        }
+      }
+      if (name.isNotEmpty) {
+        files.add(ParsedKnowledgeFile(name: name, description: 'Tài liệu đính kèm', id: ''));
+      }
+    }
+  }
+
+  if (title.isEmpty) {
+    title = doc.split('\n').first;
+  }
+
+  return ParsedKnowledgeDoc(
+    title: title,
+    keywords: keywords,
+    content: content,
+    files: files,
+  );
+}
+
+/// Bốn nhóm media mà tài liệu kiến thức hỗ trợ đính kèm. Nhóm được suy ra từ
+/// đuôi file để tự phân loại sau khi chọn (xem [_attachmentTypeOf]).
+enum KnowledgeAttachmentType { image, video, audio, file }
+
+KnowledgeAttachmentType _attachmentTypeOf(String filename) {
+  final ext = filename.contains('.')
+      ? filename.split('.').last.toLowerCase()
+      : '';
+  const image = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'svg'};
+  const video = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v', '3gp', 'flv', 'wmv'};
+  const audio = {'mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'amr', 'wma'};
+  if (image.contains(ext)) return KnowledgeAttachmentType.image;
+  if (video.contains(ext)) return KnowledgeAttachmentType.video;
+  if (audio.contains(ext)) return KnowledgeAttachmentType.audio;
+  return KnowledgeAttachmentType.file;
+}
+
+String _attachmentTypeLabel(KnowledgeAttachmentType type) => switch (type) {
+      KnowledgeAttachmentType.image => 'Hình ảnh',
+      KnowledgeAttachmentType.video => 'Video',
+      KnowledgeAttachmentType.audio => 'Âm thanh',
+      KnowledgeAttachmentType.file => 'Tệp tài liệu',
+    };
+
+IconData _attachmentTypeIcon(KnowledgeAttachmentType type) => switch (type) {
+      KnowledgeAttachmentType.image => Icons.image_outlined,
+      KnowledgeAttachmentType.video => Icons.videocam_outlined,
+      KnowledgeAttachmentType.audio => Icons.audiotrack_outlined,
+      KnowledgeAttachmentType.file => Icons.insert_drive_file_outlined,
+    };
+
+class _UploadedFileState {
+  final String filename;
+  // Content-hash id of the file stored in the LOCAL bridge knowledge store.
+  // Empty for legacy entries (previously on B2) — these render as "missing".
+  final String id;
+  final TextEditingController descriptionController;
+
+  _UploadedFileState({
+    required this.filename,
+    required this.id,
+    String description = '',
+  }) : descriptionController = TextEditingController(text: description);
+
+  void dispose() {
+    descriptionController.dispose();
+  }
+}
+
+

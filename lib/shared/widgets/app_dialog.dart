@@ -51,6 +51,7 @@ class AppDialog extends StatelessWidget {
         vertical: AppSpacing.l,
       ),
       shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
+      clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: dialogWidth, maxHeight: 720),
         child: Column(
@@ -75,9 +76,20 @@ class AppDialog extends StatelessWidget {
               ),
             ),
             if (actions.isNotEmpty) ...[
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.m),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xl,
+                  vertical: AppSpacing.m,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.appBackground,
+                  border: Border(
+                    top: BorderSide(
+                      color: AppColors.borderSoft,
+                      width: 1,
+                    ),
+                  ),
+                ),
                 child: Wrap(
                   spacing: AppSpacing.s,
                   runSpacing: AppSpacing.s,
@@ -207,47 +219,48 @@ class _AppDialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primarySoftColor = isDark
-        ? const Color(0xFF1E293B)
-        : AppColors.primarySoft;
-    final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
-        : AppColors.textSecondary;
-
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.l),
-      decoration: BoxDecoration(
-        color: primarySoftColor,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.radiusM),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.l,
+      ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF0F172A),
+            Color(0xFF1E293B),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: AppSpacing.borderRadiusM,
-            ),
-            child: Icon(icon, color: Colors.white, size: 24),
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 28,
           ),
           const SizedBox(width: AppSpacing.m),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTextStyles.sectionTitle),
+                Text(
+                  title,
+                  style: AppTextStyles.sectionTitle.copyWith(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: AppSpacing.xs),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: AppTextStyles.body.copyWith(
-                      color: textSecondaryColor,
-                      height: 1.45,
+                    style: AppTextStyles.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 11.5,
                     ),
                   ),
                 ],
@@ -257,8 +270,11 @@ class _AppDialogHeader extends StatelessWidget {
           if (showCloseButton)
             IconButton(
               tooltip: 'Đóng',
-              icon: const Icon(Icons.close_rounded),
-              color: textSecondaryColor,
+              icon: const Icon(
+                Icons.close,
+                color: Colors.white,
+                size: 20,
+              ),
               onPressed: () => Navigator.of(context).pop(),
             ),
         ],

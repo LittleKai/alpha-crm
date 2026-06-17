@@ -485,6 +485,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                   height: 40,
                   child: DropdownButtonFormField<String>(
                     value: _phoneFilter,
+                    isExpanded: true,
                     style: AppTextStyles.bodyMedium,
                     decoration: const InputDecoration(
                       contentPadding: EdgeInsets.symmetric(

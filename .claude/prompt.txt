@@ -1,6 +1,126 @@
-Có các vấn đề trogn Trong file build ra như sau:
-- không biết vì lý do nào đó sau khi tôi đăng nhập thành công 1 lúc thì bị văng về lại trang đăng nhập.
-- Trong lần khởi động đầu tiên thì báo lỗi backend chưa chạy, cần đảm bảo khởi động backend rồi thì mới load đầy đủ flutter, cả trang đăng nhập và cả trang đã đăng nhập thành công.
-- Chặn không cho mở file exe nhiều cửa sổ, chỉ 1 active.
-- Khi khởi động file exe trên nền tảng window, cửa sổ luôn luôn ở chế độ maximize.
-- Check lại giúp tôi hiện tại backend trong file build khi mở file exe flutter được khởi động với đầy đủ như trong chế độ dev không?
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+│ No Overlay widget found.
+│ EditableText widgets require an Overlay widget ancestor within the closest LookupBoundary.
+│ An overlay lets widgets float on top of other widget children.
+│ To introduce an Overlay widget, you can either directly include one, or use a widget that contains an Overlay itself, such as a Navigator, WidgetApp, MaterialApp, or CupertinoApp.
+│ The specific widget that could not find a Overlay ancestor was:
+│   EditableText-[LabeledGlobalKey<EditableTextState>#771aa]
+│ The ancestors of this widget were:
+│   UnmanagedRestorationScope
+│   RepaintBoundary
+│   _Decorator
+│   InputDecorator
+│   AnimatedBuilder
+│   Listener
+│   RawGestureDetector
+│   TextSelectionGestureDetector
+│   Semantics
+│   AnimatedBuilder
+│   IgnorePointer
+│   TextFieldTapRegion
+│   MouseRegion
+│   TextField
+│   Column
+│   Padding
+│   DecoratedBox
+│   ConstrainedBox
+│   Padding
+│   Container
+│   Center
+│   DefaultTextStyle
+│   AnimatedDefaultTextStyle
+│   _InkFeatures-[GlobalKey#6d819 ink renderer]
+│   NotificationListener<LayoutChangedNotification>
+│   PhysicalModel
+│   AnimatedPhysicalModel
+│   Material
+│   Positioned
+│   Stack
+│   AppLockOverlay
+│   Builder
+│   DefaultSelectionStyle
+│   _ScaffoldMessengerScope
+│   ScaffoldMessenger
+│   DefaultSelectionStyle
+│   IconTheme
+│   IconTheme
+│   InheritedCupertinoTheme
+│   CupertinoTheme
+│   _InheritedTheme
+│   Theme
+│   AnimatedTheme
+│   Builder
+│   DefaultTextStyle
+│   ValueListenableBuilder<bool>
+│   Title
+│   Directionality
+│   _LocalizationsScope-[GlobalKey#571f8]
+│   Semantics
+│   Localizations
+│   ListenableBuilder
+│   Semantics
+│   _FocusInheritedScope
+│   Focus
+│   Shortcuts
+│   _ShortcutRegistrarScope
+│   ShortcutRegistrar
+│   TapRegionSurface
+│   _FocusInheritedScope
+│   Focus
+│   FocusTraversalGroup
+│   _ActionsScope
+│   Actions
+│   Semantics
+│   _FocusInheritedScope
+│   Focus
+│   Shortcuts
+│   DefaultTextEditingShortcuts
+│   Semantics
+│   _FocusInheritedScope
+│   Focus
+│   Shortcuts
+│   NotificationListener<NavigationNotification>
+│   _SharedAppModel
+│   SharedAppData
+│   UnmanagedRestorationScope
+│   RestorationScope
+│   UnmanagedRestorationScope
+│   RootRestorationScope
+│   WidgetsApp-[GlobalObjectKey _MaterialAppState#901b3]
+│   Semantics
+│   _FocusInheritedScope
+│   Focus
+│   HeroControllerScope
+│   ScrollConfiguration
+│   MaterialApp
+│   MyApp
+│   UncontrolledProviderScope
+│   ProviderScope
+│   _FocusInheritedScope
+│   _FocusScopeWithExternalFocusNode
+│   _FocusInheritedScope
+│   Focus
+│   FocusTraversalGroup
+│   MediaQuery
+│   _MediaQueryFromView
+│   _PipelineOwnerScope
+│   _ViewScope
+│   _RawViewInternal-[_DeprecatedRawViewKey FlutterView#08742]
+│   RawView
+│   View
+│   [root]
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ #0   debugCheckHasOverlay.<anonymous closure> (package:flutter/src/widgets/debug.dart:506:7)
+│ #1   debugCheckHasOverlay (package:flutter/src/widgets/debug.dart:528:4)
+│ #2   new SelectionOverlay (package:flutter/src/widgets/text_selection.dart:1092:15)
+│ #3   new TextSelectionOverlay (package:flutter/src/widgets/text_selection.dart:355:25)
+│ #4   EditableTextState._createSelectionOverlay (package:flutter/src/widgets/editable_text.dart:4249:51)
+│ #5   EditableTextState.userUpdateTextEditingValue (package:flutter/src/widgets/editable_text.dart:4932:31)
+│ #6   RenderEditable._setTextEditingValue (package:flutter/src/rendering/editable.dart:738:27)
+│ #7   RenderEditable._setSelection (package:flutter/src/rendering/editable.dart:757:5)
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ 2026-06-17 15:27:37.276
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ ⛔ Flutter Framework Error
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Another exception was thrown: No Overlay widget found.

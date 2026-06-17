@@ -17,6 +17,7 @@ import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_search_field.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
+import '../../../../../shared/widgets/app_dialog.dart';
 import '../../providers/bulk_messaging_provider.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../groups/providers/invite_to_group_provider.dart';
@@ -1729,112 +1730,70 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
     showDialog(
       context: context,
       builder: (ctx) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            width: 500,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: AppSpacing.borderRadiusM,
+        return AppDialog(
+          title: 'Thêm tin mẫu mới',
+          icon: Icons.add_box_outlined,
+          width: 500,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.pop(ctx),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.add_box_outlined,
-                        color: AppColors.primary,
-                        size: 28,
+            AppDialogAction(
+              text: 'Lưu tin mẫu',
+              icon: Icons.save,
+              onPressed: () {
+                final t = titleController.text.trim();
+                final c = contentController.text.trim();
+                if (t.isNotEmpty && c.isNotEmpty) {
+                  setState(() {
+                    templates.insert(0, {
+                      'title': t,
+                      'content': c,
+                    });
+                  });
+                  Navigator.pop(ctx);
+                } else {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Vui lòng nhập đầy đủ Tên và Nội dung',
                       ),
-                      const SizedBox(width: AppSpacing.s),
-                      Expanded(
-                        child: Text(
-                          'Thêm tin mẫu mới',
-                          style: AppTextStyles.pageTitle,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(height: 1, color: AppColors.border),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tên chiến dịch / Tên mẫu *',
-                        style: AppTextStyles.label,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      TextField(
-                        controller: titleController,
-                        style: AppTextStyles.body,
-                        decoration: const InputDecoration(
-                          hintText: 'VD: Khuyến mãi ngày lễ',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.m),
-                      Text('Nội dung tin nhắn *', style: AppTextStyles.label),
-                      const SizedBox(height: AppSpacing.xs),
-                      TextField(
-                        controller: contentController,
-                        style: AppTextStyles.body,
-                        maxLines: 5,
-                        minLines: 3,
-                        decoration: const InputDecoration(
-                          hintText: 'Nhập nội dung mẫu...',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: Text('Hủy', style: AppTextStyles.bodyMedium),
-                          ),
-                          const SizedBox(width: AppSpacing.s),
-                          AppButton(
-                            text: 'Lưu tin mẫu',
-                            icon: Icons.save,
-                            variant: AppButtonVariant.primary,
-                            onPressed: () {
-                              final t = titleController.text.trim();
-                              final c = contentController.text.trim();
-                              if (t.isNotEmpty && c.isNotEmpty) {
-                                setState(() {
-                                  templates.insert(0, {
-                                    'title': t,
-                                    'content': c,
-                                  });
-                                });
-                                Navigator.pop(ctx);
-                              } else {
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Vui lòng nhập đầy đủ Tên và Nội dung',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  );
+                }
+              },
             ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tên chiến dịch / Tên mẫu *',
+                style: AppTextStyles.label,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              TextField(
+                controller: titleController,
+                style: AppTextStyles.body,
+                decoration: const InputDecoration(
+                  hintText: 'VD: Khuyến mãi ngày lễ',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              Text('Nội dung tin nhắn *', style: AppTextStyles.label),
+              const SizedBox(height: AppSpacing.xs),
+              TextField(
+                controller: contentController,
+                style: AppTextStyles.body,
+                maxLines: 5,
+                minLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Nhập nội dung mẫu...',
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -1866,101 +1825,68 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 600,
-        height: 500,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: AppSpacing.borderRadiusM,
+    return AppDialog(
+      title: 'Quản lý tin mẫu',
+      icon: Icons.inventory_2,
+      width: 600,
+      actions: [
+        AppDialogAction(
+          text: 'Thêm tin mẫu',
+          icon: Icons.add,
+          onPressed: _showAddTemplateDialog,
         ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.inventory_2,
-                    color: AppColors.primary,
-                    size: 28,
-                  ),
-                  const SizedBox(width: AppSpacing.s),
-                  Expanded(
-                    child: Text(
-                      'Quản lý tin mẫu',
-                      style: AppTextStyles.pageTitle,
+      ],
+      child: SizedBox(
+        height: 400,
+        child: ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: templates.length,
+          separatorBuilder: (context, index) =>
+              const SizedBox(height: AppSpacing.m),
+          itemBuilder: (context, index) {
+            final tpl = templates[index];
+            return InkWell(
+              onTap: () {
+                widget.onSelect(tpl['title']!, tpl['content']!);
+                Navigator.pop(context);
+              },
+              borderRadius: AppSpacing.borderRadiusM,
+              child: Container(
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.borderSoft),
+                  borderRadius: AppSpacing.borderRadiusM,
+                  color: AppColors.appBackground,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.bookmark_outline,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text(
+                          tpl['title']!,
+                          style: AppTextStyles.cardTitle,
+                        ),
+                      ],
                     ),
-                  ),
-                  AppButton(
-                    text: 'Thêm tin mẫu',
-                    icon: Icons.add,
-                    variant: AppButtonVariant.primary,
-                    onPressed: _showAddTemplateDialog,
-                  ),
-                  const SizedBox(width: AppSpacing.s),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: AppColors.border),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                itemCount: templates.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: AppSpacing.m),
-                itemBuilder: (context, index) {
-                  final tpl = templates[index];
-                  return InkWell(
-                    onTap: () {
-                      widget.onSelect(tpl['title']!, tpl['content']!);
-                      Navigator.pop(context);
-                    },
-                    borderRadius: AppSpacing.borderRadiusM,
-                    child: Container(
-                      padding: const EdgeInsets.all(AppSpacing.m),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.borderSoft),
-                        borderRadius: AppSpacing.borderRadiusM,
-                        color: AppColors.appBackground,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.bookmark_outline,
-                                size: 18,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                tpl['title']!,
-                                style: AppTextStyles.cardTitle,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            tpl['content']!,
-                            style: AppTextStyles.body.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      tpl['content']!,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

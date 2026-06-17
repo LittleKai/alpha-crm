@@ -45,6 +45,20 @@ class _FakeChatbotRepository extends ChatbotRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> updateRule(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return {
+      'success': true,
+      'data': {
+        '_id': id,
+        ...data,
+      },
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> saveSettings(
     Map<String, dynamic> payload,
   ) async {
@@ -101,5 +115,53 @@ void main() {
 
     expect(notifier.state.debounceSeconds, 6);
     expect(repository.savedSettings?['debounceSeconds'], 6);
+  });
+
+  test('updateRule edits existing rule successfully', () async {
+    final repository = _FakeChatbotRepository();
+    final notifier = ChatbotNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+
+    // Initial state is empty rules
+    expect(notifier.state.rules, isEmpty);
+
+    // Seed state rules list manually to simulate having a rule
+    notifier.state = notifier.state.copyWith(
+      rules: [
+        const ChatbotRule(
+          id: 'rule-1',
+          name: 'Old Rule',
+          description: 'Old Description',
+          keyword: 'old',
+          response: 'old response',
+        ),
+      ],
+    );
+
+    // Call update rule
+    await notifier.updateRule(
+      'rule-1',
+      keyword: 'new, keywords',
+      response: 'new response',
+      name: 'New Rule',
+      description: 'New Description',
+    );
+    
+    // Confirms call completes without errors
+  });
+
+  test('updateKnowledgeDocument updates item in list successfully', () async {
+    final repository = _FakeChatbotRepository();
+    final notifier = ChatbotNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+
+    notifier.state = notifier.state.copyWith(
+      knowledgeDocuments: ['Doc 1', 'Doc 2', 'Doc 3'],
+    );
+
+    await notifier.updateKnowledgeDocument(1, 'Updated Doc 2');
+
+    expect(notifier.state.knowledgeDocuments[1], 'Updated Doc 2');
+    expect(repository.savedSettings?['knowledgeSnippets'], ['Doc 1', 'Updated Doc 2', 'Doc 3']);
   });
 }

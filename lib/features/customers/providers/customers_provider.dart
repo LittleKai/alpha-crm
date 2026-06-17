@@ -21,7 +21,7 @@ extension ContactJson on Contact {
       phone: json['phone']?.toString() ?? '',
       group: json['company']?.toString() ?? 'Mặc định',
       tag: json['notes']?.toString() ?? 'Tất cả',
-      source: 'Cloud DB',
+      source: json['source']?.toString() ?? 'Cloud DB',
       status: _mapStatusToVietnamese(json['status']?.toString() ?? 'lead'),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())

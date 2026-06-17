@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-03
 **Target:** Alpha CRM (`tools/alpha-crm`)
-**Reference:** Deplao App (`D:\Dev\2.reference_pj\Zalo-ref\Deplao-App`)
+**Reference:** Deplao App (`D:\Dev\2.reference_pj\.Zalo-ref\Deplao-App`)
 
 ## Objective
 

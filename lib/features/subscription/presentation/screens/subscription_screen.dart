@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../../auth/providers/crm_auth_provider.dart';
 import '../../models/subscription_catalog.dart';
 
@@ -78,93 +79,82 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          insetPadding: const EdgeInsets.all(AppSpacing.m),
-          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _DialogHeader(
-                  icon: Icons.workspace_premium_rounded,
-                  title: authState.subscriptionStatus == 'active'
-                      ? 'Xác nhận gia hạn gói tháng'
-                      : 'Xác nhận đăng ký gói tháng',
-                  subtitle:
-                      'Kiểm tra chi phí, quota và số dư trước khi tiếp tục.',
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SummaryTile(
-                              label: 'Chi phí',
-                              value: '${crmMonthlyPlan.priceCredits} Credits',
-                              note: formatVnd(crmMonthlyPlan.priceVnd),
-                              icon: Icons.account_balance_wallet_rounded,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.m),
-                          Expanded(
-                            child: _SummaryTile(
-                              label: 'Quota mới',
-                              value: '${crmMonthlyPlan.aiRequests} AI',
-                              note: 'Hiệu lực 30 ngày',
-                              icon: Icons.auto_awesome_rounded,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.m),
-                      ...details.rows.map(
-                        (row) => _DetailRow(label: row.$1, value: row.$2),
-                      ),
-                      const SizedBox(height: AppSpacing.m),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.m),
-                        decoration: BoxDecoration(
-                          color: details.canPayWithCredits
-                              ? AppColors.successSoft
-                              : AppColors.warningSoft,
-                          borderRadius: AppSpacing.borderRadiusM,
-                          border: Border.all(
-                            color: details.canPayWithCredits
-                                ? AppColors.success
-                                : AppColors.warning,
-                          ),
-                        ),
-                        child: Text(
-                          details.canPayWithCredits
-                              ? 'Số dư hiện tại: ${authState.creditBalance} Credits. Bạn có thể thanh toán bằng Credits ngay.'
-                              : 'Số dư hiện tại: ${authState.creditBalance} Credits, thiếu ${details.missingCredits} Credits. Bạn vẫn có thể chọn VietQR.',
-                          style: AppTextStyles.body.copyWith(
-                            color: details.canPayWithCredits
-                                ? AppColors.successText
-                                : AppColors.warningText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+        return AppDialog(
+          title: authState.subscriptionStatus == 'active'
+              ? 'Xác nhận gia hạn gói tháng'
+              : 'Xác nhận đăng ký gói tháng',
+          subtitle: 'Kiểm tra chi phí, quota và số dư trước khi tiếp tục.',
+          icon: Icons.workspace_premium_rounded,
+          width: 560,
+          actions: [
+            AppDialogAction(
+              text: 'Chưa gia hạn',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            AppDialogAction(
+              text: 'Tôi xác nhận',
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showCheckoutDialog(crmMonthlyPlan);
+              },
+            ),
+          ],
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _SummaryTile(
+                      label: 'Chi phí',
+                      value: '${crmMonthlyPlan.priceCredits} Credits',
+                      note: formatVnd(crmMonthlyPlan.priceVnd),
+                      icon: Icons.account_balance_wallet_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.m),
+                  Expanded(
+                    child: _SummaryTile(
+                      label: 'Quota mới',
+                      value: '${crmMonthlyPlan.aiRequests} AI',
+                      note: 'Hiệu lực 30 ngày',
+                      icon: Icons.auto_awesome_rounded,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.m),
+              ...details.rows.map(
+                (row) => _DetailRow(label: row.$1, value: row.$2),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: BoxDecoration(
+                  color: details.canPayWithCredits
+                      ? AppColors.successSoft
+                      : AppColors.warningSoft,
+                  borderRadius: AppSpacing.borderRadiusM,
+                  border: Border.all(
+                    color: details.canPayWithCredits
+                        ? AppColors.success
+                        : AppColors.warning,
                   ),
                 ),
-                _DialogActions(
-                  cancelText: 'Chưa gia hạn',
-                  confirmText: 'Tôi xác nhận',
-                  onCancel: () => Navigator.of(dialogContext).pop(),
-                  onConfirm: () {
-                    Navigator.of(dialogContext).pop();
-                    _showCheckoutDialog(crmMonthlyPlan);
-                  },
+                child: Text(
+                  details.canPayWithCredits
+                      ? 'Số dư hiện tại: ${authState.creditBalance} Credits. Bạn có thể thanh toán bằng Credits ngay.'
+                      : 'Số dư hiện tại: ${authState.creditBalance} Credits, thiếu ${details.missingCredits} Credits. Bạn vẫn có thể chọn VietQR.',
+                  style: AppTextStyles.body.copyWith(
+                    color: details.canPayWithCredits
+                        ? AppColors.successText
+                        : AppColors.warningText,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -178,79 +168,66 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          insetPadding: const EdgeInsets.all(AppSpacing.m),
-          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _DialogHeader(
-                  icon: product.isPlan
-                      ? Icons.workspace_premium_rounded
-                      : Icons.bolt_rounded,
-                  title: product.name,
-                  subtitle:
-                      'Chọn Credits để kích hoạt ngay hoặc VietQR để tạo mã chuyển khoản chính xác.',
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  child: Column(
-                    children: [
-                      _DetailRow(
-                        label: 'Giá trị',
-                        value:
-                            '${formatVnd(product.priceVnd)} hoặc ${product.priceCredits} Credits',
-                      ),
-                      _DetailRow(
-                        label: product.isPlan ? 'Quota gói chính' : 'AI thêm',
-                        value: '${product.aiRequests} yêu cầu AI',
-                      ),
-                      _DetailRow(
-                        label: 'Số dư Credits',
-                        value: '${authState.creditBalance} Credits',
-                      ),
-                      const SizedBox(height: AppSpacing.m),
-                      AppButton(
-                        text: canPayCredits
-                            ? 'Thanh toán bằng Credits'
-                            : 'Không đủ Credits',
-                        icon: Icons.account_balance_wallet_rounded,
-                        width: double.infinity,
-                        height: 44,
-                        isLoading: _isProcessing,
-                        onPressed: canPayCredits && !_isProcessing
-                            ? () {
-                                Navigator.of(dialogContext).pop();
-                                _checkout(product, 'credit');
-                              }
-                            : null,
-                      ),
-                      const SizedBox(height: AppSpacing.s),
-                      AppButton(
-                        text: 'Tạo mã VietQR chuyển khoản',
-                        icon: Icons.qr_code_2_rounded,
-                        width: double.infinity,
-                        height: 44,
-                        variant: AppButtonVariant.outline,
-                        onPressed: _isProcessing
-                            ? null
-                            : () {
-                                Navigator.of(dialogContext).pop();
-                                _checkout(product, 'bank_transfer');
-                              },
-                      ),
-                    ],
-                  ),
-                ),
-                _DialogActions(
-                  cancelText: 'Đóng',
-                  onCancel: () => Navigator.of(dialogContext).pop(),
-                ),
-              ],
+        return AppDialog(
+          title: product.name,
+          subtitle: 'Chọn Credits để kích hoạt ngay hoặc VietQR để tạo mã chuyển khoản chính xác.',
+          icon: product.isPlan
+              ? Icons.workspace_premium_rounded
+              : Icons.bolt_rounded,
+          width: 520,
+          actions: [
+            AppDialogAction(
+              text: 'Đóng',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
+          ],
+          child: Column(
+            children: [
+              _DetailRow(
+                label: 'Giá trị',
+                value:
+                    '${formatVnd(product.priceVnd)} hoặc ${product.priceCredits} Credits',
+              ),
+              _DetailRow(
+                label: product.isPlan ? 'Quota gói chính' : 'AI thêm',
+                value: '${product.aiRequests} yêu cầu AI',
+              ),
+              _DetailRow(
+                label: 'Số dư Credits',
+                value: '${authState.creditBalance} Credits',
+              ),
+              const SizedBox(height: AppSpacing.m),
+              AppButton(
+                text: canPayCredits
+                    ? 'Thanh toán bằng Credits'
+                    : 'Không đủ Credits',
+                icon: Icons.account_balance_wallet_rounded,
+                width: double.infinity,
+                height: 44,
+                isLoading: _isProcessing,
+                onPressed: canPayCredits && !_isProcessing
+                    ? () {
+                        Navigator.of(dialogContext).pop();
+                        _checkout(product, 'credit');
+                      }
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.s),
+              AppButton(
+                text: 'Tạo mã VietQR chuyển khoản',
+                icon: Icons.qr_code_2_rounded,
+                width: double.infinity,
+                height: 44,
+                variant: AppButtonVariant.outline,
+                onPressed: _isProcessing
+                    ? null
+                    : () {
+                        Navigator.of(dialogContext).pop();
+                        _checkout(product, 'bank_transfer');
+                      },
+              ),
+            ],
           ),
         );
       },
@@ -264,145 +241,132 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          insetPadding: const EdgeInsets.all(AppSpacing.m),
-          shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 760),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _DialogHeader(
-                  icon: Icons.qr_code_2_rounded,
-                  title: 'Mã VietQR chuyển khoản',
-                  subtitle:
-                      'Quét đúng mã hoặc chuyển khoản đúng nội dung để hệ thống tự duyệt giao dịch.',
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppSpacing.l),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(AppSpacing.m),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: AppSpacing.borderRadiusM,
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: checkout.qrCodeUrl == null
-                              ? Icon(
-                                  Icons.qr_code_2_rounded,
-                                  size: 160,
-                                  color: AppColors.textSecondary,
-                                )
-                              : Image.network(
-                                  checkout.qrCodeUrl!,
-                                  width: 240,
-                                  height: 240,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Icon(
-                                        Icons.qr_code_2_rounded,
-                                        size: 160,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                ),
-                        ),
-                        const SizedBox(height: AppSpacing.l),
-                        _DetailRow(label: 'Sản phẩm', value: product.name),
-                        _DetailRow(
-                          label: 'Số tiền',
-                          value: formatVnd(checkout.amountVnd),
-                        ),
-                        _DetailRow(
-                          label: 'Ngân hàng',
-                          value: checkout.bankName,
-                        ),
-                        _DetailRow(
-                          label: 'Số tài khoản',
-                          value: checkout.accountNumber,
-                        ),
-                        _DetailRow(
-                          label: 'Chủ tài khoản',
-                          value: checkout.accountHolder,
-                        ),
-                        const SizedBox(height: AppSpacing.s),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.m),
-                          decoration: BoxDecoration(
-                            color: AppColors.primarySoft,
-                            borderRadius: AppSpacing.borderRadiusM,
-                            border: Border.all(color: AppColors.primaryBorder),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Nội dung chuyển khoản',
-                                style: AppTextStyles.caption.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              SelectableText(
-                                checkout.transferContent,
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.s),
-                              AppButton(
-                                text: 'Sao chép nội dung',
-                                icon: Icons.copy_rounded,
-                                variant: AppButtonVariant.outline,
-                                onPressed: () {
-                                  Clipboard.setData(
-                                    ClipboardData(
-                                      text: checkout.transferContent,
-                                    ),
-                                  );
-                                  _showSnack(
-                                    'Đã sao chép nội dung chuyển khoản.',
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        Text(
-                          'Lưu ý: Không sửa nội dung chuyển khoản. Sau khi ngân hàng ghi nhận đúng mã ${checkout.transferContent}, giao dịch sẽ được tự động duyệt.',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.warningText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                _DialogActions(
-                  cancelText: 'Đóng',
-                  confirmText: 'Tôi đã chuyển khoản',
-                  onCancel: () {
-                    Navigator.of(dialogContext).pop();
-                    ref.read(crmAuthProvider.notifier).refreshSubscription();
-                  },
-                  onConfirm: () {
-                    Navigator.of(dialogContext).pop();
-                    ref.read(crmAuthProvider.notifier).refreshSubscription();
-                    _showSnack(
-                      'Đã ghi nhận. Hệ thống sẽ tự duyệt khi tiền về.',
-                    );
-                  },
-                ),
-              ],
+        return AppDialog(
+          title: 'Mã VietQR chuyển khoản',
+          subtitle: 'Quét đúng mã hoặc chuyển khoản đúng nội dung để hệ thống tự duyệt giao dịch.',
+          icon: Icons.qr_code_2_rounded,
+          width: 560,
+          actions: [
+            AppDialogAction(
+              text: 'Đóng',
+              variant: AppButtonVariant.outline,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                ref.read(crmAuthProvider.notifier).refreshSubscription();
+              },
             ),
+            AppDialogAction(
+              text: 'Tôi đã chuyển khoản',
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                ref.read(crmAuthProvider.notifier).refreshSubscription();
+                _showSnack(
+                  'Đã ghi nhận. Hệ thống sẽ tự duyệt khi tiền về.',
+                );
+              },
+            ),
+          ],
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppSpacing.borderRadiusM,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: checkout.qrCodeUrl == null
+                    ? Icon(
+                        Icons.qr_code_2_rounded,
+                        size: 160,
+                        color: AppColors.textSecondary,
+                      )
+                    : Image.network(
+                        checkout.qrCodeUrl!,
+                        width: 240,
+                        height: 240,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Icon(
+                              Icons.qr_code_2_rounded,
+                              size: 160,
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.l),
+              _DetailRow(label: 'Sản phẩm', value: product.name),
+              _DetailRow(
+                label: 'Số tiền',
+                value: formatVnd(checkout.amountVnd),
+              ),
+              _DetailRow(
+                label: 'Ngân hàng',
+                value: checkout.bankName,
+              ),
+              _DetailRow(
+                label: 'Số tài khoản',
+                value: checkout.accountNumber,
+              ),
+              _DetailRow(
+                label: 'Chủ tài khoản',
+                value: checkout.accountHolder,
+              ),
+              const SizedBox(height: AppSpacing.s),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: AppSpacing.borderRadiusM,
+                  border: Border.all(color: AppColors.primaryBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Nội dung chuyển khoản',
+                      style: AppTextStyles.caption.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    SelectableText(
+                      checkout.transferContent,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    AppButton(
+                      text: 'Sao chép nội dung',
+                      icon: Icons.copy_rounded,
+                      variant: AppButtonVariant.outline,
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(
+                            text: checkout.transferContent,
+                          ),
+                        );
+                        _showSnack(
+                          'Đã sao chép nội dung chuyển khoản.',
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              Text(
+                'Lưu ý: Không sửa nội dung chuyển khoản. Sau khi ngân hàng ghi nhận đúng mã ${checkout.transferContent}, giao dịch sẽ được tự động duyệt.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.warningText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -1100,91 +1064,7 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _DialogHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
 
-  const _DialogHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.l),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.radiusM),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _IconBadge(icon: icon),
-          const SizedBox(width: AppSpacing.m),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTextStyles.sectionTitle),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DialogActions extends StatelessWidget {
-  final String cancelText;
-  final String? confirmText;
-  final VoidCallback onCancel;
-  final VoidCallback? onConfirm;
-
-  const _DialogActions({
-    required this.cancelText,
-    this.confirmText,
-    required this.onCancel,
-    this.onConfirm,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.borderSoft)),
-      ),
-      child: Wrap(
-        spacing: AppSpacing.s,
-        runSpacing: AppSpacing.s,
-        alignment: WrapAlignment.end,
-        children: [
-          AppButton(
-            text: cancelText,
-            variant: AppButtonVariant.outline,
-            onPressed: onCancel,
-          ),
-          if (confirmText != null)
-            AppButton(text: confirmText!, onPressed: onConfirm),
-        ],
-      ),
-    );
-  }
-}
 
 class _GuideChip extends StatelessWidget {
   final String text;

@@ -5,7 +5,7 @@
 This catalog summarizes the usable public API surface from the local reference repository:
 
 ```text
-D:\Dev\2.reference_pj\Zalo-ref\zca-js
+D:\Dev\2.reference_pj\.Zalo-ref\zca-js
 ```
 
 Source files checked:

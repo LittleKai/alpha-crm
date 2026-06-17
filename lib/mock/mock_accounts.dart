@@ -45,6 +45,9 @@ class SystemSettings {
   final int liveChatMediaCacheMaxAgeDays;
   final int liveChatMediaCacheMaxGb;
 
+  // Show a desktop notification when a new inbound Live Chat message arrives.
+  final bool liveChatNotifications;
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -83,6 +86,7 @@ class SystemSettings {
     this.downloadFolder = '',
     this.liveChatMediaCacheMaxAgeDays = 90,
     this.liveChatMediaCacheMaxGb = 20,
+    this.liveChatNotifications = true,
   });
 
   SystemSettings copyWith({
@@ -123,6 +127,7 @@ class SystemSettings {
     String? downloadFolder,
     int? liveChatMediaCacheMaxAgeDays,
     int? liveChatMediaCacheMaxGb,
+    bool? liveChatNotifications,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -176,6 +181,8 @@ class SystemSettings {
           liveChatMediaCacheMaxAgeDays ?? this.liveChatMediaCacheMaxAgeDays,
       liveChatMediaCacheMaxGb:
           liveChatMediaCacheMaxGb ?? this.liveChatMediaCacheMaxGb,
+      liveChatNotifications:
+          liveChatNotifications ?? this.liveChatNotifications,
     );
   }
 
@@ -224,6 +231,7 @@ class SystemSettings {
       'downloadFolder': downloadFolder,
       'liveChatMediaCacheMaxAgeDays': liveChatMediaCacheMaxAgeDays,
       'liveChatMediaCacheMaxGb': liveChatMediaCacheMaxGb,
+      'liveChatNotifications': liveChatNotifications,
     };
   }
 
@@ -287,6 +295,7 @@ class SystemSettings {
       downloadFolder: json['downloadFolder'] ?? '',
       liveChatMediaCacheMaxAgeDays: json['liveChatMediaCacheMaxAgeDays'] ?? 90,
       liveChatMediaCacheMaxGb: json['liveChatMediaCacheMaxGb'] ?? 20,
+      liveChatNotifications: json['liveChatNotifications'] != false,
     );
   }
 }

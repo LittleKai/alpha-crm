@@ -24,6 +24,8 @@ import { createProxyAgent, redactProxyUrl } from '../integrations/proxy-helper.j
 import { Zalo, ThreadType, FriendEventType } from 'zca-js';
 import type { API, Credentials } from 'zca-js';
 
+type AccountStatus = 'connected' | 'disconnected_expired';
+
 interface ZaloAccountInstance {
   api: API;
   uId: string;
@@ -31,6 +33,30 @@ interface ZaloAccountInstance {
   listenerRunning: boolean;
   lastEventAt: string | null;
   avatar?: string;
+  // Source credentials file this account was loaded from / should persist to.
+  credentialsPath?: string;
+  // Connection health surfaced to the UI. When the realtime socket is force-closed
+  // by Zalo (duplicate login / kicked), the session is dead and must be re-scanned.
+  // Optional so lightweight test fixtures can omit it; defaults to 'connected'.
+  status?: AccountStatus;
+  disconnectCode?: number;
+  disconnectReason?: string;
+  disconnectedAt?: string;
+}
+
+// Human-readable explanation for a websocket close code from zca-js.
+// 3000 = DuplicateConnection, 3003 = KickConnection (see zca-js CloseReason).
+function describeCloseReason(code: number, reason: string): string {
+  switch (code) {
+    case 3000:
+      return 'Đăng nhập trùng: tài khoản này vừa được đăng nhập ở nơi khác (Zalo Web hoặc thiết bị khác), khiến phiên trên CRM bị ngắt. Vui lòng quét QR đăng nhập lại.';
+    case 3003:
+      return 'Bị đăng xuất: phiên đã bị thu hồi/đăng xuất từ ứng dụng Zalo trên điện thoại. Vui lòng quét QR đăng nhập lại.';
+    default:
+      return reason
+        ? `Mất kết nối (mã ${code}): ${reason}`
+        : `Mất kết nối (mã ${code}).`;
+  }
 }
 
 interface AccountSettings {
@@ -98,25 +124,35 @@ const groupsCache = new Map<string, CacheEntry<any[]>>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 // Group name cache — short TTL to keep group display names fresh
-const groupNameCache = new Map<string, { name: string; timestamp: number }>();
+interface GroupMeta {
+  name: string;
+  avatar: string;
+}
+const groupNameCache = new Map<string, { meta: GroupMeta; timestamp: number }>();
 const GROUP_NAME_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function resolveGroupName(api: API, groupId: string): Promise<string> {
+// Resolve a group's display name AND avatar from the zca-js API. The group
+// avatar (fullAvt/avt) becomes the conversation avatar so the inbox shows the
+// group's own picture rather than whichever member happened to send last.
+async function resolveGroupInfo(api: API, groupId: string): Promise<GroupMeta> {
   const cached = groupNameCache.get(groupId);
   if (cached && Date.now() - cached.timestamp < GROUP_NAME_CACHE_TTL_MS) {
-    return cached.name;
+    return cached.meta;
   }
   try {
     const result = await (api as any).getGroupInfo(groupId);
     const info = result?.gridInfoMap?.[groupId];
-    const name = info?.name || '';
-    if (name) {
-      groupNameCache.set(groupId, { name, timestamp: Date.now() });
+    const meta: GroupMeta = {
+      name: info?.name || '',
+      avatar: normalizeImageUrl(info?.fullAvt || info?.avt || ''),
+    };
+    if (meta.name || meta.avatar) {
+      groupNameCache.set(groupId, { meta, timestamp: Date.now() });
     }
-    return name;
+    return meta;
   } catch (err) {
     console.warn(`[PersonalZcaChannel] getGroupInfo failed for ${groupId}:`, err);
-    return '';
+    return { name: '', avatar: '' };
   }
 }
 
@@ -191,6 +227,86 @@ function writeAccountSettings(settings: Record<string, AccountSettings>): void {
 function accountIdFromCredentialsPath(filePath: string): string | undefined {
   const match = basename(filePath).match(/^credentials_(.+)\.json$/);
   return match?.[1];
+}
+
+function defaultCredentialsPathForAccount(uId: string): string {
+  const credPath = resolve(projectRoot, config.personalCredentialsPath);
+  return resolve(dirname(credPath), `credentials_${uId}.json`);
+}
+
+/**
+ * Persist the LIVE (rotated) Zalo cookie jar back to disk.
+ *
+ * Root cause this solves: the credentials file is written ONCE at QR login.
+ * During an active session Zalo rotates its session cookies (zpsid / zpw_sek …)
+ * and zca-js only updates the in-memory tough-cookie CookieJar. On the next
+ * service restart `loadCredentialsFile` reads the ORIGINAL stale cookie, Zalo
+ * rejects it, the account never re-enters the pool — i.e. the account "suddenly
+ * disappears". Writing the fresh jar back keeps the on-disk session valid so the
+ * login survives restarts indefinitely (until Zalo itself revokes it).
+ */
+export function persistAccountCredentials(uId: string): boolean {
+  const instance = accountPool.get(uId);
+  if (!instance) return false;
+  try {
+    const api = instance.api as any;
+    const ctx = typeof api.getContext === 'function' ? api.getContext() : null;
+    const jar = ctx?.cookie;
+    if (!jar || typeof jar.serializeSync !== 'function') return false;
+
+    const serialized = jar.serializeSync();
+    const cookies = serialized?.cookies;
+    if (!Array.isArray(cookies) || cookies.length === 0) return false;
+
+    const filePath = instance.credentialsPath || defaultCredentialsPathForAccount(uId);
+    let existing: Record<string, unknown> = {};
+    if (existsSync(filePath)) {
+      try {
+        existing = JSON.parse(readFileSync(filePath, 'utf-8'));
+      } catch {
+        existing = {};
+      }
+    }
+
+    // Save in the same shape `Zalo.login()` accepts (cookie array branch of
+    // parseCookies, which reads `key || name`). imei + userAgent must stay
+    // stable across restarts, so prefer the live context then fall back to disk.
+    const next = {
+      ...existing,
+      cookie: cookies,
+      imei: ctx.imei || existing.imei,
+      userAgent: ctx.userAgent || existing.userAgent,
+      language: ctx.language || existing.language || 'vi',
+    };
+
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error(`[PersonalZcaChannel] Failed to persist credentials for ${uId}:`, err);
+    return false;
+  }
+}
+
+// Re-serialize every connected account's cookie jar to disk.
+export function persistAllCredentials(): void {
+  for (const uId of accountPool.keys()) {
+    persistAccountCredentials(uId);
+  }
+}
+
+// Periodically flush rotated cookies so a crash/restart never falls back to a
+// stale on-disk session. Idempotent; unref'd so it never holds the process open.
+let credentialRefreshTimer: NodeJS.Timeout | null = null;
+const CREDENTIAL_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+function startCredentialRefreshTimer(): void {
+  if (credentialRefreshTimer) return;
+  credentialRefreshTimer = setInterval(() => {
+    persistAllCredentials();
+  }, CREDENTIAL_REFRESH_INTERVAL_MS);
+  if (typeof credentialRefreshTimer.unref === 'function') {
+    credentialRefreshTimer.unref();
+  }
 }
 
 function readPngMetadata(data: Buffer): { width: number; height: number } | null {
@@ -927,7 +1043,11 @@ export async function ensureLoginPool(): Promise<void> {
 }
 
 // Add account dynamically (e.g. after QR login)
-export async function addAccountInstance(uId: string, apiInstance: API): Promise<void> {
+export async function addAccountInstance(
+  uId: string,
+  apiInstance: API,
+  credentialsPath?: string,
+): Promise<void> {
   let label = `${config.personalAccountLabel} (${uId})`;
   let avatar = '';
   try {
@@ -941,6 +1061,16 @@ export async function addAccountInstance(uId: string, apiInstance: API): Promise
     console.error(`[PersonalZcaChannel] Failed to fetch account display name:`, err);
   }
 
+  // Tear down any existing live session for this account before adding the new
+  // one. Without this the previous realtime websocket stays open, Zalo sees two
+  // connections for the same uId and force-closes one with code 3000
+  // (DuplicateConnection) — the "đăng nhập xong là mất kết nối ngay" symptom.
+  const existing = accountPool.get(uId);
+  if (existing) {
+    await stopListenerForInstance(existing);
+    console.log(`[PersonalZcaChannel] Replaced existing session for ${uId} before re-login.`);
+  }
+
   const instance: ZaloAccountInstance = {
     api: apiInstance,
     uId,
@@ -948,13 +1078,20 @@ export async function addAccountInstance(uId: string, apiInstance: API): Promise
     listenerRunning: false,
     lastEventAt: null,
     avatar,
+    credentialsPath: credentialsPath || defaultCredentialsPathForAccount(uId),
+    status: 'connected',
   };
 
   accountPool.set(uId, instance);
   console.log(`[PersonalZcaChannel] Dynamically added new account to pool: ${label}`);
-  
+
   // Auto start listener
   await startListenerForInstance(instance);
+
+  // Capture the cookie freshly issued by this login handshake, then keep it
+  // refreshed on disk so the session survives future restarts.
+  persistAccountCredentials(uId);
+  startCredentialRefreshTimer();
 }
 
 async function loadCredentialsFile(filePath: string): Promise<void> {
@@ -967,9 +1104,10 @@ async function loadCredentialsFile(filePath: string): Promise<void> {
 
     const activeApi = await zalo.login(credentials);
     const uId = activeApi.getOwnId ? activeApi.getOwnId() : `personal_${Date.now()}`;
-    
-    // Add to pool
-    await addAccountInstance(uId, activeApi);
+
+    // Add to pool — remember the exact file we loaded from so refreshed cookies
+    // are persisted back to the same path (handles legacy credentials.json too).
+    await addAccountInstance(uId, activeApi, filePath);
   } catch (err) {
     console.error(`[PersonalZcaChannel] Failed to load credentials from ${filePath}:`, err);
   }
@@ -981,6 +1119,9 @@ const recentInboxBootstrapDone = new Set<string>();
 
 async function startListenerForInstance(instance: ZaloAccountInstance): Promise<void> {
   if (instance.listenerRunning) return;
+  // A revoked session can never reconnect on the same (dead) cookie — skip it so
+  // the health monitor does not spin in a reconnect loop and the warning stays put.
+  if (instance.status === 'disconnected_expired') return;
   try {
     const listener = instance.api.listener;
     if (listener) {
@@ -996,6 +1137,8 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
       listener.removeAllListeners("reaction");
       listener.removeAllListeners("message_deleted");
       listener.removeAllListeners("delete");
+      listener.removeAllListeners("old_messages");
+      listener.removeAllListeners("closed");
 
       listener.on("friend_event", async (event: any) => {
         instance.lastEventAt = new Date().toISOString();
@@ -1120,16 +1263,22 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         });
       });
 
-      listener.on("old_messages", async (event: any) => {
+      listener.on("old_messages", async (payload: any) => {
         instance.lastEventAt = new Date().toISOString();
-        const msgs = event?.data?.msgs ?? event?.messages ?? [];
+        // zca-js emits old_messages as (messages: Message[], threadType) — the
+        // FIRST arg is the message array itself, not an event wrapper. The old
+        // `event.data.msgs` read always yielded [] so history never loaded.
+        // Stay defensive across versions.
+        const msgs: any[] = Array.isArray(payload)
+          ? payload
+          : (payload?.data?.msgs ?? payload?.messages ?? []);
         console.log(`[PersonalZcaChannel - ${instance.label}] Received ${msgs.length} old messages.`);
         const batch: ZaloInboundMessageEvent[] = [];
         for (const msg of msgs) {
           try {
             const inbound = normalizeInboundMessage(instance, msg);
             if (!inbound) continue;
-            
+
             if (inbound.senderId && (!inbound.avatarUrl || !inbound.senderName)) {
                const profile = await getOrFetchUserProfile(instance, inbound.senderId);
                if (profile) {
@@ -1139,8 +1288,10 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
                }
             }
             if (inbound.threadType === 'group' && inbound.threadId) {
-               const groupName = await resolveGroupName(instance.api, inbound.threadId);
-               if (groupName) inbound.groupName = groupName;
+               const group = await resolveGroupInfo(instance.api, inbound.threadId);
+               if (group.name) inbound.groupName = group.name;
+               // Conversation avatar = the group's own picture, not the sender's.
+               if (group.avatar) inbound.avatarUrl = group.avatar;
             }
             batch.push(inbound);
           } catch (err) {
@@ -1167,11 +1318,16 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
           }
         }
 
-        // Resolve group display name for group threads
+        // Resolve group display name + avatar for group threads. The group's
+        // own picture becomes the conversation avatar (senderAvatarUrl keeps the
+        // per-message sender avatar for in-bubble display).
         if (inbound.threadType === 'group' && inbound.threadId) {
-          const groupName = await resolveGroupName(instance.api, inbound.threadId);
-          if (groupName) {
-            inbound.groupName = groupName;
+          const group = await resolveGroupInfo(instance.api, inbound.threadId);
+          if (group.name) {
+            inbound.groupName = group.name;
+          }
+          if (group.avatar) {
+            inbound.avatarUrl = group.avatar;
           }
         }
 
@@ -1184,24 +1340,27 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
       // ── Connection closed (e.g. Kicked from phone or Duplicate Login) ──
       listener.on("closed", async (code: number, reason: string) => {
         console.warn(`[PersonalZcaChannel - ${instance.label}] Listener closed. Code: ${code}, Reason: ${reason}`);
+
         if (code === 3000 || code === 3003) { // 3000: Duplicate, 3003: Kicked
+          // Unrecoverable: only a fresh QR login fixes it. Stop (while
+          // listenerRunning is still true so cleanup runs) and mark expired so the
+          // health monitor does not spin reconnecting a dead cookie, and the UI
+          // can surface the revoke reason.
           console.error(`[PersonalZcaChannel - ${instance.label}] Kicked by server or duplicate login. Marking as disconnected.`);
-
-          instance.listenerRunning = false;
-
-          // Import local chat store to update DB
-          try {
-            const { getLocalChatStore } = await import('../local-chat/index.js');
-            const store = getLocalChatStore();
-            if (store) {
-              store.db.prepare('UPDATE accounts SET status = ? WHERE id = ?').run('DISCONNECTED_EXPIRED', instance.uId);
-            }
-          } catch (e) {
-            console.error('Failed to update account status in DB:', e);
-          }
-
           await stopListenerForInstance(instance);
+          instance.status = 'disconnected_expired';
+          instance.disconnectCode = code;
+          instance.disconnectReason = describeCloseReason(code, reason);
+          instance.disconnectedAt = new Date().toISOString();
+          return;
         }
+
+        // Transient close (network blip, server reset…). The socket is dead, so
+        // drop the "running" flag — this fixes the zombie "đang lắng nghe" state
+        // in the UI and lets the existing ListenerHealthMonitor (connected &&
+        // !listenerRunning → recover, every 15s) auto-reconnect without a manual
+        // re-login. status stays 'connected' so recovery is allowed.
+        instance.listenerRunning = false;
       });
 
       listener.on("connected", () => {
@@ -1251,6 +1410,8 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
       listener.removeAllListeners("message_deleted");
       listener.removeAllListeners("delete");
       listener.removeAllListeners("connected");
+      listener.removeAllListeners("old_messages");
+      listener.removeAllListeners("closed");
       recentInboxBootstrapDone.delete(instance.uId);
       instance.listenerRunning = false;
       console.log(`[PersonalZcaChannel - ${instance.label}] Realtime listener stopped.`);
@@ -1262,13 +1423,26 @@ async function stopListenerForInstance(instance: ZaloAccountInstance): Promise<v
 
 export class PersonalZcaChannel implements ZaloChannel {
   getStatus(): ZaloChannelStatus {
-    const connected = accountPool.size > 0;
     const connectedAccounts = Array.from(accountPool.values());
-    const label = connected
+    // A kicked/expired account stays in the pool so the UI can still surface its
+    // disconnect reason. "connected" must therefore mean at least one account is
+    // still live — not just pool.size > 0, otherwise an all-expired pool would
+    // keep reporting "đã kết nối" and no warning would ever show.
+    const connected = connectedAccounts.some(
+      acc => acc.status !== 'disconnected_expired',
+    );
+    const label = accountPool.size > 0
       ? `${accountPool.size} tài khoản Zalo cá nhân`
       : 'Chưa liên kết tài khoản nào';
 
     const listenerRunning = connectedAccounts.some(acc => acc.listenerRunning);
+    // Per-account recovery hint: any live (non-expired) account whose listener is
+    // down needs recovering — even if another account is still listening (so the
+    // coarse `listenerRunning` OR above is true). This is what makes auto-recovery
+    // work with multiple accounts.
+    const needsListenerRecovery = connectedAccounts.some(
+      acc => acc.status !== 'disconnected_expired' && !acc.listenerRunning,
+    );
     const lastEventAt = connectedAccounts.reduce<string | null>((latest, acc) => {
       if (!acc.lastEventAt) return latest;
       if (!latest) return acc.lastEventAt;
@@ -1281,6 +1455,7 @@ export class PersonalZcaChannel implements ZaloChannel {
       accountType: 'personal',
       accountLabel: label,
       listenerRunning,
+      needsListenerRecovery,
       lastEventAt,
     };
   }
@@ -1665,8 +1840,11 @@ export class PersonalZcaChannel implements ZaloChannel {
     return Array.from(accountPool.values()).map(acc => ({
       id: acc.uId,
       label: acc.label,
-      connected: true,
+      connected: acc.status !== 'disconnected_expired',
       listenerRunning: acc.listenerRunning,
+      status: acc.status || 'connected',
+      disconnectReason: acc.disconnectReason || '',
+      disconnectedAt: acc.disconnectedAt || '',
       avatar: acc.avatar || '',
       settings: settingsByAccount[acc.uId] || {},
     }));

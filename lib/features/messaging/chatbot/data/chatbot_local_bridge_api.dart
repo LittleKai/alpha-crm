@@ -57,6 +57,58 @@ class ChatbotLocalBridgeApi {
     );
   }
 
+  /// Upload an operator-attached knowledge file to the LOCAL bridge store.
+  /// Returns `{id, name, size}`; the content-hash `id` is what the config keeps.
+  Future<Map<String, dynamic>> uploadKnowledgeFile({
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    final response = await _client
+        .post(
+          _baseUri.resolve('/local/chatbot/knowledge-file'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'filename': filename,
+            'base64': base64Encode(bytes),
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+    final body = response.body.isEmpty
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        body['success'] != true ||
+        body['data'] is! Map) {
+      throw Exception(
+        body['error'] ?? body['message'] ?? 'Local bridge upload failed.',
+      );
+    }
+    return Map<String, dynamic>.from(body['data'] as Map);
+  }
+
+  /// Ids of knowledge files currently present on this machine (for "missing
+  /// file" warnings in the knowledge tab). Returns an empty set if unreachable.
+  Future<Set<String>> listKnowledgeFileIds() async {
+    try {
+      final response = await _client
+          .get(_baseUri.resolve('/local/chatbot/knowledge-files'))
+          .timeout(const Duration(seconds: 3));
+      final body = response.body.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      if (response.statusCode == 200 && body['data'] is Map) {
+        final ids = (body['data'] as Map)['ids'];
+        if (ids is List) {
+          return ids.map((e) => e.toString()).toSet();
+        }
+      }
+      return <String>{};
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
   ChatbotBridgeStatus _statusFrom(http.Response response) {
     final body = response.body.isEmpty
         ? <String, dynamic>{}

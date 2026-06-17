@@ -34,25 +34,27 @@ class _AppLockOverlayState extends ConsumerState<AppLockOverlay> {
         widget.child,
         if (state.isLocked)
           Positioned.fill(
-            child: Material(
-              color: const Color(0xEE0F172A),
-              child: Center(
-                child: Container(
-                  width: 420,
-                  margin: const EdgeInsets.all(AppSpacing.l),
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: AppSpacing.borderRadiusM,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 24,
-                        offset: Offset(0, 12),
+            child: Navigator(
+              onGenerateRoute: (_) => MaterialPageRoute(
+                builder: (context) => Material(
+                  color: const Color(0xEE0F172A),
+                  child: Center(
+                    child: Container(
+                      width: 420,
+                      margin: const EdgeInsets.all(AppSpacing.l),
+                      padding: const EdgeInsets.all(AppSpacing.l),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: AppSpacing.borderRadiusM,
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 24,
+                            offset: Offset(0, 12),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Column(
+                      child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -147,6 +149,8 @@ class _AppLockOverlayState extends ConsumerState<AppLockOverlay> {
               ),
             ),
           ),
+        ),
+      ),
       ],
     );
   }

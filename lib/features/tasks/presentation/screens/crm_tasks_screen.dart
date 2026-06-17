@@ -9,6 +9,7 @@ import '../../../../shared/widgets/app_badge.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../providers/crm_tasks_provider.dart';
 
 class CrmTasksScreen extends ConsumerWidget {
@@ -184,58 +185,18 @@ class CrmTasksScreen extends ConsumerWidget {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Tạo công việc follow-up'),
-              content: SizedBox(
-                width: 460,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Tiêu đề công việc',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    TextField(
-                      controller: descriptionController,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Mô tả chi tiết',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    DropdownButtonFormField<String>(
-                      initialValue: priority,
-                      decoration: const InputDecoration(
-                        labelText: 'Mức độ ưu tiên',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'low', child: Text('Thấp')),
-                        DropdownMenuItem(
-                          value: 'medium',
-                          child: Text('Trung bình'),
-                        ),
-                        DropdownMenuItem(value: 'high', child: Text('Cao')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) setState(() => priority = value);
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            return AppDialog(
+              title: 'Tạo công việc follow-up',
+              icon: Icons.task_alt_outlined,
+              width: 460,
               actions: [
-                TextButton(
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Hủy'),
                 ),
-                ElevatedButton(
+                AppDialogAction(
+                  text: 'Lưu',
                   onPressed: () async {
                     await notifier.createTask(
                       title: titleController.text,
@@ -246,9 +207,49 @@ class CrmTasksScreen extends ConsumerWidget {
                       Navigator.of(dialogContext).pop();
                     }
                   },
-                  child: const Text('Lưu'),
                 ),
               ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tiêu đề công việc',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  TextField(
+                    controller: descriptionController,
+                    minLines: 3,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: 'Mô tả chi tiết',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  DropdownButtonFormField<String>(
+                    initialValue: priority,
+                    decoration: const InputDecoration(
+                      labelText: 'Mức độ ưu tiên',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'low', child: Text('Thấp')),
+                      DropdownMenuItem(
+                        value: 'medium',
+                        child: Text('Trung bình'),
+                      ),
+                      DropdownMenuItem(value: 'high', child: Text('Cao')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => priority = value);
+                    },
+                  ),
+                ],
+              ),
             );
           },
         );

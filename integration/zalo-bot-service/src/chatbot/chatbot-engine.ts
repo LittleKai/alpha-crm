@@ -34,6 +34,13 @@ export interface ChatbotRule {
   businessHours: ChatbotBusinessHours;
 }
 
+export interface ChatbotAttachment {
+  type: 'image' | 'video' | 'audio' | 'file';
+  // Content-hash id resolved to a local file path by the bridge at send time.
+  id: string;
+  name: string;
+}
+
 export interface ChatbotInboundMessage {
   providerMessageId: string;
   content: string;
@@ -61,7 +68,7 @@ export interface ChatbotEvaluationInput {
   generateAi?: (request: {
     conversationKey: string;
     messages: ChatbotInboundMessage[];
-  }) => Promise<{ reply: string }>;
+  }) => Promise<{ reply: string; attachments?: ChatbotAttachment[] }>;
   now?: Date;
 }
 
@@ -71,6 +78,7 @@ export type ChatbotDecision =
       mode: 'keyword' | 'ai';
       text: string;
       ruleId?: string;
+      attachments?: ChatbotAttachment[];
       sourceMessageIds: string[];
     }
   | {
@@ -198,13 +206,15 @@ export class LocalChatbotEngine {
         messages,
       });
       const reply = generated.reply.trim();
-      if (!reply) {
+      const attachments = generated.attachments ?? [];
+      if (!reply && attachments.length === 0) {
         throw new Error('AI returned an empty reply');
       }
       return {
         kind: 'reply',
         mode: 'ai',
         text: reply,
+        ...(attachments.length ? { attachments } : {}),
         sourceMessageIds: eligibleIds,
       };
     } catch (error) {

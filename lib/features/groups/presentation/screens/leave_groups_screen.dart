@@ -10,6 +10,7 @@ import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_badge.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
@@ -477,37 +478,28 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   void _showConfirmDialog(LeaveGroupsNotifier notifier) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: AppColors.errorText),
-            SizedBox(width: AppSpacing.s),
-            Text('Xác nhận rời nhóm'),
-          ],
-        ),
-        content: const Text(
-          'Hành động rời nhóm chat Zalo là không thể hoàn tác. Bạn có chắc chắn muốn rời khỏi các nhóm đã chọn không?',
-        ),
+      builder: (context) => AppDialog(
+        title: 'Xác nhận rời nhóm',
+        icon: Icons.warning_amber_rounded,
         actions: [
-          TextButton(
+          AppDialogAction(
+            text: 'Hủy bỏ',
+            variant: AppButtonVariant.outline,
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Hủy bỏ',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+          AppDialogAction(
+            text: 'Đồng ý rời nhóm',
+            variant: AppButtonVariant.destructive,
             onPressed: () {
               Navigator.of(context).pop();
               notifier.startLeaveCampaign();
             },
-            child: const Text(
-              'Đồng ý rời nhóm',
-              style: TextStyle(color: Colors.white),
-            ),
           ),
         ],
+        child: Text(
+          'Hành động rời nhóm chat Zalo là không thể hoàn tác. Bạn có chắc chắn muốn rời khỏi các nhóm đã chọn không?',
+          style: AppTextStyles.bodyMedium,
+        ),
       ),
     );
   }

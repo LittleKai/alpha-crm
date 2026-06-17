@@ -64,7 +64,7 @@ npm run build
 ```
 
 > [!NOTE]  
-> Thư viện `zca-js` được cài đặt trực tiếp từ NPM registry (`^2.1.2`) để dễ dàng triển khai độc lập. Tuy nhiên, lập trình viên có thể tham khảo, nghiên cứu cấu trúc API chi tiết bằng cách xem thư mục mã nguồn gốc tại `D:\Dev\2.reference_pj\Zalo-ref\zca-js`.
+> Thư viện `zca-js` được cài đặt trực tiếp từ NPM registry (`^2.1.2`) để dễ dàng triển khai độc lập. Tuy nhiên, lập trình viên có thể tham khảo, nghiên cứu cấu trúc API chi tiết bằng cách xem thư mục mã nguồn gốc tại `D:\Dev\2.reference_pj\.Zalo-ref\zca-js`.
 
 ### 2.2 Cấu Hình Chi Tiết File `.env`
 

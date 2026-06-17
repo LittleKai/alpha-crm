@@ -132,6 +132,133 @@ test('successful reply sends once, persists chatbot metadata, publishes, process
   );
 });
 
+test('reply with attachments sends text then each local file and records them', async () => {
+  const resolved: string[] = [];
+  const fixture = createDependencies({
+    resolveAttachmentPath: (id) => {
+      resolved.push(id);
+      return `/data/chatbot-knowledge/${id}`;
+    },
+  });
+
+  const result = await new ChatbotDispatcher(fixture.dependencies).dispatch({
+    accountId: 'account-1',
+    threadId: 'user-1',
+    threadType: 'user',
+    conversationKey: 'account-1:user-1',
+    decision: {
+      kind: 'reply',
+      mode: 'ai',
+      text: 'Gửi bạn tài liệu nhé.',
+      attachments: [
+        { type: 'image', id: 'idimg', name: 'lo-trinh.png' },
+        { type: 'video', id: 'idvid', name: 'demo.mp4' },
+      ],
+      sourceMessageIds: ['source-1'],
+    },
+  });
+
+  assert.equal(result.status, 'sent');
+  // 1 text + 2 attachment sends.
+  assert.equal(fixture.calls.filter((call) => call === 'send').length, 3);
+  assert.equal(fixture.outbound.length, 3);
+  assert.equal(fixture.outbound[0]?.messageType, 'text');
+  assert.equal(fixture.outbound[1]?.messageType, 'image');
+  assert.equal(fixture.outbound[2]?.messageType, 'video');
+  assert.deepEqual(resolved, ['idimg', 'idvid']);
+  assert.equal(fixture.audits[0]?.attachmentCount, 2);
+  assert.ok(fixture.calls.includes('processed:source-1'));
+});
+
+test('attachment send failure is non-fatal once text is delivered', async () => {
+  const fixture = createDependencies({
+    sendMessage: async (request) => {
+      if (request.attachments && request.attachments.length > 0) {
+        return { success: false, error: 'upload failed' };
+      }
+      return {
+        success: true,
+        messageId: 'provider-out-1',
+        clientMessageId: 'client-out-1',
+      };
+    },
+    resolveAttachmentPath: () => '/data/chatbot-knowledge/idf',
+  });
+
+  const result = await new ChatbotDispatcher(fixture.dependencies).dispatch({
+    accountId: 'account-1',
+    threadId: 'user-1',
+    threadType: 'user',
+    conversationKey: 'account-1:user-1',
+    decision: {
+      kind: 'reply',
+      mode: 'ai',
+      text: 'Xin chào',
+      attachments: [{ type: 'image', id: 'idf', name: 'f.png' }],
+      sourceMessageIds: ['source-1'],
+    },
+  });
+
+  assert.equal(result.status, 'sent');
+  assert.equal(fixture.outbound.length, 1); // only the text persisted
+  assert.equal(fixture.outbound[0]?.messageType, 'text');
+  assert.ok(fixture.calls.includes('processed:source-1'));
+  assert.notEqual(
+    fixture.calls.find((call) => call.startsWith('state:')),
+    'state:handoff',
+  );
+});
+
+test('missing local knowledge file is skipped without blocking the text reply', async () => {
+  const fixture = createDependencies({
+    resolveAttachmentPath: () => null, // file not present on this machine
+  });
+
+  const result = await new ChatbotDispatcher(fixture.dependencies).dispatch({
+    accountId: 'account-1',
+    threadId: 'user-1',
+    threadType: 'user',
+    conversationKey: 'account-1:user-1',
+    decision: {
+      kind: 'reply',
+      mode: 'ai',
+      text: 'Xin chào',
+      attachments: [{ type: 'image', id: 'gone', name: 'gone.png' }],
+      sourceMessageIds: ['source-1'],
+    },
+  });
+
+  assert.equal(result.status, 'sent'); // text still delivered
+  assert.equal(fixture.calls.filter((call) => call === 'send').length, 1);
+  assert.equal(fixture.outbound.length, 1);
+  assert.equal(fixture.outbound[0]?.messageType, 'text');
+});
+
+test('file-only reply (empty text) still sends the local attachment', async () => {
+  const fixture = createDependencies({
+    resolveAttachmentPath: (id) => `/data/chatbot-knowledge/${id}`,
+  });
+
+  const result = await new ChatbotDispatcher(fixture.dependencies).dispatch({
+    accountId: 'account-1',
+    threadId: 'user-1',
+    threadType: 'user',
+    conversationKey: 'account-1:user-1',
+    decision: {
+      kind: 'reply',
+      mode: 'ai',
+      text: '',
+      attachments: [{ type: 'image', id: 'idf', name: 'f.png' }],
+      sourceMessageIds: ['source-1'],
+    },
+  });
+
+  assert.equal(result.status, 'sent');
+  assert.equal(fixture.calls.filter((call) => call === 'send').length, 1);
+  assert.equal(fixture.outbound.length, 1);
+  assert.equal(fixture.outbound[0]?.messageType, 'image');
+});
+
 test('send failure does not persist a successful outbound, enters handoff, audits failure, and does not retry', async () => {
   let sends = 0;
   const fixture = createDependencies({

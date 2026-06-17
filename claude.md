@@ -6,7 +6,7 @@
 
 Read `.claude/PROJECT_SUMMARY.md` first, not the entire codebase.
 Update documentation after every change.
-Use the skill in `C:\Users\XEON\.gemini\skills\flutter-dev\skill.md`.
+Use the skill in `C:\Users\XEON\.gemini\skills\Mini-max-skills\flutter-dev`.
 
 ---
 
@@ -39,7 +39,7 @@ Specific files user mentioned  -> Only if needed for implementation
 ### Update `.claude/PROJECT_SUMMARY.md`
 
 Always update:
-- Top `Last Updated` timestamp and session number.
+- Top: Latest Session number.
 - `Active Features & Status` when feature state changes.
 - `Known Issues & TODOs` by marking completed items and adding current issues.
 
@@ -185,14 +185,14 @@ Examples:
 
 ## Zalo Integration Direction
 
-- For a categorized snapshot of the usable public `zca-js` API surface, read `docs/api-catalog/zca-js-api-catalog.md` before designing new personal-Zalo backend features. It catalogs the local reference repo at `D:\Dev\2.reference_pj\Zalo-ref\zca-js`, including `Zalo` login, the generated `API` facade, listener events, and high-risk API groups.
+- For a categorized snapshot of the usable public `zca-js` API surface, read `docs/api-catalog/zca-js-api-catalog.md` before designing new personal-Zalo backend features. It catalogs the local reference repo at `D:\Dev\2.reference_pj\.Zalo-ref\zca-js`, including `Zalo` login, the generated `API` facade, listener events, and high-risk API groups.
 
-- Current product direction is personal Zalo first. The Node backend uses the official NPM package `zca-js@^2.1.2` for dependency portability. Khi muốn tìm hiểu thêm về các API hoặc tìm kiếm xem còn API nào khác, nhà phát triển/AI có thể tham khảo mã nguồn tại local repository [zca-js/claude.md](file:///d:/Dev/2.reference_pj/Zalo-ref/zca-js/claude.md) và chạy công cụ CodeGraph tại thư mục đó để tra cứu/phân tích chi tiết.
+- Current product direction is personal Zalo first. The Node backend uses the official NPM package `zca-js@^2.1.2` for dependency portability. Khi muốn tìm hiểu thêm về các API hoặc tìm kiếm xem còn API nào khác, nhà phát triển/AI có thể tham khảo mã nguồn tại local repository [zca-js/claude.md](file:///d:/Dev/2.reference_pj/.Zalo-ref/zca-js/claude.md) và chạy công cụ CodeGraph tại thư mục đó để tra cứu/phân tích chi tiết.
 - Zalo Official Account / OA remains supported as an optional secondary adapter, not the default direction unless the user explicitly asks for official-only mode.
 - Backend service owns all Zalo credentials, cookies, IMEI, user-agent values, QR artifacts, access tokens, and listener sessions. Flutter must never store or display these secrets.
 - Preferred backend channel names are `personal_zca` for the `zca-js` personal-account adapter, `official_oa` for OA/OpenAPI, and `mock` for local test mode.
 - Keep personal-account workflows risk-aware: use rate limits, cooldowns, human approval for high-risk batches, stop conditions, and clear operator status. Do not silently remove safeguards just because personal Zalo is preferred.
-- Đối với tất cả màn hình có tính năng tiếp thị hoặc hành động rủi ro cao trên Zalo (Gửi tin hàng loạt, kết bạn qua SĐT/Nhóm, mời/tạo/tham gia nhóm, quét thành viên), luôn hiển thị một nút cảnh báo/an toàn ở Header trang và luôn sử dụng hộp thoại thiết kế riêng biệt `showComplianceWarningsDialog` từ `lib/shared/widgets/compliance_warnings_popup.dart` để hiển thị các khuyến cáo thay vì dùng Dialog mặc định của Flutter.
+- Đối với tất cả màn hình có tính năng tiếp thị hoặc hành động rủi ro cao trên Zalo (Gửi tin hàng loạt, kết bạn qua SĐT/Nhóm, mời/tạo/tham gia nhóm, quét thành viên), luôn hiển thị một nút cảnh báo/an toàn ở Header trang và luôn sử dụng hộp thoại thiết kế riêng biệt `showComplianceWarningsDialog` từ `lib/shared/widgets/compliance_warnings_popup.dart` để hiển thị các khuyến cáo thay vì dùng Dialog mặc định của Flutter. Đồng thời, toàn bộ dialog trong hệ thống phải tuân thủ thiết kế cao cấp chuẩn hóa từ `AppDialog` (header gradient màu tối `0xFF0F172A` - `0xFF1E293B`, icon màu trắng không viền hộp, chữ trắng, phần footer có nền `AppColors.appBackground` và đường viền trên `AppColors.borderSoft`).
 - Do not reintroduce official-only assumptions into docs, settings, guards, or backend code unless the user explicitly changes the product direction.
 - For media/file sends through `zca-js`, remember that file-path image/GIF metadata requires a backend `imageMetadataGetter`; keep that dependency in the Node service, not Flutter.
 

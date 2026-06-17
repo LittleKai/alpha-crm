@@ -3,8 +3,8 @@
 **Date:** 2026-06-04
 **Target project:** `D:\Dev\NodeJS\alpha-studio\tools\alpha-crm`
 **Reference projects:**
-- `D:\Dev\2.reference_pj\Zalo-ref\deplao-builder`
-- `D:\Dev\2.reference_pj\Zalo-ref\ZaloCRM`
+- `D:\Dev\2.reference_pj\.Zalo-ref\deplao-builder`
+- `D:\Dev\2.reference_pj\.Zalo-ref\ZaloCRM`
 
 ## 1. Current Alpha CRM Analysis
 

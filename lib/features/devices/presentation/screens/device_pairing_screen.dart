@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
+import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../providers/crm_device_provider.dart';
 
 class DevicePairingScreen extends ConsumerStatefulWidget {
@@ -47,22 +50,25 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   Future<void> _confirmUnpairDevice(PairedDevice dev) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ngắt kết nối Remote'),
-        content: Text(
-          'Bạn có chắc chắn muốn hủy ghép đôi thiết bị "${dev.displayName}" không? Điện thoại này sẽ không thể đồng bộ chiến dịch tự động qua PC này nữa.',
-        ),
+      builder: (context) => AppDialog(
+        title: 'Ngắt kết nối Remote',
+        icon: Icons.link_off_rounded,
         actions: [
-          TextButton(
+          AppDialogAction(
+            text: 'Bỏ qua',
+            variant: AppButtonVariant.outline,
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Bỏ qua'),
           ),
-          ElevatedButton(
+          AppDialogAction(
+            text: 'Xác Nhận Hủy',
+            variant: AppButtonVariant.destructive,
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Xác Nhận Hủy'),
           ),
         ],
+        child: Text(
+          'Bạn có chắc chắn muốn hủy ghép đôi thiết bị "${dev.displayName}" không? Điện thoại này sẽ không thể đồng bộ chiến dịch tự động qua PC này nữa.',
+          style: AppTextStyles.bodyMedium,
+        ),
       ),
     );
 
@@ -76,9 +82,18 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Quét QR từ màn hình PC'),
-          content: SizedBox(
+        return AppDialog(
+          title: 'Quét QR từ màn hình PC',
+          icon: Icons.qr_code_scanner_rounded,
+          width: 420,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+          child: SizedBox(
             width: 360,
             height: 360,
             child: ClipRRect(
@@ -102,12 +117,6 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
-            ),
-          ],
         );
       },
     );
@@ -118,10 +127,29 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
       context: context,
       builder: (context) {
         final tokenController = TextEditingController();
-        return AlertDialog(
-          title: const Text('Mô phỏng Quét QR Code'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+        return AppDialog(
+          title: 'Mô phỏng Quét QR Code',
+          icon: Icons.qr_code_rounded,
+          width: 500,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.pop(context),
+            ),
+            AppDialogAction(
+              text: 'Xác nhận quét',
+              onPressed: () {
+                final input = tokenController.text.trim();
+                Navigator.pop(context);
+                if (input.isNotEmpty) {
+                  _codeController.text = input;
+                  _submitPairingCode();
+                }
+              },
+            ),
+          ],
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
@@ -139,23 +167,6 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final input = tokenController.text.trim();
-                Navigator.pop(context);
-                if (input.isNotEmpty) {
-                  _codeController.text = input;
-                  _submitPairingCode();
-                }
-              },
-              child: const Text('Xác nhận quét'),
-            ),
-          ],
         );
       },
     );
@@ -355,29 +366,29 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                 : () {
                     showDialog(
                       context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Ngắt kết nối Remote'),
-                        content: const Text(
-                          'Cảnh báo: Nếu hủy ghép đôi thiết bị này, bạn sẽ không thể đồng bộ dữ liệu chiến dịch tự động qua Zalo cá nhân được nữa.',
-                        ),
+                      builder: (context) => AppDialog(
+                        title: 'Ngắt kết nối Remote',
+                        icon: Icons.warning_amber_rounded,
                         actions: [
-                          TextButton(
+                          AppDialogAction(
+                            text: 'Đóng',
+                            variant: AppButtonVariant.outline,
                             onPressed: () => Navigator.pop(context),
-                            child: const Text('Đóng'),
                           ),
-                          ElevatedButton(
+                          AppDialogAction(
+                            text: 'Xác Nhận Hủy',
+                            variant: AppButtonVariant.destructive,
                             onPressed: () {
                               Navigator.pop(context);
                               ref
                                   .read(crmDeviceProvider.notifier)
                                   .disconnectCurrentMobileRemote();
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.error,
-                            ),
-                            child: const Text('Xác Nhận Hủy'),
                           ),
                         ],
+                        child: const Text(
+                          'Cảnh báo: Nếu hủy ghép đôi thiết bị này, bạn sẽ không thể đồng bộ dữ liệu chiến dịch tự động qua Zalo cá nhân được nữa.',
+                        ),
                       ),
                     );
                   },

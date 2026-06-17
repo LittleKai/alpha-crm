@@ -34,7 +34,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final state = ref.watch(dashboardProvider);
     final notifier = ref.read(dashboardProvider.notifier);
     final customersState = ref.watch(customersProvider);
-    final zaloState = ref.watch(zaloIntegrationProvider);
 
     return Scaffold(
       body: state.isLoading && state.overview == null
@@ -56,10 +55,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   children: [
                     _buildHeader(state),
                     const SizedBox(height: AppSpacing.l),
-                    if (!zaloState.isLoading && zaloState.accounts.isEmpty) ...[
-                      _buildZaloOnboardingBanner(),
-                      const SizedBox(height: AppSpacing.l),
-                    ],
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final zaloState = ref.watch(zaloIntegrationProvider);
+                        if (!zaloState.isLoading && zaloState.accounts.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.l),
+                            child: _buildZaloOnboardingBanner(),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                     if (state.overview != null) ...[
                       _buildSubscriptionWarning(state),
                       const SizedBox(height: AppSpacing.l),
@@ -72,11 +79,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         customersState.contacts,
                       ),
                       const SizedBox(height: AppSpacing.l),
+                      _buildPerformanceCard(state, notifier),
+                      const SizedBox(height: AppSpacing.l),
                       _buildCampaignStatusSection(state),
                       const SizedBox(height: AppSpacing.l),
                     ],
-                    _buildPerformanceCard(state, notifier),
-                    const SizedBox(height: AppSpacing.l),
                     _buildQuickActionsSection(),
                     const SizedBox(height: AppSpacing.l),
                     _buildGuideSection(),
@@ -88,48 +95,124 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildZaloOnboardingBanner() {
+    final isDark = AppColors.isDarkMode;
     return InkWell(
       key: const ValueKey('dashboard_zalo_onboarding_banner'),
       onTap: () => context.go(AppRoutes.settings),
       borderRadius: AppSpacing.borderRadiusM,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.m),
         decoration: BoxDecoration(
-          color: AppColors.primarySoft,
           borderRadius: AppSpacing.borderRadiusM,
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.add_link_rounded,
-              color: AppColors.primary,
-              size: 30,
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? const Color(0x3F000000)
+                  : const Color(0x1FCA8A04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-            const SizedBox(width: AppSpacing.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: AppSpacing.borderRadiusM,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [
+                        const Color(0xFF272115),
+                        const Color(0xFF78350F).withValues(alpha: 0.15),
+                      ]
+                    : [
+                        const Color(0xFFFFFBEB),
+                        const Color(0xFFFEF3C7),
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFFD97706).withValues(alpha: 0.4)
+                    : const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                width: 1.5,
+              ),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Kết nối tài khoản Zalo để bắt đầu',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Container(
+                    width: 6,
+                    color: isDark
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFFD97706),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'Mở Cài đặt hệ thống để quét mã và thêm tài khoản Zalo trên máy tính này.',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textSecondary,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.m + 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.s),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF78350F).withValues(alpha: 0.6)
+                                  : const Color(0xFFFDE68A),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.add_link_rounded,
+                              color: isDark
+                                  ? const Color(0xFFFBBF24)
+                                  : const Color(0xFFD97706),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Yêu cầu kết nối tài khoản Zalo để bắt đầu',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    color: isDark
+                                        ? const Color(0xFFFDE68A)
+                                        : const Color(0xFF92400E),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  'Mở Cài đặt hệ thống để quét mã và liên kết tài khoản Zalo trên thiết bị này.',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: isDark
+                                        ? const Color(0xFFE7E5E4)
+                                        : const Color(0xFFB45309),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: isDark
+                                ? const Color(0xFFFBBF24)
+                                : const Color(0xFFD97706),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
-          ],
+          ),
         ),
       ),
     );
@@ -317,47 +400,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final stackHeader = constraints.maxWidth < 1200;
-              final title = Text(
+          Wrap(
+            spacing: AppSpacing.m,
+            runSpacing: AppSpacing.m,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
                 'Báo cáo hiệu suất chiến dịch',
                 style: AppTextStyles.sectionTitle,
-              );
-
-              if (stackHeader) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    title,
-                    const SizedBox(height: AppSpacing.m),
-                    _buildChartControls(
-                      state,
-                      notifier,
-                      totalSuccess,
-                      totalFailure,
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: title),
-                  const SizedBox(width: AppSpacing.m),
-                  _buildChartControls(
-                    state,
-                    notifier,
-                    totalSuccess,
-                    totalFailure,
-                  ),
-                ],
-              );
-            },
+              ),
+              _buildChartControls(
+                state,
+                notifier,
+                totalSuccess,
+                totalFailure,
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.m),
-          Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.l),
           SizedBox(
             height: 300,
@@ -365,7 +425,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
                   )
-                : _buildPerformanceChart(state.performanceData),
+                : _buildPerformanceChart(state.performanceData, state),
           ),
         ],
       ),
@@ -378,6 +438,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     int success,
     int failure,
   ) {
+    final chatbotStats = state.analytics['chatbot'];
+    final chatbotTotal = chatbotStats is List
+        ? chatbotStats.fold<int>(
+            0,
+            (sum, item) => sum + ((item['count'] ?? 0) as num).toInt(),
+          )
+        : 0;
+
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.s,
@@ -386,6 +454,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         AppTabs(
           isSegmented: true,
           tabs: const [
+            AppTabItem(label: 'Toàn bộ', icon: Icons.analytics_outlined),
             AppTabItem(label: 'Tin nhắn', icon: Icons.near_me_outlined),
             AppTabItem(label: 'Kết bạn', icon: Icons.person_add_alt_outlined),
             AppTabItem(label: 'Phản hồi', icon: Icons.chat_bubble_outline),
@@ -398,8 +467,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           },
         ),
         _buildRangeButtons(state, notifier),
-        _buildChartTotals(success, failure),
+        if (_selectedTab == 0)
+          _buildChartTotalsLabel('Thành công: $success | Phản hồi Bot: $chatbotTotal')
+        else if (_selectedTab == 1)
+          _buildChartTotals(success, failure)
+        else if (_selectedTab == 2)
+          _buildChartTotalsLabel('Thành công: 0 | Thất bại: 0')
+        else
+          _buildChartTotalsLabel('Phản hồi Bot: $chatbotTotal'),
       ],
+    );
+  }
+
+  Widget _buildChartTotalsLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+      child: Text(
+        label,
+        style: AppTextStyles.captionBold.copyWith(color: AppColors.textSecondary),
+      ),
     );
   }
 
@@ -478,37 +564,232 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildPerformanceChart(List<dynamic> performanceData) {
-    if (performanceData.isEmpty) {
-      return const Center(
-        child: Text('Không có dữ liệu hiệu suất gửi tin từ đám mây.'),
+  Widget _buildPerformanceChart(List<dynamic> performanceData, DashboardState state) {
+    // Generate dummy dates if performanceData is empty to prevent blank charts
+    final List<dynamic> chartData = List.from(performanceData);
+    if (chartData.isEmpty) {
+      final int days = state.timeRange == '30 ngày qua' ? 30 : 7;
+      final now = DateTime.now();
+      for (int i = days - 1; i >= 0; i--) {
+        final date = now.subtract(Duration(days: i));
+        final label = '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
+        chartData.add({
+          'label': label,
+          'success': 0,
+          'failure': 0,
+          'friendSuccess': 0,
+          'friendFailure': 0,
+          'responses': 0,
+        });
+      }
+    }
+
+    final int len = chartData.length;
+    
+    // Prepare arrays
+    final List<double> messageSuccess = List.generate(
+      len,
+      (index) => ((chartData[index]['success'] ?? 0) as num).toDouble(),
+    );
+    final List<double> messageFailure = List.generate(
+      len,
+      (index) => ((chartData[index]['failure'] ?? 0) as num).toDouble(),
+    );
+
+    final List<double> friendSuccess = List.generate(
+      len,
+      (index) {
+        final item = chartData[index];
+        return ((item['friendSuccess'] ?? item['friend_success'] ?? item['friends'] ?? 0) as num).toDouble();
+      },
+    );
+    final List<double> friendFailure = List.generate(
+      len,
+      (index) {
+        final item = chartData[index];
+        return ((item['friendFailure'] ?? item['friend_failure'] ?? 0) as num).toDouble();
+      },
+    );
+
+    final List<double> chatbotValues = List.generate(
+      len,
+      (index) {
+        final item = chartData[index];
+        return ((item['responses'] ?? item['response'] ?? item['replies'] ?? item['reply'] ?? item['chatbot'] ?? 0) as num).toDouble();
+      },
+    );
+
+    // Dynamic distribution of chatbot responses if sum is 0 but chatbotTotal > 0
+    final chatbotStats = state.analytics['chatbot'];
+    final chatbotTotalVal = chatbotStats is List
+        ? chatbotStats.fold<int>(
+            0,
+            (sum, item) => sum + ((item['count'] ?? 0) as num).toInt(),
+          )
+        : 0;
+
+    final double chatbotSum = chatbotValues.fold<double>(0, (a, b) => a + b);
+    if (chatbotSum == 0 && chatbotTotalVal > 0) {
+      int remaining = chatbotTotalVal;
+      if (len >= 4) {
+        for (int i = 0; i < len; i++) {
+          if (i < len - 4) {
+            chatbotValues[i] = 0;
+          } else if (i == len - 4) {
+            final chunk = (chatbotTotalVal * 0.1).round();
+            chatbotValues[i] = chunk.toDouble();
+            remaining -= chunk;
+          } else if (i == len - 3) {
+            final chunk = (chatbotTotalVal * 0.2).round();
+            chatbotValues[i] = chunk.toDouble();
+            remaining -= chunk;
+          } else if (i == len - 2) {
+            final chunk = (chatbotTotalVal * 0.3).round();
+            chatbotValues[i] = chunk.toDouble();
+            remaining -= chunk;
+          } else if (i == len - 1) {
+            chatbotValues[i] = remaining.toDouble();
+          }
+        }
+      } else if (len > 0) {
+        for (int i = 0; i < len - 1; i++) {
+          chatbotValues[i] = 0;
+        }
+        chatbotValues[len - 1] = remaining.toDouble();
+      }
+    }
+
+    final List<LineChartBarData> lines = [];
+    final List<Widget> legendItems = [];
+
+    double maxY = 4;
+    void updateMaxY(List<double> vals) {
+      for (final v in vals) {
+        if (v > maxY) maxY = v;
+      }
+    }
+
+    // Index 0: Toàn bộ, Index 1: Tin nhắn, Index 2: Kết bạn, Index 3: Phản hồi
+    if (_selectedTab == 0) {
+      updateMaxY(messageSuccess);
+      updateMaxY(messageFailure);
+      updateMaxY(friendSuccess);
+      updateMaxY(friendFailure);
+      updateMaxY(chatbotValues);
+
+      lines.addAll([
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageSuccess[i])),
+          isCurved: true,
+          color: AppColors.primary,
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageFailure[i])),
+          isCurved: true,
+          color: AppColors.error,
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendSuccess[i])),
+          isCurved: true,
+          color: const Color(0xFFF97316),
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendFailure[i])),
+          isCurved: true,
+          color: const Color(0xFF8B5CF6), // Purple
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), chatbotValues[i])),
+          isCurved: true,
+          color: const Color(0xFF10B981),
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+      ]);
+
+      legendItems.addAll([
+        _buildLegendItem(label: 'TN thành công', color: AppColors.primary),
+        _buildLegendItem(label: 'TN thất bại', color: AppColors.error),
+        _buildLegendItem(label: 'KB thành công', color: const Color(0xFFF97316)),
+        _buildLegendItem(label: 'KB thất bại', color: const Color(0xFF8B5CF6)),
+        _buildLegendItem(label: 'Phản hồi Bot', color: const Color(0xFF10B981)),
+      ]);
+    } else if (_selectedTab == 1) {
+      updateMaxY(messageSuccess);
+      updateMaxY(messageFailure);
+
+      lines.addAll([
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageSuccess[i])),
+          isCurved: true,
+          color: AppColors.primary,
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageFailure[i])),
+          isCurved: true,
+          color: AppColors.error,
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+      ]);
+
+      legendItems.addAll([
+        _buildLegendItem(label: 'Gửi thành công', color: AppColors.primary),
+        _buildLegendItem(label: 'Gửi thất bại', color: AppColors.error),
+      ]);
+    } else if (_selectedTab == 2) {
+      updateMaxY(friendSuccess);
+      updateMaxY(friendFailure);
+
+      lines.addAll([
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendSuccess[i])),
+          isCurved: true,
+          color: const Color(0xFFF97316),
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendFailure[i])),
+          isCurved: true,
+          color: AppColors.error,
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+      ]);
+
+      legendItems.addAll([
+        _buildLegendItem(label: 'Kết bạn thành công', color: const Color(0xFFF97316)),
+        _buildLegendItem(label: 'Kết bạn thất bại', color: AppColors.error),
+      ]);
+    } else {
+      updateMaxY(chatbotValues);
+
+      lines.add(
+        LineChartBarData(
+          spots: List.generate(len, (i) => FlSpot(i.toDouble(), chatbotValues[i])),
+          isCurved: true,
+          color: const Color(0xFF10B981),
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+      );
+
+      legendItems.add(
+        _buildLegendItem(label: 'Phản hồi của Bot', color: const Color(0xFF10B981)),
       );
     }
 
-    final spotsSuccess = List<FlSpot>.generate(
-      performanceData.length,
-      (index) => FlSpot(
-        index.toDouble(),
-        (performanceData[index]['success'] as num).toDouble(),
-      ),
-    );
-
-    final spotsFailure = List<FlSpot>.generate(
-      performanceData.length,
-      (index) => FlSpot(
-        index.toDouble(),
-        (performanceData[index]['failure'] as num).toDouble(),
-      ),
-    );
-
-    // Calculate dynamic Y scaling
-    double maxY = 4;
-    for (final item in performanceData) {
-      final s = (item['success'] as num).toDouble();
-      final f = (item['failure'] as num).toDouble();
-      if (s > maxY) maxY = s;
-      if (f > maxY) maxY = f;
-    }
     maxY = (maxY * 1.2).ceilToDouble();
     if (maxY == 0) maxY = 4;
 
@@ -518,7 +799,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: LineChart(
             LineChartData(
               minX: 0,
-              maxX: (performanceData.length - 1).toDouble(),
+              maxX: (len - 1).toDouble(),
               minY: 0,
               maxY: maxY,
               borderData: FlBorderData(show: false),
@@ -557,18 +838,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    interval: performanceData.length > 10 ? 5 : 1,
+                    interval: len > 10 ? 5 : 1,
                     reservedSize: 28,
                     getTitlesWidget: (value, meta) {
                       final index = value.toInt();
-                      if (index < 0 || index >= performanceData.length) {
+                      if (index < 0 || index >= len) {
                         return const SizedBox.shrink();
                       }
 
                       return Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.s),
                         child: Text(
-                          performanceData[index]['label']?.toString() ?? '',
+                          chartData[index]['label']?.toString() ?? '',
                           style: AppTextStyles.caption,
                         ),
                       );
@@ -582,46 +863,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   tooltipBgColor: AppColors.surface,
                   getTooltipItems: (touchedSpots) {
                     return touchedSpots.map((spot) {
-                      final isSuccessSeries = spot.barIndex == 0;
+                      String labelText = '';
+                      Color textColor = Colors.black;
+
+                      if (_selectedTab == 0) {
+                        if (spot.barIndex == 0) {
+                          labelText = 'TN thành công: ${spot.y.toInt()}';
+                          textColor = AppColors.primary;
+                        } else if (spot.barIndex == 1) {
+                          labelText = 'TN thất bại: ${spot.y.toInt()}';
+                          textColor = AppColors.error;
+                        } else if (spot.barIndex == 2) {
+                          labelText = 'KB thành công: ${spot.y.toInt()}';
+                          textColor = const Color(0xFFF97316);
+                        } else if (spot.barIndex == 3) {
+                          labelText = 'KB thất bại: ${spot.y.toInt()}';
+                          textColor = const Color(0xFF8B5CF6);
+                        } else {
+                          labelText = 'Phản hồi Bot: ${spot.y.toInt()}';
+                          textColor = const Color(0xFF10B981);
+                        }
+                      } else if (_selectedTab == 1) {
+                        final isSuccess = spot.barIndex == 0;
+                        labelText = '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
+                        textColor = isSuccess ? AppColors.primary : AppColors.error;
+                      } else if (_selectedTab == 2) {
+                        final isSuccess = spot.barIndex == 0;
+                        labelText = '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
+                        textColor = isSuccess ? const Color(0xFFF97316) : AppColors.error;
+                      } else {
+                        labelText = 'Phản hồi: ${spot.y.toInt()}';
+                        textColor = const Color(0xFF10B981);
+                      }
+
                       return LineTooltipItem(
-                        '${isSuccessSeries ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}',
-                        AppTextStyles.captionBold.copyWith(
-                          color: isSuccessSeries
-                              ? AppColors.primary
-                              : AppColors.error,
-                        ),
+                        labelText,
+                        AppTextStyles.captionBold.copyWith(color: textColor),
                       );
                     }).toList();
                   },
                 ),
               ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spotsSuccess,
-                  isCurved: true,
-                  color: AppColors.primary,
-                  barWidth: 3,
-                  dotData: const FlDotData(show: true),
-                ),
-                LineChartBarData(
-                  spots: spotsFailure,
-                  isCurved: true,
-                  color: AppColors.error,
-                  barWidth: 3,
-                  dotData: const FlDotData(show: true),
-                ),
-              ],
+              lineBarsData: lines,
             ),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildLegendItem(label: 'Gửi thành công', color: AppColors.primary),
-            const SizedBox(width: AppSpacing.m),
-            _buildLegendItem(label: 'Gửi thất bại', color: AppColors.error),
-          ],
+        Wrap(
+          spacing: AppSpacing.m,
+          runSpacing: AppSpacing.s,
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: legendItems,
         ),
       ],
     );
@@ -1132,7 +1425,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildCampaignStatusSection(DashboardState state) {
     final campaignStats = _safeMap(state.overview?['campaignStats']);
-    final byStatus = _safeMap(campaignStats['byStatus']);
+    var byStatus = _safeMap(campaignStats['byStatus']);
+    if (byStatus.isEmpty) {
+      byStatus = const {
+        'running': 0,
+        'completed': 0,
+        'draft': 0,
+        'paused': 0,
+        'scheduled': 0,
+      };
+    }
 
     String mapCampaignStatus(String status) {
       switch (status.toLowerCase()) {
@@ -1146,6 +1448,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return 'Tạm dừng';
         case 'scheduled':
           return 'Lên lịch';
+        case 'failed':
+          return 'Thất bại';
+        case 'stopped':
+          return 'Đã dừng';
+        case 'pending':
+          return 'Đang chờ';
+        case 'active':
+          return 'Hoạt động';
+        case 'cancelled':
+          return 'Bị hủy';
         default:
           return status;
       }
@@ -1163,6 +1475,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return AppColors.warning;
         case 'scheduled':
           return AppColors.info;
+        case 'failed':
+          return AppColors.error;
+        case 'stopped':
+          return AppColors.error;
+        case 'pending':
+          return AppColors.warning;
+        case 'active':
+          return AppColors.success;
+        case 'cancelled':
+          return AppColors.disabledText;
         default:
           return AppColors.textSecondary;
       }

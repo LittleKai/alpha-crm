@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/models/crm_customer.dart';
 import '../../../../shared/utils/image_helper.dart';
+import '../../../../shared/utils/desktop_notifier.dart';
 import '../../../../shared/local_db/local_db_maintenance.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../data/live_chat_repository.dart';
@@ -91,6 +92,12 @@ class ChatMessage {
   });
 
   bool get isMine => direction == 'outbound';
+
+  /// Outbound messages auto-sent by the chatbot are tagged
+  /// `metadata.source == 'chatbot'` by the bridge. Everything else outbound is
+  /// a human operator reply. Used to badge AI vs nhân viên in the bubble.
+  bool get isFromBot => metadata['source'] == 'chatbot';
+
   String get providerActionId =>
       zaloMsgId?.trim().isNotEmpty == true ? zaloMsgId!.trim() : id;
 
@@ -134,8 +141,12 @@ class ChatMessage {
       message: _stringFrom(json, const ['content', 'text', 'message', 'body']),
       direction: (json['direction'] ?? 'inbound').toString(),
       status: (json['status'] ?? '').toString(),
+      // Pick the first NON-EMPTY timestamp. Inbound rows store sentAt as '' (an
+      // empty string, not null), so a `??` chain would stop there and fall back
+      // to now — re-stamping old inbound messages to "today" on every reload and
+      // breaking chronological order. _stringFrom skips empties.
       timestamp: _dateFrom(
-        json['sentAt'] ?? json['receivedAt'] ?? json['createdAt'],
+        _stringFrom(json, const ['sentAt', 'receivedAt', 'createdAt']),
       ),
       contentType: (json['messageType'] ?? json['contentType'] ?? 'text')
           .toString(),
@@ -416,12 +427,19 @@ class LiveChatState {
 
 class LiveChatNotifier extends StateNotifier<LiveChatState> {
   final LiveChatRepository _repository;
+  // Returns the current desktop-notification preference (read fresh each time
+  // so runtime toggles in the Live Chat settings dialog take effect).
+  final bool Function() _notificationsEnabled;
   StreamSubscription<LiveChatEvent>? _eventSubscription;
   Timer? _eventRefreshDebounce;
   Timer? _draftDebounce;
   DateTime _lastTypingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  LiveChatNotifier(this._repository) : super(LiveChatState.initial()) {
+  LiveChatNotifier(
+    this._repository, {
+    bool Function()? notificationsEnabled,
+  })  : _notificationsEnabled = notificationsEnabled ?? (() => false),
+        super(LiveChatState.initial()) {
     loadAccounts();
     loadConversations(loadSelectedMessages: true);
   }
@@ -470,6 +488,11 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           .map((item) => Conversation.fromJson(Map<String, dynamic>.from(item)))
           .toList();
       conversations = await _filterManagedGroupConversations(conversations);
+      // Only on silent refreshes (poll/SSE) do we surface a desktop toast for
+      // newly arrived inbound messages — never on the first/manual full load.
+      if (silent) {
+        _notifyNewInboundMessages(conversations);
+      }
       final selected = _selectedAfterRefresh(conversations);
       state = state.copyWith(
         conversations: conversations,
@@ -515,6 +538,32 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   ) async {
     // Luôn hiển thị tất cả các group (mặc định bật)
     return conversations;
+  }
+
+  // Fire a desktop toast for conversations whose unread count rose since the
+  // previous snapshot (inbound only — outbound never bumps unread). Skips the
+  // conversation the operator is actively viewing, and the very first load
+  // (empty baseline) to avoid a burst of toasts on startup.
+  void _notifyNewInboundMessages(List<Conversation> updated) {
+    if (!_notificationsEnabled()) return;
+    final previous = state.conversations;
+    if (previous.isEmpty) return;
+    final oldUnread = <String, int>{
+      for (final c in previous) c.id: c.unreadCount,
+    };
+    final selectedId = state.selectedConversation?.id;
+    for (final conv in updated) {
+      final before = oldUnread[conv.id];
+      final hasNew = before == null
+          ? conv.unreadCount > 0
+          : conv.unreadCount > before;
+      if (!hasNew) continue;
+      if (conv.id == selectedId && state.isChatFocused) continue;
+      final title = conv.customerName.isNotEmpty
+          ? conv.customerName
+          : 'Tin nhắn mới';
+      DesktopNotifier.instance.show(title, conv.lastMessage);
+    }
   }
 
   Future<void> selectAccount(LiveChatAccount? account) async {
@@ -1200,6 +1249,36 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     _replaceSelected(current.copyWith(chatbotEnabled: false));
   }
 
+  /// Per-account AI auto-reply settings (Live Chat settings dialog). Returns a
+  /// map of accountId → aiAutoReply (bool); accounts absent default to true.
+  Future<Map<String, bool>> getAccountAiAutoReply() async {
+    try {
+      final response = await _repository.getAccountChatSettings();
+      final data = response['data'];
+      final result = <String, bool>{};
+      if (data is Map) {
+        data.forEach((key, value) {
+          if (value is Map && value['aiAutoReply'] is bool) {
+            result[key.toString()] = value['aiAutoReply'] as bool;
+          }
+        });
+      }
+      return result;
+    } catch (_) {
+      return <String, bool>{};
+    }
+  }
+
+  Future<bool> setAccountAiAutoReply(String accountId, bool enabled) async {
+    try {
+      final response =
+          await _repository.setAccountAiAutoReply(accountId, enabled);
+      return response['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> sendAttachment(
     List<String> filePaths, {
     String content = '',
@@ -1224,7 +1303,12 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       }
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['message'] ?? 'Gửi file thất bại.').toString(),
+        // Bridge surfaces the real Zalo reason under 'error'; cloud uses 'message'.
+        // Prefer the concrete reason so the operator sees e.g. the Zalo error code.
+        errorMessage: (response['error'] ??
+                response['message'] ??
+                'Gửi file thất bại.')
+            .toString(),
       );
     }
   }
@@ -1261,6 +1345,40 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       return false;
     }
   }
+
+  Future<bool> deleteMessage(String messageId) async {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return false;
+    state = state.copyWith(isSending: true, errorMessage: null);
+    try {
+      final response = await _repository.deleteMessage(
+        conversation.id,
+        messageId,
+      );
+      if (response['success'] == true) {
+        await loadMessages(conversation.id);
+        state = state.copyWith(isSending: false);
+        return true;
+      } else {
+        state = state.copyWith(
+          isSending: false,
+          errorMessage:
+              (response['message'] ??
+                      response['error'] ??
+                      'Xóa tin nhắn thất bại.')
+                  .toString(),
+        );
+        return false;
+      }
+    } catch (error) {
+      state = state.copyWith(
+        isSending: false,
+        errorMessage: 'Xóa tin nhắn thất bại: $error',
+      );
+      return false;
+    }
+  }
+
 
   @override
   void dispose() {
@@ -1365,7 +1483,11 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
 
 final liveChatProvider = StateNotifierProvider<LiveChatNotifier, LiveChatState>(
   (ref) {
-    return LiveChatNotifier(ref.read(liveChatRepositoryProvider));
+    return LiveChatNotifier(
+      ref.read(liveChatRepositoryProvider),
+      notificationsEnabled: () =>
+          ref.read(settingsProvider).settings.liveChatNotifications,
+    );
   },
 );
 

@@ -215,9 +215,9 @@ Container(
 ### UI Rules
 ### Dialogs
 - Do not use the default `AlertDialog` for complex forms or selections.
-- Use `Dialog` widget with a custom `Container`, using `AppColors.surface` and `AppSpacing.borderRadiusL`.
-- Provide a clear header with an icon, a title (e.g. `AppTextStyles.h2`), optional action buttons (like Add), and a close button `IconButton(icon: Icon(Icons.close))`.
-- Separate header and content with a `Divider`.
+- Use the standard `AppDialog` widget (or `Dialog` with custom container using `AppColors.surface` and `AppSpacing.borderRadiusM` with `clipBehavior: Clip.antiAlias`).
+- All dialogs must feature the premium dark/slate gradient header (`0xFF0F172A` to `0xFF1E293B`) with white text (title size 19 bold, subtitle size 11.5 with 85% opacity), an un-boxed white icon (size 28), and a white close button.
+- The footer / actions section should have `AppColors.appBackground` background, a top border of `AppColors.borderSoft`, and `horizontal: AppSpacing.xl, vertical: AppSpacing.m` padding to ensure a standardized, high-fidelity experience.
 - **Zalo Compliance Warnings:** Never use Flutter's default `AlertDialog` or `showDialog` to display compliance warnings or safety recommendations. Instead, always import and use `showComplianceWarningsDialog` from `lib/shared/widgets/compliance_warnings_popup.dart`.
 
 
@@ -226,6 +226,27 @@ Container(
 - Use shared widgets before creating local versions.
 - Keep mobile layouts stacked and avoid overflow.
 - Avoid large speculative UI not present in `img/*.png`.
+
+### Chatbot Knowledge Attachments (Tài liệu kiến thức)
+
+`_showKnowledgeDialog` in `lib/features/messaging/chatbot/presentation/screens/chatbot_screen.dart`:
+- Attachments support **4 media groups** (`image`, `video`, `audio`, `file`) via the
+  `KnowledgeAttachmentType` enum; a file's group is **derived from its extension**
+  (`_attachmentTypeOf`), not stored. Auto-grouped after upload, no fixed file-count cap,
+  the "Chọn thêm file" button is multi-select and repeatable.
+- **Files are stored LOCALLY by the bridge, not on B2.** Upload goes to the local bridge
+  `POST /local/chatbot/knowledge-file` (via `ChatbotLocalBridgeApi.uploadKnowledgeFile`),
+  which writes `<bridge>/.data/chatbot-knowledge/<id><ext>` and returns a content-hash `id`.
+  The cloud only ever stores **name + type + description + id** (never the bytes/URL).
+- Knowledge docs serialize each file as `- [File] Tên: NAME | ID: <id> | Mô tả: DESC`
+  (legacy `| URL: ... |` entries parse with an empty id → shown as "missing").
+- The bridge sends a file by resolving `id → local path` at send time (no download). If the
+  file is absent on this machine (e.g. attached on another device), the send is skipped and
+  the knowledge tab flags it: `_knowledgeIdsPresent` (from `GET /local/chatbot/knowledge-files`)
+  drives a red "thiếu file" chip. Refresh it after the dialog closes.
+- The AI never types filenames: the backend (`/crm/agent/chatbot/generate`) gives the model a
+  catalog with `[[SEND:Fx]]` markers, resolves them to `{id,name,type}`, and strips both the
+  markers and any stray `[File]…` text before returning `{reply, attachments}`.
 
 ---
 

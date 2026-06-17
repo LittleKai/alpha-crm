@@ -26,6 +26,25 @@ test('listener recovery is needed only for a connected account with a stopped li
   assert.equal(shouldRecoverZaloListener(status(false, false)), false);
 });
 
+test('multi-account: account-aware hint recovers a down listener even if another account is up', () => {
+  // Pool-level listenerRunning is true (account A up) but account B is down:
+  // the coarse signal alone would miss it, the hint catches it.
+  assert.equal(
+    shouldRecoverZaloListener({ ...status(true, true), needsListenerRecovery: true }),
+    true,
+  );
+  // All live accounts listening → no recovery.
+  assert.equal(
+    shouldRecoverZaloListener({ ...status(true, true), needsListenerRecovery: false }),
+    false,
+  );
+  // Not connected (all expired) → never recover, regardless of the hint.
+  assert.equal(
+    shouldRecoverZaloListener({ ...status(false, false), needsListenerRecovery: true }),
+    false,
+  );
+});
+
 test('health monitor coalesces concurrent listener recovery attempts', async () => {
   let recoveries = 0;
   let release!: () => void;

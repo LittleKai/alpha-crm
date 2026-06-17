@@ -75,6 +75,13 @@ export interface InboundMessageInput {
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';
+  /**
+   * Message direction. Self-sent messages that arrive through the live
+   * `message` / `old_messages` listener (e.g. the operator typing on their
+   * phone) must be stored as 'outbound' so they render on the correct side.
+   * Defaults to 'inbound' when omitted.
+   */
+  direction?: 'inbound' | 'outbound';
   senderId: string;
   senderName: string;
   avatarUrl?: string;

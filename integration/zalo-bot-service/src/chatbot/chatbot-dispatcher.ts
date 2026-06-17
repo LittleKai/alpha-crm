@@ -51,6 +51,10 @@ export interface ChatbotDispatcherDependencies {
   postAudit(request: ChatbotAuditRequest): Promise<void>;
   deleteAudit(idempotencyKey: string): void;
   markAuditFailed(idempotencyKey: string, error: string): void;
+  // Resolve a knowledge-file id to its local file path on this machine, or null
+  // if the file is missing (e.g. configured on another machine). zca-js sends
+  // the local path directly — no download.
+  resolveAttachmentPath?(id: string): string | null;
   now?: () => number;
   createClientMessageId?: () => string;
 }
@@ -107,43 +111,173 @@ export class ChatbotDispatcher {
       .sendTyping(input.accountId, input.threadId, input.threadType)
       .catch(() => false);
 
-    const clientMessageId = this.createClientMessageId();
-    let sendResult: ZaloSendMessageResult;
-    try {
-      sendResult = await this.dependencies.sendMessage({
-        recipientId: input.threadId,
-        accountId: input.accountId,
-        threadType: input.threadType,
-        message: decision.text,
-        messageType: 'text',
-        clientMessageId,
-        metadata: { source: 'chatbot' },
-      });
-    } catch (error) {
-      return this.handleSendFailure(input, error);
+    const text = decision.text.trim();
+    const attachments = decision.attachments ?? [];
+
+    let lastLocalMessageId = '';
+    let lastProviderMessageId = '';
+
+    // 1) Text part. A text send failure is fatal (enters handoff) exactly as
+    //    before — only sent when there is text, so a file-only reply is allowed.
+    if (text.length > 0) {
+      const clientMessageId = this.createClientMessageId();
+      let sendResult: ZaloSendMessageResult;
+      try {
+        sendResult = await this.dependencies.sendMessage({
+          recipientId: input.threadId,
+          accountId: input.accountId,
+          threadType: input.threadType,
+          message: decision.text,
+          messageType: 'text',
+          clientMessageId,
+          metadata: { source: 'chatbot' },
+        });
+      } catch (error) {
+        return this.handleSendFailure(input, error);
+      }
+      if (!sendResult.success) {
+        return this.handleSendFailure(
+          input,
+          new Error(sendResult.error || 'Zalo send failed'),
+        );
+      }
+
+      try {
+        const metadata = {
+          source: 'chatbot',
+          chatbotMode: decision.mode,
+          ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
+          sourceMessageIds: decision.sourceMessageIds,
+        };
+        const localMessageId = this.dependencies.insertOutboundMessage({
+          accountId: input.accountId,
+          threadId: input.threadId,
+          threadType: input.threadType,
+          content: decision.text,
+          messageType: 'text',
+          clientMessageId,
+          metadata,
+        });
+        const providerMessageId = sendResult.messageId || '';
+        this.dependencies.updateMessageStatus(
+          localMessageId,
+          'sent',
+          providerMessageId || undefined,
+          '',
+          sendResult.clientMessageId || clientMessageId,
+        );
+        this.dependencies.publish({
+          type: 'message.created',
+          accountId: input.accountId,
+          threadId: input.threadId,
+          data: {
+            messageId: localMessageId,
+            providerMessageId,
+            clientMessageId: sendResult.clientMessageId || clientMessageId,
+          },
+        });
+        lastLocalMessageId = localMessageId;
+        lastProviderMessageId = providerMessageId;
+      } catch (error) {
+        return this.handleSendFailure(input, error);
+      }
     }
-    if (!sendResult.success) {
+
+    // 2) Attachment parts. Supplementary — a per-file failure is logged and
+    //    skipped so it never undoes an already-delivered text message.
+    for (const attachment of attachments) {
+      const sent = await this.dispatchAttachment(input, decision, attachment);
+      if (sent) {
+        lastLocalMessageId = sent.localMessageId || lastLocalMessageId;
+        lastProviderMessageId = sent.providerMessageId || lastProviderMessageId;
+      }
+    }
+
+    // Nothing got out the door (e.g. empty text and every attachment failed).
+    if (!lastProviderMessageId && !lastLocalMessageId) {
       return this.handleSendFailure(
         input,
-        new Error(sendResult.error || 'Zalo send failed'),
+        new Error('Chatbot reply had no deliverable content'),
       );
     }
 
-    try {
-      const metadata = {
-        source: 'chatbot',
-        chatbotMode: decision.mode,
+    this.markProcessed(input.conversationKey, decision.sourceMessageIds);
+    await this.recordAudit(
+      input,
+      decision.mode === 'keyword' ? 'matched' : 'ai',
+      {
         ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
-        sourceMessageIds: decision.sourceMessageIds,
-      };
+        providerMessageId: lastProviderMessageId,
+        localMessageId: lastLocalMessageId,
+        ...(attachments.length ? { attachmentCount: attachments.length } : {}),
+      },
+    );
+    return {
+      status: 'sent',
+      localMessageId: lastLocalMessageId,
+      providerMessageId: lastProviderMessageId,
+    };
+  }
+
+  private async dispatchAttachment(
+    input: ChatbotDispatchInput,
+    decision: Extract<ChatbotDecision, { kind: 'reply' }>,
+    attachment: NonNullable<
+      Extract<ChatbotDecision, { kind: 'reply' }>['attachments']
+    >[number],
+  ): Promise<{ localMessageId: string; providerMessageId: string } | null> {
+    const resolve = this.dependencies.resolveAttachmentPath;
+    if (!resolve) return null;
+
+    const localPath = resolve(attachment.id);
+    if (!localPath) {
+      // Missing on this machine — most likely attached on another device. Skip
+      // (never blocks the text reply); the operator is warned in the knowledge
+      // tab via the present-ids list.
+      console.error(
+        `[ChatbotDispatcher] Knowledge file missing locally, skipping (${attachment.name}, id=${attachment.id}).`,
+      );
+      return null;
+    }
+
+    try {
+      const clientMessageId = this.createClientMessageId();
+      const messageType = mapAttachmentMessageType(attachment.type);
+      const sendResult = await this.dependencies.sendMessage({
+        recipientId: input.threadId,
+        accountId: input.accountId,
+        threadType: input.threadType,
+        message: '',
+        messageType,
+        attachments: [localPath],
+        clientMessageId,
+        metadata: { source: 'chatbot' },
+      });
+      if (!sendResult.success) {
+        console.error(
+          `[ChatbotDispatcher] Attachment send failed (${attachment.name}): ${sendResult.error}`,
+        );
+        return null;
+      }
       const localMessageId = this.dependencies.insertOutboundMessage({
         accountId: input.accountId,
         threadId: input.threadId,
         threadType: input.threadType,
-        content: decision.text,
-        messageType: 'text',
+        content: attachment.name || '',
+        messageType,
         clientMessageId,
-        metadata,
+        metadata: {
+          source: 'chatbot',
+          chatbotMode: decision.mode,
+          sourceMessageIds: decision.sourceMessageIds,
+        },
+        attachments: [
+          {
+            kind: attachment.type,
+            name: attachment.name,
+            localPath,
+          },
+        ],
       });
       const providerMessageId = sendResult.messageId || '';
       this.dependencies.updateMessageStatus(
@@ -163,23 +297,13 @@ export class ChatbotDispatcher {
           clientMessageId: sendResult.clientMessageId || clientMessageId,
         },
       });
-      this.markProcessed(input.conversationKey, decision.sourceMessageIds);
-      await this.recordAudit(
-        input,
-        decision.mode === 'keyword' ? 'matched' : 'ai',
-        {
-          ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
-          providerMessageId,
-          localMessageId,
-        },
-      );
-      return {
-        status: 'sent',
-        localMessageId,
-        providerMessageId,
-      };
+      return { localMessageId, providerMessageId };
     } catch (error) {
-      return this.handleSendFailure(input, error);
+      console.error(
+        `[ChatbotDispatcher] Attachment dispatch error (${attachment.name}):`,
+        error,
+      );
+      return null;
     }
   }
 
@@ -253,6 +377,15 @@ export class ChatbotDispatcher {
       );
     }
   }
+}
+
+function mapAttachmentMessageType(
+  type: 'image' | 'video' | 'audio' | 'file',
+): 'image' | 'video' | 'voice' | 'file' {
+  if (type === 'image') return 'image';
+  if (type === 'video') return 'video';
+  if (type === 'audio') return 'voice';
+  return 'file';
 }
 
 export function createChatbotAuditIdempotencyKey(

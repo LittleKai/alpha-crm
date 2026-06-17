@@ -10,6 +10,7 @@ import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
+import 'shared/utils/desktop_notifier.dart';
 import 'shared/utils/app_logger.dart';
 
 void main() async {
@@ -19,6 +20,9 @@ void main() async {
   if (!kIsWeb) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
   }
+
+  // Thông báo desktop (Live Chat) — no-op trên web/mobile
+  await DesktopNotifier.instance.init();
 
   // Khởi tạo Logger (ghi log ra file + console)
   final appLogger = AppLogger();

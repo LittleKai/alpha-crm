@@ -57,6 +57,71 @@ describe('LocalChatStore', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Self-sent history (operator's phone) is stored as outbound, not inbound
+  // -------------------------------------------------------------------------
+  it('stores self-sent history as outbound without renaming the 1:1 thread', () => {
+    // First a real inbound from the customer establishes the thread name.
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'cust1',
+      threadType: 'user',
+      senderId: 'cust1',
+      senderName: 'Khách Hàng',
+      avatarUrl: 'https://example.com/cust.jpg',
+      content: 'Chào shop',
+      messageType: 'text',
+      providerMessageId: 'pmsg_in',
+      timestamp: '2024-06-01T12:00:00Z',
+    });
+
+    // The operator's own reply (typed on their phone) arrives via the same
+    // listener with senderId === accountId, flagged outbound by the caller.
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'cust1',
+      threadType: 'user',
+      direction: 'outbound',
+      senderId: 'acc1',
+      senderName: 'Chủ Shop',
+      avatarUrl: 'https://example.com/owner.jpg',
+      content: 'Dạ chào bạn',
+      messageType: 'text',
+      providerMessageId: 'pmsg_self',
+      timestamp: '2024-06-01T12:01:00Z',
+    });
+
+    const conv = store.getConversationByThread('acc1', 'cust1');
+    assert.ok(conv);
+    // Thread must stay named after the customer, never the operator.
+    assert.equal(conv!.displayName, 'Khách Hàng');
+    // Outbound self-message must not bump the unread counter.
+    assert.equal(conv!.unreadCount, 1);
+
+    const page = store.getMessages(conv!.id);
+    assert.equal(page.messages.length, 2);
+    const self = page.messages.find((m) => m.providerMessageId === 'pmsg_self');
+    assert.ok(self);
+    assert.equal(self!.direction, 'outbound');
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-account AI auto-reply settings
+  // -------------------------------------------------------------------------
+  it('per-account AI auto-reply defaults on and persists when toggled off', () => {
+    // Unknown account defaults to enabled.
+    assert.equal(store.isAccountAiAutoReplyEnabled('accX'), true);
+
+    store.setAccountAiAutoReply('accX', false);
+    assert.equal(store.isAccountAiAutoReplyEnabled('accX'), false);
+
+    const settings = store.getAccountChatSettings();
+    assert.deepEqual(settings['accX'], { aiAutoReply: false });
+
+    store.setAccountAiAutoReply('accX', true);
+    assert.equal(store.isAccountAiAutoReplyEnabled('accX'), true);
+  });
+
+  // -------------------------------------------------------------------------
   // Duplicate provider message does not duplicate rows
   // -------------------------------------------------------------------------
   it('duplicate provider message does not duplicate rows', () => {

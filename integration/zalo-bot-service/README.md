@@ -58,6 +58,28 @@ npm run zalo:login-personal
 
 Quét QR bằng app Zalo. Credentials được lưu tại `.data/zalo-personal/credentials.json` (gitignored).
 
+### Giữ phiên đăng nhập lâu dài (re-login refresh)
+
+File credential (`credentials_<uId>.json`) được ghi **đúng một lần** lúc QR login
+và **giữ bất biến**. Service KHÔNG bao giờ re-serialize cookie jar sống rồi ghi
+đè file — việc đó từng làm rớt cookie `zpw_sek` và hỏng phiên (lỗi
+"zpw_sek bị thiếu hoặc không đúng").
+
+Để giữ phiên sống lâu, service **đăng nhập lại** (`zalo.login(saved)`) định kỳ
+(mặc định mỗi 12 giờ, có stagger 10s/tài khoản): Zalo cấp cookie mới vào jar
+trong RAM, còn file lưu vẫn là bản QR gốc tốt. Đây là cách dự án tham khảo
+ZaloCRM dùng (immutable credential + re-login refresh + circuit breaker).
+
+Phiên vẫn có thể mất nếu Zalo chủ động vô hiệu hoá: đăng nhập trùng tài khoản ở
+nơi khác (Zalo Web/máy khác → listener `closed` code 3000/3003), đổi mật khẩu,
+hoặc hành vi bị gắn cờ. Khuyến nghị dùng tài khoản riêng và không đăng nhập song
+song tài khoản đó ở thiết bị khác.
+
+Khi bị thu hồi, lý do (mã 3000/3003) được lưu trong bộ nhớ của instance và trả
+qua `GET /api/zalo/accounts` ở các field `status` (`connected` |
+`disconnected_expired`), `disconnectReason`, `disconnectedAt`. Flutter hiển thị
+icon cảnh báo + nút "Đăng nhập lại" trong panel "Tài khoản Zalo" (tab Cài đặt).
+
 ## Endpoints
 
 | Method | Path | Mô tả |

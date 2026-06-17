@@ -16,6 +16,10 @@ class ZaloConnectedAccount {
   final String proxy;
   final bool blockSeen;
   final bool blockTyping;
+  // 'connected' | 'disconnected_expired'. Reason is set when the Zalo session
+  // was force-revoked (duplicate login / kicked from phone).
+  final String status;
+  final String disconnectReason;
 
   const ZaloConnectedAccount({
     required this.id,
@@ -28,11 +32,15 @@ class ZaloConnectedAccount {
     this.proxy = '',
     this.blockSeen = false,
     this.blockTyping = false,
+    this.status = 'connected',
+    this.disconnectReason = '',
   }) : _label = label;
 
   String get label => nickname.trim().isEmpty ? _label : nickname;
 
   String get originalLabel => zaloLabel.trim().isEmpty ? _label : zaloLabel;
+
+  bool get isExpired => status == 'disconnected_expired';
 }
 
 class ZaloIntegrationState {
@@ -121,13 +129,12 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
       return;
     }
     _pollingTimer?.cancel();
-    // Run an immediate check when starting
-    checkConnection();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      checkConnection();
-    });
+    _pollingTimer = null;
+
+    // Run connection status check once on startup. Background periodic polling is disabled as requested.
+    checkConnection(showLoading: false);
     debugPrint(
-      '[ZaloIntegrationNotifier] Started backend polling timer (every 5s).',
+      '[ZaloIntegrationNotifier] Connection status checked on startup. Background polling disabled.',
     );
   }
 
@@ -137,8 +144,12 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
     debugPrint('[ZaloIntegrationNotifier] Stopped backend polling timer.');
   }
 
-  Future<void> checkConnection() async {
-    state = state.copyWith(isLoading: true, errorText: null);
+  Future<void> checkConnection({bool showLoading = false}) async {
+    if (showLoading) {
+      state = state.copyWith(isLoading: true, errorText: null);
+    } else {
+      state = state.copyWith(errorText: null);
+    }
 
     try {
       final api = _getApi();
@@ -175,6 +186,8 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
                   proxy: settings['proxy']?.toString() ?? '',
                   blockSeen: settings['blockSeen'] == true,
                   blockTyping: settings['blockTyping'] == true,
+                  status: item['status']?.toString() ?? 'connected',
+                  disconnectReason: item['disconnectReason']?.toString() ?? '',
                 );
               })
                 .where((acc) => seenIds.add(acc.id))
@@ -297,6 +310,8 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
               proxy: account.proxy,
               blockSeen: account.blockSeen,
               blockTyping: account.blockTyping,
+              status: account.status,
+              disconnectReason: account.disconnectReason,
             ),
           )
           .toList(),

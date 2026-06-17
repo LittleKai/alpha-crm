@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:data_table_2/data_table_2.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../shared/widgets/app_dialog.dart';
+import '../../../../shared/widgets/app_button.dart';
 
 class SystemLogsScreen extends StatefulWidget {
   const SystemLogsScreen({super.key});
@@ -51,47 +53,45 @@ class _SystemLogsScreenState extends State<SystemLogsScreen> {
   void _showLogDetails(Map<String, dynamic> log) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(log['message'] ?? 'Error Details'),
-        content: SizedBox(
-          width: 600,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Platform: ${log['platform'] ?? 'Unknown'}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text('Time: ${log['timestamp']}'),
-                const Divider(),
-                if (log['error'] != null) ...[
-                  const Text('Error:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    color: AppColors.surface,
-                    child: SelectableText(log['error']),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (log['stackTrace'] != null) ...[
-                  const Text('Stack Trace:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    color: AppColors.surface,
-                    child: SelectableText(log['stackTrace']),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+      builder: (context) => AppDialog(
+        title: log['message'] ?? 'Chi tiết lỗi',
+        icon: Icons.bug_report_outlined,
+        width: 600,
         actions: [
-          TextButton(
+          AppDialogAction(
+            text: 'Đóng',
+            variant: AppButtonVariant.outline,
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Đóng'),
           ),
         ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Platform: ${log['platform'] ?? 'Unknown'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('Time: ${log['timestamp']}'),
+            const Divider(),
+            if (log['error'] != null) ...[
+              const Text('Error:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                color: AppColors.surface,
+                child: SelectableText(log['error']),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (log['stackTrace'] != null) ...[
+              const Text('Stack Trace:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                color: AppColors.surface,
+                child: SelectableText(log['stackTrace']),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

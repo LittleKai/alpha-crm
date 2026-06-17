@@ -322,6 +322,20 @@ class LiveChatRepository {
     return localApi.retryMessage(messageId);
   }
 
+  Future<Map<String, dynamic>> getAccountChatSettings() {
+    return localApi.getAccountChatSettings();
+  }
+
+  Future<Map<String, dynamic>> setAccountAiAutoReply(
+    String accountId,
+    bool enabled,
+  ) {
+    return localApi.setAccountAiAutoReply(
+      accountId: accountId,
+      enabled: enabled,
+    );
+  }
+
   Future<Map<String, dynamic>> reactToMessage(
     String messageId,
     String reaction,
@@ -376,7 +390,12 @@ class LiveChatRepository {
     String content = '',
     String messageType = 'file',
   }) async {
-    if (localFirstEnabled) {
+    // Gate on the SAME condition as sendRichMessage/getMessages so attachments
+    // route through the bridge whenever it is the message source. Previously this
+    // checked localFirstEnabled alone (defaults false), so attachments skipped the
+    // bridge and hit the cloud /send-attachment — which has no local-first
+    // conversation/window pairing and returns 500.
+    if (_preferLocalZaloActions || localFirstEnabled) {
       try {
         final response = await localApi.sendLocalAttachment(
           conversationId,
@@ -400,6 +419,9 @@ class LiveChatRepository {
             'Phiên đăng nhập Zalo đã hết hạn hoặc bị đăng xuất từ điện thoại. Vui lòng quét mã QR để kết nối lại Alpha CRM.',
           );
         }
+        // Strict local-first: surface the real bridge error rather than masking
+        // it with a cloud 500.
+        if (localFirstEnabled) rethrow;
       }
     }
 
@@ -451,6 +473,29 @@ class LiveChatRepository {
           'Tài khoản Zalo đã bị đăng xuất hoặc mất kết nối từ điện thoại. Không thể thu hồi tin. Vui lòng quét QR để kết nối lại.',
         );
       }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    if (_preferLocalZaloActions || localFirstEnabled) {
+      try {
+        final response = await localApi.deleteLocalMessage(messageId);
+        return response;
+      } catch (e) {
+        throw Exception('Xóa tin nhắn thất bại qua bridge cục bộ: $e');
+      }
+    }
+
+    try {
+      return await CrmCloudApi.post(
+        '/crm/conversations/$conversationId/messages/$messageId/delete',
+        {},
+      );
+    } catch (e) {
       rethrow;
     }
   }

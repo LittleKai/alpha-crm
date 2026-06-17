@@ -13,13 +13,14 @@
 migrate_working_dir/
 
 # Hybrid AI workflow archives
-.hybrid-ai/archive/
+.hybrid-ai/
 
 # IntelliJ related
 *.iml
 *.ipr
 *.iws
 .idea/
+
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line

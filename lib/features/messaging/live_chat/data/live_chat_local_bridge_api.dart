@@ -179,6 +179,21 @@ class LiveChatLocalBridgeApi {
     }
   }
 
+  Future<Map<String, dynamic>> deleteLocalMessage(String messageId) async {
+    final encodedMessageId = Uri.encodeComponent(messageId);
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/local/messages/$encodedMessageId/delete'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 5));
+      return _decodeResponse(response);
+    } catch (e) {
+      throw Exception('Failed to delete via local bridge: $e');
+    }
+  }
+
   Stream<LiveChatEvent> watchEvents({
     String? accountId,
     String? threadId,
@@ -227,6 +242,25 @@ class LiveChatLocalBridgeApi {
       'mode': mode,
       if (reason != null) 'reason': reason,
     });
+  }
+
+  /// Map of accountId → { aiAutoReply: bool }. Accounts without an explicit
+  /// setting are absent (treated as enabled by default on the caller side).
+  Future<Map<String, dynamic>> getAccountChatSettings() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/local/accounts/chat-settings'))
+        .timeout(const Duration(seconds: 5));
+    return _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> setAccountAiAutoReply({
+    required String accountId,
+    required bool enabled,
+  }) {
+    return _put(
+      '/local/accounts/${Uri.encodeComponent(accountId)}/chat-settings',
+      {'aiAutoReply': enabled},
+    );
   }
 
   Future<Map<String, dynamic>> retryMessage(String messageId) {

@@ -118,11 +118,20 @@ LiveChatAttachmentView? _viewFromAttachmentMap(
 
 LiveChatAttachmentView _viewFromPath(String path, String contentType) {
   final isImage = contentType == 'image' || _looksLikeImagePath(path);
+  final isVideo = contentType == 'video' || _looksLikeVideoPath(path);
   return LiveChatAttachmentView(
-    kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
+    kind: isVideo
+        ? LiveChatAttachmentKind.video
+        : isImage
+        ? LiveChatAttachmentKind.image
+        : LiveChatAttachmentKind.file,
     displayName: _safeDecodeComponent(
       _basename(path).isEmpty
-          ? (isImage ? 'Hinh anh' : 'Tep dinh kem')
+          ? (isVideo
+                ? 'Video'
+                : isImage
+                ? 'Hình ảnh'
+                : 'Tệp đính kèm')
           : _basename(path),
     ),
     url: path.startsWith('http://') || path.startsWith('https://') ? path : '',
@@ -143,15 +152,24 @@ LiveChatAttachmentView? _viewFromMessageType(ChatMessage message) {
   }
   final trimmed = message.message.trim();
   final isImage = type == 'image' || type == 'gif';
+  final isVideo = type == 'video';
   final displayName =
       trimmed.isNotEmpty &&
           trimmed != '[image]' &&
           trimmed != '[file]' &&
           trimmed != '[video]'
       ? trimmed
-      : (isImage ? 'Hinh anh' : 'Tep dinh kem');
+      : (isVideo
+            ? 'Video'
+            : isImage
+            ? 'Hình ảnh'
+            : 'Tệp đính kèm');
   return LiveChatAttachmentView(
-    kind: isImage ? LiveChatAttachmentKind.image : LiveChatAttachmentKind.file,
+    kind: isVideo
+        ? LiveChatAttachmentKind.video
+        : isImage
+        ? LiveChatAttachmentKind.image
+        : LiveChatAttachmentKind.file,
     displayName: displayName,
   );
 }
@@ -231,3 +249,95 @@ String _formatSize(Object? raw) {
   if (bytes >= 1048576) return '${(bytes / 1048576).toStringAsFixed(1)} MB';
   return '${(bytes / 1024).ceil()} KB';
 }
+
+List<LiveChatAttachmentView> resolveLiveChatImageAttachments(ChatMessage message) {
+  if (message.isDeleted) return [];
+  final list = <LiveChatAttachmentView>[];
+  final attachments = message.attachments;
+  if (attachments is List) {
+    for (final att in attachments) {
+      if (att is Map) {
+        final kind = (att['kind'] ?? att['type'] ?? '').toString().toLowerCase();
+        final mimeType = (att['mimeType'] ?? '').toString().toLowerCase();
+        if ((kind.isNotEmpty && kind != 'image' && kind != 'gif' && kind != 'photo') ||
+            (mimeType.isNotEmpty && !mimeType.startsWith('image/'))) {
+          continue;
+        }
+        final view = _viewFromAttachmentMap(Map<String, dynamic>.from(att), message.contentType);
+        if (view != null && view.kind == LiveChatAttachmentKind.image) {
+          list.add(view);
+        }
+      } else if (att is String) {
+        final view = _viewFromPath(att, message.contentType);
+        if (view.kind == LiveChatAttachmentKind.image) {
+          list.add(view);
+        }
+      }
+    }
+  } else if (attachments is Map) {
+    final kind = (attachments['kind'] ?? attachments['type'] ?? '').toString().toLowerCase();
+    final mimeType = (attachments['mimeType'] ?? '').toString().toLowerCase();
+    if (!((kind.isNotEmpty && kind != 'image' && kind != 'gif' && kind != 'photo') ||
+        (mimeType.isNotEmpty && !mimeType.startsWith('image/')))) {
+      final view = _viewFromAttachmentMap(Map<String, dynamic>.from(attachments), message.contentType);
+      if (view != null && view.kind == LiveChatAttachmentKind.image) {
+        list.add(view);
+      }
+    }
+  }
+  
+  if (list.isEmpty) {
+    final view = resolveLiveChatAttachmentView(message);
+    if (view != null && view.kind == LiveChatAttachmentKind.image) {
+      list.add(view);
+    }
+  }
+  return list;
+}
+
+List<LiveChatAttachmentView> resolveLiveChatMediaAttachments(ChatMessage message) {
+  if (message.isDeleted) return [];
+  final list = <LiveChatAttachmentView>[];
+  final attachments = message.attachments;
+  if (attachments is List) {
+    for (final att in attachments) {
+      if (att is Map) {
+        final kind = (att['kind'] ?? att['type'] ?? '').toString().toLowerCase();
+        final mimeType = (att['mimeType'] ?? '').toString().toLowerCase();
+        if ((kind.isNotEmpty && kind != 'image' && kind != 'gif' && kind != 'photo' && kind != 'video') ||
+            (mimeType.isNotEmpty && !mimeType.startsWith('image/') && !mimeType.startsWith('video/'))) {
+          continue;
+        }
+        final view = _viewFromAttachmentMap(Map<String, dynamic>.from(att), message.contentType);
+        if (view != null && (view.kind == LiveChatAttachmentKind.image || view.kind == LiveChatAttachmentKind.video)) {
+          list.add(view);
+        }
+      } else if (att is String) {
+        final view = _viewFromPath(att, message.contentType);
+        if (view.kind == LiveChatAttachmentKind.image || view.kind == LiveChatAttachmentKind.video) {
+          list.add(view);
+        }
+      }
+    }
+  } else if (attachments is Map) {
+    final kind = (attachments['kind'] ?? attachments['type'] ?? '').toString().toLowerCase();
+    final mimeType = (attachments['mimeType'] ?? '').toString().toLowerCase();
+    if (!((kind.isNotEmpty && kind != 'image' && kind != 'gif' && kind != 'photo' && kind != 'video') ||
+        (mimeType.isNotEmpty && !mimeType.startsWith('image/') && !mimeType.startsWith('video/')))) {
+      final view = _viewFromAttachmentMap(Map<String, dynamic>.from(attachments), message.contentType);
+      if (view != null && (view.kind == LiveChatAttachmentKind.image || view.kind == LiveChatAttachmentKind.video)) {
+        list.add(view);
+      }
+    }
+  }
+  
+  if (list.isEmpty) {
+    final view = resolveLiveChatAttachmentView(message);
+    if (view != null && (view.kind == LiveChatAttachmentKind.image || view.kind == LiveChatAttachmentKind.video)) {
+      list.add(view);
+    }
+  }
+  return list;
+}
+
+

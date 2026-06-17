@@ -11,6 +11,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
 import '../../../../shared/widgets/app_search_field.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../providers/templates_provider.dart';
 
 class ContentTemplatesScreen extends ConsumerStatefulWidget {
@@ -280,48 +281,18 @@ class _ContentTemplatesScreenState
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Thêm tin mẫu mới'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Tiêu đề tin mẫu',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.m),
-                TextField(
-                  controller: contentController,
-                  minLines: 3,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: 'Nội dung tin nhắn',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.m),
-                TextField(
-                  controller: shortcutController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phím tắt',
-                    hintText: '/1 hoặc /hello',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return AppDialog(
+          title: 'Thêm tin mẫu mới',
+          icon: Icons.add_box_outlined,
+          width: 460,
           actions: [
-            TextButton(
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Hủy'),
             ),
-            ElevatedButton(
+            AppDialogAction(
+              text: 'Lưu',
               onPressed: () async {
                 final navigator = Navigator.of(dialogContext);
                 final title = titleController.text.trim();
@@ -347,9 +318,39 @@ class _ContentTemplatesScreenState
                 }
                 navigator.pop();
               },
-              child: const Text('Lưu'),
             ),
           ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Tiêu đề tin mẫu',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              TextField(
+                controller: contentController,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Nội dung tin nhắn',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              TextField(
+                controller: shortcutController,
+                decoration: const InputDecoration(
+                  labelText: 'Phím tắt',
+                  hintText: '/1 hoặc /hello',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

@@ -7,6 +7,8 @@ import '../theme/app_spacing.dart';
 import '../theme/app_text_styles.dart';
 import '../routing/app_routes.dart';
 import '../../shared/widgets/compliance_warnings_popup.dart';
+import '../../shared/widgets/app_dialog.dart';
+import '../../shared/widgets/app_button.dart';
 
 import '../../features/customers/providers/customers_provider.dart';
 import '../../features/messaging/live_chat/providers/live_chat_provider.dart';
@@ -45,19 +47,13 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
         subscriptionStatus != 'active';
     if (hasKnownSubscriptionWarning) notifCount++;
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final surfaceColor = theme.cardTheme.color ?? theme.colorScheme.surface;
-    final dividerColor = theme.dividerTheme.color ?? theme.dividerColor;
-    final textSecondary = isDark
-        ? const Color(0xFF94A3B8)
-        : AppColors.textSecondary;
-    final textPrimary = isDark
-        ? const Color(0xFFF8FAFC)
-        : AppColors.textPrimary;
-    final textMuted = isDark ? const Color(0xFF64748B) : AppColors.textMuted;
-    final disabledColor = isDark ? const Color(0xFF475569) : AppColors.disabled;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FF); // Xanh lam nhạt hoặc dark
+    final dividerColor = isDark ? const Color(0xFF334155) : const Color(0xFFBFD2FF); // Viền xanh lam nhạt hoặc dark
+    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569); // Text màu đậm để dễ đọc
+    final textPrimary = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final textMuted = isDark ? const Color(0xFF64748B) : const Color(0xFF718096);
+    final disabledColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
 
     return Container(
       height: 64,
@@ -380,39 +376,22 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
       }
     }
 
-    return Dialog(
+    return AppDialog(
       key: const ValueKey('global_search_panel'),
-      insetPadding: const EdgeInsets.all(AppSpacing.m),
-      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.m),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, color: AppColors.primary),
-                  const SizedBox(width: AppSpacing.s),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Tìm kiếm khách hàng, hội thoại, công việc...',
-                        border: InputBorder.none,
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _query = val;
-                        });
-                      },
-                    ),
-                  ),
-                  if (_query.isNotEmpty)
-                    IconButton(
+      title: 'Tìm kiếm toàn cầu',
+      icon: Icons.search,
+      width: 600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _searchController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Tìm kiếm khách hàng, hội thoại, công việc...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _query.isNotEmpty
+                  ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
                       onPressed: () {
                         _searchController.clear();
@@ -420,97 +399,101 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                           _query = '';
                         });
                       },
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
+                    )
+                  : null,
             ),
-            const Divider(height: 1),
-            Expanded(
-              child: _query.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Nhập từ khóa để bắt đầu tìm kiếm...',
-                        style: TextStyle(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF64748B)
-                              : AppColors.textMuted,
-                        ),
+            onChanged: (val) {
+              setState(() {
+                _query = val;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const Divider(height: 1),
+          const SizedBox(height: AppSpacing.m),
+          SizedBox(
+            height: 350,
+            child: _query.isEmpty
+                ? Center(
+                    child: Text(
+                      'Nhập từ khóa để bắt đầu tìm kiếm...',
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF64748B)
+                            : AppColors.textMuted,
                       ),
-                    )
-                  : results.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Không tìm thấy kết quả phù hợp.',
-                        style: TextStyle(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF64748B)
-                              : AppColors.textMuted,
-                        ),
+                    ),
+                  )
+                : results.isEmpty
+                ? Center(
+                    child: Text(
+                      'Không tìm thấy kết quả phù hợp.',
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF64748B)
+                            : AppColors.textMuted,
                       ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(AppSpacing.m),
-                      itemCount: results.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = results[index];
-                        return ListTile(
-                          leading: Icon(item.icon, color: AppColors.primary),
-                          title: Text(
-                            item.title,
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: results.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = results[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(item.icon, color: AppColors.primary),
+                        title: Text(
+                          item.title,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
                           ),
-                          subtitle: Text(
-                            item.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: item.extra != null
-                              ? Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.s,
-                                    vertical: AppSpacing.xs,
+                        ),
+                        subtitle: Text(
+                          item.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: item.extra != null
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s,
+                                  vertical: AppSpacing.xs,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(0xFF1E293B)
+                                          : AppColors.primarySoft,
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusS,
                                   ),
-                                  decoration: BoxDecoration(
+                                ),
+                                child: Text(
+                                  item.extra!,
+                                  style: AppTextStyles.caption.copyWith(
                                     color:
                                         Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? const Color(0xFF1E293B)
-                                        : AppColors.primarySoft,
-                                    borderRadius: BorderRadius.circular(
-                                      AppSpacing.radiusS,
-                                    ),
+                                                Brightness.dark
+                                            ? const Color(0xFF60A5FA)
+                                            : AppColors.primary,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  child: Text(
-                                    item.extra!,
-                                    style: AppTextStyles.caption.copyWith(
-                                      color:
-                                          Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const Color(0xFF60A5FA)
-                                          : AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                          onTap: () {
-                            Navigator.pop(context);
-                            context.go(item.route);
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+                                ),
+                              )
+                            : null,
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.go(item.route);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -646,81 +629,57 @@ class _NotificationMenuDialog extends ConsumerWidget {
       );
     }
 
-    return Dialog(
+    return AppDialog(
       key: const ValueKey('notification_menu'),
-      insetPadding: const EdgeInsets.all(AppSpacing.m),
-      shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 450),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.m),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.notifications_active_outlined,
-                    color: AppColors.primary,
+      title: 'Thông báo hệ thống',
+      icon: Icons.notifications_active_outlined,
+      width: 500,
+      child: SizedBox(
+        height: 350,
+        child: notifications.isEmpty
+            ? Center(
+                child: Text(
+                  'Không có thông báo mới nào.',
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF64748B)
+                        : AppColors.textMuted,
                   ),
-                  const SizedBox(width: AppSpacing.s),
-                  Text('Thông báo hệ thống', style: AppTextStyles.sectionTitle),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: notifications.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Không có thông báo mới nào.',
-                        style: TextStyle(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF64748B)
-                              : AppColors.textMuted,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(AppSpacing.m),
-                      itemCount: notifications.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = notifications[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: item.color.withValues(alpha: 0.1),
-                            child: Icon(item.icon, color: item.color),
-                          ),
-                          title: Text(
-                            item.title,
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            item.detail,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            if (item.route != null) {
-                              context.go(item.route!);
-                            }
-                          },
-                        );
-                      },
+                ),
+              )
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: notifications.length,
+                separatorBuilder: (context, index) =>
+                    const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = notifications[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: item.color.withValues(alpha: 0.1),
+                      child: Icon(item.icon, color: item.color),
                     ),
-            ),
-          ],
-        ),
+                    title: Text(
+                      item.title,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      item.detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (item.route != null) {
+                        context.go(item.route!);
+                      }
+                    },
+                  );
+                },
+              ),
       ),
     );
   }

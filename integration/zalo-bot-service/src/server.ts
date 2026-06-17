@@ -1104,3 +1104,10 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   void shutdown();
 });
+
+// Safety net: a single unhandled async error (e.g. a dead Zalo session thrown
+// from deep inside zca-js) must never crash the whole service and take down the
+// listeners of every other account. Log and keep running.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled promise rejection (kept alive):', reason);
+});

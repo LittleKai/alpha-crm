@@ -119,25 +119,43 @@ async function handleInboundMessageBatch(
     return;
   }
   try {
-    const managedKeys = events.some((event) => event.threadType === 'group')
-      ? await getManagedGroupKeys(credentials)
-      : new Set<string>();
-    const accepted = events.filter(
-      (event) =>
-        event.threadType !== 'group' ||
-        managedKeys.has(`${event.accountId}:${event.threadId}`),
-    );
-    if (accepted.length === 0 || !running) {
-      return;
+    // The managed-group set comes from a CLOUD fetch. It must NEVER block or drop
+    // local storage — otherwise a cloud hiccup silently loses every group message
+    // (1:1 messages skip this call, which is why they kept working). Default to an
+    // empty set on failure so local storage proceeds; only cloud/n8n gating cares.
+    let managedKeys = new Set<string>();
+    if (events.some((event) => event.threadType === 'group')) {
+      try {
+        managedKeys = await getManagedGroupKeys(credentials);
+      } catch (err) {
+        console.warn(
+          '[agent-runner] managed-group lookup failed; storing groups locally as unmanaged:',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
+    const isManaged = (event: ZaloInboundMessageEvent) =>
+      event.threadType !== 'group' ||
+      managedKeys.has(`${event.accountId}:${event.threadId}`);
 
     const localStore = getLocalChatStore();
     if (localStore) {
+      // Local-first inbox stores EVERY thread (including unmanaged groups) so the
+      // conversation list populates naturally like a messenger. Cloud reporting,
+      // n8n dispatch, and chatbot remain gated to managed groups below.
+      if (events.length === 0 || !running) {
+        return;
+      }
       const ids = localStore.upsertInboundMessages(
-        accepted.map((event) => ({
+        events.map((event) => ({
           accountId: event.accountId,
           threadId: event.threadId,
           threadType: event.threadType,
+          // Self-sent history (operator's own phone messages) renders outbound.
+          direction:
+            event.senderId === event.accountId
+              ? ('outbound' as const)
+              : ('inbound' as const),
           senderId: event.senderId,
           senderName: event.senderName || '',
           avatarUrl: event.avatarUrl,
@@ -155,7 +173,7 @@ async function handleInboundMessageBatch(
           timestamp: event.timestamp,
         })),
       );
-      accepted.forEach((event, index) => {
+      events.forEach((event, index) => {
         localChatEvents.publish({
           type: 'message.created',
           accountId: event.accountId,
@@ -168,8 +186,9 @@ async function handleInboundMessageBatch(
           },
         });
       });
+      const reportable = events.filter(isManaged);
       await Promise.all(
-        accepted.map((event) =>
+        reportable.map((event) =>
           reportInboundMessageMetadata(
             credentials.deviceId,
             credentials.agentSecret,
@@ -177,7 +196,16 @@ async function handleInboundMessageBatch(
           ),
         ),
       );
+      await Promise.all(
+        reportable.map((event) =>
+          dispatchN8nEvent('zalo.message.inbound', event),
+        ),
+      );
     } else {
+      const accepted = events.filter(isManaged);
+      if (accepted.length === 0 || !running) {
+        return;
+      }
       await Promise.all(
         accepted.map((event) =>
           reportInboundMessage(
@@ -187,10 +215,10 @@ async function handleInboundMessageBatch(
           ),
         ),
       );
+      await Promise.all(
+        accepted.map((event) => dispatchN8nEvent('zalo.message.inbound', event)),
+      );
     }
-    await Promise.all(
-      accepted.map((event) => dispatchN8nEvent('zalo.message.inbound', event)),
-    );
   } catch (error) {
     if (await handleCloudFailure(error)) {
       return;
@@ -210,15 +238,30 @@ async function handleInboundMessageEvent(
     return;
   }
   try {
+    // Resolve managed status WITHOUT letting the cloud fetch drop the message.
+    // A group message must still be stored locally even if the managed-group
+    // lookup fails (previously this threw and the whole handler bailed, which is
+    // why live group messages never landed while 1:1 messages did).
+    let isManaged = true;
     if (event.threadType === 'group') {
-      const managedKeys = await getManagedGroupKeys(credentials);
-      if (!managedKeys.has(`${event.accountId}:${event.threadId}`)) {
-        return;
+      try {
+        isManaged = (await getManagedGroupKeys(credentials)).has(
+          `${event.accountId}:${event.threadId}`,
+        );
+      } catch (err) {
+        console.warn(
+          '[agent-runner] managed-group lookup failed; storing group locally as unmanaged:',
+          err instanceof Error ? err.message : String(err),
+        );
+        isManaged = false;
       }
     }
 
     const localStore = getLocalChatStore();
     if (localStore) {
+      // Store every thread locally (including unmanaged groups) so the inbox
+      // populates naturally. Chatbot, cloud report and n8n stay gated to
+      // managed groups below.
       try {
         const existingProviderMessage = event.providerMessageId
           ? localStore.db
@@ -243,6 +286,11 @@ async function handleInboundMessageEvent(
             accountId: event.accountId,
             threadId: event.threadId,
             threadType: event.threadType,
+            // Self-sent live messages (operator's own phone) render outbound.
+            direction:
+              event.senderId === event.accountId
+                ? ('outbound' as const)
+                : ('inbound' as const),
             senderId: event.senderId,
             senderName: event.senderName || '',
             avatarUrl: event.avatarUrl,
@@ -269,7 +317,15 @@ async function handleInboundMessageEvent(
             clientMessageId: event.clientMessageId,
           },
         });
-        if (!reconciledId && !existingProviderMessage) {
+        // Per-account AI auto-reply switch (Live Chat settings). When off, this
+        // account never auto-engages incoming messages — the operator replies
+        // manually. Defaults on.
+        if (
+          !reconciledId &&
+          !existingProviderMessage &&
+          isManaged &&
+          localStore.isAccountAiAutoReplyEnabled(event.accountId)
+        ) {
           handleChatbotInbound(event, event.threadType === 'group');
         }
       } catch (error: any) {
@@ -280,12 +336,17 @@ async function handleInboundMessageEvent(
         return;
       }
 
-      await reportInboundMessageMetadata(
-        credentials.deviceId,
-        credentials.agentSecret,
-        event,
-      );
+      if (isManaged) {
+        await reportInboundMessageMetadata(
+          credentials.deviceId,
+          credentials.agentSecret,
+          event,
+        );
+      }
     } else {
+      if (!isManaged) {
+        return;
+      }
       await reportInboundMessage(
         credentials.deviceId,
         credentials.agentSecret,
@@ -293,7 +354,9 @@ async function handleInboundMessageEvent(
       );
     }
 
-    await dispatchN8nEvent('zalo.message.inbound', event);
+    if (isManaged) {
+      await dispatchN8nEvent('zalo.message.inbound', event);
+    }
   } catch (error: any) {
     if (await handleCloudFailure(error)) {
       return;

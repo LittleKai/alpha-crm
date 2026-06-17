@@ -76,6 +76,62 @@ test('generateReply makes one request and validates text output', async () => {
   }
 });
 
+test('generateReply parses attachments and allows a file-only reply', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    jsonResponse({
+      success: true,
+      data: {
+        reply: '',
+        attachments: [
+          { type: 'image', id: 'aaa111', name: 'a.png' },
+          { type: 'bogus', id: 'bbb222', name: 'b.mp4' },
+          { type: 'video', id: '', name: 'skip' },
+        ],
+      },
+    });
+
+  try {
+    const result = await new ChatbotCloudApi(credentials).generateReply({
+      accountId: 'account-1',
+      threadId: 'thread-1',
+      conversationKey: 'account-1:thread-1',
+      messages: [{ id: 'm1', content: 'Cho xem lộ trình', timestamp: 1 }],
+      history: [],
+    });
+    assert.equal(result.reply, '');
+    // bogus type coerced to 'file', empty id dropped.
+    assert.deepEqual(result.attachments, [
+      { type: 'image', id: 'aaa111', name: 'a.png' },
+      { type: 'file', id: 'bbb222', name: 'b.mp4' },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generateReply rejects an empty reply with no attachments', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    jsonResponse({ success: true, data: { reply: '   ', attachments: [] } });
+
+  try {
+    await assert.rejects(
+      () =>
+        new ChatbotCloudApi(credentials).generateReply({
+          accountId: 'account-1',
+          threadId: 'thread-1',
+          conversationKey: 'account-1:thread-1',
+          messages: [{ id: 'm1', content: 'Hi', timestamp: 1 }],
+          history: [],
+        }),
+      /Invalid chatbot AI response/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('postAudit sends the idempotency key without retrying errors', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;

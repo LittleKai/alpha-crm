@@ -1,6 +1,12 @@
 import type { ZaloChannelStatus } from '../channels/types.js';
 
 export function shouldRecoverZaloListener(status: ZaloChannelStatus): boolean {
+  // Prefer the account-aware hint when the channel provides it (handles the
+  // multi-account case where one listener is up and another is down). Fall back
+  // to the coarse pool-level signal for channels that don't compute it.
+  if (status.needsListenerRecovery !== undefined) {
+    return status.connected && status.needsListenerRecovery;
+  }
   return status.connected && !status.listenerRunning;
 }
 

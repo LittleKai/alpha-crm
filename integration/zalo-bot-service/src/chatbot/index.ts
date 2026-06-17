@@ -9,6 +9,7 @@ import { ChatbotDispatcher } from './chatbot-dispatcher.js';
 import { LocalChatbotEngine } from './chatbot-engine.js';
 import { LocalChatbotRuntime } from './chatbot-runtime.js';
 import { ChatbotStore } from './chatbot-store.js';
+import { resolveKnowledgeFilePath } from './chatbot-knowledge-store.js';
 
 let runtime: LocalChatbotRuntime | null = null;
 let chatbotStore: ChatbotStore | null = null;
@@ -49,6 +50,7 @@ export function startLocalChatbotRuntime(
     deleteAudit: (key) => chatbotStore!.deleteAudit(key),
     markAuditFailed: (key, error) =>
       chatbotStore!.markAuditFailed(key, error),
+    resolveAttachmentPath: (id) => resolveKnowledgeFilePath(id),
   });
 
   runtime = new LocalChatbotRuntime({
@@ -82,7 +84,7 @@ export function startLocalChatbotRuntime(
         })),
         history: [],
       });
-      return { reply: result.reply };
+      return { reply: result.reply, attachments: result.attachments };
     },
     startConfigSync: () => configSync!.start(),
     stopConfigSync: () => configSync!.stop(),

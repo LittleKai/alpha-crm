@@ -35,5 +35,6 @@
   "liveChatMessageCacheTtlSeconds": 300,
   "downloadFolder": "",
   "liveChatMediaCacheMaxAgeDays": 90,
-  "liveChatMediaCacheMaxGb": 20
+  "liveChatMediaCacheMaxGb": 20,
+  "liveChatNotifications": true
 }

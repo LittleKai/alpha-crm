@@ -276,6 +276,12 @@ export class LocalChatStore {
         processed_at INTEGER NOT NULL,
         PRIMARY KEY (conversation_key, provider_message_id)
       );
+
+      CREATE TABLE IF NOT EXISTS account_chat_settings (
+        accountId TEXT PRIMARY KEY,
+        aiAutoReply INTEGER NOT NULL DEFAULT 1,
+        updatedAt TEXT NOT NULL DEFAULT ''
+      );
     `);
 
     // ── Incremental migrations (idempotent) ──
@@ -436,17 +442,29 @@ export class LocalChatStore {
       }
     }
 
-    // For group chats, use groupName as display name; for 1:1, use senderName
+    // Self-sent history (operator typed on their phone) arrives through the same
+    // listener as inbound. Persist it as outbound so it renders on the right side.
+    const direction = input.direction === 'outbound' ? 'outbound' : 'inbound';
+
+    // Conversation identity must reflect the OTHER party, never the operator.
+    // - Group: always the group name.
+    // - 1:1 inbound: the sender (customer).
+    // - 1:1 outbound (self): leave blank so we don't name the thread after the
+    //   operator; the read-time fallback fills it from the latest inbound sender.
     const displayName = input.threadType === 'group'
-      ? (input.groupName || input.senderName || '')
-      : (input.senderName || '');
+      ? (input.groupName || '')
+      : (direction === 'outbound' ? '' : (input.senderName || ''));
+    const conversationAvatar =
+      input.threadType === 'group' || direction === 'inbound'
+        ? (input.avatarUrl || '')
+        : '';
 
     const conversationId = this.findOrCreateConversation(
       input.accountId,
       input.threadId,
       input.threadType,
       displayName,
-      input.avatarUrl || '',
+      conversationAvatar,
     );
 
     const id = randomUUID();
@@ -460,7 +478,7 @@ export class LocalChatStore {
           clientMessageId, zaloMsgId, status, errorText, quoteJson, mentionsJson,
           stylesJson, metadataJson, recalledContent, isDeleted, receivedAt, sentAt,
           createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?, ?, '', 'delivered', '',
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'delivered', '',
                  ?, ?, ?, ?, '', 0, ?, '', ?, ?)`,
       )
       .run(
@@ -469,6 +487,7 @@ export class LocalChatStore {
         input.accountId,
         input.threadId,
         input.threadType,
+        direction,
         input.senderId,
         input.senderName,
         input.senderAvatarUrl || input.avatarUrl || '',
@@ -495,14 +514,14 @@ export class LocalChatStore {
       .prepare(
         `UPDATE conversations
          SET lastMessagePreview = ?, lastMessageAt = ?,
-             unreadCount = unreadCount + 1, updatedAt = ?
+             unreadCount = unreadCount + ?, updatedAt = ?
          WHERE id = ?`,
       )
       .run(JSON.stringify({
-        direction: 'inbound',
+        direction,
         messageType: input.messageType || 'text',
         content: preview,
-      }), input.timestamp || now, now, conversationId);
+      }), input.timestamp || now, direction === 'inbound' ? 1 : 0, now, conversationId);
 
     this.enqueueSyncAction('sync_message', { messageId: id });
     this.enqueueSyncAction('sync_conversation', { conversationId });
@@ -961,6 +980,39 @@ export class LocalChatStore {
     return row?.content || '';
   }
 
+  // ---------------------------------------------------------------------------
+  // Per-account chat settings (e.g. AI auto-reply on/off)
+  // ---------------------------------------------------------------------------
+
+  /** Whether the chatbot may auto-reply for this account. Defaults true. */
+  isAccountAiAutoReplyEnabled(accountId: string): boolean {
+    const row = this.db
+      .prepare('SELECT aiAutoReply FROM account_chat_settings WHERE accountId = ?')
+      .get(accountId) as { aiAutoReply: number } | undefined;
+    return row ? row.aiAutoReply === 1 : true;
+  }
+
+  /** Map of accountId → aiAutoReply for every account with an explicit setting. */
+  getAccountChatSettings(): Record<string, { aiAutoReply: boolean }> {
+    const rows = this.db
+      .prepare('SELECT accountId, aiAutoReply FROM account_chat_settings')
+      .all() as Array<{ accountId: string; aiAutoReply: number }>;
+    const out: Record<string, { aiAutoReply: boolean }> = {};
+    for (const r of rows) out[r.accountId] = { aiAutoReply: r.aiAutoReply === 1 };
+    return out;
+  }
+
+  setAccountAiAutoReply(accountId: string, enabled: boolean): void {
+    this.db
+      .prepare(
+        `INSERT INTO account_chat_settings (accountId, aiAutoReply, updatedAt)
+         VALUES (?, ?, ?)
+         ON CONFLICT(accountId)
+         DO UPDATE SET aiAutoReply = excluded.aiAutoReply, updatedAt = excluded.updatedAt`,
+      )
+      .run(accountId, enabled ? 1 : 0, new Date().toISOString());
+  }
+
   setHistoryState(
     accountId: string,
     threadId: string,
@@ -1044,6 +1096,16 @@ export class LocalChatStore {
     if (result.changes > 0) {
       this.enqueueSyncAction('sync_message', { messageId });
     }
+    return result.changes > 0;
+  }
+
+  deleteMessage(messageId: string): boolean {
+    // Delete attachments first
+    this.db.prepare('DELETE FROM attachments WHERE messageId = ?').run(messageId);
+    // Delete message receipt if any
+    this.db.prepare('DELETE FROM message_receipts WHERE messageId = ?').run(messageId);
+    // Delete message
+    const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
     return result.changes > 0;
   }
 

@@ -237,6 +237,28 @@ test('calls AI only when no rule matches and returns text reply', async () => {
   });
 });
 
+test('AI reply with attachments carries them through; file-only reply is allowed', async () => {
+  const engine = new LocalChatbotEngine();
+  const result = await engine.evaluate(input({
+    settings: { ...input().settings, aiEnabled: true },
+    rules: [],
+    generateAi: async () => ({
+      reply: '',
+      attachments: [
+        { type: 'image', id: 'abc123', name: 'a.png' },
+      ],
+    }),
+  }));
+
+  assert.deepEqual(result, {
+    kind: 'reply',
+    mode: 'ai',
+    text: '',
+    attachments: [{ type: 'image', id: 'abc123', name: 'a.png' }],
+    sourceMessageIds: ['message-1'],
+  });
+});
+
 test('AI failure enters failed handoff without fallback', async () => {
   const engine = new LocalChatbotEngine();
   const result = await engine.evaluate(input({

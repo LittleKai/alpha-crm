@@ -11,6 +11,12 @@ export interface ZaloChannelStatus {
   accountLabel: string;
   listenerRunning: boolean;
   lastEventAt: string | null;
+  // Account-aware recovery hint for the health monitor. `listenerRunning` is a
+  // coarse pool-level OR (any account listening), which misses a second account
+  // whose listener dropped while the first is still up. When set, it means at
+  // least one live (non-expired) account has a stopped listener and should be
+  // recovered. Optional so single-account/mock channels can omit it.
+  needsListenerRecovery?: boolean;
 }
 
 export interface ZaloSendMessageRequest {

@@ -21,6 +21,10 @@ import {
   getChatbotConfigSync,
   getChatbotStore,
 } from '../chatbot/index.js';
+import {
+  listKnowledgeFileIds,
+  saveKnowledgeFile,
+} from '../chatbot/chatbot-knowledge-store.js';
 import type { ChatbotConversationMode } from '../chatbot/chatbot-types.js';
 
 type JsonFn = (res: ServerResponse, status: number, data: unknown, req?: IncomingMessage) => void;
@@ -78,6 +82,36 @@ export function handleLocalRoute(
   }
   if (method === 'POST' && url === '/local/chatbot/sync') {
     void handleLocalChatbotSync(req, res, json);
+    return true;
+  }
+  // POST /local/chatbot/knowledge-file  → store an operator-attached file
+  if (method === 'POST' && url === '/local/chatbot/knowledge-file') {
+    void handleSaveKnowledgeFile(req, res, json, readBody);
+    return true;
+  }
+  // GET /local/chatbot/knowledge-files  → ids present locally (for "missing" warnings)
+  if (method === 'GET' && url === '/local/chatbot/knowledge-files') {
+    handleListKnowledgeFiles(req, res, json);
+    return true;
+  }
+
+  // GET /local/accounts/chat-settings  → map of accountId → { aiAutoReply }
+  if (method === 'GET' && url === '/local/accounts/chat-settings') {
+    handleGetAccountChatSettings(req, res, json);
+    return true;
+  }
+  // PUT /local/accounts/:accountId/chat-settings  → { aiAutoReply: boolean }
+  const acctSettingsMatch = url.match(
+    /^\/local\/accounts\/([^/?]+)\/chat-settings$/,
+  );
+  if (method === 'PUT' && acctSettingsMatch) {
+    void handlePutAccountChatSettings(
+      decodeURIComponent(acctSettingsMatch[1]),
+      req,
+      res,
+      json,
+      readBody,
+    );
     return true;
   }
 
@@ -160,6 +194,14 @@ export function handleLocalRoute(
   if (method === 'POST' && recallMatch) {
     const messageId = decodeURIComponent(recallMatch[1]);
     handleLocalRecall(messageId, req, res, json);
+    return true;
+  }
+
+  // POST /local/messages/:id/delete
+  const deleteMatch = url.match(/^\/local\/messages\/([^/?]+)\/delete$/);
+  if (method === 'POST' && deleteMatch) {
+    const messageId = decodeURIComponent(deleteMatch[1]);
+    handleLocalDelete(messageId, req, res, json);
     return true;
   }
 
@@ -251,6 +293,95 @@ async function handleLocalChatbotSync(
       data: sync.getStatus(),
     }, req);
   }
+}
+
+async function handleSaveKnowledgeFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  try {
+    const payload = JSON.parse((await readBody(req)) || '{}');
+    const filename = String(payload.filename || '').trim();
+    const base64 = String(payload.base64 || '');
+    if (!filename || !base64) {
+      json(res, 400, {
+        success: false,
+        error: 'filename and base64 are required.',
+      }, req);
+      return;
+    }
+    const bytes = Buffer.from(base64, 'base64');
+    if (bytes.byteLength === 0) {
+      json(res, 400, { success: false, error: 'Empty file.' }, req);
+      return;
+    }
+    const saved = saveKnowledgeFile(bytes, filename);
+    json(res, 200, {
+      success: true,
+      data: { id: saved.id, name: saved.name, size: bytes.byteLength },
+    }, req);
+  } catch (error) {
+    json(res, 500, {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }, req);
+  }
+}
+
+function handleListKnowledgeFiles(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  json(res, 200, {
+    success: true,
+    data: { ids: listKnowledgeFileIds() },
+  }, req);
+}
+
+function handleGetAccountChatSettings(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const localStore = getLocalChatStore();
+  if (!localStore) {
+    json(res, 503, { success: false, error: 'Local store unavailable.' }, req);
+    return;
+  }
+  json(res, 200, { success: true, data: localStore.getAccountChatSettings() }, req);
+}
+
+async function handlePutAccountChatSettings(
+  accountId: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  const localStore = getLocalChatStore();
+  if (!localStore) {
+    json(res, 503, { success: false, error: 'Local store unavailable.' }, req);
+    return;
+  }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    json(res, 400, { success: false, error: 'Invalid JSON body.' }, req);
+    return;
+  }
+  if (typeof payload.aiAutoReply !== 'boolean') {
+    json(res, 400, { success: false, error: 'aiAutoReply (boolean) is required.' }, req);
+    return;
+  }
+  localStore.setAccountAiAutoReply(accountId, payload.aiAutoReply);
+  json(res, 200, {
+    success: true,
+    data: { accountId, aiAutoReply: payload.aiAutoReply },
+  }, req);
 }
 
 async function handleLocalConversationChatbot(
@@ -907,10 +1038,11 @@ async function handleLocalSend(
     return;
   }
 
-  // Check account status
+  // Check account status against the live pool (in-memory, no `accounts` table).
   if (accountId) {
-    const acc = store.db.prepare('SELECT status FROM accounts WHERE id = ?').get(accountId) as any;
-    if (acc && acc.status === 'DISCONNECTED_EXPIRED') {
+    const { getAccounts } = await import('../zalo.js');
+    const acc = getAccounts().find((a) => a.id === accountId);
+    if (acc && acc.status === 'disconnected_expired') {
       json(res, 401, { success: false, error: 'Logged out. Device is no longer connected to Zalo.' }, req);
       return;
     }
@@ -1301,6 +1433,54 @@ async function handleLocalRecall(
     }
   } catch (err: any) {
     json(res, 500, { success: false, error: err.message || 'Internal server error during recall.' }, req);
+  }
+}
+
+async function handleLocalDelete(
+  messageId: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): Promise<void> {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+
+  try {
+    const msgRow = store.db
+      .prepare('SELECT id, accountId, threadId FROM messages WHERE id = ?')
+      .get(messageId) as { id: string; accountId: string; threadId: string } | undefined
+      ?? store.db
+        .prepare('SELECT id, accountId, threadId FROM messages WHERE providerMessageId = ? OR zaloMsgId = ? ORDER BY createdAt DESC LIMIT 1')
+        .get(messageId, messageId) as { id: string; accountId: string; threadId: string } | undefined;
+
+    if (!msgRow) {
+      json(res, 404, { success: false, error: 'Message not found.' }, req);
+      return;
+    }
+
+    const deleted = store.deleteMessage(msgRow.id);
+    if (deleted) {
+      localChatEvents.publish({
+        type: 'message.deleted',
+        accountId: msgRow.accountId,
+        threadId: msgRow.threadId,
+        data: {
+          messageId: msgRow.id,
+        },
+      });
+      json(res, 200, { success: true }, req);
+    } else {
+      json(res, 500, { success: false, error: 'Failed to delete message from local store.' }, req);
+    }
+  } catch (err: any) {
+    json(res, 500, { success: false, error: err.message || 'Internal server error during local delete.' }, req);
   }
 }
 

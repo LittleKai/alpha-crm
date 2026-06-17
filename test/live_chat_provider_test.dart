@@ -91,6 +91,48 @@ void main() {
     expect(withQuote.quote!['content'], 'Tin nhan goc');
   });
 
+  test('ChatMessage.fromJson uses receivedAt when sentAt is an empty string', () {
+    // Inbound bridge rows carry sentAt = '' (empty, not null). A `??` chain
+    // would stop there and fall back to now; the parsed time must instead come
+    // from receivedAt so old inbound messages keep their real chronological slot.
+    final inbound = ChatMessage.fromJson({
+      '_id': 'msg-t1',
+      'senderId': 'cust-1',
+      'content': 'Bao nhieu',
+      'direction': 'inbound',
+      'sentAt': '',
+      'receivedAt': '2026-06-15T08:03:01.474Z',
+      'createdAt': '2026-06-15T08:03:01.359Z',
+    });
+
+    expect(
+      inbound.timestamp.toUtc().toIso8601String(),
+      '2026-06-15T08:03:01.474Z',
+    );
+  });
+
+  test('ChatMessage.isFromBot reflects the chatbot metadata source', () {
+    final fromBot = ChatMessage.fromJson({
+      '_id': 'msg-b1',
+      'senderId': 'acc-1',
+      'content': 'Da chao ban',
+      'direction': 'outbound',
+      'metadataJson': '{"source":"chatbot"}',
+      'createdAt': '2026-06-16T12:14:00.000Z',
+    });
+    final fromOperator = ChatMessage.fromJson({
+      '_id': 'msg-b2',
+      'senderId': 'acc-1',
+      'content': 'Da chao ban',
+      'direction': 'outbound',
+      'metadataJson': '{}',
+      'createdAt': '2026-06-16T12:15:00.000Z',
+    });
+
+    expect(fromBot.isFromBot, isTrue);
+    expect(fromOperator.isFromBot, isFalse);
+  });
+
   test('Conversation.fromJson unwraps the bridge lastMessagePreview envelope', () {
     final textPreview = Conversation.fromJson({
       'id': 'local-uuid-3',
