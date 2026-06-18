@@ -250,6 +250,7 @@ export class ChatbotDispatcher {
         message: '',
         messageType,
         attachments: [localPath],
+        attachmentNames: [attachment.name || ''],
         clientMessageId,
         metadata: { source: 'chatbot' },
       });

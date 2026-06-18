@@ -337,8 +337,8 @@ class _ComplianceWarningsDialog extends StatelessWidget {
             // Header Dialog với dải màu gradient cao cấp (Amber cho warning, Slate cho safe)
             Container(
               padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xl,
-                vertical: AppSpacing.l,
+                horizontal: AppSpacing.l,
+                vertical: AppSpacing.m,
               ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(

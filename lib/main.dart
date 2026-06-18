@@ -16,6 +16,9 @@ import 'shared/utils/desktop_notifier.dart';
 import 'shared/utils/app_logger.dart';
 import 'shared/widgets/backend_status_banner.dart';
 import 'shared/widgets/backend_splash_overlay.dart';
+import 'shared/widgets/app_close_gate.dart';
+import 'shared/widgets/revocation_gate.dart';
+import 'shared/widgets/device_conflict_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,14 +29,26 @@ void main() async {
   }
 
   // Cửa sổ + System Tray (Windows): maximize khi mở, nút X ẩn xuống tray.
-  await DesktopShell.instance.init();
+  // Bọc try/catch để lỗi window/tray KHÔNG làm sập toàn bộ app.
+  try {
+    await DesktopShell.instance.init();
+  } catch (e, st) {
+    debugPrint('DesktopShell.init failed (bỏ qua, app vẫn chạy): $e\n$st');
+  }
 
   // Thông báo desktop (Live Chat) — no-op trên web/mobile
-  await DesktopNotifier.instance.init();
+  try {
+    await DesktopNotifier.instance.init();
+  } catch (e) {
+    debugPrint('DesktopNotifier.init failed: $e');
+  }
 
-  // Khởi tạo Logger (ghi log ra file + console)
+  // Khởi tạo Logger (ghi log ra file + console). Đặt SAU window/tray vì gọi
+  // getApplicationDocumentsDirectory() quá sớm (trước khi plugin sẵn sàng) làm
+  // file log không tạo được — bản đóng gói khi đó mất hết log.
   final appLogger = AppLogger();
   await appLogger.init();
+  appLogger.info('=== APP STARTED ===');
 
   // Bắt các lỗi liên quan đến UI/Framework của Flutter
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -123,13 +138,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             MediaQuery.platformBrightnessOf(context) == Brightness.dark,
         };
         AppColors.isDarkMode = currentIsDark;
-        return AppLockOverlay(
-          child: BackendSplashOverlay(
-            child: Column(
-              children: [
-                const BackendStatusBanner(),
-                Expanded(child: child ?? const SizedBox.shrink()),
-              ],
+        return AppCloseGate(
+          child: DeviceConflictGate(
+            child: RevocationGate(
+              child: AppLockOverlay(
+                child: BackendSplashOverlay(
+                  child: Column(
+                    children: [
+                      const BackendStatusBanner(),
+                      Expanded(child: child ?? const SizedBox.shrink()),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         );

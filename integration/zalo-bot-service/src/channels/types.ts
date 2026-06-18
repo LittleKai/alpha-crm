@@ -27,6 +27,8 @@ export interface ZaloSendMessageRequest {
   messageType?: 'text' | 'template' | 'image' | 'file' | 'sticker' | 'video' | 'voice' | 'gif' | 'link' | 'rich';
   /** File paths or URLs for attachments (images, videos, files) */
   attachments?: string[];
+  /** Original filenames of attachments to display to the recipient */
+  attachmentNames?: string[];
   clientMessageId?: string;
   quote?: Record<string, unknown>;
   mentions?: Array<Record<string, unknown>>;

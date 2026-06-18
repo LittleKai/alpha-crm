@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/api/crm_cloud_api.dart';
 import '../../../shared/auth/crm_auth_token_store.dart';
 import '../../../shared/auth/web_auth_bridge.dart';
+import '../../../shared/utils/app_logger.dart';
 import '../data/local_agent_session_client.dart';
 import '../models/crm_login_result.dart';
 
@@ -89,6 +90,11 @@ class CrmAuthState {
   /// thể "đòi lại" thay vì văng thẳng về login.
   final String? deviceRevokedReason;
 
+  /// Khác null khi KHÔI PHỤC phiên (lúc mở app) phát hiện tài khoản đã đạt giới
+  /// hạn thiết bị (máy khác đang active). Dùng để hiện dialog "thay thế thiết bị
+  /// cũ" thay vì văng im lặng về login.
+  final ActiveDeviceSummary? pendingDeviceConflict;
+
   const CrmAuthState({
     this.isAuthenticated = false,
     this.isLoading = false,
@@ -100,6 +106,7 @@ class CrmAuthState {
     this.creditBalance = 0,
     this.errorText,
     this.deviceRevokedReason,
+    this.pendingDeviceConflict,
   });
 
   CrmAuthState copyWith({
@@ -113,6 +120,7 @@ class CrmAuthState {
     int? creditBalance,
     String? errorText,
     String? deviceRevokedReason,
+    ActiveDeviceSummary? pendingDeviceConflict,
   }) {
     return CrmAuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -125,6 +133,7 @@ class CrmAuthState {
       creditBalance: creditBalance ?? this.creditBalance,
       errorText: errorText,
       deviceRevokedReason: deviceRevokedReason,
+      pendingDeviceConflict: pendingDeviceConflict,
     );
   }
 }
@@ -236,21 +245,43 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     final profile = await _loadCloudProfile();
     if (profile == null) {
       await _tokenStore.deleteToken();
+      AppLogger().warning(
+        '[CrmAuthNotifier] KICK: _loadCloudProfile null → xoá token, về login '
+        '(restoration=$isRestoration, force=$forceReplace).',
+      );
       const message = 'Không thể xác minh tài khoản Alpha Studio.';
       state = const CrmAuthState(errorText: message);
       return const CrmLoginFailure(message);
     }
 
+    AppLogger().warning(
+      '[CrmAuthNotifier] _authenticateToken: profile OK, isWindows=$_isWindows, '
+      'restoration=$isRestoration, force=$forceReplace → gọi local sync...',
+    );
     if (_isWindows) {
       final localResult = await _localAgent.sync(
         token: token,
         userId: profile.user.id,
         forceReplace: forceReplace,
       );
+      AppLogger().warning(
+        '[CrmAuthNotifier] local sync kết quả: ${localResult.runtimeType}',
+      );
       if (localResult is LocalAgentConflict) {
         _pendingToken = token;
         await _tokenStore.deleteToken();
-        state = const CrmAuthState();
+        if (isRestoration) {
+          // Khi KHÔI PHỤC phiên không có UI nào chờ kết quả → đẩy conflict qua
+          // state để DeviceConflictGate hiện dialog "thay thế thiết bị cũ".
+          // Trước đây giá trị trả về bị bỏ qua → văng im lặng về login.
+          AppLogger().warning(
+            '[CrmAuthNotifier] KICK→CONFLICT: khôi phục phiên gặp giới hạn '
+            'thiết bị (máy khác đang active) → hiện dialog thay thế.',
+          );
+          state = CrmAuthState(pendingDeviceConflict: localResult.device);
+        } else {
+          state = const CrmAuthState();
+        }
         return CrmLoginDeviceConflict(localResult.device);
       }
       if (localResult is LocalAgentUnavailable) {
@@ -264,6 +295,10 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
           _scheduleLocalAgentRetry(token, profile.user.id);
         } else {
           await _tokenStore.deleteToken();
+          AppLogger().warning(
+            '[CrmAuthNotifier] KICK: local agent unavailable khi đăng nhập mới '
+            '→ xoá token, về login. Lý do: ${localResult.message}',
+          );
           final message =
               'Không thể kết nối dịch vụ CRM trên máy này: '
               '${localResult.message}';
@@ -275,6 +310,11 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
     _pendingToken = null;
     await _tokenStore.saveToken(token);
+    AppLogger().info(
+      '[CrmAuthNotifier] LOGIN OK → authenticated=true '
+      '(restoration=$isRestoration, force=$forceReplace). Bắt đầu lắng nghe '
+      'sự kiện thu hồi (SSE).',
+    );
     state = CrmAuthState(
       isAuthenticated: true,
       token: token,
@@ -380,6 +420,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       return;
     }
     unawaited(_eventSubscription?.cancel());
+    AppLogger().info('[CrmAuthNotifier] Mở stream SSE /local/events để nhận thu hồi.');
     _eventSubscription = _localAgent.events().listen(
       (event) {
         if (event is LocalSessionRevoked) {
@@ -387,7 +428,12 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         }
       },
       onError: (Object error, StackTrace stackTrace) {
-        debugPrint('[CrmAuthNotifier] Local event stream unavailable: $error');
+        AppLogger().warning(
+          '[CrmAuthNotifier] Stream SSE /local/events lỗi/đứt: $error',
+        );
+      },
+      onDone: () {
+        AppLogger().warning('[CrmAuthNotifier] Stream SSE /local/events đã đóng.');
       },
     );
   }
@@ -400,6 +446,10 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     }
     // KHÔNG văng thẳng về login. Giữ token để có thể "đòi lại" máy này, và bật
     // cờ deviceRevokedReason để UI hiện dialog xác nhận (dùng máy này / đăng xuất).
+    AppLogger().warning(
+      '[CrmAuthNotifier] Nhận session.revoked → hiện dialog xác nhận '
+      '(giữ phiên, KHÔNG đăng xuất). Lý do: ${event.reason}',
+    );
     _pendingToken = state.token;
     state = state.copyWith(deviceRevokedReason: event.reason);
   }
@@ -424,6 +474,11 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
   Future<void> logout() async {
     final token = state.token ?? _pendingToken;
+    AppLogger().info(
+      '[CrmAuthNotifier] logout() được gọi → xoá token, về login.',
+      null,
+      StackTrace.current,
+    );
     state = state.copyWith(isLoading: true);
     await _eventSubscription?.cancel();
     _eventSubscription = null;

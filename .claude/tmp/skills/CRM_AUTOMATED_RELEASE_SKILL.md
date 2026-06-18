@@ -25,8 +25,10 @@ To run a release, navigate to the `alpha-studio-backend` folder and run `node sc
 
 ### Command Format
 ```bash
-node scripts/release-to-b2.js <bump_type_or_version> "<release_notes>"
+node scripts/release-to-b2.js <bump_type_or_version> "<release_notes>" [--no-upload]
 ```
+
+The optional `--no-upload` flag (alias `--local`) builds the app + bundles the backend + stages + zips **locally only**, then stops before uploading to B2 (no B2 credentials required). The flag may appear in any position.
 
 ### Options
 
@@ -58,6 +60,13 @@ node scripts/release-to-b2.js <bump_type_or_version> "<release_notes>"
    Rebuilds and re-uploads the exact current version defined in `pubspec.yaml` without changing the version string, while using a custom release notes string. You can pass `none`, `skip`, `current`, or `nobump` as the first argument.
    ```bash
    node scripts/release-to-b2.js none "Bản cập nhật minor CRM tự động và đồng bộ lên B2"
+   ```
+
+6. **Local build only — app + backend, NO B2 upload** (`--no-upload` / `--local`):
+   Builds the Flutter Windows app, bundles + stages the local Zalo backend, zips to `tools/alpha-crm/build/alpha-crm-windows.zip`, then stops (no upload, no B2 credentials needed). Combine with any bump option, or use alone to keep the current version.
+   ```bash
+   node scripts/release-to-b2.js --no-upload
+   node scripts/release-to-b2.js patch "Thử nghiệm cục bộ" --no-upload
    ```
 
 ---

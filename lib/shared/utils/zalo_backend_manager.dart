@@ -262,15 +262,16 @@ class ZaloBackendManager {
         );
       }
 
-      // 5. Lắng nghe output backend để tiện debug.
+      // 5. Lắng nghe output backend để tiện debug. Decode UTF-8 (allowMalformed)
+      //    thay vì String.fromCharCodes — nếu không tiếng Việt sẽ bị mã hoá lỗi.
       _backendProcess!.stdout.listen((data) {
-        final line = String.fromCharCodes(data).trim();
+        final line = utf8.decode(data, allowMalformed: true).trim();
         if (line.isEmpty) return;
         debugPrint("ZaloBot-Log: $line");
         AppLogger().info("ZaloBot: $line");
       });
       _backendProcess!.stderr.listen((data) {
-        final line = String.fromCharCodes(data).trim();
+        final line = utf8.decode(data, allowMalformed: true).trim();
         if (line.isEmpty) return;
         debugPrint("ZaloBot-Error-Log: $line");
         AppLogger().error("ZaloBot stderr: $line");
@@ -615,6 +616,21 @@ class ZaloBackendManager {
       _killProcess();
       debugPrint("ZaloBackendManager: Đã ngắt tiến trình backend hoàn toàn.");
     }
+    _setStatus(BackendStatus.stopped);
+  }
+
+  /// Chuẩn bị THOÁT app: dừng watchdog + đánh dấu thoát có chủ đích và kill
+  /// backend KHÔNG đồng bộ (chỉ gửi tín hiệu kill, không gọi taskkill runSync
+  /// gây treo UI). Windows Job Object (KILL_ON_JOB_CLOSE) sẽ tự diệt phần còn
+  /// lại khi tiến trình app kết thúc.
+  static void prepareForShutdown() {
+    _manualStop = true;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    final proc = _backendProcess;
+    _backendProcess = null;
+    _isRunning = false;
+    proc?.kill(); // bất đồng bộ, không block luồng UI
     _setStatus(BackendStatus.stopped);
   }
 }

@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../shared/utils/app_logger.dart';
 import '../models/crm_login_result.dart';
 
 abstract interface class LocalAgentSessionGateway {
@@ -66,6 +67,11 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
         }),
       );
       final body = _decodeBody(response.body);
+      AppLogger().warning(
+        '[LocalAgentSync] /local/auth/sync → HTTP ${response.statusCode}, '
+        'code=${body['code']}, success=${body['success']}, '
+        'msg=${body['message']}',
+      );
       if (response.statusCode == 409 &&
           body['code'] == 'DEVICE_ALREADY_ACTIVE') {
         final rawData = body['data'];
@@ -94,6 +100,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
         body['message']?.toString() ?? 'Local CRM agent rejected the session.',
       );
     } catch (error) {
+      AppLogger().warning('[LocalAgentSync] sync ngoại lệ: $error');
       return LocalAgentUnavailable(error.toString());
     }
   }

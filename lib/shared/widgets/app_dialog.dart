@@ -221,8 +221,8 @@ class _AppDialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: AppSpacing.l,
+        horizontal: AppSpacing.l,
+        vertical: AppSpacing.m,
       ),
       decoration: const BoxDecoration(
         gradient: LinearGradient(

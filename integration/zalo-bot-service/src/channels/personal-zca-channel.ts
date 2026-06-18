@@ -3,7 +3,7 @@
  * Supports multiple concurrent active accounts and automatic round-robin rotation.
  */
 
-import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync, copyFileSync, rmdirSync } from 'fs';
 import { resolve, dirname, basename } from 'path';
 import { config, projectRoot } from '../config.js';
 import type {
@@ -1423,6 +1423,7 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
 
     let selectedInstance: ZaloAccountInstance | undefined;
+    const tempDirsToCleanup: string[] = [];
     try {
       await ensureLoginPool();
 
@@ -1455,8 +1456,39 @@ export class PersonalZcaChannel implements ZaloChannel {
       const threadType =
         req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
 
-      const hasAttachments = attachments.length > 0;
-      console.log(`[PersonalZcaChannel] sendMessage params: recipientId=${recipientId}, threadType=${req.threadType}(${threadType}), message="${messageText.substring(0, 50)}", attachments=${hasAttachments ? attachments.length : 0}`);
+      // Prepare processed attachments to preserve original filenames
+      let processedAttachments: string[] = [];
+      if (attachments.length > 0) {
+        if (req.attachmentNames && req.attachmentNames.length > 0) {
+          const tempBaseDir = resolve(projectRoot, '.data/temp-sends');
+          if (!existsSync(tempBaseDir)) {
+            mkdirSync(tempBaseDir, { recursive: true });
+          }
+          for (let i = 0; i < attachments.length; i++) {
+            const originalPath = attachments[i];
+            const originalName = req.attachmentNames[i];
+            if (originalName && existsSync(originalPath)) {
+              const uniqueSubdir = resolve(
+                tempBaseDir,
+                `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+              );
+              mkdirSync(uniqueSubdir, { recursive: true });
+              tempDirsToCleanup.push(uniqueSubdir);
+
+              const tempPath = resolve(uniqueSubdir, originalName);
+              copyFileSync(originalPath, tempPath);
+              processedAttachments.push(tempPath);
+            } else {
+              processedAttachments.push(originalPath);
+            }
+          }
+        } else {
+          processedAttachments = attachments;
+        }
+      }
+
+      const hasAttachments = processedAttachments.length > 0;
+      console.log(`[PersonalZcaChannel] sendMessage params: recipientId=${recipientId}, threadType=${req.threadType}(${threadType}), message="${messageText.substring(0, 50)}", attachments=${hasAttachments ? processedAttachments.length : 0}`);
 
       // Build the richest payload supported by the installed zca-js version.
       const quote = normalizeQuoteForZca(req.quote);
@@ -1470,7 +1502,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         ...(req.styles ? { styles: req.styles } : {}),
       };
       if (hasAttachments) {
-        messageContent.attachments = attachments;
+        messageContent.attachments = processedAttachments;
       }
 
       const api = selectedInstance.api as any;
@@ -1540,6 +1572,19 @@ export class PersonalZcaChannel implements ZaloChannel {
         success: false,
         error: code ? `${message} (code: ${code})` : message,
       };
+    } finally {
+      for (const dir of tempDirsToCleanup) {
+        try {
+          if (existsSync(dir)) {
+            for (const entry of readdirSync(dir)) {
+              unlinkSync(resolve(dir, entry));
+            }
+            rmdirSync(dir);
+          }
+        } catch (cleanupErr) {
+          console.warn(`[PersonalZcaChannel] Failed to clean up temp dir ${dir}:`, cleanupErr);
+        }
+      }
     }
   }
 
