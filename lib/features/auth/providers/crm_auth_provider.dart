@@ -84,6 +84,11 @@ class CrmAuthState {
   final int creditBalance;
   final String? errorText;
 
+  /// Khác null khi phiên trên máy này vừa bị thu hồi và đang chờ user quyết định
+  /// (dùng máy này & thu hồi máy kia, hay đăng xuất). Giữ phiên hiện tại để có
+  /// thể "đòi lại" thay vì văng thẳng về login.
+  final String? deviceRevokedReason;
+
   const CrmAuthState({
     this.isAuthenticated = false,
     this.isLoading = false,
@@ -94,6 +99,7 @@ class CrmAuthState {
     this.extraAiRemaining = 0,
     this.creditBalance = 0,
     this.errorText,
+    this.deviceRevokedReason,
   });
 
   CrmAuthState copyWith({
@@ -106,6 +112,7 @@ class CrmAuthState {
     int? extraAiRemaining,
     int? creditBalance,
     String? errorText,
+    String? deviceRevokedReason,
   }) {
     return CrmAuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -117,6 +124,7 @@ class CrmAuthState {
       extraAiRemaining: extraAiRemaining ?? this.extraAiRemaining,
       creditBalance: creditBalance ?? this.creditBalance,
       errorText: errorText,
+      deviceRevokedReason: deviceRevokedReason,
     );
   }
 }
@@ -387,13 +395,31 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   Future<void> _handleRevocation(LocalSessionRevoked event) async {
     await _eventSubscription?.cancel();
     _eventSubscription = null;
-    _pendingToken = null;
-    await _tokenStore.deleteToken();
-    if (mounted) {
-      state = CrmAuthState(
-        errorText: 'Phiên trên máy tính này đã bị thu hồi: ${event.reason}',
+    if (!mounted) {
+      return;
+    }
+    // KHÔNG văng thẳng về login. Giữ token để có thể "đòi lại" máy này, và bật
+    // cờ deviceRevokedReason để UI hiện dialog xác nhận (dùng máy này / đăng xuất).
+    _pendingToken = state.token;
+    state = state.copyWith(deviceRevokedReason: event.reason);
+  }
+
+  /// User chọn "Dùng máy này": đăng ký lại có force để thu hồi thiết bị kia và
+  /// tiếp tục phiên trên máy này.
+  Future<CrmLoginResult> reclaimRevokedDevice() async {
+    final token = state.token ?? _pendingToken;
+    if (token == null) {
+      await logout();
+      return const CrmLoginFailure(
+        'Phiên đã hết hạn, vui lòng đăng nhập lại.',
       );
     }
+    return _authenticateToken(token, forceReplace: true);
+  }
+
+  /// User chọn "Đăng xuất" sau khi bị thu hồi: rời phiên, về màn đăng nhập.
+  Future<void> dismissRevokedDevice() async {
+    await logout();
   }
 
   Future<void> logout() async {

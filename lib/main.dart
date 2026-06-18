@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,8 +11,11 @@ import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
+import 'shared/utils/desktop_window_manager.dart';
 import 'shared/utils/desktop_notifier.dart';
 import 'shared/utils/app_logger.dart';
+import 'shared/widgets/backend_status_banner.dart';
+import 'shared/widgets/backend_splash_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +24,9 @@ void main() async {
   if (!kIsWeb) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
   }
+
+  // Cửa sổ + System Tray (Windows): maximize khi mở, nút X ẩn xuống tray.
+  await DesktopShell.instance.init();
 
   // Thông báo desktop (Live Chat) — no-op trên web/mobile
   await DesktopNotifier.instance.init();
@@ -40,31 +47,10 @@ void main() async {
     return true; // Ngăn không cho crash app nếu có thể
   };
 
-  // Tự động chạy Zalo Bot backend trên Desktop và chờ sẵn sàng.
-  // Thử tối đa 2 lần để chịu được khởi động chậm hoặc lỗi tạm thời.
-  bool backendReady = false;
-  for (int attempt = 1; attempt <= 2 && !backendReady; attempt++) {
-    final started = await ZaloBackendManager.startBackend();
-    if (!started) {
-      appLogger.warning(
-        'Backend chưa khởi động được (lần $attempt/2). '
-        '${ZaloBackendManager.lastStartupError ?? ''}',
-      );
-      continue;
-    }
-    backendReady = await ZaloBackendManager.waitUntilReady();
-    if (!backendReady) {
-      appLogger.warning(
-        'Backend khởi động nhưng chưa sẵn sàng (lần $attempt/2).',
-      );
-    }
-  }
-  if (!backendReady) {
-    appLogger.error(
-      'Không thể đưa backend vào trạng thái sẵn sàng sau 2 lần thử. '
-      'Ứng dụng vẫn tiếp tục; các tính năng Zalo cục bộ có thể chưa hoạt động.',
-    );
-  }
+  // Khởi động backend Zalo dưới quyền supervisor: tự khởi động lại khi chết,
+  // có watchdog + circuit breaker. KHÔNG block boot — UI hiện ngay và phản ứng
+  // theo trạng thái backend qua BackendStatusBanner.
+  unawaited(ZaloBackendManager.startSupervised());
 
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -137,7 +123,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             MediaQuery.platformBrightnessOf(context) == Brightness.dark,
         };
         AppColors.isDarkMode = currentIsDark;
-        return AppLockOverlay(child: child ?? const SizedBox.shrink());
+        return AppLockOverlay(
+          child: BackendSplashOverlay(
+            child: Column(
+              children: [
+                const BackendStatusBanner(),
+                Expanded(child: child ?? const SizedBox.shrink()),
+              ],
+            ),
+          ),
+        );
       },
     );
   }

@@ -1,14 +1,70 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'app_logger.dart';
+import 'windows_job_object.dart';
 
-/// Quản lý tiến trình chạy ngầm Node.js Zalo Bot Service trên môi trường Desktop
+/// Trạng thái vòng đời của backend cục bộ, dùng để UI phản ứng.
+enum BackendStatus {
+  /// Chưa khởi động hoặc đã dừng có chủ đích (đóng app).
+  stopped,
+
+  /// Đang khởi động lần đầu.
+  starting,
+
+  /// Đang phục vụ bình thường (/health trả ok).
+  healthy,
+
+  /// Vừa lỡ một nhịp health-check, đang theo dõi trước khi khởi động lại.
+  degraded,
+
+  /// Đang tự khởi động lại sau khi phát hiện chết.
+  restarting,
+
+  /// Đã thất bại quá nhiều lần (circuit breaker mở) — chờ người dùng thử lại.
+  failed,
+}
+
+/// Quản lý tiến trình chạy ngầm Node.js Zalo Bot Service trên môi trường Desktop.
+///
+/// Hoạt động như một supervisor: khởi động backend, giám sát /health liên tục,
+/// tự khởi động lại khi tiến trình chết (có exponential backoff + circuit
+/// breaker), và trói tiến trình vào Windows Job Object để không bao giờ mồ côi.
 class ZaloBackendManager {
   static Process? _backendProcess;
   static bool _isRunning = false;
   static int? _activePort;
+
+  // --- Cấu hình supervisor ---
+  static const int _defaultPort = 8787;
+  static const Duration _watchdogInterval = Duration(seconds: 5);
+
+  /// Số nhịp health-check lỗi liên tiếp trước khi coi backend là chết.
+  static const int _failureThreshold = 2;
+
+  /// Số lần khởi động lại tối đa trong [_circuitWindow] trước khi mở circuit.
+  static const int _maxRestartsPerWindow = 5;
+  static const Duration _circuitWindow = Duration(minutes: 2);
+  static const Duration _maxBackoff = Duration(seconds: 30);
+
+  // --- Trạng thái supervisor ---
+  /// Trạng thái backend cho UI lắng nghe (không cần Riverpod).
+  static final ValueNotifier<BackendStatus> status =
+      ValueNotifier<BackendStatus>(BackendStatus.stopped);
+
+  static Timer? _watchdogTimer;
+  static int _consecutiveFailures = 0;
+  static int _restartCount = 0;
+  static DateTime? _windowStart;
+
+  /// Đang trong một chu trình (re)start — chặn watchdog kích hoạt chồng chéo.
+  static bool _ensuring = false;
+
+  /// True khi app chủ động dừng backend (đóng app / cập nhật) — chặn auto-restart.
+  static bool _manualStop = false;
 
   /// Thư mục làm việc của backend đang chạy (chứa dist/ và .data/).
   /// Dùng để đọc đúng .data/active-port.json. Null khi chạy ở chế độ dev thủ công.
@@ -97,6 +153,7 @@ class ZaloBackendManager {
           workingDirectory: serviceDir,
           mode: ProcessStartMode.normal,
         );
+        _afterSpawn();
       } else {
         // 3b. Fallback: dò launcher script (.cmd/.exe/.bat) như cũ.
         final candidateNames = Platform.isWindows
@@ -167,6 +224,7 @@ class ZaloBackendManager {
           mode: ProcessStartMode.normal,
           workingDirectory: File(executablePath).parent.path,
         );
+        _afterSpawn();
       }
 
       _isRunning = true;
@@ -288,6 +346,203 @@ class ZaloBackendManager {
     return false;
   }
 
+  // =========================================================================
+  // SUPERVISOR — giám sát liên tục, tự khởi động lại, vòng đời tiến trình chắc.
+  // =========================================================================
+
+  /// Chạy ngay sau khi spawn một tiến trình backend: trói vào Job Object để
+  /// không mồ côi, và gắn listener thoát vĩnh viễn để kích hoạt auto-restart.
+  static void _afterSpawn() {
+    final proc = _backendProcess;
+    if (proc == null) return;
+
+    // Phase 3: trói vào Windows Job Object (KILL_ON_JOB_CLOSE).
+    if (Platform.isWindows) {
+      final assigned = WindowsJobObject.assignProcess(proc.pid);
+      debugPrint(
+        'ZaloBackendManager: Job Object ${assigned ? "đã trói" : "không trói được"} '
+        'tiến trình pid=${proc.pid}.',
+      );
+    }
+
+    // Listener thoát vĩnh viễn: tiến trình chết bất ngờ → kích hoạt khởi động lại.
+    proc.exitCode.then((code) {
+      // Chỉ xử lý nếu đây vẫn là tiến trình hiện hành (không phải bản đã bị thay).
+      if (!identical(proc, _backendProcess)) return;
+      _isRunning = false;
+      if (_manualStop) return;
+      _lastStartupError = 'Tiến trình backend thoát bất ngờ với mã $code.';
+      AppLogger().error('ZaloBackendManager: $_lastStartupError');
+      debugPrint('ZaloBackendManager: $_lastStartupError → tự khởi động lại.');
+      _setStatus(BackendStatus.degraded);
+      // Khởi động lại ngay, không đợi nhịp watchdog kế tiếp.
+      unawaited(_ensureRunning());
+    });
+  }
+
+  /// Điểm vào cho app: khởi động backend rồi bật watchdog giám sát liên tục.
+  /// Không blocking — gọi viên (caller) có thể fire-and-forget để UI hiện ngay.
+  static Future<void> startSupervised() async {
+    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+      return;
+    }
+    _manualStop = false;
+    _consecutiveFailures = 0;
+    _restartCount = 0;
+    _windowStart = null;
+    _setStatus(BackendStatus.starting);
+    await _ensureRunning();
+    _startWatchdog();
+  }
+
+  /// Người dùng bấm "Thử lại" khi circuit đã mở: reset bộ đếm và khởi động lại.
+  static Future<void> retryManually() async {
+    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+      return;
+    }
+    _manualStop = false;
+    _consecutiveFailures = 0;
+    _restartCount = 0;
+    _windowStart = null;
+    _setStatus(BackendStatus.starting);
+    await _ensureRunning();
+    _startWatchdog();
+  }
+
+  /// Bật vòng giám sát health định kỳ (idempotent).
+  static void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) => _tick());
+  }
+
+  /// Một nhịp watchdog: kiểm tra /health, chịu đựng một lần lỡ, lỗi liên tiếp
+  /// quá ngưỡng thì kích hoạt khởi động lại.
+  static Future<void> _tick() async {
+    if (_manualStop || _ensuring) return;
+    // Circuit đang mở → ngưng auto-restart, chờ retryManually().
+    if (status.value == BackendStatus.failed) return;
+
+    final port = _activePort ?? _defaultPort;
+    final healthy = await _probeHealth(port);
+    if (healthy) {
+      _consecutiveFailures = 0;
+      _isRunning = true;
+      // Ổn định đủ lâu → reset circuit breaker.
+      if (_windowStart != null &&
+          DateTime.now().difference(_windowStart!) > _circuitWindow) {
+        _windowStart = null;
+        _restartCount = 0;
+      }
+      _setStatus(BackendStatus.healthy);
+      return;
+    }
+
+    _consecutiveFailures++;
+    if (_consecutiveFailures < _failureThreshold) {
+      _setStatus(BackendStatus.degraded);
+      return; // chịu đựng một lần lỡ tạm thời
+    }
+    await _ensureRunning();
+  }
+
+  /// Bảo đảm backend đang chạy & khỏe. Tự kill bản hỏng, áp dụng exponential
+  /// backoff và circuit breaker rồi spawn lại + chờ sẵn sàng.
+  static Future<void> _ensureRunning() async {
+    if (_ensuring) return;
+    _ensuring = true;
+    try {
+      final port = _activePort ?? _defaultPort;
+      if (await _probeHealth(port)) {
+        _isRunning = true;
+        _consecutiveFailures = 0;
+        _setStatus(BackendStatus.healthy);
+        return;
+      }
+
+      // Circuit breaker theo cửa sổ thời gian.
+      final now = DateTime.now();
+      if (_windowStart == null ||
+          now.difference(_windowStart!) > _circuitWindow) {
+        _windowStart = now;
+        _restartCount = 0;
+      }
+      if (_restartCount >= _maxRestartsPerWindow) {
+        _lastStartupError =
+            'Backend khởi động lại thất bại $_restartCount lần liên tiếp '
+            '(circuit breaker mở). Vui lòng thử lại thủ công.';
+        AppLogger().error('ZaloBackendManager: $_lastStartupError');
+        _setStatus(BackendStatus.failed);
+        return;
+      }
+
+      _restartCount++;
+      _setStatus(
+        _restartCount == 1 ? BackendStatus.starting : BackendStatus.restarting,
+      );
+
+      // Diệt bản cũ (nếu còn) rồi chờ backoff trước khi spawn lại.
+      _killProcess();
+      if (_restartCount > 1) {
+        final backoff = _backoffFor(_restartCount);
+        debugPrint(
+          'ZaloBackendManager: Chờ ${backoff.inSeconds}s (backoff) trước khi '
+          'khởi động lại lần $_restartCount...',
+        );
+        await Future.delayed(backoff);
+      }
+
+      final started = await startBackend();
+      if (!started) {
+        _setStatus(BackendStatus.degraded);
+        return;
+      }
+      final ready = await waitUntilReady();
+      if (ready) {
+        _consecutiveFailures = 0;
+        _setStatus(BackendStatus.healthy);
+      } else {
+        _setStatus(BackendStatus.degraded);
+      }
+    } finally {
+      _ensuring = false;
+    }
+  }
+
+  /// Exponential backoff 2^(n-1) giây, chặn trần ở [_maxBackoff].
+  static Duration _backoffFor(int restartCount) {
+    final seconds = math.min(
+      _maxBackoff.inSeconds,
+      math.pow(2, restartCount - 1).toInt(),
+    );
+    return Duration(seconds: seconds);
+  }
+
+  /// Diệt tiến trình backend hiện hành (cả cây con) mà KHÔNG đặt cờ dừng có chủ
+  /// đích — dùng nội bộ cho restart. taskkill /T /F là fallback khi Job Object
+  /// không khả dụng.
+  static void _killProcess() {
+    final proc = _backendProcess;
+    if (proc == null) return;
+    final pid = proc.pid;
+    if (Platform.isWindows) {
+      try {
+        Process.runSync('taskkill', ['/PID', '$pid', '/T', '/F']);
+      } catch (e) {
+        debugPrint('ZaloBackendManager: taskkill thất bại: $e');
+      }
+    }
+    proc.kill();
+    _backendProcess = null;
+    _isRunning = false;
+  }
+
+  /// Cập nhật trạng thái + thông báo cho UI (chỉ khi đổi).
+  static void _setStatus(BackendStatus next) {
+    if (status.value != next) {
+      status.value = next;
+    }
+  }
+
   /// Kiểm tra nhanh xem đã có backend khỏe mạnh đang lắng nghe ở [port] chưa.
   static Future<bool> _probeHealth(int port) async {
     final client = http.Client();
@@ -346,26 +601,20 @@ class ZaloBackendManager {
     }
   }
 
-  /// Tắt tiến trình chạy ngầm khi đóng ứng dụng (diệt cả cây con để tránh node.exe mồ côi).
+  /// Tắt backend có chủ đích khi đóng ứng dụng / cập nhật. Dừng watchdog và đặt
+  /// cờ [_manualStop] để KHÔNG kích hoạt auto-restart, rồi diệt cả cây tiến
+  /// trình con để tránh node.exe mồ côi.
   static void stopBackend() {
-    if (_backendProcess != null && _isRunning) {
+    _manualStop = true;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    if (_backendProcess != null) {
       debugPrint(
         "ZaloBackendManager: Đang ngắt tiến trình chạy ngầm backend...",
       );
-      final pid = _backendProcess!.pid;
-      // Trên Windows, kill() chỉ giết tiến trình trực tiếp. Khi chạy qua launcher .cmd,
-      // node.exe là tiến trình con và sẽ mồ côi (giữ cổng 8787). taskkill /T /F diệt cả cây.
-      if (Platform.isWindows) {
-        try {
-          Process.runSync('taskkill', ['/PID', '$pid', '/T', '/F']);
-        } catch (e) {
-          debugPrint("ZaloBackendManager: taskkill thất bại: $e");
-        }
-      }
-      _backendProcess!.kill();
-      _backendProcess = null;
-      _isRunning = false;
+      _killProcess();
       debugPrint("ZaloBackendManager: Đã ngắt tiến trình backend hoàn toàn.");
     }
+    _setStatus(BackendStatus.stopped);
   }
 }

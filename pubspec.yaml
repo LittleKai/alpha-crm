@@ -59,6 +59,12 @@ dependencies:
   qr_flutter: ^4.1.0
   logger: ^2.7.0
   local_notifier: ^0.1.6
+  # Windows Job Object (trói tiến trình backend để không mồ côi) — dùng FFI trực tiếp.
+  ffi: ^2.1.0
+  win32: ^5.15.0
+  # Quản lý cửa sổ desktop (maximize khi mở, chặn nút X) + biểu tượng System Tray.
+  window_manager: ^0.4.3
+  tray_manager: ^0.3.2
 
 dev_dependencies:
   flutter_test:
@@ -83,6 +89,7 @@ flutter:
   # the material Icons class.
   assets:
     - shorebird.yaml
+    - assets/app_icon.ico
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
