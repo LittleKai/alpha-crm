@@ -81,7 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         final dir = await getDownloadsDirectory();
         if (dir != null && mounted) {
           setState(() {
-            _defaultDownloadsPath = dir.path;
+            _defaultDownloadsPath = '${dir.path}${Platform.pathSeparator}AlphaCRM';
           });
         }
       }
@@ -270,7 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Text(
                     kIsWeb
                         ? 'Web tải file trực tiếp, không mở tab mới. Vị trí lưu do trình duyệt quản lý.'
-                        : 'Mặc định lưu vào Downloads. Media hội thoại được cache trên máy chạy Zalo bridge.',
+                        : 'Mặc định lưu vào Downloads/AlphaCRM. Media hội thoại được cache trên máy chạy Zalo bridge.',
                     style: AppTextStyles.caption,
                   ),
                   const SizedBox(height: AppSpacing.m),
@@ -431,7 +431,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final navigator = Navigator.of(context);
                   final messenger = ScaffoldMessenger.of(context);
                   await notifier.saveSettings();
-                  if (mounted) {
+                  if (context.mounted) {
                     navigator.pop();
                     messenger.showSnackBar(
                       SnackBar(

@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../../../shared/local_db/local_db.dart';
 import '../data/dashboard_repository.dart';
 
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
@@ -11,6 +15,7 @@ class DashboardState {
   final Map<String, dynamic> analytics;
   final List<dynamic> performanceData;
   final bool isLoading;
+  final bool isRefreshing;
   final String? errorMessage;
   final String timeRange; // '7 ngày qua' or '30 ngày qua'
 
@@ -19,6 +24,7 @@ class DashboardState {
     required this.analytics,
     required this.performanceData,
     required this.isLoading,
+    this.isRefreshing = false,
     this.errorMessage,
     required this.timeRange,
   });
@@ -29,6 +35,7 @@ class DashboardState {
       analytics: {},
       performanceData: [],
       isLoading: false,
+      isRefreshing: false,
       errorMessage: null,
       timeRange: '7 ngày qua',
     );
@@ -39,6 +46,7 @@ class DashboardState {
     Map<String, dynamic>? analytics,
     List<dynamic>? performanceData,
     bool? isLoading,
+    bool? isRefreshing,
     String? errorMessage,
     String? timeRange,
   }) {
@@ -47,6 +55,7 @@ class DashboardState {
       analytics: analytics ?? this.analytics,
       performanceData: performanceData ?? this.performanceData,
       isLoading: isLoading ?? this.isLoading,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
       errorMessage: errorMessage,
       timeRange: timeRange ?? this.timeRange,
     );
@@ -59,10 +68,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   DashboardNotifier(Ref ref)
     : _repository = ref.read(dashboardRepositoryProvider),
       super(DashboardState.initial()) {
-    loadDashboard();
+    _initDashboard();
   }
 
-  Future<void> loadDashboard() async {
+  Future<void> _initDashboard() async {
     if (WidgetsBinding.instance.toString().contains('Test')) {
       state = state.copyWith(
         overview: _emptyOverview(),
@@ -74,7 +83,103 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, errorMessage: null);
+    // 1. Try to load from cache
+    final cached = await _loadFromCache();
+    if (cached != null) {
+      state = cached;
+      // 2. Schedule network load on next frame / idle
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadIdle();
+      });
+    } else {
+      // No cache, load immediately
+      await loadDashboard();
+    }
+  }
+
+  void _loadIdle() {
+    SchedulerBinding.instance.scheduleTask<void>(
+      () {
+        loadDashboard(isBackground: true);
+      },
+      Priority.idle,
+      debugLabel: 'LoadDashboardIdle',
+    );
+  }
+
+  Future<void> _saveToCache(DashboardState dashboardState) async {
+    try {
+      final db = await LocalDb.instance;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // Cache entries expire in 1 day
+      final expiresAt = now + const Duration(days: 1).inMilliseconds;
+
+      final data = {
+        'overview': dashboardState.overview,
+        'analytics': dashboardState.analytics,
+        'performanceData': dashboardState.performanceData,
+        'timeRange': dashboardState.timeRange,
+      };
+
+      await db.insert(
+        'cache_entries',
+        {
+          'key': 'dashboard_cache',
+          'value': jsonEncode(data),
+          'expiresAt': expiresAt,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error saving dashboard to cache: $e');
+    }
+  }
+
+  Future<DashboardState?> _loadFromCache() async {
+    try {
+      final db = await LocalDb.instance;
+      final results = await db.query(
+        'cache_entries',
+        where: 'key = ?',
+        whereArgs: ['dashboard_cache'],
+        limit: 1,
+      );
+
+      if (results.isNotEmpty) {
+        final valueStr = results.first['value'] as String;
+        final decoded = jsonDecode(valueStr) as Map<String, dynamic>;
+        return DashboardState(
+          overview: decoded['overview'] as Map<String, dynamic>?,
+          analytics: Map<String, dynamic>.from(decoded['analytics'] ?? {}),
+          performanceData: decoded['performanceData'] as List<dynamic>? ?? [],
+          timeRange: decoded['timeRange'] as String? ?? '7 ngày qua',
+          isLoading: false,
+          errorMessage: null,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading dashboard from cache: $e');
+    }
+    return null;
+  }
+
+  Future<void> loadDashboard({bool isBackground = false}) async {
+    if (WidgetsBinding.instance.toString().contains('Test')) {
+      state = state.copyWith(
+        overview: _emptyOverview(),
+        analytics: const {},
+        performanceData: const [],
+        isLoading: false,
+        errorMessage: null,
+      );
+      return;
+    }
+
+    if (!isBackground) {
+      state = state.copyWith(isLoading: true, isRefreshing: false, errorMessage: null);
+    } else {
+      state = state.copyWith(isRefreshing: true, errorMessage: null);
+    }
 
     try {
       final overviewResponse = await _repository.getOverview();
@@ -91,7 +196,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
       if (overviewResponse['success'] == true &&
           performanceResponse['success'] == true) {
-        state = state.copyWith(
+        final newState = state.copyWith(
           overview: overviewResponse['data'],
           analytics: {
             'funnel': analyticsResponses[0]['data'] ?? const [],
@@ -101,16 +206,19 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           },
           performanceData: performanceResponse['data'] ?? const [],
           isLoading: false,
+          isRefreshing: false,
         );
+        state = newState;
+        await _saveToCache(newState);
       } else {
         final err =
             overviewResponse['message'] ??
             performanceResponse['message'] ??
             'Lỗi tải tổng quan từ đám mây';
-        state = state.copyWith(isLoading: false, errorMessage: err);
+        state = state.copyWith(isLoading: false, isRefreshing: false, errorMessage: err);
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, isRefreshing: false, errorMessage: e.toString());
     }
   }
 

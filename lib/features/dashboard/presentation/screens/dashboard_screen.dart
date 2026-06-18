@@ -225,7 +225,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Tổng quan chiến dịch', style: AppTextStyles.pageTitle),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text('Tổng quan chiến dịch', style: AppTextStyles.pageTitle),
+                  if (state.isRefreshing) ...[
+                    const SizedBox(width: AppSpacing.s),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'Đang cập nhật...',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Hệ thống theo dõi hiệu suất gửi tin và các chỉ số Zalo Marketing của bạn',

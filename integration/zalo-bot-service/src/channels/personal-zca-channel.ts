@@ -235,79 +235,22 @@ function defaultCredentialsPathForAccount(uId: string): string {
 }
 
 /**
- * Persist the LIVE (rotated) Zalo cookie jar back to disk.
+ * Credentials persistence policy — DO NOT re-serialize the live cookie jar.
  *
- * Root cause this solves: the credentials file is written ONCE at QR login.
- * During an active session Zalo rotates its session cookies (zpsid / zpw_sek …)
- * and zca-js only updates the in-memory tough-cookie CookieJar. On the next
- * service restart `loadCredentialsFile` reads the ORIGINAL stale cookie, Zalo
- * rejects it, the account never re-enters the pool — i.e. the account "suddenly
- * disappears". Writing the fresh jar back keeps the on-disk session valid so the
- * login survives restarts indefinitely (until Zalo itself revokes it).
+ * The credentials file (`credentials_<uId>.json`) is written EXACTLY ONCE, at
+ * QR login, from the fresh `GotLoginInfo` event data (see `personal-login.ts`
+ * and the `/create-qr` handler in `server.ts`). It must stay immutable.
+ *
+ * Re-serializing the in-memory tough-cookie jar (`api.getContext().cookie`)
+ * back to disk is the root cause of the `zpw_sek bị thiếu hoặc không đúng`
+ * (code 600) outage: zca-js's RAM jar is momentarily degraded during session
+ * rotation, so a periodic flush could overwrite the good file with a cookie set
+ * missing `zpw_sek`, permanently corrupting the on-disk session. The canonical
+ * reference (ZaloCRM `zalo-pool.ts`) never does this — it keeps long-lived
+ * sessions alive by RE-LOGGING IN (`zalo.login(savedCredentials)`) from the
+ * immutable saved data, which makes Zalo re-issue fresh cookies into the RAM
+ * jar while the file stays the known-good QR original.
  */
-export function persistAccountCredentials(uId: string): boolean {
-  const instance = accountPool.get(uId);
-  if (!instance) return false;
-  try {
-    const api = instance.api as any;
-    const ctx = typeof api.getContext === 'function' ? api.getContext() : null;
-    const jar = ctx?.cookie;
-    if (!jar || typeof jar.serializeSync !== 'function') return false;
-
-    const serialized = jar.serializeSync();
-    const cookies = serialized?.cookies;
-    if (!Array.isArray(cookies) || cookies.length === 0) return false;
-
-    const filePath = instance.credentialsPath || defaultCredentialsPathForAccount(uId);
-    let existing: Record<string, unknown> = {};
-    if (existsSync(filePath)) {
-      try {
-        existing = JSON.parse(readFileSync(filePath, 'utf-8'));
-      } catch {
-        existing = {};
-      }
-    }
-
-    // Save in the same shape `Zalo.login()` accepts (cookie array branch of
-    // parseCookies, which reads `key || name`). imei + userAgent must stay
-    // stable across restarts, so prefer the live context then fall back to disk.
-    const next = {
-      ...existing,
-      cookie: cookies,
-      imei: ctx.imei || existing.imei,
-      userAgent: ctx.userAgent || existing.userAgent,
-      language: ctx.language || existing.language || 'vi',
-    };
-
-    mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf-8');
-    return true;
-  } catch (err) {
-    console.error(`[PersonalZcaChannel] Failed to persist credentials for ${uId}:`, err);
-    return false;
-  }
-}
-
-// Re-serialize every connected account's cookie jar to disk.
-export function persistAllCredentials(): void {
-  for (const uId of accountPool.keys()) {
-    persistAccountCredentials(uId);
-  }
-}
-
-// Periodically flush rotated cookies so a crash/restart never falls back to a
-// stale on-disk session. Idempotent; unref'd so it never holds the process open.
-let credentialRefreshTimer: NodeJS.Timeout | null = null;
-const CREDENTIAL_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-function startCredentialRefreshTimer(): void {
-  if (credentialRefreshTimer) return;
-  credentialRefreshTimer = setInterval(() => {
-    persistAllCredentials();
-  }, CREDENTIAL_REFRESH_INTERVAL_MS);
-  if (typeof credentialRefreshTimer.unref === 'function') {
-    credentialRefreshTimer.unref();
-  }
-}
 
 function readPngMetadata(data: Buffer): { width: number; height: number } | null {
   if (
@@ -1087,19 +1030,23 @@ export async function addAccountInstance(
 
   // Auto start listener
   await startListenerForInstance(instance);
-
-  // Capture the cookie freshly issued by this login handshake, then keep it
-  // refreshed on disk so the session survives future restarts.
-  persistAccountCredentials(uId);
-  startCredentialRefreshTimer();
+  // NOTE: do NOT persist the live cookie jar here. The credentials file is the
+  // immutable QR-login original; re-serializing the RAM jar corrupts `zpw_sek`.
 }
 
+export const failedAccounts = new Map<string, { id: string, reason: string, filePath: string }>();
+
 async function loadCredentialsFile(filePath: string): Promise<void> {
+  const accountId = accountIdFromCredentialsPath(filePath);
   try {
     const raw = readFileSync(filePath, 'utf-8');
     const credentials: Credentials = JSON.parse(raw);
 
-    const accountId = accountIdFromCredentialsPath(filePath);
+    const zpw_sek = (credentials.cookie as any)?.zpw_sek || raw.includes('zpw_sek');
+    if (!zpw_sek) {
+      throw new Error(`File ${basename(filePath)} này bị thiếu trường quan trọng zpw_sek (do lỗi ghi đè cookie cũ trước đó hoặc phiên đã bị Zalo thu hồi từ điện thoại).`);
+    }
+
     const zalo = createZaloClient(accountId);
 
     const activeApi = await zalo.login(credentials);
@@ -1108,8 +1055,15 @@ async function loadCredentialsFile(filePath: string): Promise<void> {
     // Add to pool — remember the exact file we loaded from so refreshed cookies
     // are persisted back to the same path (handles legacy credentials.json too).
     await addAccountInstance(uId, activeApi, filePath);
+    if (accountId) failedAccounts.delete(accountId);
   } catch (err) {
     console.error(`[PersonalZcaChannel] Failed to load credentials from ${filePath}:`, err);
+    const idToUse = accountId || `unknown_${Date.now()}`;
+    failedAccounts.set(idToUse, {
+      id: idToUse,
+      reason: err instanceof Error ? err.message : String(err),
+      filePath,
+    });
   }
 }
 
@@ -1468,6 +1422,7 @@ export class PersonalZcaChannel implements ZaloChannel {
       return { success: true, messageId: `test_personal_${Date.now()}` };
     }
 
+    let selectedInstance: ZaloAccountInstance | undefined;
     try {
       await ensureLoginPool();
 
@@ -1477,7 +1432,7 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       // Dynamic Round-Robin rotation selector, unless CRM requested a sender account.
       const instances = Array.from(accountPool.values());
-      let selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
+      selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
       if (!selectedInstance && req.accountId) {
         throw new Error(`Requested Zalo account ${req.accountId} is not connected.`);
       }
@@ -1531,7 +1486,7 @@ export class PersonalZcaChannel implements ZaloChannel {
       } else {
         result = await runWithFixedDateNow(
           zcaClientMessageId,
-          () => selectedInstance.api.sendMessage(
+          () => api.sendMessage(
             messageContent,
             recipientId,
             threadType,
@@ -1566,6 +1521,21 @@ export class PersonalZcaChannel implements ZaloChannel {
       const errAny = err as any;
       const code = errAny?.code ?? errAny?.data?.code ?? errAny?.details?.code;
       const message = loginError || (err instanceof Error ? err.message : 'Unknown personal send error');
+
+      // A `zpw_sek` error (code 600) means the session cookie is dead — no retry
+      // can recover it; only a fresh QR re-login will. Mark the account expired so
+      // the Settings UI surfaces the ⚠️ + "Đăng nhập lại" instead of failing
+      // silently on every future send.
+      const isDeadSession =
+        code === 600 || /zpw_sek/i.test(message);
+      if (isDeadSession && selectedInstance && selectedInstance.status !== 'disconnected_expired') {
+        console.error(`[PersonalZcaChannel - ${selectedInstance.label}] Dead session (zpw_sek). Marking as disconnected_expired.`);
+        await stopListenerForInstance(selectedInstance);
+        selectedInstance.status = 'disconnected_expired';
+        selectedInstance.disconnectReason = 'Phiên đăng nhập đã hết hạn (zpw_sek). Vui lòng đăng nhập lại.';
+        selectedInstance.disconnectedAt = new Date().toISOString();
+      }
+
       return {
         success: false,
         error: code ? `${message} (code: ${code})` : message,
@@ -1837,7 +1807,7 @@ export class PersonalZcaChannel implements ZaloChannel {
 
   getAccounts(): any[] {
     const settingsByAccount = readAccountSettings();
-    return Array.from(accountPool.values()).map(acc => ({
+    const accounts: any[] = Array.from(accountPool.values()).map(acc => ({
       id: acc.uId,
       label: acc.label,
       connected: acc.status !== 'disconnected_expired',
@@ -1848,6 +1818,22 @@ export class PersonalZcaChannel implements ZaloChannel {
       avatar: acc.avatar || '',
       settings: settingsByAccount[acc.uId] || {},
     }));
+
+    for (const failed of failedAccounts.values()) {
+      accounts.push({
+        id: failed.id,
+        label: `Tài khoản ${failed.id}`,
+        connected: false,
+        listenerRunning: false,
+        status: 'disconnected_expired',
+        disconnectReason: `Không thể kết nối và bị từ chối đăng nhập. Nguyên nhân: ${failed.reason}`,
+        disconnectedAt: new Date().toISOString(),
+        avatar: '',
+        settings: settingsByAccount[failed.id] || {},
+      });
+    }
+
+    return accounts;
   }
 
   async updateAccountSettings(accountId: string, settings: Record<string, unknown>): Promise<boolean> {
@@ -1864,6 +1850,13 @@ export class PersonalZcaChannel implements ZaloChannel {
   }
 
   async deleteAccount(accountId: string): Promise<boolean> {
+    if (failedAccounts.has(accountId)) {
+      failedAccounts.delete(accountId);
+      const filePath = resolve(dirname(resolve(projectRoot, config.personalCredentialsPath)), `credentials_${accountId}.json`);
+      if (existsSync(filePath)) unlinkSync(filePath);
+      return true;
+    }
+
     const instance = accountPool.get(accountId);
     if (!instance) return false;
 

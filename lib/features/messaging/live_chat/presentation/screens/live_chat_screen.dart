@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -30,8 +31,6 @@ import '../../utils/live_chat_local_image_stub.dart'
     if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
 import '../widgets/live_chat_settings_dialog.dart';
-
-Offset? _lastMessageBubbleTapPosition;
 
 class LiveChatScreen extends ConsumerStatefulWidget {
   const LiveChatScreen({super.key});
@@ -64,6 +63,11 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
+    Future.microtask(() {
+      if (mounted) {
+        ref.read(zaloIntegrationProvider.notifier).checkConnection();
+      }
+    });
   }
 
   @override
@@ -170,6 +174,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
               onRefresh: () {
                 notifier.loadAccounts();
                 notifier.loadConversations();
+                ref.read(zaloIntegrationProvider.notifier).checkConnection();
               },
               onAccountChanged: notifier.selectAccount,
             ),
@@ -535,15 +540,15 @@ class _ConversationList extends ConsumerWidget {
                       final selected =
                           conversation.id == state.selectedConversation?.id;
 
-                      final matchingAccount = zaloState.accounts.firstWhere(
-                        (a) => a.id == conversation.accountId,
-                        orElse: () => ZaloConnectedAccount(
-                          id: conversation.accountId,
-                          label: conversation.accountId,
-                          connected: true,
-                          listenerRunning: false,
-                        ),
-                      );
+      final matchingAccount = zaloState.accounts.firstWhere(
+        (a) => a.id == conversation.accountId,
+        orElse: () => ZaloConnectedAccount(
+          id: conversation.accountId,
+          label: conversation.accountId,
+          connected: false,
+          listenerRunning: false,
+        ),
+      );
                       final accountLabel = matchingAccount.label.replaceAll(
                         RegExp(r'\s*\([^)]*\)$'),
                         '',
@@ -750,6 +755,7 @@ class _ConversationPanel extends ConsumerWidget {
       RegExp(r'\s*\([^)]*\)$'),
       '',
     );
+    final bool isAccountConnected = matchingAccount.connected && matchingAccount.status != 'disconnected_expired';
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -964,6 +970,28 @@ class _ConversationPanel extends ConsumerWidget {
                 ],
               ),
             ),
+          if (!isAccountConnected)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+              padding: const EdgeInsets.all(AppSpacing.s),
+              decoration: BoxDecoration(
+                color: AppColors.warningSoft,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: AppColors.warningText, size: 20),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text(
+                      'Tài khoản Zalo đã mất kết nối. Không thể nhắn tin hay gửi file.',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.warningText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
@@ -972,32 +1000,41 @@ class _ConversationPanel extends ConsumerWidget {
                 IconButton(
                   icon: Icon(Icons.attach_file, color: AppColors.textSecondary),
                   tooltip: 'Đính kèm file/ảnh/video',
-                  onPressed: state.isSending || state.isBridgeOffline
+                  onPressed: state.isSending || state.isBridgeOffline || !isAccountConnected
                       ? null
                       : () => _pickAndSendFile(notifier),
                 ),
                 Expanded(
                   child: CallbackShortcuts(
                     bindings: <ShortcutActivator, VoidCallback>{
-                      const SingleActivator(LogicalKeyboardKey.enter): () =>
-                          _send(quickTemplates),
+                      const SingleActivator(LogicalKeyboardKey.enter): () {
+                        if (isAccountConnected && !state.isBridgeOffline) {
+                          _send(quickTemplates);
+                        }
+                      },
                     },
                     child: TextField(
                       controller: messageController,
                       minLines: 1,
                       maxLines: 4,
-                      enabled: !state.isBridgeOffline,
+                      enabled: !state.isBridgeOffline && isAccountConnected,
                       decoration: InputDecoration(
-                        hintText: state.isBridgeOffline
-                            ? 'Không thể gửi tin khi Bridge offline'
-                            : 'Nhập tin nhắn hoặc /1, /hello...',
+                        hintText: !isAccountConnected
+                            ? 'Không thể gửi tin do mất kết nối'
+                            : state.isBridgeOffline
+                                ? 'Không thể gửi tin khi Bridge offline'
+                                : 'Nhập tin nhắn hoặc /1, /hello...',
                         border: const OutlineInputBorder(),
                       ),
                       onChanged: (value) {
                         notifier.updateDraft(value);
                         notifier.notifyTyping();
                       },
-                      onSubmitted: (_) => _send(quickTemplates),
+                      onSubmitted: (_) {
+                        if (isAccountConnected && !state.isBridgeOffline) {
+                          _send(quickTemplates);
+                        }
+                      },
                     ),
                   ),
                 ),
@@ -1005,7 +1042,7 @@ class _ConversationPanel extends ConsumerWidget {
                 AppButton(
                   text: 'Gửi',
                   icon: Icons.send_rounded,
-                  onPressed: state.isSending || state.isBridgeOffline
+                  onPressed: state.isSending || state.isBridgeOffline || !isAccountConnected
                       ? null
                       : () => _send(quickTemplates),
                 ),
@@ -1496,7 +1533,7 @@ class _MessageBubble extends ConsumerWidget {
 
     final isMine = message.isMine;
     final color = isMine
-        ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : const Color(0xFFDBEAFE))
+        ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : const Color(0xFFEFF6FF))
         : AppColors.surfaceMuted;
     final textColor = isMine
         ? (AppColors.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFF1E40AF))
@@ -1535,12 +1572,12 @@ class _MessageBubble extends ConsumerWidget {
       final zaloState = ref.watch(zaloIntegrationProvider);
       final matching = zaloState.accounts.firstWhere(
         (a) => a.id == conversation.accountId,
-        orElse: () => ZaloConnectedAccount(
-          id: conversation.accountId,
-          label: '',
-          connected: true,
-          listenerRunning: false,
-        ),
+          orElse: () => ZaloConnectedAccount(
+            id: conversation.accountId,
+            label: '',
+            connected: false,
+            listenerRunning: false,
+          ),
       );
       final avatarUrl = matching.avatarUrl;
       final label = matching.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
@@ -2049,127 +2086,234 @@ class _MessageBubble extends ConsumerWidget {
 
     if (attachmentView?.kind == LiveChatAttachmentKind.file) {
       final file = attachmentView!;
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.s),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: textColor.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    file.displayName,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (file.sizeLabel.isNotEmpty)
+      return InkWell(
+        onTap: () async {
+          if (file.hasLocalPath && liveChatLocalFileExists(file.localPath)) {
+            OpenFilex.open(file.localPath);
+          } else if (file.hasRemoteUrl) {
+            try {
+              final url = file.url.contains('/local/media/')
+                  ? '${file.url}/download'
+                  : file.url;
+              final path = await const LiveChatDownloadService().download(
+                url: url,
+                fileName: file.displayName,
+                directory: ref.read(settingsProvider).settings.downloadFolder,
+              );
+              OpenFilex.open(path);
+            } catch (_) {}
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.s),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: textColor.withValues(alpha: 0.15)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      file.sizeLabel,
-                      style: AppTextStyles.caption.copyWith(
-                        color: textColor.withValues(alpha: 0.6),
+                      file.displayName,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (file.sizeLabel.isNotEmpty)
+                      Text(
+                        file.sizeLabel,
+                        style: AppTextStyles.caption.copyWith(
+                          color: textColor.withValues(alpha: 0.6),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            if (file.hasRemoteUrl)
-              IconButton(
-                icon: const Icon(Icons.download, size: 20),
-                color: textColor,
-                onPressed: () async {
-                  try {
-                    final url = file.url.contains('/local/media/')
-                        ? '${file.url}/download'
-                        : file.url;
-                    final path = await const LiveChatDownloadService().download(
-                      url: url,
-                      fileName: file.displayName,
-                      directory: ref
-                          .read(settingsProvider)
-                          .settings
-                          .downloadFolder,
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Đã tải tệp: $path')),
-                      );
+              if (file.hasLocalPath || file.hasRemoteUrl)
+                IconButton(
+                  icon: const Icon(Icons.folder_open, size: 20),
+                  tooltip: 'Mở thư mục chứa tệp',
+                  color: textColor,
+                  onPressed: () async {
+                    String pathToOpen = file.localPath;
+                    if (!file.hasLocalPath && file.hasRemoteUrl) {
+                      final url = file.url.contains('/local/media/')
+                          ? '${file.url}/download'
+                          : file.url;
+                      try {
+                        pathToOpen = await const LiveChatDownloadService().download(
+                          url: url,
+                          fileName: file.displayName,
+                          directory: ref.read(settingsProvider).settings.downloadFolder,
+                        );
+                      } catch (_) { return; }
                     }
-                  } catch (error) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Tải tệp thất bại: $error')),
-                      );
+                    if (pathToOpen.isNotEmpty) {
+                      try {
+                        final parentPath = pathToOpen.substring(0, pathToOpen.lastIndexOf(RegExp(r'[/\\]')));
+                        final folderUri = Uri.parse('file:///$parentPath');
+                        if (await canLaunchUrl(folderUri)) {
+                          await launchUrl(folderUri);
+                        }
+                      } catch (_) {}
                     }
-                  }
-                },
-              ),
-          ],
+                  },
+                ),
+              if (file.hasRemoteUrl)
+                IconButton(
+                  icon: const Icon(Icons.download, size: 20),
+                  color: textColor,
+                  tooltip: 'Tải xuống',
+                  onPressed: () async {
+                    try {
+                      final url = file.url.contains('/local/media/')
+                          ? '${file.url}/download'
+                          : file.url;
+                      final path = await const LiveChatDownloadService().download(
+                        url: url,
+                        fileName: file.displayName,
+                        directory: ref
+                            .read(settingsProvider)
+                            .settings
+                            .downloadFolder,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã tải tệp: $path')),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tải tệp thất bại: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+            ],
+          ),
         ),
       );
     }
 
     final fileInfo = _getFileInfo(message);
     if (fileInfo != null) {
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.s),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: textColor.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    fileInfo['name'] ?? '',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
+      return InkWell(
+        onTap: () async {
+          if (fileInfo['href']?.isNotEmpty == true) {
+            final url = fileInfo['href']!;
+            try {
+              final path = await const LiveChatDownloadService().download(
+                url: url,
+                fileName: fileInfo['name'] ?? 'file',
+                directory: ref.read(settingsProvider).settings.downloadFolder,
+              );
+              OpenFilex.open(path);
+            } catch (_) {
+              final uri = Uri.tryParse(url);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            }
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.s),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: textColor.withValues(alpha: 0.15)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      fileInfo['name'] ?? '',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    fileInfo['size'] ?? '',
-                    style: AppTextStyles.caption.copyWith(
-                      color: textColor.withValues(alpha: 0.6),
+                    Text(
+                      fileInfo['size'] ?? '',
+                      style: AppTextStyles.caption.copyWith(
+                        color: textColor.withValues(alpha: 0.6),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (fileInfo['href']?.isNotEmpty == true)
-              IconButton(
-                icon: const Icon(Icons.download, size: 20),
-                color: textColor,
-                onPressed: () async {
-                  final uri = Uri.tryParse(fileInfo['href'] ?? '');
-                  if (uri != null && await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-          ],
+              if (fileInfo['href']?.isNotEmpty == true) ...[
+                IconButton(
+                  icon: const Icon(Icons.folder_open, size: 20),
+                  tooltip: 'Mở thư mục chứa tệp',
+                  color: textColor,
+                  onPressed: () async {
+                    try {
+                      final path = await const LiveChatDownloadService().download(
+                        url: fileInfo['href']!,
+                        fileName: fileInfo['name'] ?? 'file',
+                        directory: ref.read(settingsProvider).settings.downloadFolder,
+                      );
+                      if (path.isNotEmpty) {
+                        final parentPath = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
+                        final folderUri = Uri.parse('file:///$parentPath');
+                        if (await canLaunchUrl(folderUri)) {
+                          await launchUrl(folderUri);
+                        }
+                      }
+                    } catch (_) {}
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download, size: 20),
+                  color: textColor,
+                  tooltip: 'Tải xuống',
+                  onPressed: () async {
+                    try {
+                      final path = await const LiveChatDownloadService().download(
+                        url: fileInfo['href']!,
+                        fileName: fileInfo['name'] ?? 'file',
+                        directory: ref.read(settingsProvider).settings.downloadFolder,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã tải tệp: $path')),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tải tệp thất bại: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -2428,21 +2572,13 @@ class _MessageBubble extends ConsumerWidget {
       }
     }
 
-    return Listener(
-      onPointerDown: (event) => _lastMessageBubbleTapPosition = event.position,
-      child: SelectableText(
+      return SelectableText(
         message.message,
         style: AppTextStyles.body.copyWith(color: textColor),
         contextMenuBuilder: (context, editableTextState) {
-          Future.microtask(() {
-            if (context.mounted) {
-              _showRecallMenu(context, ref, _lastMessageBubbleTapPosition);
-            }
-          });
           return const SizedBox.shrink();
         },
-      ),
-    );
+      );
   }
 
   Widget _buildImageGrid(

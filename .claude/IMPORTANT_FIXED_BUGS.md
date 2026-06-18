@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-17 +07:00
+**Last Updated:** 2026-06-18 +07:00
 
 ---
 
@@ -28,6 +28,23 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-18 - Mọi lệnh gửi tin Zalo cá nhân fail `zpw_sek bị thiếu hoặc không đúng` (code 600) do ghi đè cookie jar sống ra đĩa
+
+- Symptom: `[PersonalZcaChannel] sendMessage error: ZaloApiError ... zpw_sek bị thiếu hoặc không đúng` (code 600) cho mọi lần gửi, kéo dài qua restart. File `credentials_<uId>.json` chỉ còn vài cookie và **thiếu hẳn `zpw_sek`**.
+- Root cause: `persistAccountCredentials()` (gọi lúc login và định kỳ 10 phút qua `startCredentialRefreshTimer`) **re-serialize jar cookie SỐNG** `api.getContext().cookie.serializeSync()` rồi ghi đè file credentials. zca-js giữ cookie trong tough-cookie jar RAM; trong lúc Zalo xoay vòng phiên, jar có thời điểm bị suy giảm/thiếu `zpw_sek`. Một lần flush trúng thời điểm đó là ghi đè file tốt bằng cookie-set không có `zpw_sek` → hỏng phiên trên đĩa vĩnh viễn → `zalo.login()` lần sau (restart) nạp cookie chết → mọi send code 600.
+- Fix summary: **Bỏ hoàn toàn việc re-serialize jar ra đĩa** — xóa `persistAccountCredentials` / `persistAllCredentials` / `startCredentialRefreshTimer` và các call site. File credentials là bản QR-login gốc **bất biến** (ghi đúng MỘT lần từ `event.data` sự kiện `GotLoginInfo` trong `personal-login.ts` và handler `/create-qr` ở `server.ts`). Để giữ phiên dài hạn thì RE-LOGIN từ dữ liệu bất biến (Zalo cấp lại cookie mới vào jar RAM), đúng pattern tham chiếu `ZaloCRM/backend/src/modules/zalo/zalo-pool.ts`. Bổ sung: khi `sendMessage` lỗi code 600/`zpw_sek` → `stopListener` + set account `disconnected_expired` để UI Settings hiện ⚠️ "Đăng nhập lại" thay vì fail âm thầm mãi.
+- Khôi phục dữ liệu: file credentials đã hỏng KHÔNG thể vá bằng code (cookie `zpw_sek` đã mất) — phải **đăng nhập QR lại** để sinh file mới hợp lệ.
+- Rule: **TUYỆT ĐỐI không re-serialize `api.getContext().cookie` ra đĩa.** File credentials chỉ ghi một lần lúc QR login và phải bất biến. Giữ phiên sống bằng re-login (`zalo.login(saved)`), không bằng cách flush jar RAM. Nỗi lo "cookie cũ bị stale sau restart" là sai — cookie QR gốc mới là thứ `zalo.login()` cần; chính việc ghi đè jar đã xoay vòng mới làm hỏng `zpw_sek`.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`. Tham chiếu pattern đúng: `D:\Dev\2.reference_pj\.Zalo-ref\ZaloCRM\backend\src\modules\zalo\zalo-pool.ts`.
+
+### 2026-06-18 - GoRouter Assertion Crash when Saving Risk Controls Dialog ('currentConfiguration.isNotEmpty' / '!_debugLocked')
+
+- Symptom: Clicking the "Lưu cài đặt rủi ro" button inside the Risk Controls dialog, or dismissing the dialog while the save operation is in progress, would crash the app. The log shows: `Failed assertion: 'currentConfiguration.isNotEmpty': You have popped the last page off of the stack, there are no pages left to show` followed by `Failed assertion: '!_debugLocked': is not true` during Navigator disposal.
+- Root cause: In `settings_screen.dart`, the `onSave` callback inside `_showRiskControlsDialog` performed `await notifier.saveSettings();` and then checked `if (mounted) { navigator.pop(); }`. However, `mounted` referred to the parent `_SettingsScreenState` (the main settings screen), which remains mounted even if the dialog has already been closed. Thus, if the dialog was closed during the save process, `navigator.pop()` was still called on the dialog's navigator context, popping the parent settings screen off the routing stack instead of the dialog.
+- Fix summary: Replaced the `if (mounted)` check with `if (context.mounted)` in the `onSave` callback. Since `context` refers to the `Consumer`'s BuildContext within the dialog, `context.mounted` correctly turns `false` if the dialog has been dismissed, preventing the double-pop/crash.
+- Rule: Always check `context.mounted` (or the dialog context's mount state) rather than the parent screen/state's `mounted` before popping dialogs after an asynchronous gap.
+- Related files: `tools/alpha-crm/lib/features/settings/presentation/screens/settings_screen.dart`
 
 ### 2026-06-17 - Tài khoản Zalo cá nhân mất kết nối ngay sau đăng nhập (duplicate 3000) + UI không báo
 

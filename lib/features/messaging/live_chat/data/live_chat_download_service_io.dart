@@ -12,10 +12,16 @@ Future<String> downloadLiveChatMedia({
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw Exception('Tải tệp thất bại: HTTP ${response.statusCode}');
   }
-  final targetDirectory = directory?.trim().isNotEmpty == true
-      ? Directory(directory!.trim())
-      : await getDownloadsDirectory() ??
-            await getApplicationDocumentsDirectory();
+  Directory targetDirectory;
+  if (directory?.trim().isNotEmpty == true) {
+    targetDirectory = Directory(directory!.trim());
+  } else {
+    final downloadsDir = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    targetDirectory = Directory(
+      '${downloadsDir.path}${Platform.pathSeparator}AlphaCRM',
+    );
+  }
   await targetDirectory.create(recursive: true);
   final safeName = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
   final file = File(
