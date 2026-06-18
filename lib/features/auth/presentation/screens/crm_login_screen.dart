@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_dialog.dart';
 import '../../models/crm_login_result.dart';
 import '../../providers/crm_auth_provider.dart';
 
@@ -40,43 +38,9 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
       return;
     }
 
-    if (result is CrmLoginDeviceConflict && mounted) {
-      final deviceName = result.device.displayName ?? 'máy tính cũ';
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AppDialog(
-          title: 'Đăng xuất máy tính cũ?',
-          icon: Icons.desktop_windows_rounded,
-          subtitle:
-              'Tài khoản đang hoạt động trên $deviceName. '
-              'Bạn có muốn đăng xuất máy cũ để dùng trên máy này không?',
-          actions: [
-            AppDialogAction(
-              text: 'Hủy',
-              variant: AppButtonVariant.outline,
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-            ),
-            AppDialogAction(
-              text: 'Đăng xuất máy cũ',
-              variant: AppButtonVariant.destructive,
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-            ),
-          ],
-          child: const SizedBox.shrink(),
-        ),
-      );
-      if (!mounted) return;
-      if (confirmed == true) {
-        final replacement = await ref
-            .read(crmAuthProvider.notifier)
-            .confirmDeviceReplacement();
-        if (replacement is CrmLoginSuccess && mounted) {
-          context.go('/dashboard');
-        }
-      } else {
-        await ref.read(crmAuthProvider.notifier).cancelPendingLogin();
-      }
-    }
+    // Trường hợp DEVICE conflict (tài khoản đang dùng máy khác) được xử lý bởi
+    // DeviceConflictGate toàn cục (hiện dialog "thay thế thiết bị cũ" inline) —
+    // không showDialog ở đây nữa để tránh trùng và để dialog hiện ổn định.
   }
 
   @override

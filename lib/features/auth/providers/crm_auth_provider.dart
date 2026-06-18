@@ -270,18 +270,15 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       if (localResult is LocalAgentConflict) {
         _pendingToken = token;
         await _tokenStore.deleteToken();
-        if (isRestoration) {
-          // Khi KHÔI PHỤC phiên không có UI nào chờ kết quả → đẩy conflict qua
-          // state để DeviceConflictGate hiện dialog "thay thế thiết bị cũ".
-          // Trước đây giá trị trả về bị bỏ qua → văng im lặng về login.
-          AppLogger().warning(
-            '[CrmAuthNotifier] KICK→CONFLICT: khôi phục phiên gặp giới hạn '
-            'thiết bị (máy khác đang active) → hiện dialog thay thế.',
-          );
-          state = CrmAuthState(pendingDeviceConflict: localResult.device);
-        } else {
-          state = const CrmAuthState();
-        }
+        // Đẩy conflict qua state để DeviceConflictGate hiện dialog "thay thế
+        // thiết bị cũ" — dùng CHO CẢ đăng nhập mới lẫn khôi phục phiên. (Trước
+        // đây fresh-login dựa vào showDialog ở màn login nhưng không hiện được;
+        // gate render inline thì hiện ổn định.)
+        AppLogger().warning(
+          '[CrmAuthNotifier] DEVICE CONFLICT (restoration=$isRestoration) → '
+          'bật pendingDeviceConflict để hiện dialog thay thế thiết bị.',
+        );
+        state = CrmAuthState(pendingDeviceConflict: localResult.device);
         return CrmLoginDeviceConflict(localResult.device);
       }
       if (localResult is LocalAgentUnavailable) {
