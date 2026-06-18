@@ -124,6 +124,13 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
+    // New behavior: does NOT log out immediately, but sets deviceRevokedReason
+    expect(notifier.state.isAuthenticated, isTrue);
+    expect(notifier.state.deviceRevokedReason, 'replaced_by_new_pc');
+    expect(tokenStore.token, 'jwt');
+
+    // Dismissing (logging out) should clear it
+    await notifier.dismissRevokedDevice();
     expect(notifier.state.isAuthenticated, isFalse);
     expect(tokenStore.token, isNull);
   });

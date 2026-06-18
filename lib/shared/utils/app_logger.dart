@@ -10,7 +10,24 @@ class AppLogger {
   factory AppLogger() => _instance;
   AppLogger._internal();
 
-  late final Logger _logger;
+  Logger? _customLogger;
+  Logger get _logger {
+    if (_customLogger == null) {
+      _customLogger = Logger(
+        filter: _AlwaysLogFilter(),
+        printer: PrettyPrinter(
+          methodCount: 0,
+          errorMethodCount: 4,
+          lineLength: 120,
+          colors: false,
+          printEmojis: true,
+          dateTimeFormat: DateTimeFormat.dateAndTime,
+        ),
+        output: ConsoleOutput(),
+      );
+    }
+    return _customLogger!;
+  }
   File? _logFile;
   bool _isInitialized = false;
 
@@ -22,7 +39,7 @@ class AppLogger {
 
     // PrettyPrinter CHỈ dùng cho console (đẹp khi debug). File ghi 1 dòng sạch
     // qua _appendCleanLine để dễ đọc, không khung viền/stack-trace.
-    _logger = Logger(
+    _customLogger = Logger(
       filter: _AlwaysLogFilter(),
       printer: PrettyPrinter(
         methodCount: 0,

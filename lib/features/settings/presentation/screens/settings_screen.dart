@@ -301,9 +301,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: AppSpacing.m),
               _ZaloIntegrationCard(
-                backendUrlController: _backendUrlController,
                 webhookPath: state.settings.zaloWebhookPath,
-                onBackendUrlChanged: notifier.updateZaloBackendBaseUrl,
               ),
               const SizedBox(height: AppSpacing.m),
               AppCard(
@@ -1107,21 +1105,32 @@ class _TimeSettingsCard extends StatelessWidget {
   }
 }
 
-class _ZaloIntegrationCard extends ConsumerWidget {
-  final TextEditingController backendUrlController;
+class _ZaloIntegrationCard extends ConsumerStatefulWidget {
   final String webhookPath;
-  final ValueChanged<String> onBackendUrlChanged;
 
   const _ZaloIntegrationCard({
-    required this.backendUrlController,
     required this.webhookPath,
-    required this.onBackendUrlChanged,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ZaloIntegrationCard> createState() =>
+      _ZaloIntegrationCardState();
+}
+
+class _ZaloIntegrationCardState extends ConsumerState<_ZaloIntegrationCard> {
+  @override
+  void initState() {
+    super.initState();
+    // Backend do supervisor tự quản lý; chỉ cần làm mới trạng thái Zalo khi mở
+    // Cài đặt (thay cho nút "Kiểm tra kết nối" đã bỏ).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(zaloIntegrationProvider.notifier).checkConnection();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final integrationState = ref.watch(zaloIntegrationProvider);
-    final integrationNotifier = ref.read(zaloIntegrationProvider.notifier);
 
     return AppCard(
       child: Column(
@@ -1136,56 +1145,22 @@ class _ZaloIntegrationCard extends ConsumerWidget {
               ),
               const SizedBox(width: AppSpacing.s),
               Text(
-                'Tích hợp Zalo Backend',
+                'Trạng thái Zalo',
                 style: AppTextStyles.sectionTitle,
               ),
               const SizedBox(width: 6),
               Tooltip(
-                message: 'Thông tin kết nối giữa ứng dụng CRM này và Zalo bridge Node.js service (cục bộ hoặc trên cloud).',
+                message: 'Tình trạng tài khoản Zalo và tiến trình lắng nghe tin nhắn. Dịch vụ nền được khởi động & giám sát tự động.',
                 child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
-              const Spacer(),
-              AppBadge(
-                label: integrationState.isConnected
-                    ? 'Đã kết nối'
-                    : 'Chưa kết nối',
-                variant: integrationState.isConnected
-                    ? AppBadgeVariant.success
-                    : AppBadgeVariant.warning,
-              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.m),
-          const AppAlert(
-            message:
-                'Flutter kết nối tới Node.js service qua HTTP. Token Zalo được lưu trữ '
-                'an toàn trên backend, không lộ ra phía client.',
-            variant: AppAlertVariant.info,
-          ),
-          const SizedBox(height: AppSpacing.m),
-          Text('Backend URL', style: AppTextStyles.label),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: backendUrlController,
-                  style: AppTextStyles.body,
-                  onChanged: onBackendUrlChanged,
-                  decoration: const InputDecoration(
-                    hintText: 'http://localhost:8787',
-                  ),
-                ),
-              ),
-            ],
-          ),
-
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
               Text('Webhook path: ', style: AppTextStyles.label),
               Text(
-                webhookPath,
+                widget.webhookPath,
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
               ),
             ],
@@ -1253,7 +1228,8 @@ class _ZaloIntegrationCard extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
                     child: Text(
-                      'Nhấn "Kiểm tra kết nối" để kiểm tra trạng thái backend.',
+                      'Chưa có tài khoản Zalo nào kết nối. Hãy kết nối Zalo ở '
+                      'màn hình tương ứng.',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.textMuted,
                       ),
@@ -1263,16 +1239,6 @@ class _ZaloIntegrationCard extends ConsumerWidget {
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.m),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppButton(
-              text: 'Kiểm tra kết nối',
-              icon: Icons.refresh,
-              isLoading: integrationState.isLoading,
-              onPressed: () => integrationNotifier.checkConnection(showLoading: true),
-            ),
-          ),
         ],
       ),
     );

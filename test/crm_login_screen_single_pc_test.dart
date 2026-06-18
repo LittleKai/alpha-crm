@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:alpha_crm/shared/widgets/device_conflict_gate.dart';
+
 class _Cloud implements CrmAuthGateway {
   @override
   Future<Map<String, dynamic>> get(String path) async {
@@ -92,7 +94,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [crmAuthProvider.overrideWith((ref) => notifier)],
-        child: const MaterialApp(home: CrmLoginScreen()),
+        child: const MaterialApp(
+          home: DeviceConflictGate(
+            child: CrmLoginScreen(),
+          ),
+        ),
       ),
     );
 
