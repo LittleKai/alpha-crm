@@ -42,6 +42,11 @@ import {
 
 export const sessionEventHub = new SessionEventHub();
 
+// Giữ SSE /local/events sống: gửi comment keepalive định kỳ để proxy/OS không
+// đóng socket idle (gây "Connection closed while receiving data" phía client).
+const sessionEventKeepAlive = setInterval(() => sessionEventHub.keepAlive(), 20000);
+sessionEventKeepAlive.unref?.();
+
 const listenerHealthMonitor = new ListenerHealthMonitor(
   getZaloStatus,
   recoverZaloListener,
@@ -98,6 +103,7 @@ setAgentRevocationHandler((reason) => sessionCoordinator.revoke(reason));
 setSyncRevocationHandler((reason) => sessionCoordinator.revoke(reason));
 
 export async function shutdownSessionRuntime(): Promise<void> {
+  clearInterval(sessionEventKeepAlive);
   stopAgentRunner();
   stopBackgroundSync();
   stopLocalChatbotRuntime();

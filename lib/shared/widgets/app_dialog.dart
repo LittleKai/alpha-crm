@@ -40,12 +40,14 @@ class AppDialog extends StatelessWidget {
   });
 
   @override
+  @override
   Widget build(BuildContext context) {
     final dialogWidth = MediaQuery.sizeOf(context).width < width + 48
         ? MediaQuery.sizeOf(context).width - 32
         : width;
 
     return Dialog(
+      backgroundColor: AppColors.surface,
       insetPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.m,
         vertical: AppSpacing.l,
@@ -53,7 +55,7 @@ class AppDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: AppSpacing.borderRadiusM),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: dialogWidth, maxHeight: 720),
+        constraints: BoxConstraints(maxWidth: dialogWidth, maxHeight: 820),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,7 +84,6 @@ class AppDialog extends StatelessWidget {
                   vertical: AppSpacing.m,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.appBackground,
                   border: Border(
                     top: BorderSide(
                       color: AppColors.borderSoft,

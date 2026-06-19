@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/chatbot_repository.dart';
 import '../data/chatbot_local_bridge_api.dart';
+import '../data/local_ai_key_store.dart';
 
 final chatbotRepositoryProvider = Provider<ChatbotRepository>((ref) {
   return ChatbotRepository();
@@ -21,18 +22,106 @@ const chatbotDefaultSystemPrompt =
 const chatbotDefaultSoul =
     'Bạn là nhân viên tư vấn Zalo của doanh nghiệp: chuyên nghiệp, gần gũi, hiểu sản phẩm/dịch vụ, không tiết lộ mình là AI, không nói về hệ thống nội bộ.';
 const chatbotDefaultResponseRules =
-    '- Trả lời bằng tiếng Việt theo ngôn ngữ của khách.\n'
+    '- Trả lời bằng tiếng Việt.\n'
     '- Không bịa thông tin ngoài kho kiến thức; nếu thiếu dữ liệu thì đề nghị chuyển nhân viên.\n'
-    '- Không gửi mật khẩu, token, cookie hoặc dữ liệu nhạy cảm.\n'
-    '- Khi cần gửi file/ảnh, chỉ nêu đúng tài liệu phù hợp trong kho kiến thức để agent Zalo gửi.';
+    '- Không gửi mật khẩu, token, cookie hoặc dữ liệu nhạy cảm.';
+
+/// AI provider configuration for the chatbot.
+class ChatbotAiProviderConfig {
+  final String id;
+  final String label;
+  final String keyHint;
+  final List<String> presetModels;
+  final String defaultModel;
+  final bool requiresApiKey;
+
+  const ChatbotAiProviderConfig({
+    required this.id,
+    required this.label,
+    this.keyHint = '',
+    required this.presetModels,
+    required this.defaultModel,
+    this.requiresApiKey = true,
+  });
+}
+
+const chatbotAiProviderConfigs = <ChatbotAiProviderConfig>[
+  ChatbotAiProviderConfig(
+    id: 'alpha_studio',
+    label: 'Alpha Studio',
+    presetModels: ['gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-3.1-pro-preview'],
+    defaultModel: 'gemini-3-flash-preview',
+    requiresApiKey: false,
+  ),
+  ChatbotAiProviderConfig(
+    id: 'gemini',
+    label: 'Google Gemini',
+    keyHint: 'AIzaSy...',
+    presetModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
+    defaultModel: 'gemini-2.5-flash',
+  ),
+  ChatbotAiProviderConfig(
+    id: 'openai',
+    label: 'OpenAI',
+    keyHint: 'sk-...',
+    presetModels: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'o4-mini', 'o3'],
+    defaultModel: 'gpt-4o-mini',
+  ),
+  ChatbotAiProviderConfig(
+    id: 'anthropic',
+    label: 'Anthropic (Claude)',
+    keyHint: 'sk-ant-...',
+    presetModels: ['claude-sonnet-4-5-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+    defaultModel: 'claude-sonnet-4-5-20250514',
+  ),
+  ChatbotAiProviderConfig(
+    id: 'deepseek',
+    label: 'DeepSeek',
+    keyHint: 'sk-...',
+    presetModels: ['deepseek-chat', 'deepseek-reasoner'],
+    defaultModel: 'deepseek-chat',
+  ),
+  ChatbotAiProviderConfig(
+    id: 'openrouter',
+    label: 'OpenRouter',
+    keyHint: 'sk-or-...',
+    presetModels: ['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-4-5'],
+    defaultModel: 'google/gemini-2.5-flash',
+  ),
+];
+
+const chatbotDefaultAiProvider = 'alpha_studio';
+
+ChatbotAiProviderConfig? findProviderConfig(String id) {
+  for (final p in chatbotAiProviderConfigs) {
+    if (p.id == id) return p;
+  }
+  return null;
+}
 
 String normalizeChatbotAiModel(String value) {
-  return chatbotAiModels.contains(value) ? value : chatbotDefaultAiModel;
+  return value.isNotEmpty ? value : chatbotDefaultAiModel;
 }
 
 int _normalizeDebounceSeconds(Object? value) {
   final parsed = int.tryParse(value?.toString() ?? '');
-  return (parsed ?? 5).clamp(2, 15);
+  return (parsed ?? 30).clamp(5, 120);
+}
+
+Map<String, List<String>> _parseAiApiKeys(Object? value) {
+  if (value is! Map) return {};
+  final result = <String, List<String>>{};
+  for (final entry in value.entries) {
+    final key = entry.key.toString();
+    if (entry.value is List) {
+      final keys = (entry.value as List)
+          .map((e) => e.toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (keys.isNotEmpty) result[key] = keys;
+    }
+  }
+  return result;
 }
 
 class ChatbotRule {
@@ -128,6 +217,7 @@ class ChatbotLogRecord {
 class ChatbotState {
   final int activeTab;
   final List<ChatbotRule> rules;
+  final String aiProvider;
   final String aiModel;
   final String systemPrompt;
   final String soulPrompt;
@@ -145,10 +235,12 @@ class ChatbotState {
   final ChatbotBridgeStatus? bridgeStatus;
   final bool isSyncingBridge;
   final String? bridgeSyncWarning;
+  final Map<String, List<String>> aiApiKeys;
 
   const ChatbotState({
     required this.activeTab,
     required this.rules,
+    required this.aiProvider,
     required this.aiModel,
     required this.systemPrompt,
     required this.soulPrompt,
@@ -166,18 +258,20 @@ class ChatbotState {
     this.bridgeStatus,
     this.isSyncingBridge = false,
     this.bridgeSyncWarning,
+    this.aiApiKeys = const {},
   });
 
   factory ChatbotState.initial() {
     return const ChatbotState(
       activeTab: 0,
       rules: [],
+      aiProvider: chatbotDefaultAiProvider,
       aiModel: chatbotDefaultAiModel,
       systemPrompt: chatbotDefaultSystemPrompt,
       soulPrompt: chatbotDefaultSoul,
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
-      debounceSeconds: 5,
+      debounceSeconds: 30,
       aiEnabled: false,
       personalAudience: 'all',
       groupAudience: 'tagOnly',
@@ -195,6 +289,7 @@ class ChatbotState {
   ChatbotState copyWith({
     int? activeTab,
     List<ChatbotRule>? rules,
+    String? aiProvider,
     String? aiModel,
     String? systemPrompt,
     String? soulPrompt,
@@ -212,10 +307,12 @@ class ChatbotState {
     ChatbotBridgeStatus? bridgeStatus,
     bool? isSyncingBridge,
     String? bridgeSyncWarning,
+    Map<String, List<String>>? aiApiKeys,
   }) {
     return ChatbotState(
       activeTab: activeTab ?? this.activeTab,
       rules: rules ?? this.rules,
+      aiProvider: aiProvider ?? this.aiProvider,
       aiModel: aiModel ?? this.aiModel,
       systemPrompt: systemPrompt ?? this.systemPrompt,
       soulPrompt: soulPrompt ?? this.soulPrompt,
@@ -233,6 +330,7 @@ class ChatbotState {
       bridgeStatus: bridgeStatus ?? this.bridgeStatus,
       isSyncingBridge: isSyncingBridge ?? this.isSyncingBridge,
       bridgeSyncWarning: bridgeSyncWarning,
+      aiApiKeys: aiApiKeys ?? this.aiApiKeys,
     );
   }
 }
@@ -308,6 +406,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           )
         : <String>[];
     state = state.copyWith(
+      aiProvider: (json['aiProvider'] ?? state.aiProvider).toString(),
       aiModel: normalizeChatbotAiModel(
         (json['aiModel'] ?? state.aiModel).toString(),
       ),
@@ -326,6 +425,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       groupAudience: (json['groupAudience'] ?? state.groupAudience).toString(),
       selectedGroupKeys: selectedGroupKeys,
       knowledgeDocuments: snippets,
+      aiApiKeys: await LocalAiKeyStore.loadKeys(),
     );
   }
 
@@ -466,6 +566,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   }) {
     return {
       'aiEnabled': aiEnabled ?? state.aiEnabled,
+      'aiProvider': state.aiProvider,
       'aiModel': aiModel ?? state.aiModel,
       'systemPrompt': systemPrompt ?? state.systemPrompt,
       'soulPrompt': soulPrompt ?? state.soulPrompt,
@@ -480,6 +581,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   }
 
   Future<void> updateAiConfig({
+    required String provider,
     required String model,
     required String prompt,
     required String soulPrompt,
@@ -488,6 +590,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     required int debounceSeconds,
   }) async {
     state = state.copyWith(
+      aiProvider: provider,
       aiModel: normalizeChatbotAiModel(model),
       systemPrompt: prompt,
       soulPrompt: soulPrompt,
@@ -510,6 +613,13 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     state = state.copyWith(aiEnabled: enabled);
     final response = await _repository.saveSettings(_settingsPayload());
     if (response['success'] == true) await syncBridgeNow();
+  }
+
+  Future<void> updateAiApiKeys(Map<String, List<String>> keys) async {
+    state = state.copyWith(aiApiKeys: keys);
+    await LocalAiKeyStore.saveKeys(keys);
+    // Keys stay local, no need to send settings payload to cloud for keys.
+    await syncBridgeNow();
   }
 
   Future<void> updateAudienceConfig({

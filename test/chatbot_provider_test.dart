@@ -78,7 +78,7 @@ void main() {
       normalizeChatbotAiModel('gemini-3.1-pro-preview'),
       'gemini-3.1-pro-preview',
     );
-    expect(normalizeChatbotAiModel('gcli-default'), chatbotDefaultAiModel);
+    expect(normalizeChatbotAiModel('gcli-default'), 'gcli-default');
   });
 
   test(
@@ -105,6 +105,7 @@ void main() {
     expect(notifier.state.debounceSeconds, 8);
 
     await notifier.updateAiConfig(
+      provider: chatbotDefaultAiProvider,
       model: chatbotDefaultAiModel,
       prompt: chatbotDefaultSystemPrompt,
       soulPrompt: chatbotDefaultSoul,

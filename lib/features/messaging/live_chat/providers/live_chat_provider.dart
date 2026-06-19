@@ -7,6 +7,7 @@ import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/models/crm_customer.dart';
 import '../../../../shared/utils/image_helper.dart';
 import '../../../../shared/utils/desktop_notifier.dart';
+import '../../../../shared/utils/string_helper.dart';
 import '../../../../shared/local_db/local_db_maintenance.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../data/live_chat_repository.dart';
@@ -136,9 +137,9 @@ class ChatMessage {
     return ChatMessage(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       senderId: (json['senderId'] ?? '').toString(),
-      senderName: (json['senderName'] ?? '').toString(),
+      senderName: (json['senderName'] ?? '').toString().toWellFormed(),
       senderAvatarUrl: json['senderAvatarUrl']?.toString(),
-      message: _stringFrom(json, const ['content', 'text', 'message', 'body']),
+      message: _stringFrom(json, const ['content', 'text', 'message', 'body']).toWellFormed(),
       direction: (json['direction'] ?? 'inbound').toString(),
       status: (json['status'] ?? '').toString(),
       // Pick the first NON-EMPTY timestamp. Inbound rows store sentAt as '' (an
@@ -153,7 +154,7 @@ class ChatMessage {
       isDeleted: json['isDeleted'] == true,
       zaloMsgId: (json['zaloMsgId'] ?? json['providerMessageId'])?.toString(),
       clientMessageId: json['clientMessageId']?.toString(),
-      errorText: (json['errorText'] ?? json['error'] ?? '').toString(),
+      errorText: (json['errorText'] ?? json['error'] ?? '').toString().toWellFormed(),
       quote: _mapFromJsonField(json['quote'] ?? json['quoteJson']),
       reactions: _mapListFromJsonField(json['reactions']),
       receipts: _mapListFromJsonField(json['receipts']),
@@ -268,7 +269,7 @@ class Conversation {
       accountId: (json['accountId'] ?? '').toString(),
       threadId: (json['threadId'] ?? '').toString(),
       threadType: (json['threadType'] ?? 'user').toString(),
-      customerName: name,
+      customerName: name.toWellFormed(),
       customerAvatar: sanitizeImageUrl(
         _stringFrom(json, const [
           'avatarUrl',
@@ -292,11 +293,11 @@ class Conversation {
         direction: json['lastMessage'] is Map
             ? (json['lastMessage'] as Map)['direction']?.toString()
             : null,
-      ),
+      ).toWellFormed(),
       lastMessageTime: _dateFrom(json['lastMessageAt'] ?? json['updatedAt']),
       unreadCount: int.tryParse((json['unreadCount'] ?? 0).toString()) ?? 0,
-      tag: tags.isEmpty ? '' : tags.first.toString(),
-      notes: (json['notes'] ?? '').toString(),
+      tag: tags.isEmpty ? '' : tags.first.toString().toWellFormed(),
+      notes: (json['notes'] ?? '').toString().toWellFormed(),
       chatbotEnabled: json['chatbotEnabled'] != false,
       chatbotPausedUntil: _pausedUntilFrom(json['chatbotPausedUntil']),
       messages: const [],

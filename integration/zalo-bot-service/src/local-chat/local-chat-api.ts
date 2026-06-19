@@ -22,7 +22,7 @@ import {
   getChatbotStore,
   pauseChatbotForOperatorReply,
 } from '../chatbot/index.js';
-import { isChatbotPaused } from '../chatbot/chatbot-store.js';
+import { ChatbotStore, isChatbotPaused } from '../chatbot/chatbot-store.js';
 import {
   listKnowledgeFileIds,
   saveKnowledgeFile,
@@ -430,6 +430,16 @@ async function handlePutAccountChatSettings(
   }, req);
 }
 
+// Conversation chatbot-state (mode/pause/toggle) lives in the local DB and must
+// work even when the full chatbot runtime is stopped (e.g. the Zalo account is
+// logged out). Fall back to a transient store over the same DB.
+function resolveChatbotStore(): ChatbotStore | null {
+  const running = getChatbotStore();
+  if (running) return running;
+  const localStore = getLocalChatStore();
+  return localStore ? new ChatbotStore(localStore.db) : null;
+}
+
 async function handleLocalConversationChatbot(
   method: string,
   conversationKey: string,
@@ -438,7 +448,7 @@ async function handleLocalConversationChatbot(
   json: JsonFn,
   readBody: ReadBodyFn,
 ): Promise<void> {
-  const store = getChatbotStore();
+  const store = resolveChatbotStore();
   const localStore = getLocalChatStore();
   if (!store || !localStore) {
     json(res, 503, {
@@ -525,7 +535,7 @@ function applyOperatorTakeover(
 
 function publishConversationChatbotState(conversationKey: string): void {
   const parsed = parseConversationKey(conversationKey);
-  const state = getChatbotStore()?.getConversationState(conversationKey);
+  const state = resolveChatbotStore()?.getConversationState(conversationKey);
   if (!parsed || !state) return;
   localChatEvents.publish({
     type: 'conversation.chatbot_state',
@@ -838,7 +848,7 @@ function handleLocalConversationList(
 
   const result = store.listConversations({ accountId, search, limit, offset });
 
-  const chatbotStore = getChatbotStore();
+  const chatbotStore = resolveChatbotStore();
   const enriched = result.conversations.map((conv) => {
     const threadType: 'user' | 'group' =
       conv.threadType === 'group' ? 'group' : 'user';

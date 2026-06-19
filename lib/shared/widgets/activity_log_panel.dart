@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_text_styles.dart';
+import '../utils/string_helper.dart';
 
 class LogItem {
   final String timestamp;
   final String message;
   final LogType type;
 
-  const LogItem({
+  LogItem({
     required this.timestamp,
-    required this.message,
+    required String message,
     this.type = LogType.info,
-  });
+  }) : message = message.toWellFormed();
 }
 
 enum LogType { info, success, warning, error }

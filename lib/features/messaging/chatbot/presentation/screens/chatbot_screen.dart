@@ -75,6 +75,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       _playgroundResponse = null;
     });
 
+    final aiApiKeys = ref.read(chatbotProvider).aiApiKeys;
+
     final response = await CrmCloudApi.post('/crm/chatbot/test', {
       'message': msg,
       'aiModel': _selectedModel,
@@ -82,6 +84,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       'soulPrompt': _soulController.text,
       'responseRules': _rulesController.text,
       'temperature': _tempValue,
+      'aiApiKeys': aiApiKeys,
     });
 
     setState(() {
@@ -92,6 +95,14 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       setState(() {
         _playgroundResponse = response['data']['text']?.toString();
       });
+
+      if (response['data']['usage'] != null) {
+        final usage = response['data']['usage'];
+        final promptTokens = usage['promptTokens'] ?? usage['prompt_tokens'] ?? 0;
+        final completionTokens = usage['completionTokens'] ?? usage['completion_tokens'] ?? 0;
+        print('🧮 [AI TOKENS] Input: $promptTokens | Output: $completionTokens | Total: ${promptTokens + completionTokens}');
+      }
+
       ref.read(crmAuthProvider.notifier).refreshSubscription();
     } else {
       setState(() {
@@ -1179,25 +1190,31 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     ChatbotState state,
     ChatbotNotifier notifier,
   ) async {
-    final modelController = ValueNotifier<String>(
-      normalizeChatbotAiModel(state.aiModel),
-    );
+    var selectedProvider = state.aiProvider;
+    var providerConfig = findProviderConfig(selectedProvider) ?? chatbotAiProviderConfigs.first;
+    final modelTextController = TextEditingController(text: state.aiModel);
     final promptController = TextEditingController(text: state.systemPrompt);
     final soulController = TextEditingController(text: state.soulPrompt);
     final rulesController = TextEditingController(text: state.responseRules);
     var temperature = state.temperature;
     var debounceSeconds = state.debounceSeconds;
+    final dialogApiKeys = <String, List<String>>{
+      for (final e in state.aiApiKeys.entries) e.key: List<String>.from(e.value),
+    };
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final needsKey = providerConfig.requiresApiKey;
+            final providerKeys = dialogApiKeys[selectedProvider] ?? [];
+            final hasKeys = providerKeys.any((k) => k.trim().isNotEmpty);
+
             return AppDialog(
               title: 'Cài đặt AI Chatbot',
-              subtitle:
-                  'Backend giữ key GCLI và gọi model; agent Zalo trên máy người dùng vẫn là nơi gửi tin, file và ảnh thật cho khách.',
-              icon: Icons.settings_outlined,
+              subtitle: 'Chọn nhà cung cấp AI, model và tùy chỉnh prompt cho chatbot tự động.',
+              icon: Icons.psychology_outlined,
               width: 720,
               actions: [
                 AppDialogAction(
@@ -1209,11 +1226,18 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   text: 'Lưu cài đặt',
                   icon: Icons.save_outlined,
                   onPressed: () {
-                    final selectedModel = modelController.value;
+                    final selectedModel = modelTextController.text.trim();
                     final messenger = ScaffoldMessenger.of(context);
                     final navigator = Navigator.of(dialogContext);
+                    final cleanedKeys = <String, List<String>>{
+                      for (final e in dialogApiKeys.entries)
+                        if (e.value.any((k) => k.trim().isNotEmpty))
+                          e.key: e.value.where((k) => k.trim().isNotEmpty).toList(),
+                    };
+                    notifier.updateAiApiKeys(cleanedKeys);
                     notifier
                         .updateAiConfig(
+                          provider: selectedProvider,
                           model: selectedModel,
                           prompt: promptController.text.trim(),
                           soulPrompt: soulController.text.trim(),
@@ -1246,136 +1270,365 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Mô hình ngôn ngữ AI sử dụng',
-                    style: AppTextStyles.label,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  ValueListenableBuilder<String>(
-                    valueListenable: modelController,
-                    builder: (context, selectedModel, _) {
-                      return AppSelectField<String>(
-                        value: selectedModel,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'gemini-3-flash-preview',
-                            child: Text(
-                              'gemini-3-flash-preview (1 quota/lượt)',
+                  // ── Provider + Model row ──
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Nhà cung cấp AI', style: AppTextStyles.label),
+                            const SizedBox(height: AppSpacing.xs),
+                            AppSelectField<String>(
+                              value: selectedProvider,
+                              items: chatbotAiProviderConfigs.map((p) {
+                                return DropdownMenuItem(
+                                  value: p.id,
+                                  child: Text(p.label),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                final newConfig = findProviderConfig(value);
+                                if (newConfig == null) return;
+                                setDialogState(() {
+                                  selectedProvider = value;
+                                  providerConfig = newConfig;
+                                  modelTextController.text = newConfig.defaultModel;
+                                });
+                              },
                             ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'gemini-2.5-pro',
-                            child: Text('gemini-2.5-pro (1 quota/lượt)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'gemini-3.1-pro-preview',
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        flex: 7,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text('Model', style: AppTextStyles.label),
+                                const SizedBox(width: AppSpacing.xs),
+                                Tooltip(
+                                  message: 'Chọn từ danh sách hoặc nhập model code tùy ý',
+                                  child: Icon(Icons.info_outline, size: 14, color: AppColors.textMuted),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: modelTextController,
+                                    style: AppTextStyles.body.copyWith(fontSize: 13),
+                                    decoration: InputDecoration(
+                                      hintText: providerConfig.defaultModel,
+                                      hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.expand_more, size: 22),
+                                  tooltip: 'Chọn model có sẵn',
+                                  onSelected: (model) {
+                                    setDialogState(() {
+                                      modelTextController.text = model;
+                                    });
+                                  },
+                                  itemBuilder: (_) => providerConfig.presetModels
+                                      .map((m) => PopupMenuItem(
+                                            value: m,
+                                            child: Text(m, style: AppTextStyles.body.copyWith(fontSize: 13)),
+                                          ))
+                                      .toList(),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  // ── Info / Warning for provider ──
+                  if (selectedProvider == 'alpha_studio') ...[
+                    const SizedBox(height: AppSpacing.s),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySoft,
+                        borderRadius: AppSpacing.borderRadiusS,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_outlined, size: 16, color: AppColors.primary),
+                          const SizedBox(width: AppSpacing.s),
+                          Expanded(
                             child: Text(
-                              'gemini-3.1-pro-preview (2 quota/lượt)',
+                              'Sử dụng quota GCLI từ gói đăng ký Alpha Studio. Không cần API key.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.primary),
                             ),
                           ),
                         ],
-                        onChanged: (value) {
-                          if (value != null) modelController.value = value;
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text('Prompt mặc định', style: AppTextStyles.label),
-                  const SizedBox(height: AppSpacing.xs),
-                  TextField(
-                    controller: promptController,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      hintText: 'Chỉ định cách chatbot phản hồi khách hàng...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text('Soul / đối tượng nhập vai', style: AppTextStyles.label),
-                  const SizedBox(height: AppSpacing.xs),
-                  TextField(
-                    controller: soulController,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'VD: Bạn là nhân viên tư vấn Zalo chuyên nghiệp, gần gũi...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text('Rule ví dụ bắt buộc', style: AppTextStyles.label),
-                  const SizedBox(height: AppSpacing.xs),
-                  TextField(
-                    controller: rulesController,
-                    minLines: 5,
-                    maxLines: 8,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'VD: Không bịa thông tin, không lặp lời chào, thiếu dữ liệu thì chuyển nhân viên...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Độ sáng tạo (Temperature): ${temperature.toStringAsFixed(1)}',
-                        style: AppTextStyles.label,
                       ),
-                      Text(
-                        temperature < 0.4
-                            ? 'Chính xác/Nhất quán'
-                            : temperature > 0.8
-                            ? 'Sáng tạo/Linh hoạt'
-                            : 'Cân bằng',
-                        style: AppTextStyles.caption.copyWith(
-                          fontWeight: FontWeight.w700,
+                    ),
+                  ] else if (needsKey && !hasKeys) ...[
+                    const SizedBox(height: AppSpacing.s),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      decoration: BoxDecoration(
+                        color: AppColors.warningSoft,
+                        borderRadius: AppSpacing.borderRadiusS,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warningText),
+                          const SizedBox(width: AppSpacing.s),
+                          Expanded(
+                            child: Text(
+                              'Cần ít nhất 1 API key cho ${providerConfig.label}. Thêm key ở phần bên dưới.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.warningText),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.l),
+                  // ── Collapsible: Prompt Configuration ──
+                  _buildCollapsibleSection(
+                    title: 'Cấu hình Prompt',
+                    icon: Icons.edit_note_outlined,
+                    initiallyExpanded: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Prompt mặc định', style: AppTextStyles.label),
+                        const SizedBox(height: AppSpacing.xs),
+                        TextField(
+                          controller: promptController,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            hintText: 'Chỉ định cách chatbot phản hồi khách hàng...',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: temperature,
-                    min: 0.1,
-                    max: 1.0,
-                    divisions: 9,
-                    activeColor: AppColors.primary,
-                    onChanged: (value) {
-                      setDialogState(() {
-                        temperature = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Chờ khách nhập thêm: $debounceSeconds giây',
-                        style: AppTextStyles.label,
-                      ),
-                      Text(
-                        'Tối đa 12 giây',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
+                        const SizedBox(height: AppSpacing.m),
+                        Text('Soul / đối tượng nhập vai', style: AppTextStyles.label),
+                        const SizedBox(height: AppSpacing.xs),
+                        TextField(
+                          controller: soulController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            hintText: 'VD: Bạn là nhân viên tư vấn Zalo chuyên nghiệp, gần gũi...',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: AppSpacing.m),
+                        Text('Rule ví dụ bắt buộc', style: AppTextStyles.label),
+                        const SizedBox(height: AppSpacing.xs),
+                        TextField(
+                          controller: rulesController,
+                          minLines: 4,
+                          maxLines: 6,
+                          decoration: const InputDecoration(
+                            hintText: 'VD: Không bịa thông tin, không lặp lời chào...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  Slider(
-                    value: debounceSeconds.toDouble(),
-                    min: 2,
-                    max: 15,
-                    divisions: 13,
-                    activeColor: AppColors.primary,
-                    label: '$debounceSeconds giây',
-                    onChanged: (value) {
-                      setDialogState(() {
-                        debounceSeconds = value.round();
-                      });
-                    },
+                  const SizedBox(height: AppSpacing.s),
+                  // ── Collapsible: Settings (Temperature + Debounce) ──
+                  _buildCollapsibleSection(
+                    title: 'Cài đặt nâng cao',
+                    icon: Icons.tune_outlined,
+                    initiallyExpanded: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Độ sáng tạo (Temperature): ${temperature.toStringAsFixed(1)}',
+                              style: AppTextStyles.label,
+                            ),
+                            Text(
+                              temperature < 0.4
+                                  ? 'Chính xác'
+                                  : temperature > 0.8
+                                  ? 'Sáng tạo'
+                                  : 'Cân bằng',
+                              style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        Slider(
+                          value: temperature,
+                          min: 0.1,
+                          max: 1.0,
+                          divisions: 9,
+                          activeColor: AppColors.primary,
+                          onChanged: (value) {
+                            setDialogState(() => temperature = value);
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.s),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Chờ khách nhập thêm: $debounceSeconds giây',
+                              style: AppTextStyles.label,
+                            ),
+                            Text(
+                              debounceSeconds >= 60
+                                  ? '${(debounceSeconds / 60).toStringAsFixed(1)} phút'
+                                  : '$debounceSeconds giây',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                        Slider(
+                          value: debounceSeconds.toDouble(),
+                          min: 5,
+                          max: 120,
+                          divisions: 23,
+                          activeColor: AppColors.primary,
+                          label: '$debounceSeconds giây',
+                          onChanged: (value) {
+                            setDialogState(() => debounceSeconds = value.round());
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  // ── Collapsible: API Keys ──
+                  _buildCollapsibleSection(
+                    title: 'API Keys',
+                    icon: Icons.vpn_key_outlined,
+                    subtitle: 'Nhập key riêng cho các nhà cung cấp — hệ thống xoay vòng ngẫu nhiên',
+                    initiallyExpanded: needsKey && !hasKeys,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: chatbotAiProviderConfigs
+                          .where((p) => p.requiresApiKey)
+                          .map((provider) {
+                        final keys = dialogApiKeys[provider.id] ?? [];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.m),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(provider.label, style: AppTextStyles.bodyMedium),
+                                  const SizedBox(width: AppSpacing.s),
+                                  if (keys.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.successSoft,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${keys.length} key',
+                                        style: AppTextStyles.caption.copyWith(
+                                          color: AppColors.successText,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  const Spacer(),
+                                  SizedBox(
+                                    height: 28,
+                                    child: TextButton.icon(
+                                      icon: const Icon(Icons.add, size: 16),
+                                      label: const Text('Thêm key'),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        textStyle: AppTextStyles.caption,
+                                      ),
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          dialogApiKeys[provider.id] = [...keys, ''];
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              ...keys.asMap().entries.map((entry) {
+                                final idx = entry.key;
+                                final keyValue = entry.value;
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: AppSpacing.xs),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '#${idx + 1}',
+                                        style: AppTextStyles.caption.copyWith(
+                                          color: AppColors.textMuted,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.s),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: TextEditingController(text: keyValue),
+                                          style: AppTextStyles.body.copyWith(fontSize: 13),
+                                          obscureText: true,
+                                          decoration: InputDecoration(
+                                            hintText: provider.keyHint,
+                                            hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                          onChanged: (v) {
+                                            dialogApiKeys[provider.id]![idx] = v.trim();
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      SizedBox(
+                                        width: 28,
+                                        height: 28,
+                                        child: IconButton(
+                                          padding: EdgeInsets.zero,
+                                          iconSize: 16,
+                                          icon: const Icon(Icons.close, color: AppColors.error),
+                                          tooltip: 'Xóa key',
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              dialogApiKeys[provider.id]!.removeAt(idx);
+                                              if (dialogApiKeys[provider.id]!.isEmpty) {
+                                                dialogApiKeys.remove(provider.id);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),
@@ -1385,10 +1638,39 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       },
     );
 
-    modelController.dispose();
+    modelTextController.dispose();
     promptController.dispose();
     soulController.dispose();
     rulesController.dispose();
+  }
+
+  Widget _buildCollapsibleSection({
+    required String title,
+    required IconData icon,
+    String? subtitle,
+    bool initiallyExpanded = false,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+        childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.m, 0, AppSpacing.m, AppSpacing.m),
+        initiallyExpanded: initiallyExpanded,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Icon(icon, size: 18, color: AppColors.primary),
+        title: Text(title, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+        subtitle: subtitle != null
+            ? Text(subtitle, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary))
+            : null,
+        children: [child],
+      ),
+    );
   }
 
   Widget _buildAudienceTargeting(ChatbotState state, ChatbotNotifier notifier) {

@@ -151,6 +151,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   final CrmTokenStore _tokenStore;
   final bool _isWindows;
   StreamSubscription<LocalAgentSessionEvent>? _eventSubscription;
+  bool _eventsReconnectScheduled = false;
   String? _pendingToken;
 
   CrmAuthNotifier({
@@ -440,13 +441,37 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         AppLogger().warning(
           '[CrmAuthNotifier] Stream SSE /local/events lỗi/đứt: $error',
         );
+        _scheduleEventReconnect();
       },
       onDone: () {
         AppLogger().warning(
           '[CrmAuthNotifier] Stream SSE /local/events đã đóng.',
         );
+        _scheduleEventReconnect();
       },
     );
+  }
+
+  // SSE đứt do socket idle / backend restart → mở lại sau 3s. Không reconnect
+  // khi đã logout (token null) hoặc đang ở trạng thái bị thu hồi (chờ user xử lý).
+  // ponytail: retry cố định 3s; chỉ thêm backoff/jitter nếu backend flap thật.
+  void _scheduleEventReconnect() {
+    if (_eventsReconnectScheduled) {
+      return;
+    }
+    if (!mounted || state.token == null || state.deviceRevokedReason != null) {
+      return;
+    }
+    _eventsReconnectScheduled = true;
+    unawaited(_eventSubscription?.cancel());
+    _eventSubscription = null;
+    Future.delayed(const Duration(seconds: 3), () {
+      _eventsReconnectScheduled = false;
+      if (!mounted || state.token == null || state.deviceRevokedReason != null) {
+        return;
+      }
+      _subscribeToLocalEvents();
+    });
   }
 
   Future<void> _handleRevocation(LocalSessionRevoked event) async {

@@ -760,11 +760,15 @@ class _ConversationPanel extends ConsumerWidget {
     final zaloState = ref.watch(zaloIntegrationProvider);
     final matchingAccount = zaloState.accounts.firstWhere(
       (a) => a.id == conversation.accountId,
+      // Fail-safe: if the conversation's account is no longer in the connected
+      // list (logged out / session expired / removed), treat it as disconnected
+      // so the composer is blocked instead of silently failing on send.
       orElse: () => ZaloConnectedAccount(
         id: conversation.accountId,
         label: conversation.accountId,
-        connected: true,
+        connected: false,
         listenerRunning: false,
+        status: 'disconnected_expired',
       ),
     );
     final accountLabel = matchingAccount.label.replaceAll(

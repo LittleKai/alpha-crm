@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'app_logger.dart';
 import 'windows_job_object.dart';
+import 'string_helper.dart';
 
 enum _BackendPortOwnerKind { free, alphaCrmBackend, other }
 
@@ -295,13 +296,13 @@ class ZaloBackendManager {
       // 5. Lắng nghe output backend để tiện debug. Decode UTF-8 (allowMalformed)
       //    thay vì String.fromCharCodes — nếu không tiếng Việt sẽ bị mã hoá lỗi.
       _backendProcess!.stdout.listen((data) {
-        final line = utf8.decode(data, allowMalformed: true).trim();
+        final line = utf8.decode(data, allowMalformed: true).trim().toWellFormed();
         if (line.isEmpty) return;
         debugPrint("ZaloBot-Log: $line");
         AppLogger().info("ZaloBot: $line");
       });
       _backendProcess!.stderr.listen((data) {
-        final line = utf8.decode(data, allowMalformed: true).trim();
+        final line = utf8.decode(data, allowMalformed: true).trim().toWellFormed();
         if (line.isEmpty) return;
         debugPrint("ZaloBot-Error-Log: $line");
         AppLogger().error("ZaloBot stderr: $line");
