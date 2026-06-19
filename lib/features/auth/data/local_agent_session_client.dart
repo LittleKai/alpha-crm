@@ -9,6 +9,18 @@ import 'package:http/http.dart' as http;
 import '../../../shared/utils/app_logger.dart';
 import '../models/crm_login_result.dart';
 
+/// Lỗi kết nối tới local agent (127.0.0.1:8787) lúc backend đang boot/restart:
+/// refused (errno 1225), header/stream bị cắt giữa chừng. Đây là noise tạm thời,
+/// retry sẽ tự lành → log mức info thay vì warning (warning còn POST về backend).
+bool isTransientLocalAgentError(Object error) {
+  final text = error.toString();
+  return text.contains('SocketException') ||
+      text.contains('Connection closed') ||
+      text.contains('Connection refused') ||
+      text.contains('before full header') ||
+      text.contains('1225');
+}
+
 abstract interface class LocalAgentSessionGateway {
   Future<LocalAgentSyncResult> sync({
     required String token,
@@ -100,7 +112,12 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
         body['message']?.toString() ?? 'Local CRM agent rejected the session.',
       );
     } catch (error) {
-      AppLogger().warning('[LocalAgentSync] sync ngoại lệ: $error');
+      final msg = '[LocalAgentSync] sync ngoại lệ: $error';
+      if (isTransientLocalAgentError(error)) {
+        AppLogger().info(msg);
+      } else {
+        AppLogger().warning(msg);
+      }
       return LocalAgentUnavailable(error.toString());
     }
   }

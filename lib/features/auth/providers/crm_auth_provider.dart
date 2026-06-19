@@ -438,13 +438,17 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         }
       },
       onError: (Object error, StackTrace stackTrace) {
-        AppLogger().warning(
-          '[CrmAuthNotifier] Stream SSE /local/events lỗi/đứt: $error',
-        );
+        final msg = '[CrmAuthNotifier] Stream SSE /local/events lỗi/đứt: $error';
+        if (isTransientLocalAgentError(error)) {
+          AppLogger().info(msg);
+        } else {
+          AppLogger().warning(msg);
+        }
         _scheduleEventReconnect();
       },
       onDone: () {
-        AppLogger().warning(
+        // Đóng stream là một phần của vòng reconnect bình thường → info.
+        AppLogger().info(
           '[CrmAuthNotifier] Stream SSE /local/events đã đóng.',
         );
         _scheduleEventReconnect();

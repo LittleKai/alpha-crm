@@ -321,3 +321,4 @@ testWidgets('App shell and routing smoke test', (WidgetTester tester) async {
 ---
 
 **Note:** These conventions are derived from the current codebase. When in doubt, follow the nearest similar file.
+
