@@ -19,6 +19,10 @@ await build({
   platform: 'node',
   format: 'cjs',
   target: 'node20',
+  // Mangle/compress the shipped bundle so the public ZIP does not expose readable
+  // source logic. The release script smoke-tests /health after staging, so a
+  // minify-induced break aborts the release instead of shipping silently.
+  minify: true,
   external,
   // config.js derives projectRoot from import.meta.url. In a CJS bundle import.meta
   // is empty, so shim it to the bundle's own path — keeps active-port.json landing in

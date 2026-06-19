@@ -157,7 +157,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     state = state.copyWith(status: UpdateStatus.installing);
 
-    final success = await AppUpdateService.installUpdate(filePath);
+    final success = await AppUpdateService.installUpdate(
+      filePath,
+      targetVersion: state.latestRelease?.version,
+    );
     if (!success) {
       state = state.copyWith(
         status: UpdateStatus.error,
@@ -190,3 +193,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
   (ref) => UpdateNotifier(),
 );
+
+/// Kết quả kiểm tra "sau khi khởi động lại từ một lần cập nhật" — được main.dart
+/// nạp lúc startup qua [AppUpdateService.checkPostUpdateResult]. [UpdateResultGate]
+/// theo dõi provider này để báo cập nhật thành công hoặc yêu cầu tải lại bản mới.
+final postUpdateResultProvider = StateProvider<PostUpdateResult?>((ref) => null);

@@ -32,12 +32,13 @@ export class ChatbotStore {
     this.db
       .prepare(
         `INSERT INTO chatbot_conversation_state
-         (conversation_key, mode, reason, inherited, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+         (conversation_key, mode, reason, inherited, paused_until, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(conversation_key) DO UPDATE SET
            mode = excluded.mode,
            reason = excluded.reason,
            inherited = excluded.inherited,
+           paused_until = excluded.paused_until,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -45,6 +46,7 @@ export class ChatbotStore {
         state.mode,
         state.reason,
         state.inherited ? 1 : 0,
+        state.pausedUntil ?? null,
         this.now(),
       );
   }
@@ -54,12 +56,12 @@ export class ChatbotStore {
   ): ChatbotConversationState | undefined {
     const row = this.db
       .prepare(
-        `SELECT mode, reason, inherited
+        `SELECT mode, reason, inherited, paused_until
          FROM chatbot_conversation_state
          WHERE conversation_key = ?`,
       )
       .get(conversationKey) as
-      | { mode: string; reason: string | null; inherited: number }
+      | { mode: string; reason: string | null; inherited: number; paused_until: number | null }
       | undefined;
     if (!row) return undefined;
 
@@ -67,6 +69,7 @@ export class ChatbotStore {
       mode: row.mode,
       reason: row.reason,
       inherited: row.inherited === 1,
+      pausedUntil: row.paused_until ?? null,
     };
     validateConversationState(state);
     return state;
@@ -114,6 +117,7 @@ export class ChatbotStore {
     chatbotEnabled: boolean;
     chatbotMode: ChatbotConversationMode | null;
     chatbotReason: string | null;
+    chatbotPausedUntil: number | null;
   } {
     const explicit = this.getConversationState(conversationKey);
     const snapshot = this.getConfigSnapshot();
@@ -125,6 +129,7 @@ export class ChatbotStore {
       chatbotEnabled: effective?.mode === 'enabled',
       chatbotMode: (effective?.mode ?? null) as ChatbotConversationMode | null,
       chatbotReason: effective?.reason ?? null,
+      chatbotPausedUntil: effective?.pausedUntil ?? null,
     };
   }
 
@@ -274,9 +279,22 @@ function validateConversationState(
   if (!isRecord(value)
       || !conversationModes.has(value.mode as ChatbotConversationMode)
       || (value.reason !== null && typeof value.reason !== 'string')
-      || typeof value.inherited !== 'boolean') {
+      || typeof value.inherited !== 'boolean'
+      || (value.pausedUntil != null && typeof value.pausedUntil !== 'number')) {
     throw new Error('Invalid chatbot conversation state');
   }
+}
+
+/**
+ * True when the conversation is temporarily paused by a human operator reply
+ * (cooldown not yet elapsed). `mode` is unaffected — this is orthogonal to the
+ * permanent enabled/disabled/handoff switch.
+ */
+export function isChatbotPaused(
+  state: ChatbotConversationState | undefined,
+  now: number = Date.now(),
+): boolean {
+  return !!(state?.pausedUntil && now < state.pausedUntil);
 }
 
 function validateConfigSnapshot(

@@ -22,6 +22,14 @@ describe('LocalChatStore', () => {
   beforeEach(() => setup());
   afterEach(() => teardown());
 
+  it('operator-pause cooldown defaults to 10 and clamps to 5..120', () => {
+    assert.equal(store.getOperatorPauseCooldownMinutes(), 10); // default
+    assert.equal(store.setOperatorPauseCooldownMinutes(30), 30);
+    assert.equal(store.getOperatorPauseCooldownMinutes(), 30);
+    assert.equal(store.setOperatorPauseCooldownMinutes(1), 5); // below min
+    assert.equal(store.setOperatorPauseCooldownMinutes(999), 120); // above max
+  });
+
   // -------------------------------------------------------------------------
   // Inbound upsert creates conversation and message
   // -------------------------------------------------------------------------

@@ -27,6 +27,7 @@ class LiveChatSettingsDialog extends ConsumerStatefulWidget {
 class _LiveChatSettingsDialogState
     extends ConsumerState<LiveChatSettingsDialog> {
   Map<String, bool> _aiAutoReply = const {};
+  int _pauseCooldownMinutes = 10;
   bool _loading = true;
 
   @override
@@ -36,13 +37,23 @@ class _LiveChatSettingsDialogState
   }
 
   Future<void> _load() async {
-    final settings =
-        await ref.read(liveChatProvider.notifier).getAccountAiAutoReply();
+    final notifier = ref.read(liveChatProvider.notifier);
+    final settings = await notifier.getAccountAiAutoReply();
+    final cooldown = await notifier.getOperatorPauseCooldownMinutes();
     if (!mounted) return;
     setState(() {
       _aiAutoReply = settings;
+      _pauseCooldownMinutes = cooldown;
       _loading = false;
     });
+  }
+
+  Future<void> _saveCooldown(int minutes) async {
+    final saved = await ref
+        .read(liveChatProvider.notifier)
+        .setOperatorPauseCooldownMinutes(minutes);
+    if (!mounted) return;
+    setState(() => _pauseCooldownMinutes = saved);
   }
 
   // Accounts without an explicit setting default to ON.
@@ -160,6 +171,49 @@ class _LiveChatSettingsDialogState
                   onChanged: (v) => _toggle(account.id, v),
                 );
               }),
+            const Divider(height: AppSpacing.l),
+            Text(
+              'Tạm nghỉ khi người trực trả lời',
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Khi bạn (hoặc bạn trả lời từ điện thoại) nhắn trong một hội thoại, '
+              'AI tạm nghỉ ở hội thoại đó. Sau khoảng thời gian này mà không có '
+              'tin tay nào nữa, AI tự bật lại.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.s),
+            if (!_loading)
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _pauseCooldownMinutes
+                          .clamp(5, 120)
+                          .toDouble(),
+                      min: 5,
+                      max: 120,
+                      divisions: 23,
+                      label: '$_pauseCooldownMinutes phút',
+                      onChanged: (v) =>
+                          setState(() => _pauseCooldownMinutes = v.round()),
+                      onChangeEnd: (v) => _saveCooldown(v.round()),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  SizedBox(
+                    width: 64,
+                    child: Text(
+                      '$_pauseCooldownMinutes phút',
+                      textAlign: TextAlign.end,
+                      style: AppTextStyles.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

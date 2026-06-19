@@ -20,7 +20,9 @@ import type { LocalMessage } from './local-chat-types.js';
 import {
   getChatbotConfigSync,
   getChatbotStore,
+  pauseChatbotForOperatorReply,
 } from '../chatbot/index.js';
+import { isChatbotPaused } from '../chatbot/chatbot-store.js';
 import {
   listKnowledgeFileIds,
   saveKnowledgeFile,
@@ -112,6 +114,50 @@ export function handleLocalRoute(
       json,
       readBody,
     );
+    return true;
+  }
+
+  // GET /local/settings  → global app settings (operator-pause cooldown)
+  if (method === 'GET' && url === '/local/settings') {
+    const ls = getLocalChatStore();
+    json(res, 200, {
+      success: true,
+      data: {
+        operatorPauseCooldownMinutes:
+          ls?.getOperatorPauseCooldownMinutes() ?? 10,
+      },
+    }, req);
+    return true;
+  }
+  // PUT /local/settings  → { operatorPauseCooldownMinutes: number }
+  if (method === 'PUT' && url === '/local/settings') {
+    void (async () => {
+      const ls = getLocalChatStore();
+      if (!ls) {
+        json(res, 503, { success: false, error: 'Local store unavailable.' }, req);
+        return;
+      }
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(await readBody(req)) as Record<string, unknown>;
+      } catch {
+        json(res, 400, { success: false, error: 'Invalid JSON body.' }, req);
+        return;
+      }
+      const minutes = Number(payload.operatorPauseCooldownMinutes);
+      if (!Number.isFinite(minutes)) {
+        json(res, 400, {
+          success: false,
+          error: 'operatorPauseCooldownMinutes (number) is required.',
+        }, req);
+        return;
+      }
+      const saved = ls.setOperatorPauseCooldownMinutes(minutes);
+      json(res, 200, {
+        success: true,
+        data: { operatorPauseCooldownMinutes: saved },
+      }, req);
+    })();
     return true;
   }
 
@@ -459,7 +505,9 @@ async function handleLocalConversationChatbot(
       mode: effective?.mode ?? 'disabled_by_operator',
       reason: effective?.reason ?? 'audience_not_eligible',
       inherited: effective?.inherited ?? true,
-      effectiveEnabled: effective?.mode === 'enabled',
+      pausedUntil: effective?.pausedUntil ?? null,
+      effectiveEnabled:
+        effective?.mode === 'enabled' && !isChatbotPaused(effective),
     },
   }, req);
 }
@@ -469,16 +517,10 @@ function applyOperatorTakeover(
   threadId: string,
   origin: unknown,
 ): void {
-  if (!accountId || !threadId || origin === 'chatbot') return;
-  const store = getChatbotStore();
-  if (!store) return;
-  const key = `${accountId}:${threadId}`;
-  store.setConversationState(key, {
-    mode: 'disabled_by_operator',
-    reason: 'manual_operator_reply',
-    inherited: false,
-  });
-  publishConversationChatbotState(key);
+  // A successful CRM send by a human → temporarily pause the bot (cooldown).
+  // The bot's own sends (origin 'chatbot') must never pause it.
+  if (origin === 'chatbot') return;
+  pauseChatbotForOperatorReply(accountId, threadId);
 }
 
 function publishConversationChatbotState(conversationKey: string): void {
@@ -492,7 +534,8 @@ function publishConversationChatbotState(conversationKey: string): void {
     data: {
       conversationKey,
       ...state,
-      effectiveEnabled: state.mode === 'enabled',
+      // Effectively active only when enabled AND not in an operator-pause window.
+      effectiveEnabled: state.mode === 'enabled' && !isChatbotPaused(state),
     },
   });
 }
@@ -804,12 +847,18 @@ function handleLocalConversationList(
           `${conv.accountId}:${conv.threadId}`,
           threadType,
         )
-      : { chatbotEnabled: false, chatbotMode: null, chatbotReason: null };
+      : {
+          chatbotEnabled: false,
+          chatbotMode: null,
+          chatbotReason: null,
+          chatbotPausedUntil: null,
+        };
     return {
       ...conv,
       chatbotEnabled: resolved.chatbotEnabled,
       chatbotMode: resolved.chatbotMode,
       chatbotReason: resolved.chatbotReason,
+      chatbotPausedUntil: resolved.chatbotPausedUntil,
     };
   });
 

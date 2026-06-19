@@ -114,6 +114,50 @@ export function handleChatbotInbound(
   runtime?.handlePersistedInbound(event, { managedGroup });
 }
 
+/**
+ * A human operator replied (from the CRM or their phone) — pause the bot for this
+ * conversation for the configured cooldown. `mode` stays 'enabled'; only a temporary
+ * `pausedUntil` is set, so the bot auto-resumes once the operator goes quiet. A
+ * permanent OFF (`disabled_by_operator`) or an active `handoff` is left untouched.
+ */
+export function pauseChatbotForOperatorReply(
+  accountId: string,
+  threadId: string,
+): void {
+  const store = chatbotStore;
+  const localStore = getLocalChatStore();
+  if (!store || !localStore || !accountId || !threadId) return;
+  const key = `${accountId}:${threadId}`;
+  const current = store.getConversationState(key);
+  if (
+    current
+    && (current.mode === 'disabled_by_operator' || current.mode === 'handoff')
+  ) {
+    return;
+  }
+  const pausedUntil =
+    Date.now() + localStore.getOperatorPauseCooldownMinutes() * 60 * 1000;
+  store.setConversationState(key, {
+    mode: 'enabled',
+    reason: 'manual_operator_reply',
+    inherited: false,
+    pausedUntil,
+  });
+  localChatEvents.publish({
+    type: 'conversation.chatbot_state',
+    accountId,
+    threadId,
+    data: {
+      conversationKey: key,
+      mode: 'enabled',
+      reason: 'manual_operator_reply',
+      inherited: false,
+      pausedUntil,
+      effectiveEnabled: false,
+    },
+  });
+}
+
 export function getLocalChatbotRuntime(): LocalChatbotRuntime | null {
   return runtime;
 }

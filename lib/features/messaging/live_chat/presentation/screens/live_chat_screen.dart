@@ -57,12 +57,16 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
   String? _lastSelectedConversationId;
   int _lastMessageCount = 0;
   Timer? _pollingTimer;
+  // Lightweight rebuild so the AI status icon flips from "paused" back to
+  // "active" when the operator-pause cooldown elapses (no backend event fires).
+  Timer? _statusTicker;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
+    _startStatusTicker();
     Future.microtask(() {
       if (mounted) {
         ref.read(zaloIntegrationProvider.notifier).checkConnection();
@@ -85,6 +89,17 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
     }
   }
 
+  void _startStatusTicker() {
+    _statusTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      final selected = ref.read(liveChatProvider).selectedConversation;
+      // Only rebuild while a pause is pending — flips the icon at expiry.
+      if (selected != null && selected.chatbotPausedUntil != null) {
+        setState(() {});
+      }
+    });
+  }
+
   void _startPolling() {
     _pollingTimer = Timer.periodic(const Duration(seconds: 12), (timer) {
       if (mounted) {
@@ -104,6 +119,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
+    _statusTicker?.cancel();
     _messageController.dispose();
     _searchController.dispose();
     _tagController.dispose();
@@ -791,11 +807,20 @@ class _ConversationPanel extends ConsumerWidget {
                 ),
                 Row(
                   children: [
-                    Text('Bot', style: AppTextStyles.caption),
+                    if (conversation.chatbotEnabled) ...[
+                      _AiStatusIcon(
+                        paused: conversation.chatbotPaused,
+                        pausedUntil: conversation.chatbotPausedUntil,
+                        onResumeNow: () =>
+                            notifier.resumeChatbotNow(),
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                    ],
                     Switch(
                       value: conversation.chatbotEnabled,
                       onChanged: notifier.toggleChatbot,
                     ),
+                    Text('Bot', style: AppTextStyles.caption),
                     const SizedBox(width: AppSpacing.s),
                     IconButton(
                       tooltip: 'Tìm trong tin nhắn',
@@ -3646,6 +3671,62 @@ class _GalleryVideoItemState extends State<_GalleryVideoItem> {
       child: AspectRatio(
         aspectRatio: 16 / 9,
         child: Video(controller: _controller, controls: AdaptiveVideoControls),
+      ),
+    );
+  }
+}
+
+String _formatResumeTime(DateTime time) {
+  final local = time.toLocal();
+  final h = local.hour.toString().padLeft(2, '0');
+  final m = local.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+/// AI status indicator in the chat header. Bright = active; dimmed = paused
+/// because a human just replied. Double-clicking the dimmed icon resumes the bot
+/// immediately without waiting out the cooldown.
+class _AiStatusIcon extends StatelessWidget {
+  final bool paused;
+  final DateTime? pausedUntil;
+  final VoidCallback onResumeNow;
+
+  const _AiStatusIcon({
+    required this.paused,
+    required this.pausedUntil,
+    required this.onResumeNow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = paused ? AppColors.textMuted : AppColors.primary;
+    final badge = Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: paused ? AppColors.surfaceMuted : AppColors.primarySoft,
+        border: Border.all(
+          color: paused ? AppColors.borderSoft : AppColors.primary,
+          width: 1.5,
+        ),
+      ),
+      child: Icon(Icons.smart_toy, size: 16, color: accent),
+    );
+    if (!paused) {
+      return Tooltip(message: 'AI đang hoạt động', child: badge);
+    }
+    final resume = pausedUntil != null
+        ? ' Tự bật lại lúc ${_formatResumeTime(pausedUntil!)}.'
+        : '';
+    return Tooltip(
+      message: 'AI tạm nghỉ vì bạn vừa trả lời.$resume\n'
+          'Nhấp đúp để bật lại ngay.',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onDoubleTap: onResumeNow,
+          child: badge,
+        ),
       ),
     );
   }

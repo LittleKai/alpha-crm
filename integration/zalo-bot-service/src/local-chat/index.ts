@@ -5,7 +5,7 @@
  */
 
 import { resolve } from 'path';
-import { config, projectRoot } from '../config.js';
+import { config, projectRoot, dataRoot } from '../config.js';
 import { LocalChatStore } from './local-chat-store.js';
 import {
   setAuxiliaryEventHandler,
@@ -29,7 +29,7 @@ export function getLocalChatStore(): LocalChatStore | null {
     _store = new LocalChatStore(dbPath);
     _mediaWorker = new LocalChatMediaWorker(
       _store,
-      resolve(projectRoot, '.data', 'local-chat-media'),
+      resolve(dataRoot, 'local-chat-media'),
     );
     _mediaWorker.start();
     console.log(`[local-chat] Initialized SQLite store at ${dbPath}`);

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { projectRoot } from '../config.js';
+import { dataRoot } from '../config.js';
 
 export interface N8nIntegrationSettings {
   enabled: boolean;
@@ -35,7 +35,7 @@ const defaultSettings: IntegrationSettings = {
 };
 
 export function integrationSettingsPath(): string {
-  return resolve(projectRoot, '.data/integrations/settings.json');
+  return resolve(dataRoot, 'integrations/settings.json');
 }
 
 export function readIntegrationSettings(

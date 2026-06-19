@@ -11,12 +11,11 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { config } from './config.js';
+import { config, dataRoot, projectRoot } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
 import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
 import { existsSync, createReadStream, writeFileSync, unlinkSync, readFileSync, mkdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
-import { projectRoot } from './config.js';
 import { LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance, createZaloClient } from './channels/personal-zca-channel.js';
@@ -36,6 +35,8 @@ import {
 } from './local-session/session-runtime.js';
 
 const VERSION = '0.2.0';
+const SERVICE_ID = 'alpha-crm-zalo-bot-service';
+let activePort = config.localBindPort;
 
 if (!['127.0.0.1', 'localhost', '::1'].includes(config.localBindHost)) {
   throw new Error('LOCAL_BIND_HOST must be a loopback address.');
@@ -165,7 +166,13 @@ const server = createServer(async (req, res) => {
     const zaloStatus = getZaloStatus();
     json(res, 200, {
       status: 'ok',
+      service: SERVICE_ID,
       version: VERSION,
+      pid: process.pid,
+      projectRoot,
+      dataRoot,
+      bindHost: config.localBindHost,
+      bindPort: activePort,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       agent: {
@@ -500,7 +507,7 @@ const server = createServer(async (req, res) => {
             }
           } catch {}
 
-          await addAccountInstance(uId, apiInstance);
+          await addAccountInstance(uId, apiInstance, targetPath);
 
           const session = pendingSessions.get(sessionId);
           if (session) {
@@ -1050,6 +1057,7 @@ const server = createServer(async (req, res) => {
 
 function listenOnPort(port: number): void {
   server.listen(port, config.localBindHost, async () => {
+    activePort = port;
     console.log(`
 ╔══════════════════════════════════════════════╗
 ║  Alpha CRM — Zalo Bot Service v${VERSION}       ║
@@ -1068,7 +1076,14 @@ function listenOnPort(port: number): void {
       if (!existsSync(dataDir)) {
         mkdirSync(dataDir, { recursive: true });
       }
-      writeFileSync(join(dataDir, 'active-port.json'), JSON.stringify({ port }));
+      writeFileSync(join(dataDir, 'active-port.json'), JSON.stringify({
+        service: SERVICE_ID,
+        port,
+        pid: process.pid,
+        projectRoot,
+        dataRoot,
+        startedAt: new Date().toISOString(),
+      }, null, 2));
       console.log(`[server] Wrote active port ${port} to .data/active-port.json`);
     } catch (writeErr) {
       console.error('[server] Failed to write active-port.json:', writeErr);
@@ -1079,9 +1094,8 @@ function listenOnPort(port: number): void {
 
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
-      console.log(`[server] Port ${port} is in use, trying next port ${port + 1}...`);
-      server.removeAllListeners('error');
-      listenOnPort(port + 1);
+      console.error(`[server] Port ${port} is already in use. Refusing to auto-fallback; the Flutter supervisor must select the backend port.`);
+      process.exit(1);
     } else {
       console.error('[server] Server error:', err);
     }

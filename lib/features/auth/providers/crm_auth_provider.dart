@@ -80,6 +80,7 @@ class CrmAuthState {
   final String? token;
   final CrmUserState? user;
   final String? subscriptionStatus;
+  final String? subscriptionPlan;
   final int includedAiRemaining;
   final int extraAiRemaining;
   final int creditBalance;
@@ -101,6 +102,7 @@ class CrmAuthState {
     this.token,
     this.user,
     this.subscriptionStatus,
+    this.subscriptionPlan,
     this.includedAiRemaining = 0,
     this.extraAiRemaining = 0,
     this.creditBalance = 0,
@@ -115,6 +117,7 @@ class CrmAuthState {
     String? token,
     CrmUserState? user,
     String? subscriptionStatus,
+    String? subscriptionPlan,
     int? includedAiRemaining,
     int? extraAiRemaining,
     int? creditBalance,
@@ -128,6 +131,7 @@ class CrmAuthState {
       token: token ?? this.token,
       user: user ?? this.user,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       includedAiRemaining: includedAiRemaining ?? this.includedAiRemaining,
       extraAiRemaining: extraAiRemaining ?? this.extraAiRemaining,
       creditBalance: creditBalance ?? this.creditBalance,
@@ -136,6 +140,9 @@ class CrmAuthState {
       pendingDeviceConflict: pendingDeviceConflict,
     );
   }
+
+  bool get isTrialSubscription =>
+      subscriptionPlan == 'crm_trial' || subscriptionPlan == 'trial';
 }
 
 class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
@@ -317,6 +324,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       token: token,
       user: profile.user,
       subscriptionStatus: profile.subscriptionStatus,
+      subscriptionPlan: profile.subscriptionPlan,
       includedAiRemaining: profile.includedAiRemaining,
       extraAiRemaining: profile.extraAiRemaining,
       creditBalance: profile.creditBalance,
@@ -337,10 +345,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         return;
       }
       try {
-        final result = await _localAgent.sync(
-          token: token,
-          userId: userId,
-        );
+        final result = await _localAgent.sync(token: token, userId: userId);
         if (result is LocalAgentActive) {
           debugPrint(
             '[CrmAuthNotifier] Local agent đồng bộ thành công (lần $attempt).',
@@ -380,14 +385,18 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
     final subResult = await _cloudApi.get('/crm/subscription/me');
     var subscriptionStatus = 'none';
+    String? subscriptionPlan;
     if (subResult['success'] == true && subResult['data'] is Map) {
       final data = subResult['data'] as Map;
       final subscription = data['subscription'];
-      subscriptionStatus = subscription is Map
-          ? subscription['status']?.toString() ?? 'none'
-          : data['active'] == true
-          ? 'active'
-          : 'none';
+      if (subscription is Map) {
+        subscriptionStatus = subscription['status']?.toString() ?? 'none';
+        subscriptionPlan =
+            subscription['plan']?.toString() ??
+            subscription['entitlementType']?.toString();
+      } else {
+        subscriptionStatus = data['active'] == true ? 'active' : 'none';
+      }
     }
 
     final quotaResult = await _cloudApi.get('/crm/quota');
@@ -406,6 +415,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     return _CloudProfile(
       user: user,
       subscriptionStatus: subscriptionStatus,
+      subscriptionPlan: subscriptionPlan,
       includedAiRemaining: includedRemaining,
       extraAiRemaining: extraRemaining,
       creditBalance: creditBalance,
@@ -417,7 +427,9 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       return;
     }
     unawaited(_eventSubscription?.cancel());
-    AppLogger().info('[CrmAuthNotifier] Mở stream SSE /local/events để nhận thu hồi.');
+    AppLogger().info(
+      '[CrmAuthNotifier] Mở stream SSE /local/events để nhận thu hồi.',
+    );
     _eventSubscription = _localAgent.events().listen(
       (event) {
         if (event is LocalSessionRevoked) {
@@ -430,7 +442,9 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
         );
       },
       onDone: () {
-        AppLogger().warning('[CrmAuthNotifier] Stream SSE /local/events đã đóng.');
+        AppLogger().warning(
+          '[CrmAuthNotifier] Stream SSE /local/events đã đóng.',
+        );
       },
     );
   }
@@ -457,9 +471,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     final token = state.token ?? _pendingToken;
     if (token == null) {
       await logout();
-      return const CrmLoginFailure(
-        'Phiên đã hết hạn, vui lòng đăng nhập lại.',
-      );
+      return const CrmLoginFailure('Phiên đã hết hạn, vui lòng đăng nhập lại.');
     }
     return _authenticateToken(token, forceReplace: true);
   }
@@ -500,6 +512,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       token: state.token,
       user: profile.user,
       subscriptionStatus: profile.subscriptionStatus,
+      subscriptionPlan: profile.subscriptionPlan,
       includedAiRemaining: profile.includedAiRemaining,
       extraAiRemaining: profile.extraAiRemaining,
       creditBalance: profile.creditBalance,
@@ -516,6 +529,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 class _CloudProfile {
   final CrmUserState user;
   final String subscriptionStatus;
+  final String? subscriptionPlan;
   final int includedAiRemaining;
   final int extraAiRemaining;
   final int creditBalance;
@@ -523,6 +537,7 @@ class _CloudProfile {
   const _CloudProfile({
     required this.user,
     required this.subscriptionStatus,
+    required this.subscriptionPlan,
     required this.includedAiRemaining,
     required this.extraAiRemaining,
     required this.creditBalance,

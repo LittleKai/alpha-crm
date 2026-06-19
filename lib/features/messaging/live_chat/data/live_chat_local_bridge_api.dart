@@ -263,6 +263,18 @@ class LiveChatLocalBridgeApi {
     );
   }
 
+  /// Global app settings (currently: operator-pause cooldown in minutes).
+  Future<Map<String, dynamic>> getAppSettings() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/local/settings'))
+        .timeout(const Duration(seconds: 5));
+    return _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> setOperatorPauseCooldownMinutes(int minutes) {
+    return _put('/local/settings', {'operatorPauseCooldownMinutes': minutes});
+  }
+
   Future<Map<String, dynamic>> retryMessage(String messageId) {
     return _post('/local/messages/$messageId/retry', const {});
   }

@@ -6,13 +6,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { extname, resolve } from 'node:path';
-import { projectRoot } from '../config.js';
+import { dataRoot } from '../config.js';
 
 // Knowledge files attached to the auto-chatbot live ONLY on the operator's
 // machine (the same machine that owns the Zalo session). The cloud stores just
 // name/type/description + this content-hash id. Files are sent straight from
 // here — no download, no B2.
-const KNOWLEDGE_DIR = resolve(projectRoot, '.data/chatbot-knowledge');
+const KNOWLEDGE_DIR = resolve(dataRoot, 'chatbot-knowledge');
 
 function ensureDir(): void {
   if (!existsSync(KNOWLEDGE_DIR)) {

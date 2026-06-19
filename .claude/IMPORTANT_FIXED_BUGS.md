@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-18 +07:00
+**Last Updated:** 2026-06-19 +07:00
 
 ---
 
@@ -28,6 +28,28 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-19 - Microsecond clientMessageId pinned Date.now() and evicted the live `zpw_sek` cookie
+
+- Symptom: every personal-Zalo send failed with `ZaloApiError ... zpw_sek bị thiếu hoặc không đúng` (code 600), immediately — even right after a fresh QR rescan — then the account was marked `disconnected_expired`. Looked like a dead/expired session but the on-disk credentials were fine.
+- Root cause: Flutter sent `clientMessageId = 'flutter_<microsecondsSinceEpoch>'`. The backend's `createZaloClientMessageId` extracts the 16-digit run and `runWithFixedDateNow` overrides the **global `Date.now()`** with it for the whole zca-js send. Microseconds are ~1000× a ms timestamp, so `Date.now()` jumped ~50,000 years into the future. zca-js builds the request `Cookie` header via tough-cookie's `getCookieString()`, which checks expiry against `Date.now()` → `zpw_sek` was treated as expired, dropped from the request and **evicted from the in-RAM jar** → Zalo returns code 600. Re-scanning re-seeded the jar, but the next send evicted it again → endless loop.
+- Fix summary: (1) Flutter `live_chat_provider.dart` now uses `millisecondsSinceEpoch` for `clientMessageId` (3 send sites). (2) Backend `runWithFixedDateNow` only pins `Date.now()` when the id is within ±10 min of the real clock (`DATE_NOW_PIN_TOLERANCE_MS`); any implausible value is ignored and the real clock is kept. Regression test `runWithFixedDateNow pins Date.now only for a plausible current ms timestamp`.
+- Rule: NEVER override the global `Date.now()` with a value that is not a real current-ms timestamp while a zca-js call is in flight — tough-cookie expiry runs on `Date.now()` and will silently drop `zpw_sek`. Keep client message ids in milliseconds. This false-positive `zpw_sek` is distinct from genuine session revocation (websocket 3000/3003) and from on-disk cookie corruption (see memory `zca-cookie-persistence`).
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/providers/live_chat_provider.dart`, `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `.../personal-zca-channel.test.ts`.
+
+### 2026-06-19 - Local Zalo backend must not silently run on multiple ports
+
+- Symptom: an orphan or stale Alpha CRM Zalo backend could keep one port while a newer backend silently started on a different port. Flutter could also accept any `GET /health` response with `status: ok`, so it could reuse the wrong service or keep talking to a stale backend session after QR re-login.
+- Fix summary: `server.ts` now identifies itself via `/health` and `.data/active-port.json` with `service: alpha-crm-zalo-bot-service`, `pid`, `projectRoot`, and `dataRoot`, and refuses Node-side auto fallback on `EADDRINUSE`. `ZaloBackendManager` owns the port policy: prefer 8787, kill only a verified Alpha CRM Zalo backend holding a candidate port, and try the next port only when the owner is another app. Debug/manual active-port discovery now also requires the backend identity.
+- Rule: never treat plain `status: ok` as proof that a local service is the Alpha CRM Zalo backend. Port cleanup must be identity-based; do not blind kill a port, and do not let the Node backend recursively choose random ports behind Flutter's back.
+- Related files: `tools/alpha-crm/lib/shared/utils/zalo_backend_manager.dart`, `tools/alpha-crm/integration/zalo-bot-service/src/server.ts`, `tools/alpha-crm/test/zalo_backend_manager_port_policy_test.dart`.
+
+### 2026-06-19 - Failed personal-Zalo credentials must not be hidden by generic pool errors
+
+- Symptom: corrupted/revoked `credentials_<uid>.json` files were recorded in `failedAccounts`, but after credential scanning `loginError` could be reset to `null`; send flows then returned the generic `No active connected Zalo accounts in the pool.` instead of the actionable `zpw_sek` / login rejection reason.
+- Fix summary: preserve the failed credential reason when all saved credentials fail to load, and make `PersonalZcaChannel.sendMessage()` prefer the matching `failedAccounts` reason when the pool is empty or the requested account failed to load. A successful QR re-login clears stale failed state for that account and stores the exact credential path on the new live instance.
+- Rule: if `loadCredentialsFile()` rejects a saved QR session, keep that reason visible to account status and send flows. Do not mask it with generic pool-empty errors. When QR re-login succeeds for the same `uId`, clear `failedAccounts`/`loginError` for that account immediately; otherwise stale code-600 state can leak into the new session. A corrupted credential file still requires fresh QR login; code cannot recreate a missing `zpw_sek`.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.test.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/server.ts`.
 
 ### 2026-06-18 - Mọi lệnh gửi tin Zalo cá nhân fail `zpw_sek bị thiếu hoặc không đúng` (code 600) do ghi đè cookie jar sống ra đĩa
 

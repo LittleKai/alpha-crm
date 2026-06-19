@@ -97,6 +97,21 @@ class ReleaseAsset {
   }
 }
 
+/// Kết quả kiểm tra sau khi khởi động lại từ một lần cập nhật.
+enum PostUpdateOutcome { none, success, failed }
+
+class PostUpdateResult {
+  final PostUpdateOutcome outcome;
+  final String targetVersion;
+  final String currentVersion;
+
+  const PostUpdateResult(
+    this.outcome, {
+    this.targetVersion = '',
+    this.currentVersion = '',
+  });
+}
+
 /// Service kiểm tra và tải bản cập nhật từ Backblaze B2.
 class AppUpdateService {
   static const String _b2VersionUrl =
@@ -208,13 +223,16 @@ class AppUpdateService {
   /// Cài đặt bản cập nhật đã tải.
   /// - Windows: mở file .exe / .msix bằng shell
   /// - Android: mở file .apk bằng intent
-  static Future<bool> installUpdate(String filePath) async {
+  ///
+  /// [targetVersion] (Windows zip): phiên bản đích — được ghi vào file mốc trước
+  /// khi thoát để lần khởi động sau app tự kiểm tra update đã áp dụng chưa.
+  static Future<bool> installUpdate(String filePath, {String? targetVersion}) async {
     try {
       if (Platform.isWindows) {
         if (filePath.toLowerCase().endsWith('.zip')) {
           // ZIP releases are portable bundles, so apply them with a helper
           // script after this running process exits.
-          return _installWindowsZipUpdate(filePath);
+          return _installWindowsZipUpdate(filePath, targetVersion);
         } else {
           // Mở file .exe hoặc .msix trực tiếp
           await Process.start(filePath, [], mode: ProcessStartMode.detached);
@@ -231,10 +249,23 @@ class AppUpdateService {
     }
   }
 
-  static Future<bool> _installWindowsZipUpdate(String zipPath) async {
+  static Future<bool> _installWindowsZipUpdate(String zipPath, [String? targetVersion]) async {
     final executableFile = File(Platform.resolvedExecutable);
     final appDir = executableFile.parent.path;
     final executableName = executableFile.uri.pathSegments.last;
+
+    // Ghi mốc "đang chờ cập nhật" cạnh exe TRƯỚC khi thoát. Lần khởi động sau,
+    // app đọc mốc này để biết update đã áp dụng thành công chưa (xem
+    // [checkPostUpdateResult]). Đặt cạnh exe để không phụ thuộc tên exe/ProductName.
+    if (targetVersion != null && targetVersion.trim().isNotEmpty) {
+      try {
+        await File('$appDir${Platform.pathSeparator}.update_pending')
+            .writeAsString(targetVersion.trim(), flush: true);
+      } catch (e) {
+        debugPrint('[AppUpdateService] Could not write update marker: $e');
+      }
+    }
+
     final tempDir = await getTemporaryDirectory();
     final updateRoot = Directory(
       '${tempDir.path}${Platform.pathSeparator}alpha_crm_update_${DateTime.now().millisecondsSinceEpoch}',
@@ -256,10 +287,12 @@ class AppUpdateService {
     await File(scriptPath).writeAsString(script, flush: true);
 
     ZaloBackendManager.stopBackend();
+    // Mở cửa sổ updater có tiêu đề (hiện tiến trình giải nén/copy) — cửa sổ tự
+    // đóng khi script kết thúc (cả nhánh thành công lẫn lỗi).
     await Process.start('cmd.exe', [
       '/c',
       'start',
-      '',
+      'Alpha CRM',
       scriptPath,
     ], mode: ProcessStartMode.detached);
 
@@ -276,20 +309,28 @@ class AppUpdateService {
   }) {
     return '''
 @echo off
+rem Bat UTF-8 de echo tieng Viet co dau hien dung (file .cmd duoc ghi bang UTF-8).
+chcp 65001 >nul
 setlocal
+title Alpha CRM - Đang cập nhật
 set "ZIP=$zipPath"
 set "APP_DIR=$appDir"
 set "EXE=$executableName"
 set "STAGE=$stagingDir"
 set "LOG=$logPath"
 
+echo ===============================================
+echo   Alpha CRM - Đang cập nhật phiên bản mới
+echo ===============================================
+echo.
 echo [%date% %time%] Alpha CRM update started > "%LOG%"
-timeout /t 3 /nobreak >nul
+echo Chờ ứng dụng đóng... & timeout /t 3 /nobreak >nul
 
 if exist "%STAGE%" rmdir /s /q "%STAGE%" >> "%LOG%" 2>&1
 mkdir "%STAGE%" >> "%LOG%" 2>&1
 if %ERRORLEVEL% GEQ 1 goto error
 
+echo Đang giải nén bản cập nhật...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath \$env:ZIP -DestinationPath \$env:STAGE -Force" >> "%LOG%" 2>&1
 if %ERRORLEVEL% GEQ 1 goto error
 
@@ -307,19 +348,64 @@ if not defined SRC (
 )
 if not defined SRC goto error
 
+echo Đang cập nhật các file ứng dụng...
 echo [%date% %time%] Copying from "%SRC%" to "%APP_DIR%" >> "%LOG%"
 robocopy "%SRC%" "%APP_DIR%" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >> "%LOG%" 2>&1
 if %ERRORLEVEL% GEQ 8 goto error
 
+echo Hoàn tất! Đang khởi động lại ứng dụng...
 echo [%date% %time%] Restarting "%APP_DIR%\\%EXE%" >> "%LOG%"
 start "" "%APP_DIR%\\%EXE%"
 exit /b 0
 
 :error
+echo Cập nhật KHÔNG hoàn tất. Đang mở lại ứng dụng để báo lỗi...
 echo [%date% %time%] Update failed. ZIP="%ZIP%" APP_DIR="%APP_DIR%" STAGE="%STAGE%" >> "%LOG%"
-start "" explorer.exe "%APP_DIR%"
+rem Khoi dong lai app (ban cu van con) de no doc moc va bao user tai lai ban moi.
+if exist "%APP_DIR%\\%EXE%" (
+  start "" "%APP_DIR%\\%EXE%"
+) else (
+  start "" explorer.exe "%APP_DIR%"
+)
 exit /b 1
 ''';
+  }
+
+  /// Kiểm tra (lúc khởi động) xem lần cập nhật trước đã áp dụng thành công chưa.
+  /// Đọc file mốc `.update_pending` cạnh exe (do [_installWindowsZipUpdate] ghi):
+  /// - không có mốc → [PostUpdateOutcome.none]
+  /// - phiên bản hiện tại ĐÃ >= phiên bản đích → [PostUpdateOutcome.success]
+  /// - phiên bản hiện tại VẪN cũ hơn đích → [PostUpdateOutcome.failed]
+  ///   (vd update không áp dụng được do đổi tên exe / robocopy lỗi).
+  /// Mốc luôn được xóa sau khi đọc để không lặp lại.
+  static Future<PostUpdateResult> checkPostUpdateResult() async {
+    if (!Platform.isWindows) return const PostUpdateResult(PostUpdateOutcome.none);
+    try {
+      final appDir = File(Platform.resolvedExecutable).parent.path;
+      final marker = File('$appDir${Platform.pathSeparator}.update_pending');
+      if (!await marker.exists()) {
+        return const PostUpdateResult(PostUpdateOutcome.none);
+      }
+
+      final target = (await marker.readAsString()).trim();
+      final current = await getCurrentVersion();
+      try {
+        await marker.delete();
+      } catch (_) {/* không sao nếu không xóa được */}
+
+      if (target.isEmpty) return const PostUpdateResult(PostUpdateOutcome.none);
+
+      // target còn mới hơn current → update CHƯA áp dụng → thất bại.
+      final failed = isNewerVersion(target, current);
+      return PostUpdateResult(
+        failed ? PostUpdateOutcome.failed : PostUpdateOutcome.success,
+        targetVersion: target,
+        currentVersion: current,
+      );
+    } catch (e) {
+      debugPrint('[AppUpdateService] checkPostUpdateResult error: $e');
+      return const PostUpdateResult(PostUpdateOutcome.none);
+    }
   }
 
   /// Mở trang releases trên trình duyệt.

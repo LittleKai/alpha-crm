@@ -1,6 +1,7 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, cpSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir, platform } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -8,7 +9,8 @@ const __dirname = dirname(__filename);
 /**
  * projectRoot resolves to integration/zalo-bot-service/ regardless of
  * whether the caller lives in dist/ or dist/channels/.
- * All relative paths (credentials, QR, .env) resolve from here.
+ * The `.env` file and RUNTIME/ephemeral files (active-port.json, logs,
+ * temp-sends) resolve from here.
  */
 export const projectRoot = resolve(__dirname, '..');
 
@@ -80,6 +82,57 @@ function loadEnv(): void {
 
 loadEnv();
 
+/**
+ * dataRoot: nơi lưu DỮ LIỆU BỀN VỮNG (credentials Zalo, định danh thiết bị, DB
+ * chat, media hội thoại, knowledge) ở vị trí ổn định theo từng MÁY — độc lập với
+ * vị trí cài đặt — để không mất khi cập nhật / di chuyển thư mục / chuyển giữa
+ * bản dev và bản đóng gói.
+ *
+ * Windows: %LOCALAPPDATA%\\AlphaCRM\\zalo-bot-service (Local, KHÔNG roam — định
+ * danh thiết bị phải gắn với từng máy). Có thể override bằng ALPHA_CRM_DATA_DIR.
+ *
+ * Lưu ý: active-port.json, logs, temp-sends là file runtime/ephemeral nên vẫn
+ * nằm ở projectRoot/.data và KHÔNG dùng dataRoot.
+ */
+function resolveDataRoot(): string {
+  const override = process.env['ALPHA_CRM_DATA_DIR'];
+  if (override && override.trim()) return resolve(override.trim());
+  if (platform() === 'win32') {
+    const base = process.env['LOCALAPPDATA'] || process.env['APPDATA'];
+    if (base) return resolve(base, 'AlphaCRM', 'zalo-bot-service');
+  }
+  // macOS/Linux (chủ yếu dùng cho dev)
+  return resolve(homedir(), '.alpha-crm', 'zalo-bot-service');
+}
+
+export const dataRoot = resolveDataRoot();
+
+/**
+ * Migration một lần: nếu dataRoot chưa tồn tại nhưng có `.data` cũ cạnh service
+ * (các bản trước lưu theo vị trí cài đặt), copy dữ liệu bền vững sang dataRoot để
+ * KHÔNG mất login/DB/device khi nâng cấp. Bỏ qua các mục runtime
+ * (active-port.json, logs, temp-sends).
+ */
+function migrateLegacyDataIfNeeded(): void {
+  try {
+    const legacy = resolve(projectRoot, '.data');
+    if (dataRoot === legacy) return; // dev trỏ thẳng .data → không cần migrate
+    if (existsSync(dataRoot)) return; // đã migrate hoặc đã có dữ liệu mới
+    if (!existsSync(legacy)) return; // không có gì để chuyển
+    mkdirSync(dataRoot, { recursive: true });
+    const skip = new Set(['active-port.json', 'logs', 'temp-sends']);
+    for (const entry of readdirSync(legacy)) {
+      if (skip.has(entry)) continue;
+      cpSync(resolve(legacy, entry), resolve(dataRoot, entry), { recursive: true });
+    }
+    console.log(`[config] Migrated legacy data: ${legacy} -> ${dataRoot}`);
+  } catch (err) {
+    console.error('[config] Legacy data migration failed (continuing):', err);
+  }
+}
+
+migrateLegacyDataIfNeeded();
+
 function parseCsv(value: string | undefined): string[] {
   if (!value) return [];
   return value
@@ -98,9 +151,10 @@ export const config: Config = {
   nodeEnv: process.env['NODE_ENV'] || 'development',
   channelMode: (process.env['ZALO_CHANNEL_MODE'] as ZaloChannelMode) || 'personal_zca',
   personalCredentialsPath:
-    process.env['ZALO_PERSONAL_CREDENTIALS_PATH'] || '.data/zalo-personal/credentials.json',
+    process.env['ZALO_PERSONAL_CREDENTIALS_PATH'] ||
+    resolve(dataRoot, 'zalo-personal/credentials.json'),
   personalQrPath:
-    process.env['ZALO_PERSONAL_QR_PATH'] || '.data/zalo-personal/qr.png',
+    process.env['ZALO_PERSONAL_QR_PATH'] || resolve(dataRoot, 'zalo-personal/qr.png'),
   personalAccountLabel:
     process.env['ZALO_PERSONAL_ACCOUNT_LABEL'] || 'Personal Zalo 1',
   personalSelfListen:
@@ -132,9 +186,11 @@ export const config: Config = {
   localBindPort: parseInt(process.env['LOCAL_BIND_PORT'] || process.env['PORT'] || '8787', 10),
   crmCloudApiUrl: process.env['CRM_CLOUD_API_URL'] || 'https://alpha-studio-backend.fly.dev/api',
   crmAgentDeviceId: process.env['CRM_AGENT_DEVICE_ID'] || '',
-  crmAgentSecretPath: process.env['CRM_AGENT_SECRET_PATH'] || '.data/agent/device-secret.json',
+  crmAgentSecretPath:
+    process.env['CRM_AGENT_SECRET_PATH'] || resolve(dataRoot, 'agent/device-secret.json'),
   crmAgentMode: (process.env['CRM_AGENT_MODE'] as 'enabled' | 'disabled') || 'enabled',
   // Local-first Live Chat
   localFirstLiveChat: parseBool(process.env['LOCAL_FIRST_LIVE_CHAT'], true),
-  localChatDbPath: process.env['LOCAL_CHAT_DB_PATH'] || '.data/live-chat/live-chat.sqlite',
+  localChatDbPath:
+    process.env['LOCAL_CHAT_DB_PATH'] || resolve(dataRoot, 'live-chat/live-chat.sqlite'),
 };

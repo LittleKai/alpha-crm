@@ -178,6 +178,9 @@ class Conversation {
   final String tag;
   final String notes;
   final bool chatbotEnabled;
+  // When set and in the future, the bot is temporarily paused (a human replied).
+  // chatbotEnabled stays true (master on) — this only drives the AI status icon.
+  final DateTime? chatbotPausedUntil;
   final List<ChatMessage> messages;
   final CrmCustomer? crmCustomer;
 
@@ -194,14 +197,28 @@ class Conversation {
     required this.tag,
     required this.notes,
     required this.chatbotEnabled,
+    this.chatbotPausedUntil,
     required this.messages,
     this.crmCustomer,
   });
+
+  /// True when the bot is on for this thread AND not in an operator-pause window.
+  bool get chatbotActive =>
+      chatbotEnabled &&
+      (chatbotPausedUntil == null ||
+          DateTime.now().isAfter(chatbotPausedUntil!));
+
+  /// True when the bot is on but temporarily paused by a human reply.
+  bool get chatbotPaused =>
+      chatbotEnabled &&
+      chatbotPausedUntil != null &&
+      chatbotPausedUntil!.isAfter(DateTime.now());
 
   Conversation copyWith({
     String? tag,
     String? notes,
     bool? chatbotEnabled,
+    Object? chatbotPausedUntilSet = _unset,
     int? unreadCount,
     List<ChatMessage>? messages,
     String? lastMessage,
@@ -222,6 +239,9 @@ class Conversation {
       tag: tag ?? this.tag,
       notes: notes ?? this.notes,
       chatbotEnabled: chatbotEnabled ?? this.chatbotEnabled,
+      chatbotPausedUntil: chatbotPausedUntilSet == _unset
+          ? chatbotPausedUntil
+          : (chatbotPausedUntilSet as DateTime?),
       messages: messages ?? this.messages,
       crmCustomer: crmCustomerSet == _unset
           ? (crmCustomer ?? this.crmCustomer)
@@ -278,10 +298,18 @@ class Conversation {
       tag: tags.isEmpty ? '' : tags.first.toString(),
       notes: (json['notes'] ?? '').toString(),
       chatbotEnabled: json['chatbotEnabled'] != false,
+      chatbotPausedUntil: _pausedUntilFrom(json['chatbotPausedUntil']),
       messages: const [],
       crmCustomer: null,
     );
   }
+}
+
+DateTime? _pausedUntilFrom(dynamic value) {
+  if (value == null) return null;
+  final ms = int.tryParse(value.toString());
+  if (ms == null || ms <= 0) return null;
+  return DateTime.fromMillisecondsSinceEpoch(ms);
 }
 
 class LiveChatState {
@@ -433,6 +461,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   StreamSubscription<LiveChatEvent>? _eventSubscription;
   Timer? _eventRefreshDebounce;
   Timer? _draftDebounce;
+  // Realtime is subscribed at ACCOUNT level (all threads) so the conversation
+  // list updates live, not just the open thread. The SSE self-heals via an
+  // exponential-backoff reconnect when the stream drops.
+  String? _subscribedAccountId;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  Timer? _listRefreshDebounce;
+  // Per-conversation high-water mark of the unread count we last toasted, so a
+  // single message never re-notifies on repeated silent refreshes.
+  final Map<String, int> _lastNotifiedUnread = <String, int>{};
   DateTime _lastTypingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   LiveChatNotifier(
@@ -492,6 +530,14 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       // newly arrived inbound messages — never on the first/manual full load.
       if (silent) {
         _notifyNewInboundMessages(conversations);
+      } else {
+        // Manual/account-switch load → reset the toast baseline so a later
+        // silent refresh only notifies for genuinely NEW unread.
+        _lastNotifiedUnread
+          ..clear()
+          ..addEntries(
+            conversations.map((c) => MapEntry(c.id, c.unreadCount)),
+          );
       }
       final selected = _selectedAfterRefresh(conversations);
       state = state.copyWith(
@@ -545,19 +591,19 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   // conversation the operator is actively viewing, and the very first load
   // (empty baseline) to avoid a burst of toasts on startup.
   void _notifyNewInboundMessages(List<Conversation> updated) {
-    if (!_notificationsEnabled()) return;
-    final previous = state.conversations;
-    if (previous.isEmpty) return;
-    final oldUnread = <String, int>{
-      for (final c in previous) c.id: c.unreadCount,
-    };
+    // The very first load establishes the baseline silently (no toast burst).
+    final firstLoad = state.conversations.isEmpty;
     final selectedId = state.selectedConversation?.id;
+    final notify = _notificationsEnabled();
     for (final conv in updated) {
-      final before = oldUnread[conv.id];
-      final hasNew = before == null
-          ? conv.unreadCount > 0
-          : conv.unreadCount > before;
-      if (!hasNew) continue;
+      final lastNotified = _lastNotifiedUnread[conv.id] ?? 0;
+      final hasNew = conv.unreadCount > lastNotified;
+      // Always advance the high-water mark so the SAME message can never be
+      // toasted twice across repeated silent refreshes (fixes the toast loop).
+      if (conv.unreadCount != lastNotified) {
+        _lastNotifiedUnread[conv.id] = conv.unreadCount;
+      }
+      if (!notify || firstLoad || !hasNew) continue;
       if (conv.id == selectedId && state.isChatFocused) continue;
       final title = conv.customerName.isNotEmpty
           ? conv.customerName
@@ -874,7 +920,10 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> sendMessage(String text) async {
     final conversation = state.selectedConversation;
     if (conversation == null || text.trim().isEmpty) return;
-    final clientMessageId = 'flutter_${DateTime.now().microsecondsSinceEpoch}';
+    // millisecondsSinceEpoch (NOT micro): the backend pins zca-js's clientId to this
+    // value; a microsecond id (~1000x larger) lands far in the future and makes
+    // tough-cookie drop the `zpw_sek` cookie → every send fails with code 600.
+    final clientMessageId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
     final reply = state.replyingTo;
     final optimistic = ChatMessage(
       id: clientMessageId,
@@ -944,7 +993,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final response = await _repository.sendRichMessage(
       conversation.id,
       title.trim().isEmpty ? normalized : title.trim(),
-      clientMessageId: 'flutter_${DateTime.now().microsecondsSinceEpoch}',
+      clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
       messageType: 'link',
       link: {'url': normalized, 'href': normalized, 'title': title.trim()},
     );
@@ -971,7 +1020,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final response = await _repository.sendRichMessage(
       conversation.id,
       '',
-      clientMessageId: 'flutter_${DateTime.now().microsecondsSinceEpoch}',
+      clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
       messageType: 'sticker',
       sticker: sticker,
     );
@@ -1229,24 +1278,60 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> toggleChatbot(bool enabled) async {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
-    final response = await _repository.updateChatbotState(
+    // Optimistic flip for instant feedback; turning ON also clears any pause.
+    _replaceSelected(conversation.copyWith(
+      chatbotEnabled: enabled,
+      chatbotPausedUntilSet: enabled ? null : conversation.chatbotPausedUntil,
+    ));
+    try {
+      final response = await _repository.updateChatbotState(
+        ConversationTarget(
+          id: conversation.id,
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          threadType: conversation.threadType,
+        ),
+        enabled: enabled,
+      );
+      if (response['success'] != true) {
+        _replaceSelected(conversation); // revert on failure
+      }
+    } catch (_) {
+      _replaceSelected(conversation); // revert on error
+    }
+  }
+
+  /// Resume the bot immediately for the open conversation, clearing any pending
+  /// operator-pause cooldown (the dimmed AI icon's double-click action).
+  Future<void> resumeChatbotNow() async {
+    final conversation = state.selectedConversation;
+    if (conversation == null || !conversation.chatbotPaused) return;
+    // Optimistically brighten the icon; the backend clears `pausedUntil`.
+    _replaceSelected(conversation.copyWith(
+      chatbotEnabled: true,
+      chatbotPausedUntilSet: null,
+    ));
+    await _repository.updateChatbotState(
       ConversationTarget(
         id: conversation.id,
         accountId: conversation.accountId,
         threadId: conversation.threadId,
         threadType: conversation.threadType,
       ),
-      enabled: enabled,
+      enabled: true,
     );
-    if (response['success'] == true) {
-      _replaceSelected(conversation.copyWith(chatbotEnabled: enabled));
-    }
   }
 
   void _markOperatorTakeover(Conversation conversation) {
     final current = state.selectedConversation;
     if (current == null || current.id != conversation.id) return;
-    _replaceSelected(current.copyWith(chatbotEnabled: false));
+    // Operator replied → temporary PAUSE (icon dims), NOT a permanent toggle-off.
+    // Keep the master switch ON; the backend's conversation.chatbot_state event
+    // refines the exact pausedUntil moments later. Skip if the bot is already off.
+    if (!current.chatbotEnabled) return;
+    _replaceSelected(current.copyWith(
+      chatbotPausedUntilSet: DateTime.now().add(const Duration(minutes: 10)),
+    ));
   }
 
   /// Per-account AI auto-reply settings (Live Chat settings dialog). Returns a
@@ -1276,6 +1361,29 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       return response['success'] == true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Minutes the bot stays paused after a human reply (5–120, default 10).
+  Future<int> getOperatorPauseCooldownMinutes() async {
+    try {
+      final response = await _repository.getAppSettings();
+      final value = response['data']?['operatorPauseCooldownMinutes'];
+      final minutes = int.tryParse('${value ?? ''}');
+      if (minutes != null && minutes >= 5 && minutes <= 120) return minutes;
+    } catch (_) {}
+    return 10;
+  }
+
+  Future<int> setOperatorPauseCooldownMinutes(int minutes) async {
+    final clamped = minutes.clamp(5, 120);
+    try {
+      final response =
+          await _repository.setOperatorPauseCooldownMinutes(clamped);
+      final saved = response['data']?['operatorPauseCooldownMinutes'];
+      return int.tryParse('${saved ?? ''}') ?? clamped;
+    } catch (_) {
+      return clamped;
     }
   }
 
@@ -1382,6 +1490,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
 
   @override
   void dispose() {
+    _subscribedAccountId = null;
+    _reconnectTimer?.cancel();
+    _listRefreshDebounce?.cancel();
     _eventSubscription?.cancel();
     _eventRefreshDebounce?.cancel();
     _draftDebounce?.cancel();
@@ -1389,18 +1500,51 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   void _subscribeToEvents(Conversation conversation) {
+    // Subscribe per ACCOUNT (not per thread) so the stream survives switching
+    // conversations and the list gets realtime updates for every thread.
+    if (_subscribedAccountId == conversation.accountId &&
+        _eventSubscription != null) {
+      // Same account already streaming — just reset per-thread transient state.
+      state = state.copyWith(typingUserIds: <String>{});
+      return;
+    }
+    _openAccountStream(conversation.accountId);
+  }
+
+  void _openAccountStream(String accountId) {
+    _reconnectTimer?.cancel();
     _eventSubscription?.cancel();
+    _subscribedAccountId = accountId;
     state = state.copyWith(realtimeConnected: false, typingUserIds: <String>{});
-    _eventSubscription = _repository
-        .watchEvents(
-          accountId: conversation.accountId,
-          threadId: conversation.threadId,
-        )
-        .listen(
-          _handleRealtimeEvent,
-          onError: (_) => state = state.copyWith(realtimeConnected: false),
-          onDone: () => state = state.copyWith(realtimeConnected: false),
-        );
+    _eventSubscription = _repository.watchEvents(accountId: accountId).listen(
+      (event) {
+        _reconnectAttempts = 0; // healthy traffic resets the backoff
+        _handleRealtimeEvent(event);
+      },
+      onError: (_) => _scheduleReconnect(),
+      onDone: () => _scheduleReconnect(),
+    );
+  }
+
+  // Self-healing SSE: reconnect with exponential backoff (1,2,4,…,30s) instead
+  // of leaving realtime dead until the next manual conversation switch.
+  void _scheduleReconnect() {
+    state = state.copyWith(realtimeConnected: false);
+    final accountId = _subscribedAccountId;
+    if (accountId == null) return;
+    _reconnectTimer?.cancel();
+    final delaySeconds = (1 << _reconnectAttempts).clamp(1, 30);
+    if (_reconnectAttempts < 5) _reconnectAttempts++;
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (_subscribedAccountId == accountId) _openAccountStream(accountId);
+    });
+  }
+
+  void _scheduleListRefresh() {
+    _listRefreshDebounce?.cancel();
+    _listRefreshDebounce = Timer(const Duration(milliseconds: 400), () {
+      loadConversations(silent: true);
+    });
   }
 
   void _handleRealtimeEvent(LiveChatEvent event) {
@@ -1413,14 +1557,29 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       state = state.copyWith(realtimeConnected: true);
       return;
     }
+    state = state.copyWith(realtimeConnected: true);
+
     final selected = state.selectedConversation;
-    if (selected == null ||
-        (event.threadId.isNotEmpty && event.threadId != selected.threadId) ||
-        (event.accountId.isNotEmpty &&
-            selected.accountId.isNotEmpty &&
-            event.accountId != selected.accountId)) {
+    final isForSelected = selected != null &&
+        (event.threadId.isEmpty || event.threadId == selected.threadId) &&
+        (event.accountId.isEmpty ||
+            selected.accountId.isEmpty ||
+            event.accountId == selected.accountId);
+
+    if (!isForSelected) {
+      // Event for another thread on this account → refresh the conversation list
+      // so its unread/last-message updates live (and a toast may surface).
+      if (event.type == 'message.created') {
+        if (!state.isChatFocused) {
+          state = state.copyWith(
+            unfocusedNewMessageCount: state.unfocusedNewMessageCount + 1,
+          );
+        }
+        _scheduleListRefresh();
+      }
       return;
     }
+
     if (event.type == 'typing.started' || event.type == 'typing.stopped') {
       final userId = (event.data['userId'] ?? '').toString();
       final typing = <String>{...state.typingUserIds};
@@ -1429,15 +1588,13 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       } else {
         typing.remove(userId);
       }
-      state = state.copyWith(realtimeConnected: true, typingUserIds: typing);
+      state = state.copyWith(typingUserIds: typing);
       return;
     }
     if (event.type == 'group.updated' || event.type == 'friend.updated') {
-      state = state.copyWith(realtimeConnected: true);
       loadConversations(silent: true);
       return;
     }
-    state = state.copyWith(realtimeConnected: true);
     if (event.type == 'message.created' && !state.isChatFocused) {
       state = state.copyWith(
         unfocusedNewMessageCount: state.unfocusedNewMessageCount + 1,
@@ -1448,22 +1605,33 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       final current = state.selectedConversation;
       if (current != null) loadMessages(current.id);
     });
+    // Keep the list (preview/unread) fresh for the open thread too.
+    _scheduleListRefresh();
   }
 
   void _applyChatbotStateEvent(LiveChatEvent event) {
-    final enabled = event.data['effectiveEnabled'] == true ||
-        event.data['mode'] == 'enabled';
+    final mode = (event.data['mode'] ?? '').toString();
+    // Master switch (toggle) follows `mode`; the operator-pause window is
+    // orthogonal and carried by `pausedUntil`.
+    final enabled = mode.isEmpty
+        ? event.data['effectiveEnabled'] == true
+        : mode == 'enabled';
+    final pausedUntil = _pausedUntilFrom(event.data['pausedUntil']);
+    Conversation apply(Conversation c) => c.copyWith(
+          chatbotEnabled: enabled,
+          chatbotPausedUntilSet: pausedUntil,
+        );
     bool matches(Conversation c) =>
         c.threadId == event.threadId &&
         (event.accountId.isEmpty || c.accountId == event.accountId);
     final selected = state.selectedConversation;
     final updatedSelected = selected != null && matches(selected)
-        ? selected.copyWith(chatbotEnabled: enabled)
+        ? apply(selected)
         : selected;
     state = state.copyWith(
       selectedConversation: updatedSelected,
       conversations: state.conversations
-          .map((c) => matches(c) ? c.copyWith(chatbotEnabled: enabled) : c)
+          .map((c) => matches(c) ? apply(c) : c)
           .toList(),
     );
   }

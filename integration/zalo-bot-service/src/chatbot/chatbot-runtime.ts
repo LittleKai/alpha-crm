@@ -10,6 +10,7 @@ import type {
   ChatbotSettings as EngineChatbotSettings,
 } from './chatbot-engine.js';
 import type { ChatbotDispatchResult } from './chatbot-dispatcher.js';
+import { isChatbotPaused } from './chatbot-store.js';
 import type {
   ChatbotConfigSnapshot,
   ChatbotConversationState,
@@ -125,9 +126,14 @@ export class LocalChatbotRuntime {
     const snapshot = this.dependencies.getConfigSnapshot();
     if (!snapshot) return;
 
+    const explicitState = this.dependencies.getConversationState(conversationKey);
+    // A human operator just replied (CRM or phone) → stay silent until the
+    // cooldown elapses. `mode` is still 'enabled'; this is a temporary pause.
+    if (isChatbotPaused(explicitState)) return;
+
     const first = buffered[0]!.event;
     const effective =
-      this.dependencies.getConversationState(conversationKey)
+      explicitState
       ?? this.dependencies.getEffectiveConversationState(
         conversationKey,
         first.threadType,

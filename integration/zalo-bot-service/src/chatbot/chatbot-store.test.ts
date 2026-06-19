@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChatbotStore } from './chatbot-store.js';
+import { ChatbotStore, isChatbotPaused } from './chatbot-store.js';
 import type { ChatbotConfigSnapshot } from './chatbot-types.js';
 import { LocalChatStore } from '../local-chat/local-chat-store.js';
 
@@ -47,7 +47,7 @@ describe('ChatbotStore', () => {
     });
     chatbotStore.setConversationState('acc:operator', {
       mode: 'disabled_by_operator',
-      reason: 'manual_operator_reply',
+      reason: 'operator_disabled',
       inherited: false,
     });
 
@@ -57,17 +57,53 @@ describe('ChatbotStore', () => {
       mode: 'enabled',
       reason: null,
       inherited: false,
+      pausedUntil: null,
     });
     assert.deepEqual(chatbotStore.getConversationState('acc:handoff'), {
       mode: 'handoff',
       reason: 'requested_human',
       inherited: false,
+      pausedUntil: null,
     });
     assert.deepEqual(chatbotStore.getConversationState('acc:operator'), {
+      mode: 'disabled_by_operator',
+      reason: 'operator_disabled',
+      inherited: false,
+      pausedUntil: null,
+    });
+  });
+
+  it('persists pausedUntil and isChatbotPaused reflects the cooldown window', () => {
+    const future = Date.now() + 60_000;
+    chatbotStore.setConversationState('acc:paused', {
+      mode: 'enabled',
+      reason: 'manual_operator_reply',
+      inherited: false,
+      pausedUntil: future,
+    });
+    const state = chatbotStore.getConversationState('acc:paused');
+    assert.equal(state?.pausedUntil, future);
+    assert.equal(isChatbotPaused(state), true);
+    assert.equal(isChatbotPaused(state, future + 1), false); // expired
+    assert.equal(
+      isChatbotPaused({ mode: 'enabled', reason: null, inherited: false }),
+      false,
+    );
+
+    // resolveConversationEnabled surfaces pausedUntil for the UI.
+    const resolved = chatbotStore.resolveConversationEnabled('acc:paused', 'user');
+    assert.equal(resolved.chatbotPausedUntil, future);
+  });
+
+  it('migration clears legacy manual_operator_reply takeover rows on restart', () => {
+    chatbotStore.setConversationState('acc:legacy', {
       mode: 'disabled_by_operator',
       reason: 'manual_operator_reply',
       inherited: false,
     });
+    restartStores();
+    // The stale permanent takeover is reset → bot active again.
+    assert.equal(chatbotStore.getConversationState('acc:legacy'), undefined);
   });
 
   it('represents inherited conversation state', () => {
@@ -81,6 +117,7 @@ describe('ChatbotStore', () => {
       mode: 'enabled',
       reason: 'global_personal_audience',
       inherited: true,
+      pausedUntil: null,
     });
   });
 
@@ -145,6 +182,7 @@ describe('ChatbotStore', () => {
         mode: 'handoff',
         reason: 'requested_human',
         inherited: false,
+        pausedUntil: null,
       },
     );
   });

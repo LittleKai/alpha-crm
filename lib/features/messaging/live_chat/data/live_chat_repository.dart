@@ -336,6 +336,14 @@ class LiveChatRepository {
     );
   }
 
+  Future<Map<String, dynamic>> getAppSettings() {
+    return localApi.getAppSettings();
+  }
+
+  Future<Map<String, dynamic>> setOperatorPauseCooldownMinutes(int minutes) {
+    return localApi.setOperatorPauseCooldownMinutes(minutes);
+  }
+
   Future<Map<String, dynamic>> reactToMessage(
     String messageId,
     String reaction,

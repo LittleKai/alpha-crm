@@ -7,6 +7,15 @@ import 'package:http/http.dart' as http;
 import 'app_logger.dart';
 import 'windows_job_object.dart';
 
+enum _BackendPortOwnerKind { free, alphaCrmBackend, other }
+
+class _BackendPortOwner {
+  const _BackendPortOwner(this.kind, {this.processIds = const []});
+
+  final _BackendPortOwnerKind kind;
+  final List<int> processIds;
+}
+
 /// Trạng thái vòng đời của backend cục bộ, dùng để UI phản ứng.
 enum BackendStatus {
   /// Chưa khởi động hoặc đã dừng có chủ đích (đóng app).
@@ -39,7 +48,9 @@ class ZaloBackendManager {
   static int? _activePort;
 
   // --- Cấu hình supervisor ---
+  static const String _serviceId = 'alpha-crm-zalo-bot-service';
   static const int _defaultPort = 8787;
+  static const int _fallbackPortLimit = 10;
   static const Duration _watchdogInterval = Duration(seconds: 5);
 
   /// Số nhịp health-check lỗi liên tiếp trước khi coi backend là chết.
@@ -82,6 +93,16 @@ class ZaloBackendManager {
   /// Cổng đang hoạt động của backend (null nếu chưa dò được)
   static int? get activePort => _activePort;
 
+  @visibleForTesting
+  static bool isAlphaCrmZaloBackendHealthForTest(Map<dynamic, dynamic> body) {
+    return _isAlphaCrmZaloBackendHealth(body);
+  }
+
+  @visibleForTesting
+  static bool isAlphaCrmZaloBackendCommandLineForTest(String? commandLine) {
+    return _isAlphaCrmZaloBackendCommandLine(commandLine);
+  }
+
   /// Khởi động tiến trình chạy ngầm Zalo Bot Service
   static Future<bool> startBackend() async {
     // 1. Chỉ thực thi trên môi trường Desktop (Windows, macOS, Linux)
@@ -98,18 +119,6 @@ class ZaloBackendManager {
     }
 
     try {
-      // 2. Reuse-or-replace: nếu đã có backend khỏe mạnh ở cổng mặc định, tái sử dụng.
-      const int defaultPort = 8787;
-      if (await _probeHealth(defaultPort)) {
-        _activePort = defaultPort;
-        _isRunning = true;
-        debugPrint(
-          "ZaloBackendManager: Đã có backend chạy sẵn tại cổng $defaultPort, tái sử dụng (không khởi tạo trùng).",
-        );
-        await _updateSettingsPort(defaultPort);
-        return true;
-      }
-
       final sep = Platform.pathSeparator;
       final appDir = File(Platform.resolvedExecutable).parent.path;
       final currentDir = Directory.current.path;
@@ -142,15 +151,22 @@ class ZaloBackendManager {
       }
 
       if (nodeExePath != null && serverJsPath != null && serviceDir != null) {
+        final backendPort = await _resolveManagedBackendPort();
+        _activePort = backendPort;
+
         // 3a. Chế độ trực tiếp — một tiến trình node duy nhất, kill sạch, không nháy console.
         _backendWorkingDir = serviceDir;
         debugPrint(
-          "ZaloBackendManager: Khởi động backend trực tiếp qua node.exe: $nodeExePath",
+          "ZaloBackendManager: Khởi động backend trực tiếp qua node.exe: $nodeExePath (port $backendPort)",
         );
         _backendProcess = await Process.start(
           nodeExePath,
           [serverJsPath],
           workingDirectory: serviceDir,
+          environment: {
+            'PORT': '$backendPort',
+            'LOCAL_BIND_PORT': '$backendPort',
+          },
           mode: ProcessStartMode.normal,
         );
         _afterSpawn();
@@ -192,11 +208,18 @@ class ZaloBackendManager {
                 final data = jsonDecode(content);
                 if (data is Map && data['port'] is int) {
                   final activePort = data['port'] as int;
+                  if (await _probeHealth(activePort)) {
+                    debugPrint(
+                      "ZaloBackendManager (Development): Phát hiện backend thủ công hợp lệ tại cổng $activePort",
+                    );
+                    _activePort = activePort;
+                    _isRunning = true;
+                    await _updateSettingsPort(activePort);
+                    return true;
+                  }
                   debugPrint(
-                    "ZaloBackendManager (Development): Phát hiện cổng active manually: $activePort",
+                    "ZaloBackendManager (Development): Bỏ qua active-port.json vì /health không có identity hợp lệ.",
                   );
-                  _activePort = activePort;
-                  await _updateSettingsPort(activePort);
                 }
               } catch (e) {
                 debugPrint(
@@ -212,10 +235,13 @@ class ZaloBackendManager {
           return false;
         }
 
+        final backendPort = await _resolveManagedBackendPort();
+        _activePort = backendPort;
+
         // 3d. Trong bản đóng gói, thư mục service nằm cạnh launcher: <launcherDir>/zalo-bot-service
         _backendWorkingDir = '$launcherDir${sep}zalo-bot-service';
         debugPrint(
-          "ZaloBackendManager: Đang khởi động backend qua launcher: $executablePath",
+          "ZaloBackendManager: Đang khởi động backend qua launcher: $executablePath (port $backendPort)",
         );
         _backendProcess = await Process.start(
           executablePath,
@@ -223,6 +249,10 @@ class ZaloBackendManager {
           runInShell: true,
           mode: ProcessStartMode.normal,
           workingDirectory: File(executablePath).parent.path,
+          environment: {
+            'PORT': '$backendPort',
+            'LOCAL_BIND_PORT': '$backendPort',
+          },
         );
         _afterSpawn();
       }
@@ -303,7 +333,7 @@ class ZaloBackendManager {
       AppLogger().error('ZaloBackendManager: $_lastStartupError');
     });
 
-    final port = _activePort ?? 8787;
+    final port = _activePort ?? _defaultPort;
     final healthUrl = Uri.parse('http://127.0.0.1:$port/health');
     final deadline = DateTime.now().add(timeout);
     final client = http.Client();
@@ -324,7 +354,7 @@ class ZaloBackendManager {
               .timeout(const Duration(seconds: 3));
           if (response.statusCode == 200) {
             final body = jsonDecode(response.body);
-            if (body is Map && body['status'] == 'ok') {
+            if (body is Map && _isAlphaCrmZaloBackendHealth(body)) {
               debugPrint(
                 'ZaloBackendManager: Backend đã sẵn sàng! (status: ok)',
               );
@@ -546,6 +576,11 @@ class ZaloBackendManager {
 
   /// Kiểm tra nhanh xem đã có backend khỏe mạnh đang lắng nghe ở [port] chưa.
   static Future<bool> _probeHealth(int port) async {
+    final body = await _readHealth(port);
+    return body != null && _isAlphaCrmZaloBackendHealth(body);
+  }
+
+  static Future<Map<dynamic, dynamic>?> _readHealth(int port) async {
     final client = http.Client();
     try {
       final response = await client
@@ -553,17 +588,178 @@ class ZaloBackendManager {
           .timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body is Map && body['status'] == 'ok';
+        return body is Map ? body : null;
       }
-      return false;
+      return null;
     } catch (_) {
-      return false;
+      return null;
     } finally {
       client.close();
     }
   }
 
-  /// Xác định file lưu cổng của Backend: <serviceDir>/.data/active-port.json.
+  static bool _isAlphaCrmZaloBackendHealth(Map<dynamic, dynamic> body) {
+    return body['status'] == 'ok' && body['service'] == _serviceId;
+  }
+
+  static bool _isAlphaCrmZaloBackendCommandLine(String? commandLine) {
+    final normalized = commandLine?.replaceAll('\\', '/').toLowerCase() ?? '';
+    if (!normalized.contains('zalo-bot-service')) return false;
+    return normalized.contains('/dist/server.js') ||
+        normalized.contains('/dist/server.cjs') ||
+        normalized.contains(' dist/server.js') ||
+        normalized.contains(' dist/server.cjs');
+  }
+
+  static Future<int> _resolveManagedBackendPort() async {
+    for (var offset = 0; offset < _fallbackPortLimit; offset++) {
+      final port = _defaultPort + offset;
+      final owner = await _classifyPortOwner(port);
+      switch (owner.kind) {
+        case _BackendPortOwnerKind.free:
+          return port;
+        case _BackendPortOwnerKind.alphaCrmBackend:
+          debugPrint(
+            'ZaloBackendManager: Port $port đang bị Alpha CRM Zalo backend cũ giữ, đang dừng process...',
+          );
+          await _terminateClaimedProcesses(owner.processIds);
+          if (await _waitUntilPortFree(port)) {
+            return port;
+          }
+          debugPrint(
+            'ZaloBackendManager: Port $port chưa rảnh sau khi dừng backend cũ, thử port kế tiếp.',
+          );
+          break;
+        case _BackendPortOwnerKind.other:
+          debugPrint(
+            'ZaloBackendManager: Port $port đang bị ứng dụng khác chiếm, thử port kế tiếp.',
+          );
+          break;
+      }
+    }
+    return _defaultPort + _fallbackPortLimit;
+  }
+
+  static Future<_BackendPortOwner> _classifyPortOwner(int port) async {
+    final health = await _readHealth(port);
+    final claimedPids = <int>[];
+
+    if (health != null && _isAlphaCrmZaloBackendHealth(health)) {
+      final pid = health['pid'];
+      if (pid is int) {
+        claimedPids.add(pid);
+      } else if (pid is String) {
+        final parsed = int.tryParse(pid);
+        if (parsed != null) claimedPids.add(parsed);
+      }
+      return _BackendPortOwner(
+        _BackendPortOwnerKind.alphaCrmBackend,
+        processIds: claimedPids,
+      );
+    }
+
+    final listeningPids = await _findListeningProcessIds(port);
+    for (final pid in listeningPids) {
+      if (await _isAlphaCrmBackendProcess(pid)) {
+        claimedPids.add(pid);
+      }
+    }
+
+    if (claimedPids.isNotEmpty) {
+      return _BackendPortOwner(
+        _BackendPortOwnerKind.alphaCrmBackend,
+        processIds: claimedPids,
+      );
+    }
+    if (health != null || listeningPids.isNotEmpty) {
+      return _BackendPortOwner(
+        _BackendPortOwnerKind.other,
+        processIds: listeningPids,
+      );
+    }
+    return const _BackendPortOwner(_BackendPortOwnerKind.free);
+  }
+
+  static Future<List<int>> _findListeningProcessIds(int port) async {
+    if (!Platform.isWindows) return const [];
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        'Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess',
+      ]).timeout(const Duration(seconds: 3));
+      if (result.exitCode != 0) return const [];
+      final pids = <int>{};
+      for (final line in '${result.stdout}'.split(RegExp(r'\r?\n'))) {
+        final parsed = int.tryParse(line.trim());
+        if (parsed != null && parsed > 0) pids.add(parsed);
+      }
+      return pids.toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<bool> _isAlphaCrmBackendProcess(int pid) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final script =
+          '''
+\$process = Get-CimInstance Win32_Process -Filter "ProcessId = $pid"
+if (\$process) {
+  Write-Output \$process.CommandLine
+  Write-Output "----PARENT----"
+  \$parent = Get-CimInstance Win32_Process -Filter "ProcessId = \$(\$process.ParentProcessId)"
+  if (\$parent) { Write-Output \$parent.CommandLine }
+}
+''';
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        script,
+      ]).timeout(const Duration(seconds: 3));
+      if (result.exitCode != 0) return false;
+      return _isAlphaCrmZaloBackendCommandLine('${result.stdout}');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> _terminateClaimedProcesses(List<int> processIds) async {
+    final currentPid = _backendProcess?.pid;
+    for (final pid in processIds.toSet()) {
+      if (pid <= 0 || pid == currentPid) continue;
+      try {
+        if (Platform.isWindows) {
+          await Process.run('taskkill', [
+            '/PID',
+            '$pid',
+            '/T',
+            '/F',
+          ]).timeout(const Duration(seconds: 5));
+        } else {
+          await Process.run('kill', [
+            '-TERM',
+            '$pid',
+          ]).timeout(const Duration(seconds: 5));
+        }
+      } catch (e) {
+        debugPrint('ZaloBackendManager: Không thể dừng process $pid: $e');
+      }
+    }
+  }
+
+  static Future<bool> _waitUntilPortFree(int port) async {
+    for (var i = 0; i < 20; i++) {
+      final health = await _readHealth(port);
+      final pids = await _findListeningProcessIds(port);
+      if (health == null && pids.isEmpty) return true;
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
+    return false;
+  }
+
+  /// Xác định file lưu cổng của Backend: `<serviceDir>/.data/active-port.json`.
   /// Khi chạy dev thủ công (không có _backendWorkingDir) thì trỏ về
   /// integration/zalo-bot-service/.data/active-port.json dưới thư mục hiện hành.
   static File _getActivePortFile() {

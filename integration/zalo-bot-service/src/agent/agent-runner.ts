@@ -19,7 +19,7 @@ import {
 import { dispatchN8nEvent } from '../integrations/n8n-event-dispatcher.js';
 import { getLocalChatStore } from '../local-chat/index.js';
 import { localChatEvents } from '../local-chat/local-chat-events.js';
-import { handleChatbotInbound } from '../chatbot/index.js';
+import { handleChatbotInbound, pauseChatbotForOperatorReply } from '../chatbot/index.js';
 
 type RevocationHandler = (reason: string) => void | Promise<void>;
 
@@ -317,6 +317,16 @@ async function handleInboundMessageEvent(
             clientMessageId: event.clientMessageId,
           },
         });
+        // Operator replied from their phone (a genuine self-sent message, NOT an
+        // echo of a CRM/chatbot send which would be reconciled) → pause the bot for
+        // the cooldown so AI doesn't talk over the human.
+        if (
+          event.senderId === event.accountId &&
+          !reconciledId &&
+          !existingProviderMessage
+        ) {
+          pauseChatbotForOperatorReply(event.accountId, event.threadId);
+        }
         // Per-account AI auto-reply switch (Live Chat settings). When off, this
         // account never auto-engages incoming messages — the operator replies
         // manually. Defaults on.

@@ -75,6 +75,16 @@ class CrmCheckoutResult {
   }
 }
 
+const crmTrialPlan = CrmSubscriptionProduct(
+  productId: 'crm_trial',
+  name: 'Gói dùng thử Alpha CRM',
+  priceVnd: 0,
+  priceCredits: 0,
+  aiRequests: 50,
+  badge: 'Dùng thử',
+  isPlan: true,
+);
+
 const crmMonthlyPlan = CrmSubscriptionProduct(
   productId: 'crm_monthly',
   name: 'Gói Alpha CRM hàng tháng',

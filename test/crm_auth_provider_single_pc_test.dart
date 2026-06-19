@@ -6,6 +6,10 @@ import 'package:alpha_crm/features/auth/providers/crm_auth_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class FakeCloudGateway implements CrmAuthGateway {
+  final Map<String, dynamic>? subscription;
+
+  const FakeCloudGateway({this.subscription});
+
   @override
   Future<Map<String, dynamic>> post(
     String path,
@@ -28,12 +32,15 @@ class FakeCloudGateway implements CrmAuthGateway {
       },
       '/crm/subscription/me' => {
         'success': true,
-        'data': {'active': true},
+        'data': {
+          'active': true,
+          if (subscription != null) 'subscription': subscription,
+        },
       },
       '/crm/quota' => {
         'success': true,
         'data': {
-          'includedAiLimit': 1000,
+          'includedAiLimit': subscription?['plan'] == 'crm_trial' ? 50 : 1000,
           'includedAiUsed': 0,
           'extraAiRemaining': 0,
         },
@@ -133,5 +140,29 @@ void main() {
     await notifier.dismissRevokedDevice();
     expect(notifier.state.isAuthenticated, isFalse);
     expect(tokenStore.token, isNull);
+  });
+
+  test('login keeps CRM trial plan from subscription profile', () async {
+    final notifier = CrmAuthNotifier(
+      cloudApi: const FakeCloudGateway(
+        subscription: {
+          'status': 'active',
+          'plan': 'crm_trial',
+          'entitlementType': 'trial',
+        },
+      ),
+      localAgent: FakeLocalAgent(const LocalAgentActive('device-1')),
+      tokenStore: MemoryTokenStore(),
+      isWindows: true,
+      autoInitialize: false,
+    );
+
+    final result = await notifier.login('user@example.com', 'password');
+
+    expect(result, isA<CrmLoginSuccess>());
+    expect(notifier.state.subscriptionStatus, 'active');
+    expect(notifier.state.subscriptionPlan, 'crm_trial');
+    expect(notifier.state.isTrialSubscription, isTrue);
+    expect(notifier.state.includedAiRemaining, 50);
   });
 }

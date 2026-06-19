@@ -10,15 +10,18 @@ import 'app/theme/app_colors.dart';
 import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
+import 'features/settings/providers/update_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
 import 'shared/utils/desktop_window_manager.dart';
 import 'shared/utils/desktop_notifier.dart';
 import 'shared/utils/app_logger.dart';
+import 'shared/utils/app_update_service.dart';
 import 'shared/widgets/backend_status_banner.dart';
 import 'shared/widgets/backend_splash_overlay.dart';
 import 'shared/widgets/app_close_gate.dart';
 import 'shared/widgets/revocation_gate.dart';
 import 'shared/widgets/device_conflict_gate.dart';
+import 'shared/widgets/update_result_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,7 +87,18 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(appLockProvider.notifier).load();
+      unawaited(_checkPostUpdate());
     });
+  }
+
+  /// Kiểm tra kết quả của lần cập nhật trước (nếu có) để báo thành công hoặc
+  /// yêu cầu tải lại bản mới — xem [UpdateResultGate].
+  Future<void> _checkPostUpdate() async {
+    final result = await AppUpdateService.checkPostUpdateResult();
+    if (!mounted) return;
+    if (result.outcome != PostUpdateOutcome.none) {
+      ref.read(postUpdateResultProvider.notifier).state = result;
+    }
   }
 
   @override
@@ -138,16 +152,18 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             MediaQuery.platformBrightnessOf(context) == Brightness.dark,
         };
         AppColors.isDarkMode = currentIsDark;
-        return AppCloseGate(
-          child: DeviceConflictGate(
-            child: RevocationGate(
-              child: AppLockOverlay(
-                child: BackendSplashOverlay(
-                  child: Column(
-                    children: [
-                      const BackendStatusBanner(),
-                      Expanded(child: child ?? const SizedBox.shrink()),
-                    ],
+        return UpdateResultGate(
+          child: AppCloseGate(
+            child: DeviceConflictGate(
+              child: RevocationGate(
+                child: AppLockOverlay(
+                  child: BackendSplashOverlay(
+                    child: Column(
+                      children: [
+                        const BackendStatusBanner(),
+                        Expanded(child: child ?? const SizedBox.shrink()),
+                      ],
+                    ),
                   ),
                 ),
               ),

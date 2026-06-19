@@ -9,6 +9,10 @@ export interface ChatbotConversationState {
   mode: ChatbotConversationMode;
   reason: string | null;
   inherited: boolean;
+  // When set and in the future, the bot is temporarily paused because a human
+  // operator replied (CRM or phone). `mode` stays 'enabled' — this is an orthogonal
+  // cooldown that auto-expires, distinct from a permanent `disabled_by_operator`.
+  pausedUntil?: number | null;
 }
 
 export interface ChatbotSettings {

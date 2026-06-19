@@ -856,12 +856,31 @@ function createZaloClientMessageId(seed?: unknown): string {
   return embeddedNumericId || String(Date.now());
 }
 
+// Pin Date.now() to the client message id ONLY when it is a plausible CURRENT
+// millisecond timestamp, so zca-js stamps the outgoing message's clientId/cliMsgId
+// with the same id the optimistic UI used (enables exact self-echo dedup).
+//
+// CRITICAL: never pin Date.now() to an arbitrary number. zca-js builds the request
+// `Cookie` header from a tough-cookie jar whose expiry check reads the global
+// Date.now() (utils.js getCookieString). Pinning it far from reality — e.g. a
+// microsecond id like `flutter_<microsecondsSinceEpoch>`, which is ~1000x too large
+// and lands ~50,000 years in the future — makes tough-cookie treat the `zpw_sek`
+// session cookie as expired, drop it from the request AND evict it from the RAM jar.
+// Zalo then rejects every send with code 600 `zpw_sek bị thiếu hoặc không đúng`,
+// immediately, even right after a fresh QR login. When the id is not a sane current
+// ms timestamp, skip the pin and let zca-js use the real clock.
+const DATE_NOW_PIN_TOLERANCE_MS = 10 * 60 * 1000; // ±10 min around the real clock
+
 async function runWithFixedDateNow<T>(
   clientMessageId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
   const fixed = Number(clientMessageId);
-  if (!Number.isFinite(fixed)) return fn();
+  const realNow = Date.now();
+  const isPlausibleNowMs =
+    Number.isFinite(fixed) &&
+    Math.abs(fixed - realNow) <= DATE_NOW_PIN_TOLERANCE_MS;
+  if (!isPlausibleNowMs) return fn();
   const originalDateNow = Date.now;
   Date.now = () => fixed;
   try {
@@ -870,6 +889,8 @@ async function runWithFixedDateNow<T>(
     Date.now = originalDateNow;
   }
 }
+
+export const runWithFixedDateNowForTest = runWithFixedDateNow;
 
 function normalizeQuoteForZca(
   quote: Record<string, unknown> | undefined,
@@ -978,7 +999,9 @@ export async function ensureLoginPool(): Promise<void> {
     }
 
     poolInitialized = true;
-    loginError = null;
+    loginError = accountPool.size === 0
+      ? describeFailedCredentials() || loginError
+      : null;
   } catch (err) {
     loginError = `Failed to scan credentials directory: ${err instanceof Error ? err.message : String(err)}`;
     console.error('[PersonalZcaChannel] Scan error:', err);
@@ -1026,6 +1049,8 @@ export async function addAccountInstance(
   };
 
   accountPool.set(uId, instance);
+  failedAccounts.delete(uId);
+  loginError = null;
   console.log(`[PersonalZcaChannel] Dynamically added new account to pool: ${label}`);
 
   // Auto start listener
@@ -1035,6 +1060,19 @@ export async function addAccountInstance(
 }
 
 export const failedAccounts = new Map<string, { id: string, reason: string, filePath: string }>();
+
+function describeFailedCredentials(accountId?: string): string | null {
+  if (accountId) {
+    const failed = failedAccounts.get(accountId);
+    if (failed) return failed.reason;
+  }
+  const failures = Array.from(failedAccounts.values());
+  if (failures.length === 0) return null;
+  if (failures.length === 1) return failures[0].reason;
+  return `Không thể nạp ${failures.length} tài khoản Zalo: ${failures
+    .map((failed) => `${failed.id}: ${failed.reason}`)
+    .join(' | ')}`;
+}
 
 async function loadCredentialsFile(filePath: string): Promise<void> {
   const accountId = accountIdFromCredentialsPath(filePath);
@@ -1066,6 +1104,100 @@ async function loadCredentialsFile(filePath: string): Promise<void> {
     });
   }
 }
+
+// ── Session recovery: re-login from the immutable credentials file ──────────────
+// When a send fails with zpw_sek/code 600 the live RAM cookie jar may just be stale.
+// Re-reading the immutable QR-login file and calling zalo.login() makes Zalo re-issue
+// fresh cookies (incl. a new zpw_sek) into a brand-new RAM jar — mirroring ZaloCRM's
+// reconnect/autoReconnect. We NEVER re-serialize the jar back to disk (see the
+// credentials persistence policy above). A circuit breaker bounds the attempts so a
+// genuinely revoked account is not hammered.
+const RELOGIN_WINDOW_MS = 5 * 60 * 1000; // 5-minute sliding window
+const RELOGIN_MAX_IN_WINDOW = 3; // re-login attempts per window before giving up
+const reloginHistory = new Map<string, number[]>();
+const reloginInFlight = new Map<string, Promise<ZaloAccountInstance | null>>();
+
+function isDeadSessionError(err: unknown): boolean {
+  const e = err as any;
+  const code = e?.code ?? e?.data?.code ?? e?.details?.code;
+  const message = e instanceof Error ? e.message : String(e ?? '');
+  return code === 600 || /zpw_sek/i.test(message);
+}
+
+// Records a re-login attempt and returns how many happened within the sliding window
+// (including this one). The caller gives up once this exceeds RELOGIN_MAX_IN_WINDOW.
+function recordReloginAttempt(uId: string): number {
+  const now = Date.now();
+  const history = (reloginHistory.get(uId) ?? []).filter(
+    (t) => now - t < RELOGIN_WINDOW_MS,
+  );
+  history.push(now);
+  reloginHistory.set(uId, history);
+  return history.length;
+}
+
+function clearReloginHistory(uId: string): void {
+  reloginHistory.delete(uId);
+}
+
+async function reloginAccountFromDisk(
+  instance: ZaloAccountInstance,
+): Promise<ZaloAccountInstance | null> {
+  const filePath =
+    instance.credentialsPath || defaultCredentialsPathForAccount(instance.uId);
+  if (!existsSync(filePath)) {
+    console.error(
+      `[PersonalZcaChannel - ${instance.label}] Cannot re-login: credentials file missing at ${filePath}`,
+    );
+    return null;
+  }
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    if (!raw.includes('zpw_sek')) {
+      console.error(
+        `[PersonalZcaChannel - ${instance.label}] Cannot re-login: credentials file is missing zpw_sek (needs a fresh QR login).`,
+      );
+      return null;
+    }
+    const credentials: Credentials = JSON.parse(raw);
+    const accountId = accountIdFromCredentialsPath(filePath);
+    const zalo = createZaloClient(accountId);
+    const activeApi = await zalo.login(credentials);
+    const uId = activeApi.getOwnId ? activeApi.getOwnId() : instance.uId;
+    // addAccountInstance tears down the previous (dead) session, restarts the listener
+    // and resets status to 'connected'.
+    await addAccountInstance(uId, activeApi, filePath);
+    console.log(
+      `[PersonalZcaChannel - ${instance.label}] Re-login from saved credentials succeeded.`,
+    );
+    return accountPool.get(uId) ?? null;
+  } catch (err) {
+    console.error(
+      `[PersonalZcaChannel - ${instance.label}] Re-login from disk failed:`,
+      err,
+    );
+    return null;
+  }
+}
+
+// De-dupe concurrent re-logins for the same account (e.g. a burst of sends all hitting
+// zpw_sek at once) so the session is not torn down / re-created multiple times.
+function reloginAccountFromDiskOnce(
+  instance: ZaloAccountInstance,
+): Promise<ZaloAccountInstance | null> {
+  const existing = reloginInFlight.get(instance.uId);
+  if (existing) return existing;
+  const p = reloginAccountFromDisk(instance).finally(() => {
+    reloginInFlight.delete(instance.uId);
+  });
+  reloginInFlight.set(instance.uId, p);
+  return p;
+}
+
+// Test exports for the circuit breaker (the re-login itself needs a live zca-js login).
+export const recordReloginAttemptForTest = recordReloginAttempt;
+export const clearReloginHistoryForTest = clearReloginHistory;
+export const RELOGIN_MAX_IN_WINDOW_FOR_TEST = RELOGIN_MAX_IN_WINDOW;
 
 // Tracks accounts whose inbox has been bootstrapped from Zalo recent history
 // (once per process lifetime) so a reconnect does not re-trigger the sync.
@@ -1428,6 +1560,10 @@ export class PersonalZcaChannel implements ZaloChannel {
       await ensureLoginPool();
 
       if (accountPool.size === 0) {
+        const credentialError = describeFailedCredentials(req.accountId);
+        if (credentialError) {
+          throw new Error(credentialError);
+        }
         throw new Error('No active connected Zalo accounts in the pool.');
       }
 
@@ -1435,7 +1571,10 @@ export class PersonalZcaChannel implements ZaloChannel {
       const instances = Array.from(accountPool.values());
       selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
       if (!selectedInstance && req.accountId) {
-        throw new Error(`Requested Zalo account ${req.accountId} is not connected.`);
+        throw new Error(
+          describeFailedCredentials(req.accountId) ||
+            `Requested Zalo account ${req.accountId} is not connected.`,
+        );
       }
       if (!selectedInstance) {
         selectedInstance = instances[roundRobinIndex % instances.length];
@@ -1505,26 +1644,57 @@ export class PersonalZcaChannel implements ZaloChannel {
         messageContent.attachments = processedAttachments;
       }
 
-      const api = selectedInstance.api as any;
-      let result: any;
-      if (req.messageType === 'sticker' && req.sticker && api.sendSticker) {
-        result = await api.sendSticker(req.sticker, recipientId, threadType);
-      } else if (req.messageType === 'link' && req.link && api.sendLink) {
-        result = await api.sendLink(req.link, recipientId, threadType);
-      } else if (req.messageType === 'video' && req.video && api.sendVideo) {
-        result = await api.sendVideo(req.video, recipientId, threadType);
-      } else if (req.messageType === 'voice' && req.voice && api.sendVoice) {
-        result = await api.sendVoice(req.voice, recipientId, threadType);
-      } else {
-        result = await runWithFixedDateNow(
+      const dispatchSend = (apiInst: any): Promise<any> => {
+        if (req.messageType === 'sticker' && req.sticker && apiInst.sendSticker) {
+          return apiInst.sendSticker(req.sticker, recipientId, threadType);
+        }
+        if (req.messageType === 'link' && req.link && apiInst.sendLink) {
+          return apiInst.sendLink(req.link, recipientId, threadType);
+        }
+        if (req.messageType === 'video' && req.video && apiInst.sendVideo) {
+          return apiInst.sendVideo(req.video, recipientId, threadType);
+        }
+        if (req.messageType === 'voice' && req.voice && apiInst.sendVoice) {
+          return apiInst.sendVoice(req.voice, recipientId, threadType);
+        }
+        return runWithFixedDateNow(
           zcaClientMessageId,
-          () => api.sendMessage(
-            messageContent,
-            recipientId,
-            threadType,
-          ),
+          () => apiInst.sendMessage(messageContent, recipientId, threadType),
         );
+      };
+
+      let result: any;
+      try {
+        result = await dispatchSend(selectedInstance.api as any);
+      } catch (sendErr) {
+        // A dead-session (zpw_sek / code 600) error can mean the session was truly
+        // revoked, OR just that the in-RAM cookie jar went stale. Recover the way the
+        // reference ZaloCRM does: RE-LOGIN from the immutable credentials file (Zalo
+        // re-issues fresh cookies into the RAM jar) and retry the send ONCE. A circuit
+        // breaker (RELOGIN_MAX_IN_WINDOW per RELOGIN_WINDOW_MS) keeps a genuinely
+        // revoked account from being hammered: once the budget is spent we rethrow and
+        // the outer catch marks the account disconnected_expired (→ QR re-login).
+        if (!isDeadSessionError(sendErr)) throw sendErr;
+        const attempts = recordReloginAttempt(selectedInstance.uId);
+        if (attempts > RELOGIN_MAX_IN_WINDOW) {
+          console.error(
+            `[PersonalZcaChannel - ${selectedInstance.label}] Circuit breaker open: ${attempts - 1} re-logins already failed within ${RELOGIN_WINDOW_MS / 60000} min. Not retrying.`,
+          );
+          throw sendErr;
+        }
+        console.warn(
+          `[PersonalZcaChannel - ${selectedInstance.label}] Send hit zpw_sek; re-logging in from saved credentials (attempt ${attempts}/${RELOGIN_MAX_IN_WINDOW}) and retrying once...`,
+        );
+        const refreshed = await reloginAccountFromDiskOnce(selectedInstance);
+        if (!refreshed) throw sendErr;
+        selectedInstance = refreshed;
+        // A still-failing retry propagates to the outer catch (→ mark expired).
+        result = await dispatchSend(selectedInstance.api as any);
       }
+
+      // A successful send (possibly after re-login) proves the session is healthy —
+      // reset the circuit breaker so a future isolated failure starts from a clean slate.
+      clearReloginHistory(selectedInstance.uId);
 
       // zca-js sendMessage returns { message: SendMessageResult | null, attachment: SendMessageResult[] }
       const msgResult = (result as any)?.message ?? result;
@@ -1554,10 +1724,10 @@ export class PersonalZcaChannel implements ZaloChannel {
       const code = errAny?.code ?? errAny?.data?.code ?? errAny?.details?.code;
       const message = loginError || (err instanceof Error ? err.message : 'Unknown personal send error');
 
-      // A `zpw_sek` error (code 600) means the session cookie is dead — no retry
-      // can recover it; only a fresh QR re-login will. Mark the account expired so
-      // the Settings UI surfaces the ⚠️ + "Đăng nhập lại" instead of failing
-      // silently on every future send.
+      // Reaching here with a `zpw_sek` error means the in-flight re-login + retry above
+      // did NOT recover the session (or the circuit breaker is open) — the session is
+      // genuinely dead. Mark the account expired so the Settings UI surfaces the ⚠️ +
+      // "Đăng nhập lại" instead of failing silently on every future send.
       const isDeadSession =
         code === 600 || /zpw_sek/i.test(message);
       if (isDeadSession && selectedInstance && selectedInstance.status !== 'disconnected_expired') {

@@ -19,7 +19,9 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
-set_target_properties(${BINARY_NAME} PROPERTIES OUTPUT_NAME "Alpha CRM")
+# Comment out the line below because overriding OUTPUT_NAME to "Alpha CRM" breaks "flutter run -d windows"
+# (which expects the executable name to match BINARY_NAME, i.e., "alpha_crm.exe").
+# set_target_properties(${BINARY_NAME} PROPERTIES OUTPUT_NAME "Alpha CRM")
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")

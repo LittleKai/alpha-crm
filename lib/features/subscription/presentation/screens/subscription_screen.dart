@@ -170,7 +170,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       builder: (dialogContext) {
         return AppDialog(
           title: product.name,
-          subtitle: 'Chọn Credits để kích hoạt ngay hoặc VietQR để tạo mã chuyển khoản chính xác.',
+          subtitle:
+              'Chọn Credits để kích hoạt ngay hoặc VietQR để tạo mã chuyển khoản chính xác.',
           icon: product.isPlan
               ? Icons.workspace_premium_rounded
               : Icons.bolt_rounded,
@@ -243,7 +244,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       builder: (dialogContext) {
         return AppDialog(
           title: 'Mã VietQR chuyển khoản',
-          subtitle: 'Quét đúng mã hoặc chuyển khoản đúng nội dung để hệ thống tự duyệt giao dịch.',
+          subtitle:
+              'Quét đúng mã hoặc chuyển khoản đúng nội dung để hệ thống tự duyệt giao dịch.',
           icon: Icons.qr_code_2_rounded,
           width: 560,
           actions: [
@@ -260,9 +262,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 ref.read(crmAuthProvider.notifier).refreshSubscription();
-                _showSnack(
-                  'Đã ghi nhận. Hệ thống sẽ tự duyệt khi tiền về.',
-                );
+                _showSnack('Đã ghi nhận. Hệ thống sẽ tự duyệt khi tiền về.');
               },
             ),
           ],
@@ -286,12 +286,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                         width: 240,
                         height: 240,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Icon(
-                              Icons.qr_code_2_rounded,
-                              size: 160,
-                              color: AppColors.textSecondary,
-                            ),
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.qr_code_2_rounded,
+                          size: 160,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
               ),
               const SizedBox(height: AppSpacing.l),
@@ -300,18 +299,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 label: 'Số tiền',
                 value: formatVnd(checkout.amountVnd),
               ),
-              _DetailRow(
-                label: 'Ngân hàng',
-                value: checkout.bankName,
-              ),
-              _DetailRow(
-                label: 'Số tài khoản',
-                value: checkout.accountNumber,
-              ),
-              _DetailRow(
-                label: 'Chủ tài khoản',
-                value: checkout.accountHolder,
-              ),
+              _DetailRow(label: 'Ngân hàng', value: checkout.bankName),
+              _DetailRow(label: 'Số tài khoản', value: checkout.accountNumber),
+              _DetailRow(label: 'Chủ tài khoản', value: checkout.accountHolder),
               const SizedBox(height: AppSpacing.s),
               Container(
                 width: double.infinity,
@@ -346,13 +336,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                       variant: AppButtonVariant.outline,
                       onPressed: () {
                         Clipboard.setData(
-                          ClipboardData(
-                            text: checkout.transferContent,
-                          ),
+                          ClipboardData(text: checkout.transferContent),
                         );
-                        _showSnack(
-                          'Đã sao chép nội dung chuyển khoản.',
-                        );
+                        _showSnack('Đã sao chép nội dung chuyển khoản.');
                       },
                     ),
                   ],
@@ -378,6 +364,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final authState = ref.watch(crmAuthProvider);
     final isExpired = authState.subscriptionStatus == 'expired';
     final isActive = authState.subscriptionStatus == 'active';
+    final isTrial = authState.isTrialSubscription;
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -390,6 +377,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               children: [
                 _HeaderSection(
                   status: authState.subscriptionStatus ?? 'none',
+                  isTrial: isTrial,
                   creditBalance: authState.creditBalance,
                 ),
                 const SizedBox(height: AppSpacing.l),
@@ -399,6 +387,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     final planCard = _buildPlanCard(
                       isActive: isActive,
                       isExpired: isExpired,
+                      isTrial: isTrial,
                       authState: authState,
                     );
                     final quotaCard = _buildQuotaCard(authState);
@@ -448,6 +437,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget _buildPlanCard({
     required bool isActive,
     required bool isExpired,
+    required bool isTrial,
     required CrmAuthState authState,
   }) {
     final statusColor = isActive
@@ -474,7 +464,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Gói Alpha CRM hàng tháng',
+                      isTrial
+                          ? 'Gói dùng thử Alpha CRM'
+                          : 'Gói Alpha CRM hàng tháng',
                       style: AppTextStyles.cardTitle,
                     ),
                     const SizedBox(height: AppSpacing.xs),
@@ -498,7 +490,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 ),
                 child: Text(
                   isActive
-                      ? 'Đang hoạt động'
+                      ? isTrial
+                            ? 'Đang dùng thử'
+                            : 'Đang hoạt động'
                       : isExpired
                       ? 'Đã hết hạn'
                       : 'Chưa đăng ký',
@@ -517,17 +511,22 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             children: [
               _MetricPill(
                 label: 'Chi phí',
-                value: '${crmMonthlyPlan.priceCredits} Credits',
-                note: formatVnd(crmMonthlyPlan.priceVnd),
+                value: isTrial
+                    ? 'Miễn phí'
+                    : '${crmMonthlyPlan.priceCredits} Credits',
+                note: isTrial
+                    ? 'Chỉ 1 lần / tài khoản'
+                    : formatVnd(crmMonthlyPlan.priceVnd),
               ),
               _MetricPill(
                 label: 'Chu kỳ',
-                value: '30 ngày',
-                note: 'Gia hạn thủ công',
+                value: isTrial ? '7 ngày' : '30 ngày',
+                note: isTrial ? 'Tự hết hạn' : 'Gia hạn thủ công',
               ),
               _MetricPill(
                 label: 'Quota AI',
-                value: '${crmMonthlyPlan.aiRequests}',
+                value:
+                    '${isTrial ? crmTrialPlan.aiRequests : crmMonthlyPlan.aiRequests}',
                 note: 'yêu cầu / chu kỳ',
               ),
             ],
@@ -545,7 +544,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               isExpired
                   ? 'Gói đã hết hạn. Hãy gia hạn để mở lại gửi tin, chatbot và sử dụng quota AI.'
                   : isActive
-                  ? 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 1000 yêu cầu AI.'
+                  ? isTrial
+                        ? 'Gói dùng thử chỉ cấp 1 lần cho tài khoản mới: 7 ngày và 50 yêu cầu AI. Nâng cấp sẽ chuyển sang gói trả phí 30 ngày.'
+                        : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 1000 yêu cầu AI.'
                   : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
@@ -555,7 +556,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           ),
           const SizedBox(height: AppSpacing.l),
           AppButton(
-            text: isActive ? 'Gia hạn gói tháng' : 'Đăng ký gói tháng',
+            text: isActive
+                ? isTrial
+                      ? 'Nâng cấp gói tháng'
+                      : 'Gia hạn gói tháng'
+                : 'Đăng ký gói tháng',
             icon: Icons.payments_rounded,
             height: 44,
             width: double.infinity,
@@ -728,9 +733,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
 class _HeaderSection extends StatelessWidget {
   final String status;
+  final bool isTrial;
   final int creditBalance;
 
-  const _HeaderSection({required this.status, required this.creditBalance});
+  const _HeaderSection({
+    required this.status,
+    required this.isTrial,
+    required this.creditBalance,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -777,7 +787,9 @@ class _HeaderSection extends StatelessWidget {
               ),
               Text(
                 status == 'active'
-                    ? 'Gói đang hoạt động'
+                    ? isTrial
+                          ? 'Đang dùng thử'
+                          : 'Gói đang hoạt động'
                     : status == 'expired'
                     ? 'Gói đã hết hạn'
                     : 'Chưa có gói',
@@ -1063,8 +1075,6 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
-
-
 
 class _GuideChip extends StatelessWidget {
   final String text;

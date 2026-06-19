@@ -282,6 +282,11 @@ export class LocalChatStore {
         aiAutoReply INTEGER NOT NULL DEFAULT 1,
         updatedAt TEXT NOT NULL DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
 
     // ── Incremental migrations (idempotent) ──
@@ -303,6 +308,8 @@ export class LocalChatStore {
       ['attachments', "checksum TEXT NOT NULL DEFAULT ''"],
       ['attachments', "errorText TEXT NOT NULL DEFAULT ''"],
       ['attachments', "downloadedAt TEXT NOT NULL DEFAULT ''"],
+      // Operator-reply cooldown: while in the future the bot is temporarily paused.
+      ['chatbot_conversation_state', 'paused_until INTEGER'],
     ] as const;
     for (const [table, definition] of additionalColumns) {
       try {
@@ -310,6 +317,22 @@ export class LocalChatStore {
       } catch {
         // Column already exists.
       }
+    }
+
+    // One-time cleanup: legacy operator-takeover rows stored a PERMANENT
+    // `disabled_by_operator` with reason `manual_operator_reply`. Under the new
+    // model an operator reply only sets a temporary `paused_until` (mode stays
+    // 'enabled'). Delete those stale rows so the conversation falls back to the
+    // audience default (bot active again) instead of being stuck off forever.
+    try {
+      this.db
+        .prepare(
+          `DELETE FROM chatbot_conversation_state
+           WHERE mode = 'disabled_by_operator' AND reason = 'manual_operator_reply'`,
+        )
+        .run();
+    } catch {
+      // Table not present yet on a brand-new DB — ignore.
     }
 
     // Add index on providerMessageId for fast undo lookups
@@ -1011,6 +1034,46 @@ export class LocalChatStore {
          DO UPDATE SET aiAutoReply = excluded.aiAutoReply, updatedAt = excluded.updatedAt`,
       )
       .run(accountId, enabled ? 1 : 0, new Date().toISOString());
+  }
+
+  // ── Global app settings (kv) ──
+  private getSetting(key: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT value FROM app_settings WHERE key = ?')
+      .get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  private setSetting(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO app_settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
+  }
+
+  static readonly OPERATOR_PAUSE_DEFAULT_MIN = 10;
+  static readonly OPERATOR_PAUSE_MIN = 5;
+  static readonly OPERATOR_PAUSE_MAX = 120;
+
+  /** Minutes the bot stays paused after a human reply (clamped 5–120, default 10). */
+  getOperatorPauseCooldownMinutes(): number {
+    const raw = Number(this.getSetting('operatorPauseCooldownMinutes'));
+    if (!Number.isFinite(raw)) return LocalChatStore.OPERATOR_PAUSE_DEFAULT_MIN;
+    return Math.min(
+      LocalChatStore.OPERATOR_PAUSE_MAX,
+      Math.max(LocalChatStore.OPERATOR_PAUSE_MIN, Math.round(raw)),
+    );
+  }
+
+  setOperatorPauseCooldownMinutes(minutes: number): number {
+    const clamped = Math.min(
+      LocalChatStore.OPERATOR_PAUSE_MAX,
+      Math.max(LocalChatStore.OPERATOR_PAUSE_MIN, Math.round(Number(minutes) || 0)),
+    );
+    this.setSetting('operatorPauseCooldownMinutes', String(clamped));
+    return clamped;
   }
 
   setHistoryState(

@@ -99,6 +99,15 @@ flutter run -d chrome  # Run web app locally
 flutter run -d windows # Run Windows desktop app
 ```
 
+**Release & Packaging:**
+
+- The CRM production release (build app + bundle backend + zip + upload to B2) is driven by the **backend** script `alpha-studio-backend/scripts/release-to-b2.js`, NOT by a script inside `tools/alpha-crm`. Flow is documented in `alpha-studio/.claude/skills/CRM_AUTOMATED_RELEASE_SKILL.md`.
+  - `node scripts/release-to-b2.js [patch|minor|major|x.y.z]` → full release to B2.
+  - Platform flags: `--android` (APK only), `--windows` (Windows app + backend only). With **no platform flag the script builds both**. APK is built with `flutter build apk --release` → `crm-app/releases/alpha-crm-v<version>.apk`; Windows zip → fixed key `crm-app/releases/alpha-crm-windows.zip`.
+  - `node scripts/release-to-b2.js --no-upload` (alias `--local`) → build + stage + zip locally, no B2 upload. Combine with `--android`/`--windows` to limit platforms.
+  - `version.json` assets are **merged by platform** on upload: a single-platform release updates only that platform's asset and preserves the other's existing download link (it does NOT wipe it). Note the shared `tag_name`/version advances for both platforms, so a Windows-only bump still shows the new version to Android clients pointing at the previous APK.
+- The local Zalo backend ships as a **single minified esbuild bundle** `zalo-bot-service/dist/server.cjs` (built via `npm run bundle`, `minify: true` in `integration/zalo-bot-service/scripts/bundle.mjs`). The release stages **only** `dist/server.cjs` plus the native `better-sqlite3` runtime closure — never the loose transpiled `dist/*.js` sources or the full `node_modules`. This keeps the public ZIP small and avoids leaking readable backend logic.
+
 ---
 
 ## Documentation Structure
@@ -190,6 +199,7 @@ Examples:
 - Current product direction is personal Zalo first. The Node backend uses the official NPM package `zca-js@^2.1.2` for dependency portability. Khi muốn tìm hiểu thêm về các API hoặc tìm kiếm xem còn API nào khác, nhà phát triển/AI có thể tham khảo mã nguồn tại local repository [zca-js/claude.md](file:///d:/Dev/2.reference_pj/.Zalo-ref/zca-js/claude.md) và chạy công cụ CodeGraph tại thư mục đó để tra cứu/phân tích chi tiết.
 - Zalo Official Account / OA remains supported as an optional secondary adapter, not the default direction unless the user explicitly asks for official-only mode.
 - Backend service owns all Zalo credentials, cookies, IMEI, user-agent values, QR artifacts, access tokens, and listener sessions. Flutter must never store or display these secrets.
+- Durable backend state (Zalo credentials, `agent/device-secret.json`, `live-chat.sqlite`, `local-chat-media`, `chatbot-knowledge`, `integrations/settings.json`, QR) lives under a stable per-machine `dataRoot` = `%LOCALAPPDATA%\AlphaCRM\zalo-bot-service` (resolved in `integration/zalo-bot-service/src/config.ts`, override `ALPHA_CRM_DATA_DIR`), NOT in `.data` next to the install — so updates/moves/dev↔packaged don't wipe login/DB/device identity. `config.ts` migrates legacy `.data` once on first run. Runtime files (`active-port.json`, `logs`, `temp-sends`) stay at `projectRoot/.data`. When adding a new durable file, resolve it under `dataRoot` (absolute), not `.data`. User downloads remain in `Downloads/AlphaCRM` (user-facing, do NOT move into LOCALAPPDATA).
 - Preferred backend channel names are `personal_zca` for the `zca-js` personal-account adapter, `official_oa` for OA/OpenAPI, and `mock` for local test mode.
 - Keep personal-account workflows risk-aware: use rate limits, cooldowns, human approval for high-risk batches, stop conditions, and clear operator status. Do not silently remove safeguards just because personal Zalo is preferred.
 - Đối với tất cả màn hình có tính năng tiếp thị hoặc hành động rủi ro cao trên Zalo (Gửi tin hàng loạt, kết bạn qua SĐT/Nhóm, mời/tạo/tham gia nhóm, quét thành viên), luôn hiển thị một nút cảnh báo/an toàn ở Header trang và luôn sử dụng hộp thoại thiết kế riêng biệt `showComplianceWarningsDialog` từ `lib/shared/widgets/compliance_warnings_popup.dart` để hiển thị các khuyến cáo thay vì dùng Dialog mặc định của Flutter. Đồng thời, toàn bộ dialog trong hệ thống phải tuân thủ thiết kế cao cấp chuẩn hóa từ `AppDialog` (header gradient màu tối `0xFF0F172A` - `0xFF1E293B`, icon màu trắng không viền hộp, chữ trắng, phần footer có nền `AppColors.appBackground` và đường viền trên `AppColors.borderSoft`).
