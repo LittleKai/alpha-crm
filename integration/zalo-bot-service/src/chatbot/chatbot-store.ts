@@ -78,10 +78,18 @@ export class ChatbotStore {
   getEffectiveConversationState(
     conversationKey: string,
     threadType: 'user' | 'group',
-    snapshot: ChatbotConfigSnapshot,
+    snapshot?: ChatbotConfigSnapshot,
   ): ChatbotConversationState | undefined {
     const explicit = this.getConversationState(conversationKey);
     if (explicit) return explicit;
+    // No global config synced yet (local-first install) → default personal
+    // (user) threads ON so the operator's Bot toggle starts enabled. Group
+    // threads stay off until explicitly enabled.
+    if (!snapshot) {
+      return threadType === 'user'
+        ? { mode: 'enabled', reason: 'default_personal_on', inherited: true }
+        : undefined;
+    }
     if (!snapshot.settings.enabled || threadType !== 'user') return undefined;
 
     if (snapshot.settings.personalAudience === 'all') {
@@ -119,12 +127,12 @@ export class ChatbotStore {
     chatbotReason: string | null;
     chatbotPausedUntil: number | null;
   } {
-    const explicit = this.getConversationState(conversationKey);
     const snapshot = this.getConfigSnapshot();
-    const effective = explicit
-      ?? (snapshot
-        ? this.getEffectiveConversationState(conversationKey, threadType, snapshot)
-        : undefined);
+    const effective = this.getEffectiveConversationState(
+      conversationKey,
+      threadType,
+      snapshot,
+    );
     return {
       chatbotEnabled: effective?.mode === 'enabled',
       chatbotMode: (effective?.mode ?? null) as ChatbotConversationMode | null,

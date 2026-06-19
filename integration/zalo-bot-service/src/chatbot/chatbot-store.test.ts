@@ -367,6 +367,28 @@ describe('ChatbotStore', () => {
     assert.equal(resolved.chatbotEnabled, true);
     assert.equal(resolved.chatbotMode, 'enabled');
   });
+
+  it('defaults personal threads ON when no config snapshot is synced', () => {
+    // Local-first install with no cloud chatbot config: the Bot toggle must
+    // start enabled for personal (user) threads, off for groups.
+    assert.equal(
+      chatbotStore.resolveConversationEnabled('acc-1:fresh-user', 'user')
+        .chatbotEnabled,
+      true,
+    );
+    assert.equal(
+      chatbotStore.resolveConversationEnabled('acc-1:fresh-group', 'group')
+        .chatbotEnabled,
+      false,
+    );
+    // getEffectiveConversationState (no snapshot) agrees so the GET endpoint
+    // and the list serializer stay consistent.
+    assert.equal(
+      chatbotStore.getEffectiveConversationState('acc-1:fresh-user', 'user')
+        ?.mode,
+      'enabled',
+    );
+  });
 });
 
 function createSnapshot(

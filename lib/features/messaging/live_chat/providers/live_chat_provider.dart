@@ -337,6 +337,13 @@ class LiveChatState {
   final String highlightedMessageId;
   final bool isChatFocused;
   final int unfocusedNewMessageCount;
+  // Per-account AI auto-reply switch (Live Chat settings dialog). Accounts
+  // absent default to ON. When OFF, the per-conversation Bot toggle is forced
+  // off and non-interactive.
+  final Map<String, bool> accountAiAutoReply;
+
+  bool isAccountAiAutoReplyEnabled(String accountId) =>
+      accountAiAutoReply[accountId] ?? true;
 
   const LiveChatState({
     this.selectedAccount,
@@ -362,6 +369,7 @@ class LiveChatState {
     this.highlightedMessageId = '',
     this.isChatFocused = true,
     this.unfocusedNewMessageCount = 0,
+    this.accountAiAutoReply = const {},
   });
 
   factory LiveChatState.initial() {
@@ -415,6 +423,7 @@ class LiveChatState {
     String? highlightedMessageId,
     bool? isChatFocused,
     int? unfocusedNewMessageCount,
+    Map<String, bool>? accountAiAutoReply,
   }) {
     return LiveChatState(
       selectedAccount: selectedAccount == _unset
@@ -450,6 +459,7 @@ class LiveChatState {
       isChatFocused: isChatFocused ?? this.isChatFocused,
       unfocusedNewMessageCount:
           unfocusedNewMessageCount ?? this.unfocusedNewMessageCount,
+      accountAiAutoReply: accountAiAutoReply ?? this.accountAiAutoReply,
     );
   }
 }
@@ -505,6 +515,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         }),
     ];
     state = state.copyWith(accounts: accounts);
+    // Refresh the per-account AI auto-reply gate so the Bot toggle reflects it.
+    final aiSettings = await getAccountAiAutoReply();
+    state = state.copyWith(accountAiAutoReply: aiSettings);
   }
 
   Future<void> loadConversations({
@@ -1359,7 +1372,15 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     try {
       final response =
           await _repository.setAccountAiAutoReply(accountId, enabled);
-      return response['success'] == true;
+      final ok = response['success'] == true;
+      if (ok) {
+        // Keep the header Bot toggle's gate in sync with the dialog change.
+        state = state.copyWith(accountAiAutoReply: {
+          ...state.accountAiAutoReply,
+          accountId: enabled,
+        });
+      }
+      return ok;
     } catch (_) {
       return false;
     }

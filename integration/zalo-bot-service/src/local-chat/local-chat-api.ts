@@ -490,7 +490,6 @@ async function handleLocalConversationChatbot(
     publishConversationChatbotState(conversationKey);
   }
 
-  const explicit = store.getConversationState(conversationKey);
   const snapshot = store.getConfigSnapshot();
   const conversation = localStore.db
     .prepare(
@@ -500,14 +499,11 @@ async function handleLocalConversationChatbot(
     .get(parsed.accountId, parsed.threadId) as
     | { threadType: 'user' | 'group' }
     | undefined;
-  const effective = explicit
-    ?? (snapshot
-      ? store.getEffectiveConversationState(
-          conversationKey,
-          conversation?.threadType ?? 'user',
-          snapshot,
-        )
-      : undefined);
+  const effective = store.getEffectiveConversationState(
+    conversationKey,
+    conversation?.threadType ?? 'user',
+    snapshot,
+  );
   json(res, 200, {
     success: true,
     data: {
@@ -517,7 +513,9 @@ async function handleLocalConversationChatbot(
       inherited: effective?.inherited ?? true,
       pausedUntil: effective?.pausedUntil ?? null,
       effectiveEnabled:
-        effective?.mode === 'enabled' && !isChatbotPaused(effective),
+        effective?.mode === 'enabled'
+        && !isChatbotPaused(effective)
+        && localStore.isAccountAiAutoReplyEnabled(parsed.accountId),
     },
   }, req);
 }
@@ -863,9 +861,13 @@ function handleLocalConversationList(
           chatbotReason: null,
           chatbotPausedUntil: null,
         };
+    // The per-account AI auto-reply switch (settings dialog) hard-gates the Bot
+    // toggle: when it's off, the conversation reports disabled regardless of the
+    // resolved per-conversation state.
+    const accountAiOn = store.isAccountAiAutoReplyEnabled(conv.accountId);
     return {
       ...conv,
-      chatbotEnabled: resolved.chatbotEnabled,
+      chatbotEnabled: resolved.chatbotEnabled && accountAiOn,
       chatbotMode: resolved.chatbotMode,
       chatbotReason: resolved.chatbotReason,
       chatbotPausedUntil: resolved.chatbotPausedUntil,

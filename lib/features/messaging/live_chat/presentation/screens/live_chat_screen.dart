@@ -776,6 +776,11 @@ class _ConversationPanel extends ConsumerWidget {
       '',
     );
     final bool isAccountConnected = matchingAccount.connected && matchingAccount.status != 'disconnected_expired';
+    // When the account's AI auto-reply is turned off in the settings dialog, the
+    // per-conversation Bot toggle is forced off and cannot be enabled.
+    final bool accountAiOn =
+        state.isAccountAiAutoReplyEnabled(conversation.accountId);
+    final bool botToggleOn = conversation.chatbotEnabled && accountAiOn;
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -811,7 +816,7 @@ class _ConversationPanel extends ConsumerWidget {
                 ),
                 Row(
                   children: [
-                    if (conversation.chatbotEnabled) ...[
+                    if (botToggleOn) ...[
                       _AiStatusIcon(
                         paused: conversation.chatbotPaused,
                         pausedUntil: conversation.chatbotPausedUntil,
@@ -821,8 +826,8 @@ class _ConversationPanel extends ConsumerWidget {
                       const SizedBox(width: AppSpacing.m),
                     ],
                     Switch(
-                      value: conversation.chatbotEnabled,
-                      onChanged: notifier.toggleChatbot,
+                      value: botToggleOn,
+                      onChanged: accountAiOn ? notifier.toggleChatbot : null,
                     ),
                     Text('Bot', style: AppTextStyles.caption),
                     const SizedBox(width: AppSpacing.s),
