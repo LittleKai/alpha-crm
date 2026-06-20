@@ -15,6 +15,7 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
+import '../../../../shared/widgets/list_item_tiles.dart';
 import '../../providers/leave_groups_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
@@ -54,22 +55,26 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
     final notifier = ref.read(leaveGroupsProvider.notifier);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
-    // Filter groups list
+    // Filter groups list by account first, then by search query
     final filteredGroups = state.groups.where((g) {
+      // Account filter (same logic as invite tab)
+      if (state.selectedAccountId != null) {
+        if (g.accountId != null) {
+          if (g.accountId != state.selectedAccountId) return false;
+        } else if (state.selectedAccountId!.length >= 4) {
+          final suffix = state.selectedAccountId!.substring(
+            state.selectedAccountId!.length - 4,
+          );
+          if (!g.name.startsWith('[$suffix]')) return false;
+        }
+      }
+      // Search filter
       final q = state.searchQuery.toLowerCase();
       return q.isEmpty || g.name.toLowerCase().contains(q);
     }).toList();
 
     final zaloState = ref.watch(zaloIntegrationProvider);
-    final activeAccounts = zaloState.accounts.map((acc) {
-      return ZaloAccount(
-        id: acc.id,
-        name: acc.label,
-        phone: acc.id,
-        type: 'Cá nhân',
-        isConnected: acc.connected,
-      );
-    }).toList();
+    final activeAccounts = zaloState.accounts;
 
     if (state.selectedAccountId == null && activeAccounts.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,7 +169,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   Widget _buildConfigCard(
     LeaveGroupsState state,
     LeaveGroupsNotifier notifier,
-    List<ZaloAccount> accounts,
+    List<ZaloConnectedAccount> accounts,
     bool useColumns,
   ) {
     final hasActiveAccount = accounts.isNotEmpty;
@@ -195,14 +200,47 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                   ? state.selectedAccountId
                   : null,
               hintText: 'Chọn tài khoản...',
-              items: accounts
-                  .map(
-                    (acc) => DropdownMenuItem(
-                      value: acc.id,
-                      child: Text('${acc.name} (${acc.phone})'),
-                    ),
-                  )
-                  .toList(),
+              items: accounts.map((acc) {
+                String cleanLabel = acc.label;
+                cleanLabel = cleanLabel.replaceAll(
+                  RegExp(r'\s*\([^)]*\)$'),
+                  '',
+                ); // Remove phone at the end
+                cleanLabel = cleanLabel.replaceAll(
+                  RegExp(r'^\[\d+\]\s*'),
+                  '',
+                ); // Remove ID prefix
+
+                return DropdownMenuItem(
+                  value: acc.id,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.surfaceMuted,
+                        backgroundImage: acc.avatarUrl.isNotEmpty
+                            ? NetworkImage(acc.avatarUrl)
+                            : null,
+                        child: acc.avatarUrl.isEmpty
+                            ? Icon(
+                                Icons.person_rounded,
+                                size: 14,
+                                color: AppColors.textSecondary,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          cleanLabel.isNotEmpty ? cleanLabel : 'Tài khoản',
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: state.isRunning ? null : notifier.setAccount,
             ),
             const SizedBox(height: AppSpacing.m),
@@ -395,67 +433,19 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                         Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final group = visibleGroups[index];
-                      final isChecked = state.selectedGroupIds.contains(
-                        group.id,
-                      );
-                      return CheckboxListTile(
-                        title: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: group.avatarUrl.isNotEmpty
-                                  ? NetworkImage(group.avatarUrl)
-                                  : null,
-                              child: group.avatarUrl.isEmpty
-                                  ? Text(
-                                      group.name.isNotEmpty
-                                          ? group.name
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                          : 'G',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Expanded(
-                              child: Text(
-                                group.name,
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            AppBadge(
-                              label: group.role,
-                              variant: group.role == 'Trưởng nhóm'
-                                  ? AppBadgeVariant.error
-                                  : group.role == 'Phó nhóm'
-                                  ? AppBadgeVariant.warning
-                                  : AppBadgeVariant.neutral,
-                            ),
-                          ],
-                        ),
-                        subtitle: Text(
-                          '${group.memberCount} thành viên',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        value: isChecked,
+                      return GroupCheckboxTile(
+                        key: ValueKey(group.id),
+                        group: group,
+                        isChecked: state.selectedGroupIds.contains(group.id),
                         enabled: !state.isRunning,
-                        onChanged: (val) => notifier.toggleGroup(group.id),
-                        activeColor: AppColors.primary,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.m,
+                        onToggle: notifier.toggleGroup,
+                        trailing: AppBadge(
+                          label: group.role,
+                          variant: group.role == 'Trưởng nhóm'
+                              ? AppBadgeVariant.error
+                              : group.role == 'Phó nhóm'
+                              ? AppBadgeVariant.warning
+                              : AppBadgeVariant.neutral,
                         ),
                       );
                     },

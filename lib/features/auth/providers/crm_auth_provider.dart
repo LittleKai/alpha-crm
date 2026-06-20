@@ -7,6 +7,7 @@ import '../../../shared/api/crm_cloud_api.dart';
 import '../../../shared/auth/crm_auth_token_store.dart';
 import '../../../shared/auth/web_auth_bridge.dart';
 import '../../../shared/utils/app_logger.dart';
+import '../../settings/providers/settings_provider.dart';
 import '../data/local_agent_session_client.dart';
 import '../models/crm_login_result.dart';
 
@@ -335,10 +336,11 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   }
 
   /// Retry đồng bộ local agent ở nền khi token restoration thành công nhưng
-  /// backend chưa kịp khởi động. Thử tối đa 10 lần, mỗi lần cách 3 giây.
+  /// backend chưa kịp khởi động. Thử tối đa 20 lần, mỗi lần cách 3 giây (~60s)
+  /// để chịu được cold start chậm (backend spawn + nạp pool zca).
   void _scheduleLocalAgentRetry(String token, String userId) {
     int attempt = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 20;
     Timer.periodic(const Duration(seconds: 3), (timer) async {
       attempt++;
       if (!mounted || attempt > maxAttempts) {
@@ -576,5 +578,12 @@ class _CloudProfile {
 final crmAuthProvider = StateNotifierProvider<CrmAuthNotifier, CrmAuthState>((
   ref,
 ) {
-  return CrmAuthNotifier();
+  // Bám cổng động của backend cục bộ (supervisor có thể chọn 8788+ khi 8787 bận)
+  // thay vì hard-code 8787 trong client.
+  return CrmAuthNotifier(
+    localAgent: LocalAgentSessionClient(
+      baseUrlResolver: () =>
+          ref.read(settingsProvider).settings.zaloBackendBaseUrl,
+    ),
+  );
 });

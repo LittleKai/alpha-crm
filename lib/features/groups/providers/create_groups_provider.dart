@@ -88,14 +88,25 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
   bool get _isConnected => _ref.read(zaloIntegrationProvider).isConnected;
 
   void setAccount(String? accountId) {
-    state = state.copyWith(selectedAccountId: accountId);
+    if (state.selectedAccountId != accountId) {
+      state = state.copyWith(
+        selectedAccountId: accountId,
+        friends: const [],
+        selectedFriendIds: {},
+      );
+      if (accountId != null) {
+        loadFriends();
+      }
+    }
   }
 
   Future<void> loadFriends() async {
     if (_isConnected) {
       try {
         final api = _getApi();
-        final response = await api.fetchFriends();
+        final response = await api.fetchFriends(
+          accountId: state.selectedAccountId,
+        );
         if (response['success'] == true && response['friends'] != null) {
           final List<dynamic> rawFriends = response['friends'];
           final friends = rawFriends.map((f) {
@@ -126,6 +137,7 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
   }
 
   void setSearchQuery(String val) {
+    if (val == state.searchQuery) return;
     state = state.copyWith(searchQuery: val);
   }
 

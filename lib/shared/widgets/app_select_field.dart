@@ -46,7 +46,14 @@ class AppSelectField<T> extends StatelessWidget {
         SizedBox(
           height: 45,
           child: DropdownButtonFormField<T>(
-            value: value,
+            // Guard against the Flutter assertion that requires exactly one item
+            // matching `value`. If the current value is missing/duplicated in the
+            // items (e.g. list reloaded with new instances), fall back to null.
+            value:
+                (value != null &&
+                    items.where((item) => item.value == value).length == 1)
+                ? value
+                : null,
             items: items,
             onChanged: onChanged,
             isExpanded: true,

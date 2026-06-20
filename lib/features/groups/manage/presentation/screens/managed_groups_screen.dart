@@ -11,8 +11,11 @@ import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/compliance_warnings_popup.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/managed_groups_provider.dart';
+import '../widgets/action_items_preview_dialog.dart';
+import '../widgets/group_summary_wizard_dialog.dart';
 
 class ManagedGroupsScreen extends ConsumerWidget {
   const ManagedGroupsScreen({super.key});
@@ -193,6 +196,18 @@ class _Header extends ConsumerWidget {
           ],
         ),
         const SizedBox(width: AppSpacing.s),
+        IconButton(
+          tooltip: 'Khuyến cáo an toàn',
+          icon: const Icon(
+            Icons.shield_outlined,
+            color: AppColors.warning,
+          ),
+          onPressed: () => showComplianceWarningsDialog(
+            context,
+            actionType: ZaloActionType.scanGroupMembers,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
         AppButton(
           text: 'Đồng bộ',
           icon: Icons.sync,
@@ -331,6 +346,63 @@ class _DetailsPanel extends StatelessWidget {
 
   const _DetailsPanel({required this.state, required this.notifier});
 
+  Future<void> _summarizeFlow(
+    BuildContext context, {
+    required bool forceWizard,
+  }) async {
+    final group = state.selectedGroup;
+    if (group == null) return;
+    final saved = GroupSummaryConfig.fromJson(group.summaryConfig);
+
+    GroupSummaryConfig config;
+    if (forceWizard || saved == null) {
+      final picked = await showGroupSummaryWizard(
+        context,
+        groupName: group.name,
+        initial: saved,
+      );
+      if (picked == null) return;
+      config = picked;
+    } else {
+      config = saved;
+    }
+
+    final outcome = await notifier.summarizeWithConfig(config);
+    if (!context.mounted || !outcome.success) return;
+
+    if (outcome.empty) {
+      _notify(context, 'Không có tin nhắn mới để tóm tắt.');
+      return;
+    }
+    _notify(
+      context,
+      'Đã tóm tắt ${outcome.messageCount} tin · ${outcome.leadCount} lead · '
+      '${outcome.questionCount} câu hỏi · ${outcome.actionItems.length} việc cần làm.',
+    );
+
+    if (config.autoCreateTasks && outcome.actionItems.isNotEmpty) {
+      await _previewAndCreate(context, outcome.actionItems);
+    }
+  }
+
+  Future<void> _previewAndCreate(
+    BuildContext context,
+    List<GroupInsight> items,
+  ) async {
+    final selected = await showActionItemsPreview(context, items: items);
+    if (selected == null || selected.isEmpty || !context.mounted) return;
+    final created = await notifier.createTasksFromInsights(selected);
+    if (context.mounted) {
+      _notify(context, 'Đã tạo $created công việc follow-up.');
+    }
+  }
+
+  void _notify(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final group = state.selectedGroup;
@@ -349,6 +421,13 @@ class _DetailsPanel extends StatelessWidget {
         ),
       );
     }
+
+    final latest = state.selectedSummaries.isNotEmpty
+        ? state.selectedSummaries.first
+        : null;
+    final older = state.selectedSummaries.length > 1
+        ? state.selectedSummaries.sublist(1)
+        : const <GroupSummaryRecord>[];
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.m),
@@ -379,9 +458,7 @@ class _DetailsPanel extends StatelessWidget {
                               ? 'Hàng ngày'
                               : (group.summaryCadence == 'weekly'
                                     ? 'Hàng tuần'
-                                    : (group.summaryCadence == 'monthly'
-                                          ? 'Hàng tháng'
-                                          : group.summaryCadence)),
+                                    : 'Thủ công'),
                           variant: AppBadgeVariant.info,
                         ),
                       ],
@@ -389,12 +466,19 @@ class _DetailsPanel extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: 'Cấu hình tóm tắt',
+                icon: const Icon(Icons.tune, color: AppColors.primary),
+                onPressed: group.isManaged && !state.isWorking
+                    ? () => _summarizeFlow(context, forceWizard: true)
+                    : null,
+              ),
               AppButton(
                 text: 'Tóm tắt AI',
                 icon: Icons.summarize_outlined,
                 isLoading: state.isWorking,
                 onPressed: group.isManaged && !state.isWorking
-                    ? notifier.summarizeSelected
+                    ? () => _summarizeFlow(context, forceWizard: false)
                     : null,
               ),
               const SizedBox(width: AppSpacing.s),
@@ -417,9 +501,17 @@ class _DetailsPanel extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                Text('Tóm tắt gần đây', style: AppTextStyles.bodyMedium),
+                if (state.proposedActionItems.isNotEmpty)
+                  _ProposedActionsBanner(
+                    count: state.proposedActionItems.length,
+                    onReview: () => _previewAndCreate(
+                      context,
+                      state.proposedActionItems,
+                    ),
+                  ),
+                Text('Tóm tắt mới nhất', style: AppTextStyles.bodyMedium),
                 const SizedBox(height: AppSpacing.s),
-                if (state.selectedSummaries.isEmpty)
+                if (latest == null)
                   Text(
                     'Chưa có tóm tắt cho nhóm này.',
                     style: AppTextStyles.body.copyWith(
@@ -427,8 +519,13 @@ class _DetailsPanel extends StatelessWidget {
                     ),
                   )
                 else
-                  ...state.selectedSummaries.map((summary) {
-                    return Container(
+                  _StructuredSummaryView(summary: latest),
+                if (older.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.m),
+                  Text('Tóm tắt trước đó', style: AppTextStyles.bodyMedium),
+                  const SizedBox(height: AppSpacing.s),
+                  ...older.map(
+                    (summary) => Container(
                       margin: const EdgeInsets.only(bottom: AppSpacing.s),
                       padding: const EdgeInsets.all(AppSpacing.m),
                       decoration: BoxDecoration(
@@ -450,8 +547,9 @@ class _DetailsPanel extends StatelessWidget {
                           Text(summary.summaryText, style: AppTextStyles.body),
                         ],
                       ),
-                    );
-                  }),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.m),
                 _InsightsList(insights: state.insights),
                 if (state.exportCsv != null && state.exportCsv!.isNotEmpty) ...[
@@ -468,6 +566,140 @@ class _DetailsPanel extends StatelessWidget {
                   ),
                 ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProposedActionsBanner extends StatelessWidget {
+  final int count;
+  final VoidCallback onReview;
+
+  const _ProposedActionsBanner({required this.count, required this.onReview});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.m),
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: AppSpacing.borderRadiusS,
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.checklist_outlined, color: AppColors.primary),
+          const SizedBox(width: AppSpacing.s),
+          Expanded(
+            child: Text(
+              '$count việc cần làm được trích xuất. Duyệt để tạo công việc follow-up.',
+              style: AppTextStyles.body,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.s),
+          AppButton(
+            text: 'Tạo công việc',
+            icon: Icons.add_task_outlined,
+            onPressed: onReview,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StructuredSummaryView extends StatelessWidget {
+  final GroupSummaryRecord summary;
+
+  const _StructuredSummaryView({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final coverage = StringBuffer(
+      DateFormat('dd/MM/yyyy HH:mm').format(summary.createdAt),
+    );
+    if (summary.messageCount > 0) {
+      coverage.write(' · ${summary.messageCount} tin');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: AppSpacing.borderRadiusS,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            coverage.toString(),
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (summary.summaryText.isNotEmpty)
+            Text(summary.summaryText, style: AppTextStyles.body),
+          _section(
+            'Lead nóng / quan tâm',
+            summary.opportunities,
+            Icons.local_fire_department_outlined,
+            AppColors.error,
+          ),
+          _section(
+            'Câu hỏi chưa trả lời',
+            summary.questions,
+            Icons.help_outline,
+            AppColors.warning,
+          ),
+          _section(
+            'Phàn nàn / rủi ro',
+            summary.risks,
+            Icons.report_problem_outlined,
+            AppColors.error,
+          ),
+          _section(
+            'Chủ đề nổi bật',
+            summary.keyTopics,
+            Icons.tag,
+            AppColors.primary,
+          ),
+          _section(
+            'Quyết định',
+            summary.decisions,
+            Icons.check_circle_outline,
+            AppColors.success,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _section(
+    String title,
+    List<String> items,
+    IconData icon,
+    Color color,
+  ) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: AppSpacing.xs),
+              Text(title, style: AppTextStyles.bodyMedium),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.m, bottom: 2),
+              child: Text('• $item', style: AppTextStyles.body),
             ),
           ),
         ],

@@ -239,10 +239,16 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                     : null,
                 hintText: 'Chọn tài khoản Zalo...',
                 items: accounts.map((acc) {
-                  final cleanLabel = acc.label.replaceAll(
+                  String cleanLabel = acc.label;
+                  cleanLabel = cleanLabel.replaceAll(
                     RegExp(r'\s*\([^)]*\)$'),
                     '',
-                  );
+                  ); // Remove phone
+                  cleanLabel = cleanLabel.replaceAll(
+                    RegExp(r'^\[\d+\]\s*'),
+                    '',
+                  ); // Remove ID prefix
+
                   return DropdownMenuItem(
                     value: acc.id,
                     child: Row(
@@ -254,20 +260,21 @@ class _FriendByPhoneScreenState extends ConsumerState<FriendByPhoneScreen> {
                               ? NetworkImage(acc.avatarUrl)
                               : null,
                           child: acc.avatarUrl.isEmpty
-                              ? Text(
-                                  cleanLabel.isNotEmpty
-                                      ? cleanLabel[0].toUpperCase()
-                                      : 'A',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                  ),
+                              ? Icon(
+                                  Icons.person_rounded,
+                                  size: 14,
+                                  color: AppColors.textSecondary,
                                 )
                               : null,
                         ),
                         const SizedBox(width: AppSpacing.s),
-                        Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                        Expanded(
+                          child: Text(
+                            cleanLabel,
+                            style: AppTextStyles.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   );

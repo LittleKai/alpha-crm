@@ -32,6 +32,7 @@ import {
   sessionCoordinator,
   sessionEventHub,
   shutdownSessionRuntime,
+  resumeRuntimeFromStoredCredentials,
 } from './local-session/session-runtime.js';
 
 const VERSION = '0.2.0';
@@ -1089,7 +1090,14 @@ function listenOnPort(port: number): void {
       console.error('[server] Failed to write active-port.json:', writeErr);
     }
 
-    console.log('[server] Waiting for Flutter session sync before starting CRM runtime.');
+    // Tự khôi phục runtime từ credentials đã lưu (nếu có) để nạp ngay pool tài
+    // khoản, không phải chờ Flutter gửi /local/auth/sync. Flutter vẫn sẽ sync để
+    // xác thực/heartbeat — sync sau đó là idempotent (heartbeat + activate lại).
+    void resumeRuntimeFromStoredCredentials().then((resumed) => {
+      if (!resumed) {
+        console.log('[server] Waiting for Flutter session sync before starting CRM runtime.');
+      }
+    });
   });
 
   server.on('error', (err: any) => {

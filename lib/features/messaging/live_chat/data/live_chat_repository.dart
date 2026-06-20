@@ -285,7 +285,11 @@ class LiveChatRepository {
     ConversationTarget target, {
     required bool enabled,
   }) {
-    if (localFirstEnabled) {
+    // Route through the local bridge whenever the Zalo bridge owns this
+    // conversation (its messages already flow locally) — matching every other
+    // Zalo action. Checking `localFirstEnabled` alone wrongly sent the toggle to
+    // the cloud `/crm/conversations/:id` route, which 500s for local Zalo threads.
+    if (_preferLocalZaloActions || localFirstEnabled) {
       return localApi.updateChatbotState(
         accountId: target.accountId,
         threadId: target.threadId,

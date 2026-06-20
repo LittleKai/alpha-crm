@@ -56,6 +56,9 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
   bool _showContactPanel = false;
   String? _lastSelectedConversationId;
   int _lastMessageCount = 0;
+  // True for the first message paint after switching threads, so we snap to the
+  // bottom instantly instead of animating through the freshly loaded list.
+  bool _justSwitchedConversation = false;
   Timer? _pollingTimer;
   // Lightweight rebuild so the AI status icon flips from "paused" back to
   // "active" when the operator-pause cooldown elapses (no backend event fires).
@@ -143,7 +146,8 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
       if (_lastSelectedConversationId != selected.id) {
         _lastSelectedConversationId = selected.id;
         _lastMessageCount = selected.messages.length;
-        _scrollMessagesToBottom();
+        _justSwitchedConversation = true;
+        _scrollMessagesToBottom(animate: false);
         _tagController.text = selected.tag;
         _notesController.text = selected.notes;
         _messageController.text = state.draftText;
@@ -167,10 +171,13 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
       }
       final currentMessageCount = selected.messages.length;
       if (currentMessageCount != _lastMessageCount) {
-        final shouldStickToBottom = _isMessageListNearBottom();
+        // After a thread switch the first batch should snap, not animate.
+        final justSwitched = _justSwitchedConversation;
+        final shouldStickToBottom = justSwitched || _isMessageListNearBottom();
         _lastMessageCount = currentMessageCount;
+        _justSwitchedConversation = false;
         if (shouldStickToBottom) {
-          _scrollMessagesToBottom();
+          _scrollMessagesToBottom(animate: !justSwitched);
         }
       }
     } else {
@@ -310,14 +317,19 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
     return position.maxScrollExtent - position.pixels < 80;
   }
 
-  void _scrollMessagesToBottom() {
+  void _scrollMessagesToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messageScrollController.hasClients) return;
-      _messageScrollController.animateTo(
-        _messageScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
+      final target = _messageScrollController.position.maxScrollExtent;
+      if (animate) {
+        _messageScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _messageScrollController.jumpTo(target);
+      }
     });
   }
 }

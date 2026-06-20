@@ -16,6 +16,7 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
+import '../../../../shared/widgets/list_item_tiles.dart';
 import '../../providers/invite_to_group_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
@@ -258,10 +259,16 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                   : null,
               hintText: 'Chọn tài khoản gửi...',
               items: accounts.map((acc) {
-                final cleanLabel = acc.label.replaceAll(
+                String cleanLabel = acc.label;
+                cleanLabel = cleanLabel.replaceAll(
                   RegExp(r'\s*\([^)]*\)$'),
                   '',
-                );
+                ); // Remove phone
+                cleanLabel = cleanLabel.replaceAll(
+                  RegExp(r'^\[\d+\]\s*'),
+                  '',
+                ); // Remove ID prefix
+
                 return DropdownMenuItem(
                   value: acc.id,
                   child: Row(
@@ -273,20 +280,21 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                             ? NetworkImage(acc.avatarUrl)
                             : null,
                         child: acc.avatarUrl.isEmpty
-                            ? Text(
-                                cleanLabel.isNotEmpty
-                                    ? cleanLabel[0].toUpperCase()
-                                    : 'A',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textSecondary,
-                                ),
+                            ? Icon(
+                                Icons.person_rounded,
+                                size: 14,
+                                color: AppColors.textSecondary,
                               )
                             : null,
                       ),
                       const SizedBox(width: AppSpacing.s),
-                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                      Expanded(
+                        child: Text(
+                          cleanLabel,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -302,44 +310,41 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                 ? state.selectedGroupId
                 : null,
             hintText: 'Chọn nhóm nhận...',
-            items: filteredGroups
-                .map(
-                  (g) => DropdownMenuItem(
-                    value: g.id,
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: AppColors.surfaceMuted,
-                          backgroundImage: g.avatarUrl.isNotEmpty
-                              ? NetworkImage(g.avatarUrl)
-                              : null,
+            items: filteredGroups.map((g) {
+              final cleanGroupName = g.name.replaceAll(
+                RegExp(r'^\[\d+\]\s*'),
+                '',
+              );
+              return DropdownMenuItem(
+                value: g.id,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.surfaceMuted,
+                      backgroundImage: g.avatarUrl.isNotEmpty
+                          ? NetworkImage(g.avatarUrl)
+                          : null,
                           child: g.avatarUrl.isEmpty
-                              ? Text(
-                                  g.name.isNotEmpty
-                                      ? g.name[0].toUpperCase()
-                                      : 'G',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                  ),
+                              ? Icon(
+                                  Icons.groups_rounded,
+                                  size: 14,
+                                  color: AppColors.textSecondary,
                                 )
                               : null,
-                        ),
-                        const SizedBox(width: AppSpacing.s),
-                        Expanded(
-                          child: Text(
-                            '${g.name} (${g.memberCount} TV)',
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.bodyMedium,
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
-                )
-                .toList(),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        '$cleanGroupName (${g.memberCount} TV)',
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
             onChanged: state.isRunning ? null : notifier.setGroupId,
           ),
           const SizedBox(height: AppSpacing.m),
@@ -552,61 +557,12 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
                         Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final friend = visibleFriends[index];
-                      final isChecked = state.selectedFriendIds.contains(
-                        friend.id,
-                      );
-                      return CheckboxListTile(
-                        title: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: friend.avatarUrl.isNotEmpty
-                                  ? NetworkImage(friend.avatarUrl)
-                                  : null,
-                              child: friend.avatarUrl.isEmpty
-                                  ? Text(
-                                      friend.name.isNotEmpty
-                                          ? friend.name
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                          : 'F',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Expanded(
-                              child: Text(
-                                friend.name,
-                                style: AppTextStyles.bodyMedium,
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: friend.phone.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 36.0),
-                                child: Text(
-                                  friend.phone,
-                                  style: AppTextStyles.caption.copyWith(
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              )
-                            : null,
-                        value: isChecked,
+                      return FriendCheckboxTile(
+                        key: ValueKey(friend.id),
+                        friend: friend,
+                        isChecked: state.selectedFriendIds.contains(friend.id),
                         enabled: !state.isRunning,
-                        onChanged: (val) => notifier.toggleFriend(friend.id),
-                        activeColor: AppColors.primary,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.m,
-                        ),
+                        onToggle: notifier.toggleFriend,
                       );
                     },
                   ),

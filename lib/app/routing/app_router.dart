@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../shell/app_shell.dart';
@@ -30,21 +31,35 @@ import '../../features/subscription/presentation/screens/subscription_screen.dar
 import '../../features/devices/presentation/screens/device_pairing_screen.dart';
 import '../../features/auth/providers/crm_auth_provider.dart';
 
-// GoRouter Riverpod Provider
-final routerProvider = Provider<GoRouter>((ref) {
-  final isAuthenticated = ref.watch(
-    crmAuthProvider.select((s) => s.isAuthenticated),
-  );
-  final isLoading = ref.watch(crmAuthProvider.select((s) => s.isLoading));
+/// Cầu nối auth state -> GoRouter.refreshListenable. Cho phép redirect chạy lại
+/// khi auth đổi mà KHÔNG tạo lại GoRouter (giữ nguyên tab/route hiện tại).
+class _RouterRefresh extends ChangeNotifier {
+  void ping() => notifyListeners();
+}
 
-  return GoRouter(
+// GoRouter Riverpod Provider
+//
+// Provider này KHÔNG `watch` auth state nên GoRouter chỉ được tạo MỘT lần và
+// không bao giờ bị tái tạo (tránh việc reset về initialLocation = dashboard mỗi
+// khi auth/subscription load xong). Thay đổi auth được đẩy vào redirect qua
+// refreshListenable.
+final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = _RouterRefresh();
+  ref.listen(
+    crmAuthProvider.select((s) => (s.isAuthenticated, s.isLoading)),
+    (_, _) => refresh.ping(),
+  );
+
+  final router = GoRouter(
     initialLocation: AppRoutes.dashboard,
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final auth = ref.read(crmAuthProvider);
       final isLoggingIn = state.uri.path == AppRoutes.login;
 
-      if (isLoading) return null;
+      if (auth.isLoading) return null;
 
-      if (!isAuthenticated) {
+      if (!auth.isAuthenticated) {
         return isLoggingIn ? null : AppRoutes.login;
       }
 
@@ -167,6 +182,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  ref.onDispose(() {
+    refresh.dispose();
+    router.dispose();
+  });
+
+  return router;
 });
 
 // Fallback legacy global appRouter instance to prevent compilation failures

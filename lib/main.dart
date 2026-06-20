@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app/routing/app_router.dart';
@@ -140,6 +141,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     return MaterialApp.router(
       title: 'Alpha CRM',
       debugShowCheckedModeBanner: false,
+      // Tiếng Việt là ngôn ngữ chính → ép locale 'vi' để các widget Material
+      // (date/time picker, tooltip mặc định...) hiển thị tiếng Việt và dùng
+      // định dạng 24 giờ.
+      locale: const Locale('vi'),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('vi'), Locale('en')],
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,

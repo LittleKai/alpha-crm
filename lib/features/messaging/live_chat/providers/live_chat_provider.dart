@@ -640,6 +640,24 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   Future<void> selectConversation(Conversation conversation) async {
+    // Switch the open thread synchronously so the tap feels instant — the
+    // header, contact panel and input swap immediately instead of waiting on
+    // the SQLite cache read + network round-trip below.
+    state = state.copyWith(
+      selectedConversation: conversation.copyWith(
+        unreadCount: 0,
+        messages: const [],
+      ),
+      hasMoreMessages: true,
+      isUsingCachedMessages: false,
+      isLoadingMessages: true,
+      replyingTo: null,
+      typingUserIds: <String>{},
+    );
+    _subscribeToEvents(conversation);
+
+    // Hydrate from the local cache first (fast) so older messages paint before
+    // the network reply lands. Guard against a newer switch racing ahead.
     final cachedData = await _repository.getCachedMessages(conversation.id);
     final cachedMessages =
         cachedData
@@ -648,18 +666,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
             )
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    final current = state.selectedConversation;
+    if (current != null &&
+        current.id == conversation.id &&
+        cachedMessages.isNotEmpty) {
+      state = state.copyWith(
+        selectedConversation: current.copyWith(messages: cachedMessages),
+        isUsingCachedMessages: true,
+      );
+    }
 
-    state = state.copyWith(
-      selectedConversation: conversation.copyWith(
-        unreadCount: 0,
-        messages: cachedMessages,
-      ),
-      hasMoreMessages: true,
-      isUsingCachedMessages: cachedMessages.isNotEmpty,
-      replyingTo: null,
-      typingUserIds: <String>{},
-    );
-    _subscribeToEvents(conversation);
     await _loadDraft(conversation);
     await Future.wait([
       loadMessages(conversation.id),

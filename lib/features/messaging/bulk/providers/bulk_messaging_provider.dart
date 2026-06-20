@@ -9,9 +9,37 @@ import '../../../../shared/widgets/activity_log_panel.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../zalo_integration/data/zalo_integration_api.dart';
+import '../../../groups/manage/providers/managed_groups_provider.dart';
 import '../data/bulk_campaign_repository.dart';
 
 const Object _unsetSelectedAccount = Object();
+const Object _unsetSelectedGroup = Object();
+const Object _unsetScheduledAt = Object();
+
+/// Send-target modes for the "Gửi vào nhóm Zalo" tab.
+enum GroupSendMode {
+  /// Send a single message into the group thread.
+  toGroup,
+
+  /// Send a personalized message to each member of the group.
+  toMembers,
+}
+
+/// Per-recipient metadata used for personalization (name/avatar) and for
+/// deciding the Zalo thread type when building the campaign payload.
+class BulkRecipient {
+  final String id; // phone, userId or groupId
+  final String name;
+  final String avatarUrl;
+  final String threadType; // 'user' | 'group'
+
+  const BulkRecipient({
+    required this.id,
+    this.name = '',
+    this.avatarUrl = '',
+    this.threadType = 'user',
+  });
+}
 
 List<ZaloAccount> _mapBulkAccounts(List<ZaloConnectedAccount> accounts) {
   final seenIds = <String>{};
@@ -89,6 +117,16 @@ class BulkMessagingState {
   final String? complianceWarning;
   final String? activeCampaignId;
   final bool isPolling;
+  // Tab 1 ("Gửi vào nhóm Zalo") state.
+  final GroupSendMode groupSendMode;
+  final ManagedZaloGroup? selectedGroup;
+  // Per-recipient metadata keyed by recipient id (phone/userId/groupId).
+  final Map<String, BulkRecipient> recipientInfo;
+  // Client-side scheduled send (Path B): when [scheduledAt] is set the campaign
+  // auto-starts via a Timer in the notifier; [isScheduleArmed] is true while that
+  // Timer is pending. Requires the app to stay open until the fire time.
+  final DateTime? scheduledAt;
+  final bool isScheduleArmed;
 
   const BulkMessagingState({
     required this.selectedTab,
@@ -109,6 +147,11 @@ class BulkMessagingState {
     this.complianceWarning,
     this.activeCampaignId,
     this.isPolling = false,
+    this.groupSendMode = GroupSendMode.toGroup,
+    this.selectedGroup,
+    this.recipientInfo = const {},
+    this.scheduledAt,
+    this.isScheduleArmed = false,
   });
 
   factory BulkMessagingState.initial() {
@@ -129,6 +172,16 @@ class BulkMessagingState {
       totalCount: 0,
     );
   }
+
+  /// Recipient ids currently queued (one per non-empty line).
+  List<String> get recipientIds => recipientsText
+      .split('\n')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  /// Whether the campaign has a valid target for the current tab/mode.
+  bool get hasValidRecipients => recipientIds.isNotEmpty;
 
   BulkMessagingState copyWith({
     int? selectedTab,
@@ -151,6 +204,11 @@ class BulkMessagingState {
     bool clearComplianceWarning = false,
     String? activeCampaignId,
     bool? isPolling,
+    GroupSendMode? groupSendMode,
+    Object? selectedGroup = _unsetSelectedGroup,
+    Map<String, BulkRecipient>? recipientInfo,
+    Object? scheduledAt = _unsetScheduledAt,
+    bool? isScheduleArmed,
   }) {
     return BulkMessagingState(
       selectedTab: selectedTab ?? this.selectedTab,
@@ -177,6 +235,15 @@ class BulkMessagingState {
           : (complianceWarning ?? this.complianceWarning),
       activeCampaignId: activeCampaignId ?? this.activeCampaignId,
       isPolling: isPolling ?? this.isPolling,
+      groupSendMode: groupSendMode ?? this.groupSendMode,
+      selectedGroup: identical(selectedGroup, _unsetSelectedGroup)
+          ? this.selectedGroup
+          : selectedGroup as ManagedZaloGroup?,
+      recipientInfo: recipientInfo ?? this.recipientInfo,
+      scheduledAt: identical(scheduledAt, _unsetScheduledAt)
+          ? this.scheduledAt
+          : scheduledAt as DateTime?,
+      isScheduleArmed: isScheduleArmed ?? this.isScheduleArmed,
     );
   }
 }
@@ -185,6 +252,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   final Ref _ref;
   final BulkCampaignRepository _repository;
   Timer? _pollingTimer;
+  Timer? _scheduleTimer;
 
   BulkMessagingNotifier(this._ref, this._repository)
     : super(BulkMessagingState.initial()) {
@@ -243,6 +311,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _scheduleTimer?.cancel();
     super.dispose();
   }
 
@@ -280,6 +349,129 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   void selectAccount(ZaloAccount? account) {
     state = state.copyWith(selectedAccount: account);
     _checkCompliance();
+  }
+
+  /// Switch the "Gửi vào nhóm Zalo" sub-mode (to-group vs to-members) and reset
+  /// any queued recipients since the target shape changes between modes.
+  void setGroupSendMode(GroupSendMode mode) {
+    if (state.groupSendMode == mode) return;
+    state = state.copyWith(
+      groupSendMode: mode,
+      selectedGroup: null,
+      recipientsText: '',
+      recipientInfo: const {},
+      clearComplianceError: true,
+      clearComplianceWarning: true,
+    );
+  }
+
+  /// Select a group in tab 1. In to-group mode the group thread becomes the
+  /// single recipient; in to-members mode recipients are added separately once
+  /// members are scanned and picked.
+  void selectGroup(ManagedZaloGroup? group) {
+    if (group == null) {
+      state = state.copyWith(
+        selectedGroup: null,
+        recipientsText: '',
+        recipientInfo: const {},
+      );
+      _checkCompliance();
+      return;
+    }
+
+    if (state.groupSendMode == GroupSendMode.toGroup) {
+      state = state.copyWith(
+        selectedGroup: group,
+        recipientsText: group.groupId,
+        recipientInfo: {
+          group.groupId: BulkRecipient(
+            id: group.groupId,
+            name: group.name,
+            avatarUrl: group.avatarUrl,
+            threadType: 'group',
+          ),
+        },
+      );
+    } else {
+      // Members mode: clear previous member selection; members are filled in by
+      // the screen once the group is scanned.
+      state = state.copyWith(
+        selectedGroup: group,
+        recipientsText: '',
+        recipientInfo: const {},
+      );
+    }
+    _checkCompliance();
+  }
+
+  /// Replace recipient metadata (name/avatar/threadType) for personalization.
+  /// The recipient id list itself is owned by the text controller in the UI; this
+  /// only stores the lookup table keyed by id.
+  void replaceRecipientInfo(List<BulkRecipient> recipients) {
+    final info = <String, BulkRecipient>{};
+    for (final r in recipients) {
+      if (r.id.isNotEmpty) info[r.id] = r;
+    }
+    state = state.copyWith(recipientInfo: info);
+  }
+
+  /// Merge/replace metadata for already-queued recipients (e.g. once an avatar
+  /// or nickname is resolved for a manually-added phone number).
+  void upsertRecipientInfo(BulkRecipient recipient) {
+    if (recipient.id.isEmpty) return;
+    state = state.copyWith(
+      recipientInfo: {...state.recipientInfo, recipient.id: recipient},
+    );
+  }
+
+  /// Store the picked send time (or clear it with null). Does NOT arm the Timer;
+  /// the user confirms by pressing the "Hẹn giờ gửi" button which calls
+  /// [armSchedule]. Ignored while a schedule is already armed.
+  void setScheduledAt(DateTime? dt) {
+    if (state.isScheduleArmed) return;
+    state = state.copyWith(scheduledAt: dt);
+  }
+
+  /// Arm the client-side Timer that auto-starts the campaign at [scheduledAt].
+  /// If the time has already passed it sends immediately. The Timer lives in the
+  /// notifier (not the widget) so it survives navigating away from this screen,
+  /// but dies when the app closes — which is the same limit as the local Zalo
+  /// agent, so it adds no false reliability promise.
+  void armSchedule() {
+    final at = state.scheduledAt;
+    if (at == null || state.isScheduleArmed) return;
+    if (state.isSending || state.isPolling) return;
+    if (!state.hasValidRecipients || state.messageText.trim().isEmpty) return;
+
+    _scheduleTimer?.cancel();
+    final delay = at.difference(DateTime.now());
+
+    if (delay.inSeconds <= 0) {
+      state = state.copyWith(isScheduleArmed: false, scheduledAt: null);
+      startSending();
+      return;
+    }
+
+    _scheduleTimer = Timer(delay, () {
+      state = state.copyWith(isScheduleArmed: false, scheduledAt: null);
+      startSending();
+    });
+    state = state.copyWith(isScheduleArmed: true);
+    addLog(
+      '[Hẹn giờ] Chiến dịch sẽ tự động gửi lúc '
+      '${DateFormat('HH:mm dd/MM/yyyy').format(at)}. '
+      'Giữ ứng dụng mở tới thời điểm đó.',
+    );
+  }
+
+  /// Cancel a pending scheduled send. Keeps [scheduledAt] so the user can re-arm
+  /// or pick a new time.
+  void cancelSchedule() {
+    _scheduleTimer?.cancel();
+    _scheduleTimer = null;
+    if (!state.isScheduleArmed) return;
+    state = state.copyWith(isScheduleArmed: false);
+    addLog('[Hẹn giờ] Đã hủy lịch hẹn giờ gửi.', type: LogType.warning);
   }
 
   void _checkCompliance() {
@@ -348,7 +540,11 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       case 0:
         return ZaloActionType.bulkMessageByPhone;
       case 1:
-        return ZaloActionType.bulkMessageToGroup;
+        // Sending into the group thread vs to individual members are different
+        // risk profiles.
+        return state.groupSendMode == GroupSendMode.toGroup
+            ? ZaloActionType.bulkMessageToGroup
+            : ZaloActionType.bulkMessageToFriends;
       case 2:
         return ZaloActionType.bulkMessageToFriends;
       default:
@@ -438,6 +634,25 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         throw Exception('Máy chủ không trả về templateId hợp lệ.');
       }
 
+      // Build the recipient payload. Sending into a group thread uses
+      // targetGroupIds; everything else (phones, friends, members, tags) uses
+      // manualRecipients with the resolved display name for personalization.
+      final bool isGroupMessage =
+          state.selectedTab == 1 &&
+          state.groupSendMode == GroupSendMode.toGroup;
+
+      final List<String> targetGroupIds = isGroupMessage ? recipients : const [];
+      final List<Map<String, String>> manualRecipients = isGroupMessage
+          ? const []
+          : recipients
+                .map(
+                  (r) => {
+                    'phone': r,
+                    'name': state.recipientInfo[r]?.name ?? '',
+                  },
+                )
+                .toList();
+
       // 1. Create campaign
       final createResp = await _repository.createCampaign({
         'name': state.campaignName.trim().isNotEmpty
@@ -445,10 +660,9 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
             : 'Bulk Campaign ${DateTime.now().toIso8601String()}',
         'templateId': templateId,
         'channel': 'zalo',
-        'audienceType': 'manual',
-        'manualRecipients': recipients
-            .map((r) => {'phone': r, 'name': ''})
-            .toList(),
+        'audienceType': isGroupMessage ? 'group' : 'manual',
+        'manualRecipients': manualRecipients,
+        if (targetGroupIds.isNotEmpty) 'targetGroupIds': targetGroupIds,
         if (state.selectedAccount != null)
           'selectedAccountId': state.selectedAccount!.id,
         'rateLimit': {

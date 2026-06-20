@@ -94,7 +94,16 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
   bool get _isConnected => _ref.read(zaloIntegrationProvider).isConnected;
 
   void setAccount(String? accountId) {
-    state = state.copyWith(selectedAccountId: accountId);
+    if (state.selectedAccountId != accountId) {
+      state = state.copyWith(
+        selectedAccountId: accountId,
+        friends: const [],
+        selectedFriendIds: {},
+      );
+      if (accountId != null) {
+        loadFriends();
+      }
+    }
   }
 
   void setGroupId(String? groupId) {
@@ -102,6 +111,7 @@ class InviteToGroupNotifier extends StateNotifier<InviteToGroupState> {
   }
 
   void setSearchQuery(String query) {
+    if (query == state.searchQuery) return;
     state = state.copyWith(searchQuery: query);
   }
 

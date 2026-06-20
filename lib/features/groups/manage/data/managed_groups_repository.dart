@@ -45,12 +45,23 @@ class ManagedGroupsRepository {
     return CrmCloudApi.get('/crm/groups/insights?status=open');
   }
 
-  Future<Map<String, dynamic>> summarizeGroup(String id) {
-    return CrmCloudApi.post('/crm/groups/$id/summarize', {});
+  Future<Map<String, dynamic>> summarizeGroup(
+    String id, [
+    Map<String, dynamic>? body,
+  ]) {
+    return CrmCloudApi.post('/crm/groups/$id/summarize', body ?? {});
   }
 
   Future<Map<String, dynamic>> getSummaries(String id) {
     return CrmCloudApi.get('/crm/groups/$id/summaries');
+  }
+
+  Future<Map<String, dynamic>> updateInsightStatus(String id, String status) {
+    return CrmCloudApi.put('/crm/groups/insights/$id', {'status': status});
+  }
+
+  Future<Map<String, dynamic>> createTask(Map<String, dynamic> body) {
+    return CrmCloudApi.post('/crm/tasks', body);
   }
 
   Future<Map<String, dynamic>> exportSummaries({String? groupId}) {

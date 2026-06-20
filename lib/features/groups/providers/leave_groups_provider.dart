@@ -69,7 +69,12 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
       );
 
   void setAccount(String? accountId) {
-    state = state.copyWith(selectedAccountId: accountId);
+    if (state.selectedAccountId != accountId) {
+      state = state.copyWith(selectedAccountId: accountId, groups: const [], selectedGroupIds: {});
+      if (accountId != null) {
+        reloadGroups();
+      }
+    }
   }
 
   void setIsSilent(bool val) {
@@ -77,6 +82,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
   }
 
   void setSearchQuery(String query) {
+    if (query == state.searchQuery) return;
     state = state.copyWith(searchQuery: query);
   }
 

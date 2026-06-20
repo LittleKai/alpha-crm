@@ -156,7 +156,16 @@ class ScanMembersNotifier extends StateNotifier<ScanMembersState> {
             isScanning: false,
             scannedGroupName:
                 response['groupName']?.toString() ??
-                state.savedGroups.firstWhere((g) => g.id == groupId).name,
+                state.savedGroups
+                    .firstWhere(
+                      (g) => g.id == groupId,
+                      orElse: () => SavedScannedGroup(
+                        id: groupId,
+                        name: 'Nhóm',
+                        memberCount: 0,
+                      ),
+                    )
+                    .name,
             scannedTotalMember:
                 response['totalMember'] as int? ?? members.length,
           );

@@ -16,6 +16,7 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/activity_log_panel.dart';
+import '../../../../shared/widgets/list_item_tiles.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/create_groups_provider.dart';
 
@@ -241,10 +242,16 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                   : null,
               hintText: 'Chọn tài khoản...',
               items: accounts.map((acc) {
-                final cleanLabel = acc.label.replaceAll(
+                String cleanLabel = acc.label;
+                cleanLabel = cleanLabel.replaceAll(
                   RegExp(r'\s*\([^)]*\)$'),
                   '',
-                );
+                ); // Remove phone
+                cleanLabel = cleanLabel.replaceAll(
+                  RegExp(r'^\[\d+\]\s*'),
+                  '',
+                ); // Remove ID prefix
+
                 return DropdownMenuItem(
                   value: acc.id,
                   child: Row(
@@ -256,20 +263,21 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                             ? NetworkImage(acc.avatarUrl)
                             : null,
                         child: acc.avatarUrl.isEmpty
-                            ? Text(
-                                cleanLabel.isNotEmpty
-                                    ? cleanLabel[0].toUpperCase()
-                                    : 'A',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textSecondary,
-                                ),
+                            ? Icon(
+                                Icons.person_rounded,
+                                size: 14,
+                                color: AppColors.textSecondary,
                               )
                             : null,
                       ),
                       const SizedBox(width: AppSpacing.s),
-                      Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                      Expanded(
+                        child: Text(
+                          cleanLabel,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -415,6 +423,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                   height: 40,
                   child: DropdownButtonFormField<String>(
                     value: _phoneFilter,
+                    isExpanded: true,
                     style: AppTextStyles.bodyMedium,
                     decoration: const InputDecoration(
                       contentPadding: EdgeInsets.symmetric(
@@ -481,61 +490,12 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                         Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final friend = visibleFriends[index];
-                      final isChecked = state.selectedFriendIds.contains(
-                        friend.id,
-                      );
-                      return CheckboxListTile(
-                        title: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: friend.avatarUrl.isNotEmpty
-                                  ? NetworkImage(friend.avatarUrl)
-                                  : null,
-                              child: friend.avatarUrl.isEmpty
-                                  ? Text(
-                                      friend.name.isNotEmpty
-                                          ? friend.name
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                          : 'F',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Expanded(
-                              child: Text(
-                                friend.name,
-                                style: AppTextStyles.bodyMedium,
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: friend.phone.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 36.0),
-                                child: Text(
-                                  friend.phone,
-                                  style: AppTextStyles.caption.copyWith(
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              )
-                            : null,
-                        value: isChecked,
+                      return FriendCheckboxTile(
+                        key: ValueKey(friend.id),
+                        friend: friend,
+                        isChecked: state.selectedFriendIds.contains(friend.id),
                         enabled: !state.isRunning,
-                        onChanged: (val) => notifier.toggleFriend(friend.id),
-                        activeColor: AppColors.primary,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.m,
-                        ),
+                        onToggle: notifier.toggleFriend,
                       );
                     },
                   ),

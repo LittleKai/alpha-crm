@@ -45,6 +45,10 @@ class ZaloConnectedAccount {
 
 class ZaloIntegrationState {
   final bool isLoading;
+  // True trong cửa sổ khởi động: backend đang lên HOẶC vừa lên nhưng chưa nạp
+  // xong pool tài khoản (zca-js khôi phục phiên bất đồng bộ). Dùng để UI hiện
+  // "đang tải" thay vì vội kết luận chưa có tài khoản.
+  final bool isInitializing;
   final bool isConnected;
   final bool isBackendActive;
   final String? serviceVersion;
@@ -59,6 +63,7 @@ class ZaloIntegrationState {
 
   const ZaloIntegrationState({
     this.isLoading = false,
+    this.isInitializing = false,
     this.isConnected = false,
     this.isBackendActive = false,
     this.serviceVersion,
@@ -74,6 +79,7 @@ class ZaloIntegrationState {
 
   ZaloIntegrationState copyWith({
     bool? isLoading,
+    bool? isInitializing,
     bool? isConnected,
     bool? isBackendActive,
     String? serviceVersion,
@@ -88,6 +94,7 @@ class ZaloIntegrationState {
   }) {
     return ZaloIntegrationState(
       isLoading: isLoading ?? this.isLoading,
+      isInitializing: isInitializing ?? this.isInitializing,
       isConnected: isConnected ?? this.isConnected,
       isBackendActive: isBackendActive ?? this.isBackendActive,
       serviceVersion: serviceVersion ?? this.serviceVersion,
@@ -107,6 +114,13 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
   final Ref _ref;
   ZaloIntegrationApi? _api;
   Timer? _pollingTimer;
+  Timer? _initRetryTimer;
+  int _initAttempts = 0;
+
+  /// Số lần thử lại tối đa trong cửa sổ khởi động (mỗi 2s) trước khi kết luận
+  /// thật sự chưa có tài khoản. ~30s đủ cho backend lên + nạp xong pool zca-js.
+  static const int _maxInitAttempts = 15;
+  static const Duration _initRetryInterval = Duration(seconds: 2);
 
   ZaloIntegrationNotifier(this._ref) : super(const ZaloIntegrationState());
 
@@ -131,16 +145,52 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
     _pollingTimer?.cancel();
     _pollingTimer = null;
 
-    // Run connection status check once on startup. Background periodic polling is disabled as requested.
-    checkConnection(showLoading: false);
-    debugPrint(
-      '[ZaloIntegrationNotifier] Connection status checked on startup. Background polling disabled.',
-    );
+    // Cửa sổ khởi động: backend trả /health=ok TRƯỚC khi nạp xong pool tài khoản
+    // (zca-js khôi phục phiên bất đồng bộ sau khi Flutter sync session). Vì vậy
+    // lần check đầu có thể ra 0 tài khoản dù thực tế đã đăng nhập. Thử lại có
+    // giới hạn cho đến khi có tài khoản hoặc hết hạn mức rồi mới kết luận.
+    state = state.copyWith(isInitializing: true);
+    _initAttempts = 0;
+    _runInitCheckLoop();
+  }
+
+  Future<void> _runInitCheckLoop() async {
+    _initRetryTimer?.cancel();
+    _initRetryTimer = null;
+
+    await checkConnection(showLoading: false);
+    _initAttempts++;
+
+    // Đã có tài khoản → xong khởi động.
+    if (state.isBackendActive && state.accounts.isNotEmpty) {
+      _finishInitializing();
+      return;
+    }
+    // Hết hạn mức thử lại → kết luận (có thể thật sự chưa có tài khoản).
+    if (_initAttempts >= _maxInitAttempts) {
+      debugPrint(
+        '[ZALO-STARTUP-DEBUG] Hết hạn mức thử lại ($_initAttempts lần) — dừng poll khởi động.',
+      );
+      _finishInitializing();
+      return;
+    }
+    // Backend chưa lên, hoặc lên rồi nhưng pool tài khoản chưa nạp xong → thử lại.
+    _initRetryTimer = Timer(_initRetryInterval, _runInitCheckLoop);
+  }
+
+  void _finishInitializing() {
+    _initRetryTimer?.cancel();
+    _initRetryTimer = null;
+    if (state.isInitializing) {
+      state = state.copyWith(isInitializing: false);
+    }
   }
 
   void stopPollingBackend() {
     _pollingTimer?.cancel();
     _pollingTimer = null;
+    _initRetryTimer?.cancel();
+    _initRetryTimer = null;
     debugPrint('[ZaloIntegrationNotifier] Stopped backend polling timer.');
   }
 
@@ -151,13 +201,22 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
       state = state.copyWith(errorText: null);
     }
 
+    debugPrint(
+      '[ZALO-STARTUP-DEBUG] checkConnection() bắt đầu @ ${DateTime.now().toIso8601String()}',
+    );
     try {
       final api = _getApi();
       final health = await api.healthCheck();
+      debugPrint(
+        '[ZALO-STARTUP-DEBUG] healthCheck -> status=${health['status']} (backend ${health['status'] == 'ok' ? 'SẴN SÀNG' : 'CHƯA SẴN SÀNG'})',
+      );
 
       if (health['status'] == 'ok') {
         final status = await api.getZaloStatus();
         final accResponse = await api.fetchAccounts();
+        debugPrint(
+          '[ZALO-STARTUP-DEBUG] fetchAccounts -> success=${accResponse['success']} count=${(accResponse['accounts'] as List?)?.length ?? 'null'}',
+        );
         final agentErr = health['agent']?['error']?.toString();
 
         List<ZaloConnectedAccount> activeAccounts = [];
@@ -209,6 +268,9 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
           displayAccountLabel = activeAccounts.first.label;
         }
 
+        debugPrint(
+          '[ZALO-STARTUP-DEBUG] -> set state với ${activeAccounts.length} tài khoản (THÀNH CÔNG)',
+        );
         state = state.copyWith(
           isLoading: false,
           isBackendActive: true,
@@ -224,6 +286,9 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
         );
       } else {
         debugPrint(
+          '[ZALO-STARTUP-DEBUG] -> backend CHƯA SẴN SÀNG, set accounts=[] và KHÔNG thử lại (đây là nguyên nhân lần đầu trống)',
+        );
+        debugPrint(
           '[ZaloIntegrationNotifier] Health check returned non-ok status: $health',
         );
         state = state.copyWith(
@@ -237,6 +302,9 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
         );
       }
     } catch (e, stack) {
+      debugPrint(
+        '[ZALO-STARTUP-DEBUG] -> EXCEPTION (backend chưa lên?), set accounts=[] và KHÔNG thử lại: $e',
+      );
       debugPrint(
         '[ZaloIntegrationNotifier] Exception in checkConnection: $e\n$stack',
       );

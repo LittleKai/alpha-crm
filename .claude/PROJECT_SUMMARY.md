@@ -1,17 +1,11 @@
 # Project Summary
 
-*Last Updated: 2026-06-20 (Session #129) - Fixed the Live Chat Bot toggle defaulting OFF and bouncing back OFF when turned on. Root cause was twofold: (1) the running minified backend `dist/server.cjs` was stale (built before the prior `resolveChatbotStore()` fix) because `npm run build` only runs `tsc` and never regenerates the bundle — `npm run bundle` is required; the stale code returned 503 on the chatbot PUT in local-first installs (no running chatbot runtime), so Flutter's optimistic toggle reverted. (2) With no cloud config snapshot synced, `getEffectiveConversationState` returned undefined for user threads → toggle defaulted OFF. Fix: `getEffectiveConversationState(snapshot?)` now defaults personal (user) threads to mode `enabled` (reason `default_personal_on`) when no snapshot exists; groups stay off. Routed `resolveConversationEnabled` and the GET `/local/conversations/:key/chatbot` endpoint through this single source of truth. Regenerated `server.cjs`. Backend 110/110 tests pass. NOTE: operator auto-pause (`pauseChatbotForOperatorReply`) still uses the raw runtime `chatbotStore` and no-ops when the runtime is null — separate from this fix.*
-
-*Last Updated: 2026-06-19 (Session #128) - Moved external AI API key storage from the Cloud Backend (`/crm/chatbot/settings` payload) to the Local Machine (`Documents/AlphaCRM/ai_api_keys.json`) via `path_provider` to guarantee credentials never leave the user's PC (except ephemerally during local playground tests or local agent generation). The `ChatbotNotifier.updateAiApiKeys` now uses `LocalAiKeyStore` to persist the keys locally. Implemented Dart AI token logging for the Playground: `_sendTestMessage` now safely extracts the `usage` block from the `/crm/chatbot/test` Cloud API response and prints `[AI TOKENS] Input: X | Output: Y | Total: Z` directly to the debug console.*
-
-*Last Updated: 2026-06-19 (Session #127) - Added multi-provider external AI API key management to the Chatbot AI settings. Users can now add multiple API keys per provider (Google Gemini, OpenAI, Anthropic/Claude, DeepSeek, OpenRouter) for random round-robin rotation, separate from the GCLI cloud quota. `ChatbotState` gains `aiProvider` and `aiApiKeys: Map<String, List<String>>`. The AI settings dialog (`_showAiSettingsDialog`) was completely redesigned: split into "Provider", "Model", "Prompt", "Advanced Settings", and "API Keys" collapsible sections. Removed the old gray footer background from `AppDialog` for a cleaner look. Debounce default is now 30s, range [5,120]. `flutter analyze` clean, tests pass.*
-
 ## 1. Project Overview
 
 - **Type:** Cross-platform CRM UI application for web, Android, and Windows desktop.
 - **Tech Stack:** Flutter, Dart SDK 3.10.7, Material 3, Riverpod, GoRouter.
 - **Package Manager:** Flutter pub via `pubspec.yaml` and `pubspec.lock`.
-- **i18n:** No formal localization solution. Vietnamese UI strings are currently inline; `intl` is used for formatting.
+- **i18n:** No formal app-string localization solution; Vietnamese UI strings are inline. `intl` is used for formatting. `flutter_localizations` is wired into `MaterialApp.router` with `locale: Locale('vi')` so built-in Material widgets (date/time pickers, default tooltips) render in Vietnamese with 24h time.
 - **State Management:** `flutter_riverpod` with `StateNotifierProvider`, `StateProvider`, and local widget state.
 - **Styling:** Central design tokens in `lib/app/theme/` plus reusable widgets in `lib/shared/widgets/`.
 - **Deployment:** Automated release is handled by `alpha-studio-backend/scripts/release-to-b2.js` for Android APK, Windows ZIP, and Flutter Web under `/crm/`. The Windows ZIP includes the Flutter runner plus the local Zalo backend bundle required for production desktop use.
@@ -75,7 +69,7 @@ docs/
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl, http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter, ffi + win32 (Windows Job Object), window_manager + tray_manager (Windows maximize/tray). Declares `assets/app_icon.ico` (tray icon). |
+| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl (`^0.20.2`), flutter_localizations (SDK, for Vietnamese Material pickers), http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter, ffi + win32 (Windows Job Object), window_manager + tray_manager (Windows maximize/tray). Declares `assets/app_icon.ico` (tray icon). |
 | `integration/zalo-bot-service/package.json` | Local backend package metadata | Uses `zca-js@^2.1.2` and `proxy-agent@^6.5.0` for per-account HTTP/HTTPS/SOCKS proxy enforcement. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. Boot is non-blocking: fires `ZaloBackendManager.startSupervised()` (fire-and-forget) and mounts `BackendStatusBanner` above the router child. |
@@ -122,6 +116,7 @@ docs/
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 | `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
+| `lib/features/groups/manage/` | Managed groups + AI summary | `/groups/manage` tab. Per-group AI summary wizard (scope incremental/recent/range, extraction goals, industry prompt templates in `data/group_summary_templates.dart`, auto-task toggle). **Privacy: group message content is NOT stored on the backend.** The provider reads messages from the **local** store via `LiveChatLocalBridgeApi` (matches group→conversation by `threadId`, scope→cursor) and sends them **transiently** in the body of `POST /crm/groups/:id/summarize`; cloud runs the LLM and persists only the derived structured summary + insights. Renders structured summary (leads/questions/risks/topics) via `presentation/widgets/`, turns follow-up action items into `CrmTask` through `action_items_preview_dialog.dart`. Incremental watermark = prior summary `coveredTo`; insights deduped by `dedupKey`. Requires the local desktop backend (won't work on web/mobile, which have no local messages). |
 
 ---
 

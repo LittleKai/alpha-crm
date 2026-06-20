@@ -1,6 +1,29 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-19 +07:00
+**Last Updated:** 2026-06-20 +07:00
+
+---
+
+## Toggle Bot trong Live Chat tự tắt (sai đường route lên cloud)
+
+**Triệu chứng:** Bấm bật toggle Bot thì lập tức tắt lại; không có log. Mọi bản vá
+ở local bridge (default-ON, account gate, `resolveChatbotStore`) đều vô tác dụng.
+
+**Nguyên nhân (tìm ra bằng log `[bot-toggle]`):** `LiveChatRepository.updateChatbotState`
+là **hành động Zalo DUY NHẤT** chỉ kiểm tra `localFirstEnabled` (mặc định false),
+trong khi mọi hành động khác (getConversations, sendMessage, markRead...) dùng
+`_preferLocalZaloActions || localFirstEnabled` (`_preferLocalZaloActions` hardcode
+`true`). Hậu quả: hội thoại Zalo local nhưng toggle lại gọi cloud
+`PUT /crm/conversations/:id` → cloud trả **500** ("Lỗi server khi cập nhật hội
+thoại") → Flutter revert optimistic flip → toggle nảy về OFF. Local bridge không
+bao giờ được gọi nên các fix ở đó không có hiệu lực.
+
+**Khắc phục:** Đổi điều kiện thành `_preferLocalZaloActions || localFirstEnabled`
+để khớp với mọi hành động Zalo khác → toggle đi qua local bridge.
+
+**Bài học:** Khi sửa mãi không ăn, dừng đoán — thêm log ở **biên** (request/response
+2 phía). Log lộ ngay URL `fly.dev/.../crm/conversations` + status 500, tức là sai
+backend đích, không phải lỗi logic trong local bridge.
 
 ---
 

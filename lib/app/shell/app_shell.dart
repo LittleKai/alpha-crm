@@ -19,6 +19,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint(
+        '[ZALO-STARTUP-DEBUG] AppShell mounted @ ${DateTime.now().toIso8601String()} -> gọi startPollingBackend()',
+      );
       ref.read(zaloIntegrationProvider.notifier).startPollingBackend();
     });
   }

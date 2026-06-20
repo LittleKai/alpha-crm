@@ -184,6 +184,36 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
 }
 
 /**
+ * Resolve personalization placeholders and spintax for a single recipient.
+ * - {{tên}} / {{ten}} / {{name}} -> recipient display name
+ * - {{sdt}} / {{phone}}          -> recipient phone (or id)
+ * - {{nhóm}} / {{nhom}} / {{group}} -> group name (when sending into a group thread)
+ * - {A|B|C} spintax              -> one option chosen at random per recipient
+ */
+function personalizeMessage(template: string, recipient: any): string {
+  const name = ((recipient?.name || '') as string).trim() || 'Anh/Chị';
+  const phone = String(recipient?.phone || recipient?.customerId || '');
+  const isGroup = recipient?.threadType === 'group';
+  const group = isGroup ? (((recipient?.name || '') as string).trim() || 'nhóm') : '';
+
+  let text = String(template || '');
+  text = text.replace(/\{\{\s*(tên|ten|name)\s*\}\}/gi, name);
+  text = text.replace(/\{\{\s*(sdt|phone)\s*\}\}/gi, phone);
+  text = text.replace(/\{\{\s*(nhóm|nhom|group)\s*\}\}/gi, group);
+
+  // Spintax {A|B|C}: resolve innermost groups repeatedly, picking one option.
+  const spintax = /\{([^{}]*\|[^{}]*)\}/;
+  let guard = 0;
+  while (spintax.test(text) && guard++ < 100) {
+    text = text.replace(/\{([^{}]*\|[^{}]*)\}/g, (_match, body: string) => {
+      const options = body.split('|');
+      return options[Math.floor(Math.random() * options.length)];
+    });
+  }
+  return text;
+}
+
+/**
  * Runs a campaign execution loop asynchronously in the background.
  * Reports the final outcome of all sends back to the Cloud Backend when finished.
  */
@@ -256,8 +286,9 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
     try {
       console.log(`[command-executor] [Background] [Campaign ${campaignId}] Gửi tin tới ${recipient.name} (${recipientId}) [${i + 1}/${targetList.length}]...`);
       
-      // Personalize the template variables: replace {{name}} with recipient's actual name
-      const personalizedText = templateText.replace(/\{\{name\}\}/g, recipient.name || 'Anh/Chị');
+      // Personalize placeholders ({{tên}}/{{sdt}}/{{nhóm}}/{{name}}) and resolve
+      // spintax ({A|B|C}) per recipient.
+      const personalizedText = personalizeMessage(templateText, recipient);
 
       const sendResult = await sendMessage({
         recipientId,

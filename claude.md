@@ -5,7 +5,6 @@
 ## Core Principle
 
 Read `.claude/PROJECT_SUMMARY.md` first, not the entire codebase.
-Update documentation after every change.
 Use the skill in `C:\Users\XEON\.gemini\skills\Mini-max-skills\flutter-dev`.
 
 ---
@@ -38,10 +37,6 @@ Specific files user mentioned  -> Only if needed for implementation
 
 ### Update `.claude/PROJECT_SUMMARY.md`
 
-Always update:
-- Top: Latest Session number.
-- `Active Features & Status` when feature state changes.
-- `Known Issues & TODOs` by marking completed items and adding current issues.
 
 Update if changed:
 - `File Structure` when files or folders are added, removed, or moved.

@@ -58,6 +58,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     Consumer(
                       builder: (context, ref, child) {
                         final zaloState = ref.watch(zaloIntegrationProvider);
+                        // Backend đang lên / đang nạp tài khoản: hiện trạng thái
+                        // tải, KHÔNG vội hiện banner "cần đăng nhập".
+                        if (zaloState.isInitializing) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.l),
+                            child: _buildBackendLoadingBanner(),
+                          );
+                        }
                         if (!zaloState.isLoading && zaloState.accounts.isEmpty) {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: AppSpacing.l),
@@ -91,6 +99,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildBackendLoadingBanner() {
+    final isDark = AppColors.isDarkMode;
+    return Container(
+      key: const ValueKey('dashboard_backend_loading_banner'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.m,
+        vertical: AppSpacing.m + 4,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: isDark ? 0.4 : 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Đang khởi động dịch vụ Zalo...',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Hệ thống đang kết nối và tải các tài khoản Zalo đã đăng nhập. Vui lòng đợi trong giây lát.',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

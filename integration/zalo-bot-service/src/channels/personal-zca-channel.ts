@@ -1583,7 +1583,7 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       console.log(`[PersonalZcaChannel] Selected sender account: ${selectedInstance.label}`);
 
-      const recipientId = String(req.recipientId || '').trim();
+      let recipientId = String(req.recipientId || '').trim();
       const messageText = String(req.message || '').trim();
       const attachments = (req.attachments || []).filter((item) =>
         String(item || '').trim(),
@@ -1594,6 +1594,21 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       const threadType =
         req.threadType === 'group' ? ThreadType.Group : ThreadType.User;
+
+      // Automatically resolve phone number to Zalo UID if needed
+      if (threadType === ThreadType.User && /^(0|84|\+84)\d{8,10}$/.test(recipientId)) {
+        try {
+          const profile = await selectedInstance.api.findUser(recipientId);
+          if (profile && profile.uid && profile.uid !== '0') {
+            console.log(`[PersonalZcaChannel] Resolved phone ${recipientId} to UID ${profile.uid}`);
+            recipientId = profile.uid;
+          } else {
+            console.warn(`[PersonalZcaChannel] findUser returned empty/invalid UID for ${recipientId}`);
+          }
+        } catch (findErr: any) {
+          console.warn(`[PersonalZcaChannel] Failed to resolve phone ${recipientId} to UID: ${findErr.message || findErr}`);
+        }
+      }
 
       // Prepare processed attachments to preserve original filenames
       let processedAttachments: string[] = [];

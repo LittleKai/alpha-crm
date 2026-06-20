@@ -13,6 +13,7 @@ import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/list_item_tiles.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../../../../shared/widgets/activity_log_panel.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
@@ -209,9 +210,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
     FriendByGroupNotifier notifier,
     List<ZaloGroup> filteredGroups,
   ) {
+    bool isSelf(String id) {
+      if (state.selectedAccountId == null || state.selectedAccountId!.isEmpty) return false;
+      return id == state.selectedAccountId;
+    }
+    
+    final selectableMembers = state.members.where((m) => !isSelf(m.id)).toList();
+
     final allSelected =
-        state.members.isNotEmpty &&
-        state.members.every((m) => state.selectedMemberIds.contains(m.id));
+        selectableMembers.isNotEmpty &&
+        selectableMembers.every((m) => state.selectedMemberIds.contains(m.id));
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -284,14 +292,42 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                               value: 'none',
                               child: Text('-- Chọn nhóm của bạn --'),
                             ),
-                            ...filteredGroups.map(
-                              (group) => DropdownMenuItem(
+                            ...filteredGroups.map((group) {
+                              final cleanGroupName = group.name.replaceAll(
+                                RegExp(r'^\[\d+\]\s*'),
+                                '',
+                              );
+                              return DropdownMenuItem(
                                 value: group.id,
-                                child: Text(
-                                  '${group.name} (${group.memberCount} thành viên)',
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: AppColors.surfaceMuted,
+                                      backgroundImage:
+                                          group.avatarUrl.isNotEmpty
+                                          ? NetworkImage(group.avatarUrl)
+                                          : null,
+                                        child: group.avatarUrl.isEmpty
+                                            ? Icon(
+                                                Icons.groups_rounded,
+                                                size: 14,
+                                                color: AppColors.textSecondary,
+                                              )
+                                            : null,
+                                    ),
+                                    const SizedBox(width: AppSpacing.s),
+                                    Expanded(
+                                      child: Text(
+                                        '$cleanGroupName (${group.memberCount} TV)',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTextStyles.bodyMedium,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ),
+                              );
+                            }),
                           ],
                           onChanged: state.isRunning
                               ? null
@@ -314,7 +350,23 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
               ),
               value: allSelected,
               enabled: !state.isRunning,
-              onChanged: (val) => notifier.toggleAllMembers(state.members),
+              onChanged: (val) {
+                if (val == true) {
+                  // select all except self
+                  for (final m in selectableMembers) {
+                    if (!state.selectedMemberIds.contains(m.id)) {
+                      notifier.toggleMember(m.id);
+                    }
+                  }
+                } else {
+                  // deselect all
+                  for (final m in selectableMembers) {
+                    if (state.selectedMemberIds.contains(m.id)) {
+                      notifier.toggleMember(m.id);
+                    }
+                  }
+                }
+              },
               activeColor: AppColors.primary,
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: const EdgeInsets.symmetric(
@@ -341,83 +393,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                         Divider(height: 1, color: AppColors.borderSoft),
                     itemBuilder: (context, index) {
                       final member = state.members[index];
-                      final isChecked = state.selectedMemberIds.contains(
-                        member.id,
-                      );
-                      final isOwner = member.role == 'Trưởng nhóm';
-                      final isAdmin = member.role == 'Phó nhóm';
+                      final self = isSelf(member.id);
+                      final isChecked = self ? false : state.selectedMemberIds.contains(member.id);
 
-                      return CheckboxListTile(
-                        value: isChecked,
+                      return ScannedMemberCheckboxTile(
+                        key: ValueKey(member.id),
+                        member: member,
+                        isChecked: isChecked,
                         enabled: !state.isRunning,
-                        onChanged: (val) => notifier.toggleMember(member.id),
-                        activeColor: AppColors.primary,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.m,
-                        ),
-                        title: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage: member.avatarUrl.isNotEmpty
-                                  ? NetworkImage(member.avatarUrl)
-                                  : null,
-                              child: member.avatarUrl.isEmpty
-                                  ? Text(
-                                      member.name.isNotEmpty
-                                          ? member.name[0].toUpperCase()
-                                          : 'M',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Expanded(
-                              child: Text(
-                                member.name,
-                                style: AppTextStyles.bodyMedium,
-                              ),
-                            ),
-                            if (isOwner || isAdmin)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isOwner
-                                      ? AppColors.warningSoft
-                                      : AppColors.primarySoft,
-                                  borderRadius: AppSpacing.borderRadiusS,
-                                ),
-                                child: Text(
-                                  member.role,
-                                  style: AppTextStyles.caption.copyWith(
-                                    color: isOwner
-                                        ? AppColors.warning
-                                        : AppColors.primary,
-                                    fontSize: 9,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(left: 36.0),
-                          child: Text(
-                            member.id,
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.textMuted,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ),
+                        isSelf: self,
+                        onToggle: self ? (id) {} : notifier.toggleMember,
                       );
                     },
                   ),
@@ -463,10 +448,16 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                     : null,
                 hintText: 'Chọn tài khoản Zalo...',
                 items: accounts.map((acc) {
-                  final cleanLabel = acc.label.replaceAll(
+                  String cleanLabel = acc.label;
+                  cleanLabel = cleanLabel.replaceAll(
                     RegExp(r'\s*\([^)]*\)$'),
                     '',
-                  );
+                  ); // Remove phone
+                  cleanLabel = cleanLabel.replaceAll(
+                    RegExp(r'^\[\d+\]\s*'),
+                    '',
+                  ); // Remove ID prefix
+
                   return DropdownMenuItem(
                     value: acc.id,
                     child: Row(
@@ -478,20 +469,21 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                               ? NetworkImage(acc.avatarUrl)
                               : null,
                           child: acc.avatarUrl.isEmpty
-                              ? Text(
-                                  cleanLabel.isNotEmpty
-                                      ? cleanLabel[0].toUpperCase()
-                                      : 'A',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                  ),
+                              ? Icon(
+                                  Icons.person_rounded,
+                                  size: 14,
+                                  color: AppColors.textSecondary,
                                 )
                               : null,
                         ),
                         const SizedBox(width: AppSpacing.s),
-                        Text(cleanLabel, style: AppTextStyles.bodyMedium),
+                        Expanded(
+                          child: Text(
+                            cleanLabel,
+                            style: AppTextStyles.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   );

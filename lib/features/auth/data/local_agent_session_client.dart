@@ -37,18 +37,31 @@ abstract interface class LocalAgentSessionGateway {
 
 class LocalAgentSessionClient implements LocalAgentSessionGateway {
   final http.Client _client;
-  final Uri _baseUri;
+  final String _fallbackBaseUrl;
+  // Resolve base URL theo TỪNG request để bám đúng cổng động mà supervisor chọn
+  // (8787, 8788, ...). Tránh hard-code 8787 gõ nhầm backend khi cổng bị dời.
+  final String Function()? _baseUrlResolver;
   final bool _isSupportedPlatform;
 
   LocalAgentSessionClient({
     http.Client? client,
     String baseUrl = 'http://127.0.0.1:8787',
+    String Function()? baseUrlResolver,
     bool? isSupportedPlatform,
   }) : _client = client ?? http.Client(),
-       _baseUri = Uri.parse(baseUrl),
+       _fallbackBaseUrl = baseUrl,
+       _baseUrlResolver = baseUrlResolver,
        _isSupportedPlatform =
            isSupportedPlatform ??
            (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
+
+  Uri _resolve(String path) {
+    final base = _baseUrlResolver?.call();
+    final raw = (base != null && base.trim().isNotEmpty)
+        ? base
+        : _fallbackBaseUrl;
+    return Uri.parse(raw).resolve(path);
+  }
 
   @override
   Future<LocalAgentSyncResult> sync({
@@ -64,7 +77,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
 
     try {
       final response = await _client.post(
-        _baseUri.resolve('/local/auth/sync'),
+        _resolve('/local/auth/sync'),
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -129,7 +142,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
     }
     try {
       await _client.post(
-        _baseUri.resolve('/local/auth/logout'),
+        _resolve('/local/auth/logout'),
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -146,7 +159,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
     if (!_isSupportedPlatform) {
       return;
     }
-    final request = http.Request('GET', _baseUri.resolve('/local/events'));
+    final request = http.Request('GET', _resolve('/local/events'));
     request.headers['Accept'] = 'text/event-stream';
     final response = await _client.send(request);
     if (response.statusCode != 200) {
