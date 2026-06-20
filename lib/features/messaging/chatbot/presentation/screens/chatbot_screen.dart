@@ -2415,6 +2415,46 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     );
   }
 
+  String _chatbotModeLabel(String mode) {
+    switch (mode) {
+      case 'keyword':
+        return 'Từ khóa';
+      case 'ai':
+        return 'AI';
+      case 'handoff':
+        return 'Chuyển NV';
+      case 'none':
+      case '':
+        return '—';
+      default:
+        return mode;
+    }
+  }
+
+  String _chatbotStatusLabel(String status) {
+    switch (status) {
+      case 'succeeded':
+        return 'Thành công';
+      case 'skipped':
+        return 'Bị bỏ qua';
+      case 'failed':
+        return 'Thất bại';
+      default:
+        return status;
+    }
+  }
+
+  AppBadgeVariant _chatbotStatusVariant(String status) {
+    switch (status) {
+      case 'succeeded':
+        return AppBadgeVariant.success;
+      case 'failed':
+        return AppBadgeVariant.error;
+      default:
+        return AppBadgeVariant.neutral;
+    }
+  }
+
   Widget _buildLogsTab(ChatbotState state, ChatbotNotifier notifier) {
     return AppCard(
       padding: EdgeInsets.zero,
@@ -2449,7 +2489,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           ),
           Divider(height: 1, color: AppColors.borderSoft),
           SizedBox(
-            height: 350,
+            // Fill the viewport instead of a small fixed box (the screen body
+            // is a scroll view, so Expanded cannot be used here).
+            height: (MediaQuery.of(context).size.height - 320)
+                .clamp(350.0, double.infinity),
             child: AppTable(
               isEmpty: state.logs.isEmpty,
               emptyTitle: 'Chưa có lượt kích hoạt nào',
@@ -2463,6 +2506,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
               ],
               rows: state.logs.map((log) {
+                final succeeded = log.status == 'succeeded';
                 return DataRow(
                   cells: [
                     DataCell(
@@ -2470,8 +2514,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     ),
                     DataCell(
                       AppBadge(
-                        label: log.keyword,
-                        variant: log.status == 'Thành công'
+                        label: _chatbotModeLabel(log.keyword),
+                        variant: succeeded
                             ? AppBadgeVariant.info
                             : AppBadgeVariant.neutral,
                       ),
@@ -2480,7 +2524,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       Text(
                         log.response,
                         style: AppTextStyles.body,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -2492,10 +2536,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     ),
                     DataCell(
                       AppBadge(
-                        label: log.status,
-                        variant: log.status == 'Thành công'
-                            ? AppBadgeVariant.success
-                            : AppBadgeVariant.error,
+                        label: _chatbotStatusLabel(log.status),
+                        variant: _chatbotStatusVariant(log.status),
                       ),
                     ),
                   ],

@@ -97,6 +97,16 @@ export class LocalChatbotRuntime {
       || event.senderId === event.accountId
       || !event.providerMessageId
     ) {
+      const why = !this.running
+        ? 'runtime not running'
+        : options.isHistory
+          ? 'history message'
+          : event.senderId === event.accountId
+            ? 'self message'
+            : 'no providerMessageId';
+      console.log(
+        `[chatbot-flow] runtime skip pmid=${event.providerMessageId ?? '-'}: ${why}`,
+      );
       return;
     }
     const conversationKey = `${event.accountId}:${event.threadId}`;
@@ -106,8 +116,15 @@ export class LocalChatbotRuntime {
         event.providerMessageId,
       )
     ) {
+      console.log(
+        `[chatbot-flow] runtime skip pmid=${event.providerMessageId}: already processed`,
+      );
       return;
     }
+    console.log(
+      `[chatbot-flow] debounce push key=${conversationKey} pmid=${event.providerMessageId} ` +
+        `delayMs=${resolveDebounceMs(this.dependencies.getConfigSnapshot()?.settings.debounceSeconds)}`,
+    );
     this.debouncer.push(conversationKey, {
       event,
       managedGroup: options.managedGroup === true,
@@ -124,13 +141,26 @@ export class LocalChatbotRuntime {
   ): Promise<void> {
     if (!this.running || buffered.length === 0) return;
     const snapshot = this.dependencies.getConfigSnapshot();
-    if (!snapshot) return;
+    if (!snapshot) {
+      console.log(
+        `[chatbot-flow] flush abort key=${conversationKey}: no config snapshot`,
+      );
+      return;
+    }
 
     const explicitState = this.dependencies.getConversationState(conversationKey);
     // A human operator just replied (CRM or phone) → stay silent until the
     // cooldown elapses. `mode` is still 'enabled'; this is a temporary pause.
-    if (isChatbotPaused(explicitState)) return;
+    if (isChatbotPaused(explicitState)) {
+      console.log(
+        `[chatbot-flow] flush abort key=${conversationKey}: paused by operator reply`,
+      );
+      return;
+    }
 
+    console.log(
+      `[chatbot-flow] flush key=${conversationKey} buffered=${buffered.length}`,
+    );
     const first = buffered[0]!.event;
     const effective =
       explicitState
@@ -170,13 +200,25 @@ export class LocalChatbotRuntime {
       generateAi: this.dependencies.generateAi,
     });
 
-    await this.dependencies.dispatch({
+    const detail = decision.kind === 'reply'
+      ? `mode=${decision.mode}`
+      : 'reason' in decision
+        ? `reason=${decision.reason}`
+        : '';
+    console.log(
+      `[chatbot-flow] decision key=${conversationKey} kind=${decision.kind} ${detail}`,
+    );
+
+    const result = await this.dependencies.dispatch({
       accountId: first.accountId,
       threadId: first.threadId,
       threadType: first.threadType,
       conversationKey,
       decision,
     });
+    console.log(
+      `[chatbot-flow] dispatch key=${conversationKey} status=${result.status}`,
+    );
   }
 }
 

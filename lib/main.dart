@@ -12,6 +12,7 @@ import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'features/settings/providers/update_provider.dart';
+import 'features/messaging/bulk/providers/scheduled_campaigns_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
 import 'shared/utils/desktop_window_manager.dart';
 import 'shared/utils/desktop_notifier.dart';
@@ -88,6 +89,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(appLockProvider.notifier).load();
+      // Instantiate the scheduled-campaigns queue at startup so its constructor
+      // loads persisted jobs and re-arms Timers (or marks past-due as missed)
+      // even if the user never opens the bulk messaging screen this session.
+      ref.read(scheduledCampaignsProvider);
       unawaited(_checkPostUpdate());
     });
   }

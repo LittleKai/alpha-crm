@@ -12,6 +12,7 @@ import 'nav_item_models.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
 import '../../features/auth/providers/crm_auth_provider.dart';
 import '../../features/security/providers/app_lock_provider.dart';
+import '../../features/tasks/providers/crm_tasks_provider.dart';
 
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
@@ -33,6 +34,9 @@ class AppSidebar extends ConsumerWidget {
     final bool isCollapsed =
         forceCollapsed ?? ref.watch(sidebarCollapsedProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
+    final int openTaskCount = ref.watch(
+      crmTasksProvider.select((s) => s.openCount),
+    );
 
     return Stack(
       clipBehavior: Clip.none,
@@ -58,7 +62,8 @@ class AppSidebar extends ConsumerWidget {
                       group: group,
                       isCollapsed: isCollapsed,
                       currentRoute: currentRoute,
-                      buildItem: (item, isCollapsed) => _buildNavItem(context, item, isCollapsed),
+                      buildItem: (item, isCollapsed) =>
+                          _buildNavItem(context, item, isCollapsed, openTaskCount),
                     );
                   }).toList(),
                 ),
@@ -204,8 +209,14 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, NavItem item, bool isCollapsed) {
+  Widget _buildNavItem(
+    BuildContext context,
+    NavItem item,
+    bool isCollapsed, [
+    int openTaskCount = 0,
+  ]) {
     final isActive = currentRoute == item.routePath;
+    final bool showBadge = item.routePath == '/tasks' && openTaskCount > 0;
     final isDark = true; // Force dark sidebar
     final textSecondary = Colors.white.withValues(alpha: 0.7);
     final activeBg = _activeBgColor(item, isDark);
@@ -237,10 +248,17 @@ class AppSidebar extends ConsumerWidget {
               borderRadius: BorderRadius.circular(AppSpacing.radiusS),
               onTap: () => context.go(item.routePath),
               child: Center(
-                child: Icon(
-                  item.icon,
-                  color: itemIconColor,
-                  size: 20,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(item.icon, color: itemIconColor, size: 20),
+                    if (showBadge)
+                      Positioned(
+                        right: -7,
+                        top: -6,
+                        child: _NavCountBadge(count: openTaskCount),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -288,6 +306,10 @@ class AppSidebar extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (showBadge) ...[
+                        _NavCountBadge(count: openTaskCount),
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
                     ],
                   ),
                 ),
@@ -519,6 +541,37 @@ class AppSidebar extends ConsumerWidget {
     if (path == '/devices') return const Color(0xFFF5F3FF);
     if (path == '/settings') return const Color(0xFFF1F5F9);
     return AppColors.primarySoft;
+  }
+}
+
+/// Red pill showing a pending count (e.g. open follow-up tasks) on a nav item.
+class _NavCountBadge extends StatelessWidget {
+  final int count;
+
+  const _NavCountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 18),
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEF4444),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          height: 1,
+        ),
+      ),
+    );
   }
 }
 

@@ -87,6 +87,37 @@ class ChatbotLocalBridgeApi {
     return Map<String, dynamic>.from(body['data'] as Map);
   }
 
+  /// Map of `threadId -> display name` from the local conversation store, used
+  /// to show real customer names in the chatbot response log (the cloud audit
+  /// only stores account/thread ids). Returns an empty map if unreachable.
+  Future<Map<String, String>> getConversationNames() async {
+    try {
+      final response = await _client
+          .get(_baseUri.resolve('/local/conversations?limit=500'))
+          .timeout(const Duration(seconds: 4));
+      final body = response.body.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      final list = body['data'] ?? body['conversations'] ?? body['items'];
+      final result = <String, String>{};
+      if (list is List) {
+        for (final item in list) {
+          if (item is! Map) continue;
+          final threadId = (item['threadId'] ?? '').toString();
+          final name = (item['displayName'] ?? item['name'] ?? '')
+              .toString()
+              .trim();
+          if (threadId.isNotEmpty && name.isNotEmpty) {
+            result[threadId] = name;
+          }
+        }
+      }
+      return result;
+    } catch (_) {
+      return <String, String>{};
+    }
+  }
+
   /// Ids of knowledge files currently present on this machine (for "missing
   /// file" warnings in the knowledge tab). Returns an empty set if unreachable.
   Future<Set<String>> listKnowledgeFileIds() async {

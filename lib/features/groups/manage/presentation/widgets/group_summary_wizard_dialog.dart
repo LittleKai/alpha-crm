@@ -176,7 +176,7 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
             contentPadding: EdgeInsets.zero,
             value: _autoCreateTasks,
             title: Text(
-              'Tự đề xuất tạo công việc follow-up',
+              'Tự đề xuất tạo công việc chăm sóc',
               style: AppTextStyles.body,
             ),
             subtitle: Text(

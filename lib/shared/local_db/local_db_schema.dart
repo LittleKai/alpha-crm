@@ -1,5 +1,24 @@
 class LocalDbSchema {
-  static const int version = 2;
+  static const int version = 3;
+
+  // Snapshot of a scheduled (pending) bulk campaign so it survives navigation
+  // and app restart. Recipients are stored as a JSON array of {id,name}.
+  static const String _scheduledCampaignsTable = '''
+    CREATE TABLE IF NOT EXISTS scheduled_campaigns (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL DEFAULT '',
+      isGroupMessage INTEGER NOT NULL DEFAULT 0,
+      recipientsJson TEXT NOT NULL DEFAULT '[]',
+      accountId TEXT,
+      minDelay INTEGER NOT NULL DEFAULT 30,
+      maxDelay INTEGER NOT NULL DEFAULT 60,
+      requireHumanApproval INTEGER NOT NULL DEFAULT 0,
+      scheduledAt INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      createdAt INTEGER NOT NULL
+    )
+    ''';
 
   static const List<String> initialScripts = [
     // Generic cache table
@@ -93,6 +112,8 @@ class LocalDbSchema {
       expiresAt INTEGER NOT NULL
     )
     ''',
+
+    _scheduledCampaignsTable,
   ];
 
   static const List<String> version2Scripts = [
@@ -131,4 +152,6 @@ class LocalDbSchema {
     )
     ''',
   ];
+
+  static const List<String> version3Scripts = [_scheduledCampaignsTable];
 }

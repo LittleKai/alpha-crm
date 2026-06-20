@@ -237,6 +237,18 @@ async function handleInboundMessageEvent(
   if (!running) {
     return;
   }
+  // Diagnostic: trace each inbound message end-to-end. `providerAgeMs` is the lag
+  // between the Zalo-reported timestamp and when this bridge received it — a large
+  // value points at listener/zca-js delay rather than chatbot debounce.
+  const providerTs = Date.parse(event.timestamp);
+  console.log(
+    `[chatbot-flow] recv acct=${event.accountId} thread=${event.threadId} ` +
+      `type=${event.threadType}/${event.messageType} pmid=${event.providerMessageId ?? '-'} ` +
+      `from=${event.senderId}` +
+      (Number.isFinite(providerTs)
+        ? ` providerAgeMs=${Date.now() - providerTs}`
+        : ''),
+  );
   try {
     // Resolve managed status WITHOUT letting the cloud fetch drop the message.
     // A group message must still be stored locally even if the managed-group
@@ -329,13 +341,22 @@ async function handleInboundMessageEvent(
         }
         // Per-account AI auto-reply switch (Live Chat settings). When off, this
         // account never auto-engages incoming messages — the operator replies
-        // manually. Defaults on.
-        if (
-          !reconciledId &&
-          !existingProviderMessage &&
-          isManaged &&
-          localStore.isAccountAiAutoReplyEnabled(event.accountId)
-        ) {
+        // manually. Defaults on. Each branch logs WHY a message did/didn't reach
+        // the chatbot so dropped auto-replies can be diagnosed.
+        if (reconciledId || existingProviderMessage) {
+          // Echo of our own send or a duplicate — never a new inbound to answer.
+        } else if (!isManaged) {
+          console.log(
+            `[chatbot-flow] skip chatbot pmid=${event.providerMessageId}: thread not managed`,
+          );
+        } else if (!localStore.isAccountAiAutoReplyEnabled(event.accountId)) {
+          console.log(
+            `[chatbot-flow] skip chatbot pmid=${event.providerMessageId}: AI auto-reply OFF for acct=${event.accountId}`,
+          );
+        } else {
+          console.log(
+            `[chatbot-flow] -> chatbot engage pmid=${event.providerMessageId}`,
+          );
           handleChatbotInbound(event, event.threadType === 'group');
         }
       } catch (error: any) {

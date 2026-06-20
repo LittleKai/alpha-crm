@@ -50,7 +50,7 @@ final List<NavGroup> navigationGroups = [
         color: Colors.orangeAccent,
       ),
       NavItem(
-        title: 'Công việc follow-up',
+        title: 'Công việc chăm sóc',
         icon: Icons.task_alt_outlined,
         routePath: '/tasks',
         color: Colors.green,

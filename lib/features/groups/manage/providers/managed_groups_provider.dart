@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/utils/zalo_backend_manager.dart';
 import '../../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
+import '../../../tasks/providers/crm_tasks_provider.dart' show defaultDueByPriority;
 import '../data/managed_groups_repository.dart';
 
 final managedGroupsRepositoryProvider = Provider<ManagedGroupsRepository>((
@@ -660,6 +661,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
         'insightId': item.id,
         if (group != null) 'groupId': group.id,
         'ownerNote': 'Từ tóm tắt nhóm',
+        'dueAt': defaultDueByPriority(item.priority).toIso8601String(),
       });
       if (ok['success'] == true) {
         created++;

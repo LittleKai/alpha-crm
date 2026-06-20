@@ -73,6 +73,13 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
     Future.microtask(() {
       if (mounted) {
         ref.read(zaloIntegrationProvider.notifier).checkConnection();
+        final target = ref.read(liveChatDeepLinkProvider);
+        if (target != null) {
+          ref.read(liveChatDeepLinkProvider.notifier).state = null;
+          ref
+              .read(liveChatProvider.notifier)
+              .openByThread(target.accountId, target.threadId);
+        }
       }
     });
   }

@@ -98,7 +98,7 @@ class _Header extends ConsumerWidget {
               Text('Quản lý nhóm Zalo', style: AppTextStyles.pageTitle),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Bật quản lý nhóm, tạo tóm tắt AI và theo dõi insight vận hành.',
+                'Bật quản lý nhóm, tạo tóm tắt AI và theo dõi điểm cần chú ý khi vận hành.',
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
               ),
             ],
@@ -393,7 +393,7 @@ class _DetailsPanel extends StatelessWidget {
     if (selected == null || selected.isEmpty || !context.mounted) return;
     final created = await notifier.createTasksFromInsights(selected);
     if (context.mounted) {
-      _notify(context, 'Đã tạo $created công việc follow-up.');
+      _notify(context, 'Đã tạo $created công việc chăm sóc.');
     }
   }
 
@@ -413,7 +413,8 @@ class _DetailsPanel extends StatelessWidget {
             const AppEmptyState(
               icon: Icons.manage_search_outlined,
               title: 'Chọn nhóm để quản lý',
-              description: 'Tóm tắt, insight và xuất file sẽ hiển thị tại đây.',
+              description:
+                  'Tóm tắt, điểm cần chú ý và xuất file sẽ hiển thị tại đây.',
               height: 260,
             ),
             _InsightsList(insights: state.insights),
@@ -595,7 +596,7 @@ class _ProposedActionsBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.s),
           Expanded(
             child: Text(
-              '$count việc cần làm được trích xuất. Duyệt để tạo công việc follow-up.',
+              '$count việc cần làm được trích xuất. Duyệt để tạo công việc chăm sóc.',
               style: AppTextStyles.body,
             ),
           ),
@@ -718,11 +719,11 @@ class _InsightsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Insight mở', style: AppTextStyles.bodyMedium),
+        Text('Điểm cần chú ý', style: AppTextStyles.bodyMedium),
         const SizedBox(height: AppSpacing.s),
         if (insights.isEmpty)
           Text(
-            'Chưa có insight cần xử lý.',
+            'Chưa có điểm nào cần xử lý.',
             style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
           )
         else

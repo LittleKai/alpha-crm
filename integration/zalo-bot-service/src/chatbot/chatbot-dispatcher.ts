@@ -207,6 +207,11 @@ export class ChatbotDispatcher {
       decision.mode === 'keyword' ? 'matched' : 'ai',
       {
         ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
+        // The actual reply text so the cloud log can show a preview. Without
+        // this the "Nội dung phản hồi" column is blank (keyword replies never
+        // reach the cloud generate endpoint, so the cloud has no other source).
+        responsePreview:
+          text || (attachments.length ? '[Đã gửi tệp đính kèm]' : ''),
         providerMessageId: lastProviderMessageId,
         localMessageId: lastLocalMessageId,
         ...(attachments.length ? { attachmentCount: attachments.length } : {}),

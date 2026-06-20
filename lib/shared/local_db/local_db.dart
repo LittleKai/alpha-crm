@@ -53,6 +53,11 @@ class LocalDb {
               await db.execute(script);
             }
           }
+          if (oldVersion < 3) {
+            for (final script in LocalDbSchema.version3Scripts) {
+              await db.execute(script);
+            }
+          }
         },
       ),
     );

@@ -15,7 +15,7 @@ const List<SummaryGoal> kSummaryGoals = [
   SummaryGoal('leads', 'Khách quan tâm / hỏi mua (lead nóng)'),
   SummaryGoal('questions', 'Câu hỏi chưa được trả lời'),
   SummaryGoal('complaints', 'Phàn nàn / khiếu nại'),
-  SummaryGoal('actions', 'Việc cần làm (follow-up)'),
+  SummaryGoal('actions', 'Việc cần làm (chăm sóc khách)'),
   SummaryGoal('trends', 'Chủ đề nổi bật / xu hướng'),
 ];
 

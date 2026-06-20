@@ -180,13 +180,47 @@ class ChatbotRule {
   }
 }
 
+/// Maps a chatbot skip/handoff/fail reason code (stored by the bridge in the
+/// audit `reason`/`error`) to a human-readable Vietnamese explanation. Returns
+/// the raw value unchanged if it is not a known code (e.g. a real error text).
+String friendlyChatbotReason(String raw) {
+  switch (raw) {
+    case 'global_disabled':
+      return 'Chatbot đang tắt.';
+    case 'no_eligible_messages':
+      return 'Không có tin nhắn hợp lệ (vd: tin không phải văn bản, hoặc đã xử lý).';
+    case 'no_matching_rule':
+      return 'Không khớp kịch bản từ khóa nào và AI đang tắt.';
+    case 'personal_audience':
+      return 'Ngoài phạm vi đối tượng cá nhân đã chọn.';
+    case 'group_audience':
+      return 'Ngoài phạm vi nhóm đã chọn.';
+    case 'group_trigger':
+      return 'Trong nhóm bot chỉ trả lời khi được nhắc tên hoặc trả lời tin của bot.';
+    case 'handoff_keyword':
+      return 'Phát hiện từ khóa chuyển nhân viên.';
+    case 'send_failed':
+      return 'Gửi tin nhắn thất bại.';
+    case 'ai_failed':
+      return 'AI tạo câu trả lời thất bại.';
+  }
+  if (raw.startsWith('conversation_')) {
+    return 'Hội thoại đang được giao cho nhân viên (không tự động trả lời).';
+  }
+  return raw;
+}
+
 class ChatbotLogRecord {
   final String id;
   final String customerName;
   final String keyword;
   final String response;
   final DateTime timestamp;
+
+  /// Raw status from the cloud: `succeeded` | `failed` | `skipped`.
   final String status;
+  final String accountId;
+  final String threadId;
 
   const ChatbotLogRecord({
     required this.id,
@@ -195,21 +229,43 @@ class ChatbotLogRecord {
     required this.response,
     required this.timestamp,
     required this.status,
+    this.accountId = '',
+    this.threadId = '',
   });
 
+  ChatbotLogRecord copyWith({String? customerName}) {
+    return ChatbotLogRecord(
+      id: id,
+      customerName: customerName ?? this.customerName,
+      keyword: keyword,
+      response: response,
+      timestamp: timestamp,
+      status: status,
+      accountId: accountId,
+      threadId: threadId,
+    );
+  }
+
   static ChatbotLogRecord fromJson(Map<String, dynamic> json) {
+    final preview = (json['responsePreview'] ?? '').toString().trim();
+    final errorMsg = (json['errorMessage'] ?? '').toString().trim();
+    // `??` does not fall through on empty strings, so an empty responsePreview
+    // would previously hide the skip reason stored in errorMessage.
+    final response = preview.isNotEmpty
+        ? preview
+        : friendlyChatbotReason(errorMsg);
     return ChatbotLogRecord(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
-      customerName: (json['conversationId'] ?? 'Chatbot').toString(),
+      customerName: '',
       keyword: (json['mode'] ?? '').toString(),
-      response: (json['responsePreview'] ?? json['errorMessage'] ?? '')
-          .toString(),
+      response: response,
+      // createdAt is a UTC ISO string; convert to the machine's local time.
       timestamp:
-          DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+          DateTime.tryParse((json['createdAt'] ?? '').toString())?.toLocal() ??
           DateTime.now(),
-      status: (json['status'] ?? '').toString() == 'succeeded'
-          ? 'Thành công'
-          : (json['status'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      accountId: (json['accountId'] ?? '').toString(),
+      threadId: (json['threadId'] ?? '').toString(),
     );
   }
 }
@@ -443,11 +499,22 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   Future<void> loadLogs() async {
     final response = await _repository.getLogs();
     if (response['success'] == true && response['data'] is List) {
-      final logs = (response['data'] as List)
+      var logs = (response['data'] as List)
           .whereType<Map>()
           .map(
             (item) =>
                 ChatbotLogRecord.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+      // The cloud audit only stores account/thread ids, so resolve real
+      // customer names from the local conversation store (desktop only).
+      final names = await _bridge.getConversationNames();
+      logs = logs
+          .map(
+            (log) => log.copyWith(
+              customerName: names[log.threadId] ??
+                  (log.threadId.isNotEmpty ? log.threadId : 'Khách hàng'),
+            ),
           )
           .toList();
       state = state.copyWith(logs: logs);

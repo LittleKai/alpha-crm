@@ -21,6 +21,8 @@ import '../../../../../shared/widgets/list_item_tiles.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
 import '../../providers/bulk_messaging_provider.dart';
+import '../../providers/scheduled_campaigns_provider.dart';
+import '../../data/scheduled_campaign.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../groups/providers/invite_to_group_provider.dart';
 import '../../../../groups/providers/scan_members_provider.dart';
@@ -100,7 +102,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
             _CampaignTabs(
               selectedIndex: state.selectedTab,
               onChanged: notifier.setSelectedTab,
-              onManageCampaigns: _showPlaceholder,
+              onManageCampaigns: () => _showScheduledCampaignsDialog(context),
             ),
             if (state.complianceError != null) ...[
               const SizedBox(height: AppSpacing.sm),
@@ -366,7 +368,7 @@ class _Header extends ConsumerWidget {
   }
 }
 
-class _CampaignTabs extends StatelessWidget {
+class _CampaignTabs extends ConsumerWidget {
   final int selectedIndex;
   final ValueChanged<int> onChanged;
   final VoidCallback onManageCampaigns;
@@ -378,7 +380,8 @@ class _CampaignTabs extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pendingCount = ref.watch(scheduledCampaignsProvider).length;
     return Row(
       children: [
         Expanded(
@@ -397,15 +400,84 @@ class _CampaignTabs extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppSpacing.m),
-        TextButton.icon(
-          onPressed: onManageCampaigns,
-          icon: const Icon(Icons.access_time, size: 17),
-          label: Text(
-            'Quản lý chiến dịch (0)',
-            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
-          ),
+        _ManageCampaignsButton(
+          count: pendingCount,
+          onTap: onManageCampaigns,
         ),
       ],
+    );
+  }
+}
+
+/// "Quản lý chiến dịch" entry point. Bordered + highlighted when there are queued
+/// campaigns, with a red (n) badge showing how many are pending.
+class _ManageCampaignsButton extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const _ManageCampaignsButton({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = count > 0;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: AppSpacing.borderRadiusM,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.m,
+          vertical: AppSpacing.s,
+        ),
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : AppColors.surface,
+          border: Border.all(
+            color: active ? AppColors.primary : AppColors.border,
+            width: active ? 1.5 : 1,
+          ),
+          borderRadius: AppSpacing.borderRadiusM,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.access_time,
+              size: 17,
+              color: active ? AppColors.primary : AppColors.textSecondary,
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Text(
+              'Quản lý chiến dịch',
+              style: AppTextStyles.label.copyWith(
+                color: active ? AppColors.primary : AppColors.textPrimary,
+                fontWeight: active ? FontWeight.bold : FontWeight.w600,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: AppSpacing.s),
+              Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1817,8 +1889,7 @@ class _ConfigPanel extends StatelessWidget {
             const SizedBox(height: AppSpacing.m),
             _ScheduleSection(
               scheduledAt: state.scheduledAt,
-              enabled:
-                  !state.isSending && !state.isPolling && !state.isScheduleArmed,
+              enabled: !state.isSending && !state.isPolling,
               onChanged: notifier.setScheduledAt,
             ),
             const SizedBox(height: AppSpacing.m),
@@ -1841,14 +1912,6 @@ class _ConfigPanel extends StatelessWidget {
                           variant: AppButtonVariant.primary,
                           onPressed: notifier.stopSending,
                         )
-                      else if (state.isScheduleArmed)
-                        AppButton(
-                          text:
-                              'Hủy hẹn giờ (${DateFormat('HH:mm dd/MM').format(state.scheduledAt!)})',
-                          icon: Icons.timer_off,
-                          variant: AppButtonVariant.outline,
-                          onPressed: notifier.cancelSchedule,
-                        )
                       else
                         AppButton(
                           text: state.scheduledAt != null
@@ -1864,9 +1927,32 @@ class _ConfigPanel extends StatelessWidget {
                               (!state.hasValidRecipients ||
                                   state.messageText.trim().isEmpty)
                               ? null
-                              : () => state.scheduledAt != null
-                                    ? notifier.armSchedule()
-                                    : notifier.startSending(),
+                              : () {
+                                  if (state.scheduledAt == null) {
+                                    notifier.startSending();
+                                    return;
+                                  }
+                                  // Snapshot the form and hand it to the queue,
+                                  // then reset the picker so the form is free for
+                                  // the next campaign.
+                                  final snapshot =
+                                      notifier.buildScheduledSnapshot();
+                                  if (snapshot == null) return;
+                                  ref
+                                      .read(
+                                        scheduledCampaignsProvider.notifier,
+                                      )
+                                      .arm(snapshot);
+                                  notifier.setScheduledAt(null);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Đã thêm vào hàng đợi — sẽ gửi lúc '
+                                        '${DateFormat('HH:mm dd/MM/yyyy').format(snapshot.scheduledAt)}.',
+                                      ),
+                                    ),
+                                  );
+                                },
                         ),
 
                       if (state.totalCount > 0 ||
@@ -2160,6 +2246,195 @@ Future<void> _pickSchedule(
     return;
   }
   onChanged(picked);
+}
+
+void _showScheduledCampaignsDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (_) => const _ScheduledCampaignsDialog(),
+  );
+}
+
+class _ScheduledCampaignsDialog extends ConsumerWidget {
+  const _ScheduledCampaignsDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final jobs = ref.watch(scheduledCampaignsProvider);
+    final notifier = ref.read(scheduledCampaignsProvider.notifier);
+
+    return AppDialog(
+      title: 'Quản lý chiến dịch hẹn giờ',
+      icon: Icons.access_time,
+      width: 640,
+      actions: [
+        AppDialogAction(
+          text: 'Đóng',
+          variant: AppButtonVariant.outline,
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+      child: SizedBox(
+        height: 420,
+        child: jobs.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.event_available,
+                      size: 48,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    Text(
+                      'Chưa có chiến dịch nào đang chờ gửi.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: jobs.length,
+                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
+                itemBuilder: (context, index) => _ScheduledCampaignTile(
+                  job: jobs[index],
+                  notifier: notifier,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+String _relativeTimeText(DateTime at) {
+  final diff = at.difference(DateTime.now());
+  if (diff.isNegative) return 'đã qua giờ hẹn';
+  if (diff.inMinutes < 1) return 'còn dưới 1 phút';
+  if (diff.inMinutes < 60) return 'còn ${diff.inMinutes} phút';
+  if (diff.inHours < 24) {
+    return 'còn ${diff.inHours} giờ ${diff.inMinutes % 60} phút';
+  }
+  return 'còn ${diff.inDays} ngày';
+}
+
+class _ScheduledCampaignTile extends StatelessWidget {
+  final ScheduledCampaign job;
+  final ScheduledCampaignsNotifier notifier;
+
+  const _ScheduledCampaignTile({required this.job, required this.notifier});
+
+  @override
+  Widget build(BuildContext context) {
+    final (chipText, chipColor) = switch (job.status) {
+      ScheduledStatus.pending => ('Đang chờ', AppColors.primary),
+      ScheduledStatus.missed => ('Đã lỡ giờ', AppColors.warning),
+      ScheduledStatus.failed => ('Gửi lỗi', Colors.red),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.borderSoft),
+        borderRadius: AppSpacing.borderRadiusM,
+        color: AppColors.appBackground,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        job.name.isNotEmpty ? job.name : '(Chiến dịch không tên)',
+                        style: AppTextStyles.cardTitle,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: chipColor.withValues(alpha: 0.12),
+                        borderRadius: AppSpacing.borderRadiusS,
+                      ),
+                      child: Text(
+                        chipText,
+                        style: AppTextStyles.caption.copyWith(
+                          color: chipColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event,
+                      size: 14,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      '${DateFormat('HH:mm  •  dd/MM/yyyy').format(job.scheduledAt)}'
+                      '  (${_relativeTimeText(job.scheduledAt)})',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${job.isGroupMessage ? "Gửi vào nhóm" : "Gửi cá nhân"} • '
+                  '${job.recipients.length} người nhận',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.play_arrow_rounded, size: 20),
+            color: AppColors.primary,
+            tooltip: 'Gửi ngay',
+            onPressed: () => notifier.sendNow(job.id),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            color: AppColors.textSecondary,
+            tooltip: 'Đổi giờ gửi',
+            onPressed: () => _pickSchedule(
+              context,
+              job.scheduledAt,
+              (dt) {
+                if (dt != null) notifier.reschedule(job.id, dt);
+              },
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 18),
+            color: Colors.red,
+            tooltip: 'Xóa khỏi hàng đợi',
+            onPressed: () => notifier.cancel(job.id),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Section extends StatelessWidget {

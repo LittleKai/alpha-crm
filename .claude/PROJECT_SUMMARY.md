@@ -85,6 +85,7 @@ docs/
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
 | `lib/features/workflows/` | Workflow automation feature | Provides `/workflows`, n8n settings UI, template catalog/filtering, channel capability matrix, and install calls to local backend. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
+| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Compose/send bulk campaigns (phone/group/friends/tags). Shared `launchCampaign()` in `providers/bulk_messaging_provider.dart` (template→campaign→start) used by both immediate send and scheduling. Client-side scheduling (Path B): `providers/scheduled_campaigns_provider.dart` holds a queue of `data/scheduled_campaign.dart` snapshots, each with its own Timer; persisted via `data/scheduled_campaigns_dao.dart` to the `scheduled_campaigns` SQLite table (re-armed at app launch in `main.dart`; past-due → `missed`). Managed via the "Quản lý chiến dịch (n)" button + dialog. Requires app open at fire time (same limit as the local agent). |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |

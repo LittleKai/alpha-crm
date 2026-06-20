@@ -11,6 +11,7 @@ import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../zalo_integration/data/zalo_integration_api.dart';
 import '../../../groups/manage/providers/managed_groups_provider.dart';
 import '../data/bulk_campaign_repository.dart';
+import '../data/scheduled_campaign.dart';
 
 const Object _unsetSelectedAccount = Object();
 const Object _unsetSelectedGroup = Object();
@@ -122,11 +123,10 @@ class BulkMessagingState {
   final ManagedZaloGroup? selectedGroup;
   // Per-recipient metadata keyed by recipient id (phone/userId/groupId).
   final Map<String, BulkRecipient> recipientInfo;
-  // Client-side scheduled send (Path B): when [scheduledAt] is set the campaign
-  // auto-starts via a Timer in the notifier; [isScheduleArmed] is true while that
-  // Timer is pending. Requires the app to stay open until the fire time.
+  // Compose-time picked send time. Null = send immediately. The actual queue of
+  // armed campaigns lives in [scheduledCampaignsProvider]; this is only the value
+  // currently selected in the date/time picker.
   final DateTime? scheduledAt;
-  final bool isScheduleArmed;
 
   const BulkMessagingState({
     required this.selectedTab,
@@ -151,7 +151,6 @@ class BulkMessagingState {
     this.selectedGroup,
     this.recipientInfo = const {},
     this.scheduledAt,
-    this.isScheduleArmed = false,
   });
 
   factory BulkMessagingState.initial() {
@@ -208,7 +207,6 @@ class BulkMessagingState {
     Object? selectedGroup = _unsetSelectedGroup,
     Map<String, BulkRecipient>? recipientInfo,
     Object? scheduledAt = _unsetScheduledAt,
-    bool? isScheduleArmed,
   }) {
     return BulkMessagingState(
       selectedTab: selectedTab ?? this.selectedTab,
@@ -243,7 +241,6 @@ class BulkMessagingState {
       scheduledAt: identical(scheduledAt, _unsetScheduledAt)
           ? this.scheduledAt
           : scheduledAt as DateTime?,
-      isScheduleArmed: isScheduleArmed ?? this.isScheduleArmed,
     );
   }
 }
@@ -252,7 +249,6 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   final Ref _ref;
   final BulkCampaignRepository _repository;
   Timer? _pollingTimer;
-  Timer? _scheduleTimer;
 
   BulkMessagingNotifier(this._ref, this._repository)
     : super(BulkMessagingState.initial()) {
@@ -311,7 +307,6 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
-    _scheduleTimer?.cancel();
     super.dispose();
   }
 
@@ -424,54 +419,60 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     );
   }
 
-  /// Store the picked send time (or clear it with null). Does NOT arm the Timer;
-  /// the user confirms by pressing the "Hẹn giờ gửi" button which calls
-  /// [armSchedule]. Ignored while a schedule is already armed.
+  /// Store the picked send time (or clear it with null). The queue itself is
+  /// owned by [scheduledCampaignsProvider]; pressing "Hẹn giờ gửi" in the UI
+  /// takes a snapshot via [buildScheduledSnapshot] and arms it there.
   void setScheduledAt(DateTime? dt) {
-    if (state.isScheduleArmed) return;
     state = state.copyWith(scheduledAt: dt);
   }
 
-  /// Arm the client-side Timer that auto-starts the campaign at [scheduledAt].
-  /// If the time has already passed it sends immediately. The Timer lives in the
-  /// notifier (not the widget) so it survives navigating away from this screen,
-  /// but dies when the app closes — which is the same limit as the local Zalo
-  /// agent, so it adds no false reliability promise.
-  void armSchedule() {
+  /// Capture an immutable snapshot of the current compose form for scheduling.
+  /// Returns null (and surfaces a compliance error) if the form is not in a
+  /// valid sendable state. Mirrors the payload shaping in [startSending] so a
+  /// scheduled send behaves identically to an immediate one.
+  ScheduledCampaign? buildScheduledSnapshot() {
     final at = state.scheduledAt;
-    if (at == null || state.isScheduleArmed) return;
-    if (state.isSending || state.isPolling) return;
-    if (!state.hasValidRecipients || state.messageText.trim().isEmpty) return;
+    if (at == null) return null;
+    final recipients = state.recipientIds;
+    if (recipients.isEmpty || state.messageText.trim().isEmpty) return null;
 
-    _scheduleTimer?.cancel();
-    final delay = at.difference(DateTime.now());
-
-    if (delay.inSeconds <= 0) {
-      state = state.copyWith(isScheduleArmed: false, scheduledAt: null);
-      startSending();
-      return;
+    final settings = _ref.read(settingsProvider).settings;
+    final decision = ZaloComplianceGuard.evaluateZaloAction(
+      settings: settings,
+      actionType: _actionTypeForTab(),
+      targetCount: recipients.length,
+    );
+    if (!decision.allowed) {
+      state = state.copyWith(
+        complianceError: '${decision.title}: ${decision.message}',
+      );
+      return null;
     }
 
-    _scheduleTimer = Timer(delay, () {
-      state = state.copyWith(isScheduleArmed: false, scheduledAt: null);
-      startSending();
-    });
-    state = state.copyWith(isScheduleArmed: true);
-    addLog(
-      '[Hẹn giờ] Chiến dịch sẽ tự động gửi lúc '
-      '${DateFormat('HH:mm dd/MM/yyyy').format(at)}. '
-      'Giữ ứng dụng mở tới thời điểm đó.',
+    final isGroupMessage =
+        state.selectedTab == 1 && state.groupSendMode == GroupSendMode.toGroup;
+    final now = DateTime.now();
+    return ScheduledCampaign(
+      id: now.microsecondsSinceEpoch.toString(),
+      name: state.campaignName.trim(),
+      message: state.messageText.trim(),
+      isGroupMessage: isGroupMessage,
+      recipients: recipients
+          .map(
+            (r) => ScheduledRecipient(
+              id: r,
+              name: state.recipientInfo[r]?.name ?? '',
+            ),
+          )
+          .toList(),
+      accountId: state.selectedAccount?.id,
+      minDelay: state.minDelay,
+      maxDelay: state.maxDelay,
+      requireHumanApproval: decision.requiredActions.contains('human_approval'),
+      scheduledAt: at,
+      status: ScheduledStatus.pending,
+      createdAt: now,
     );
-  }
-
-  /// Cancel a pending scheduled send. Keeps [scheduledAt] so the user can re-arm
-  /// or pick a new time.
-  void cancelSchedule() {
-    _scheduleTimer?.cancel();
-    _scheduleTimer = null;
-    if (!state.isScheduleArmed) return;
-    state = state.copyWith(isScheduleArmed: false);
-    addLog('[Hẹn giờ] Đã hủy lịch hẹn giờ gửi.', type: LogType.warning);
   }
 
   void _checkCompliance() {
@@ -608,91 +609,24 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     );
 
     try {
-      final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(
-        state.messageText.trim(),
-      );
-
-      final templateResp = await _repository.createTemplate({
-        'name': state.campaignName.trim().isNotEmpty
-            ? '${state.campaignName.trim()} - Nội dung gửi'
-            : 'Bulk template ${DateTime.now().toIso8601String()}',
-        'body': finalMessage,
-        'type': 'zalo',
-        'category': 'bulk',
-        'isQuick': false,
-        'status': 'active',
-        'language': 'vi',
-      });
-
-      if (templateResp['success'] != true || templateResp['data'] == null) {
-        throw Exception(templateResp['message'] ?? 'Tạo mẫu tin nhắn thất bại');
-      }
-      final templateId =
-          templateResp['data']['_id']?.toString() ??
-          templateResp['data']['id']?.toString();
-      if (templateId == null || templateId.isEmpty) {
-        throw Exception('Máy chủ không trả về templateId hợp lệ.');
-      }
-
-      // Build the recipient payload. Sending into a group thread uses
-      // targetGroupIds; everything else (phones, friends, members, tags) uses
-      // manualRecipients with the resolved display name for personalization.
-      final bool isGroupMessage =
-          state.selectedTab == 1 &&
-          state.groupSendMode == GroupSendMode.toGroup;
-
-      final List<String> targetGroupIds = isGroupMessage ? recipients : const [];
-      final List<Map<String, String>> manualRecipients = isGroupMessage
-          ? const []
-          : recipients
-                .map(
-                  (r) => {
-                    'phone': r,
-                    'name': state.recipientInfo[r]?.name ?? '',
-                  },
-                )
-                .toList();
-
-      // 1. Create campaign
-      final createResp = await _repository.createCampaign({
-        'name': state.campaignName.trim().isNotEmpty
-            ? state.campaignName.trim()
-            : 'Bulk Campaign ${DateTime.now().toIso8601String()}',
-        'templateId': templateId,
-        'channel': 'zalo',
-        'audienceType': isGroupMessage ? 'group' : 'manual',
-        'manualRecipients': manualRecipients,
-        if (targetGroupIds.isNotEmpty) 'targetGroupIds': targetGroupIds,
-        if (state.selectedAccount != null)
-          'selectedAccountId': state.selectedAccount!.id,
-        'rateLimit': {
-          'minDelaySeconds': state.minDelay,
-          'maxDelaySeconds': state.maxDelay,
-        },
-        'requireHumanApproval': decision.requiredActions.contains(
-          'human_approval',
+      final campaignId = await launchCampaign(
+        _repository,
+        CampaignLaunchParams(
+          name: state.campaignName,
+          message: state.messageText,
+          isGroupMessage: state.selectedTab == 1 &&
+              state.groupSendMode == GroupSendMode.toGroup,
+          recipientIds: recipients,
+          recipientNames: {
+            for (final r in recipients) r: state.recipientInfo[r]?.name ?? '',
+          },
+          accountId: state.selectedAccount?.id,
+          minDelay: state.minDelay,
+          maxDelay: state.maxDelay,
+          requireHumanApproval:
+              decision.requiredActions.contains('human_approval'),
         ),
-      });
-
-      if (!createResp['success']) {
-        throw Exception(createResp['message'] ?? 'Tạo chiến dịch thất bại');
-      }
-
-      final campaignId = createResp['data']['_id'];
-
-      // 2. Start campaign
-      String? humanApprovedAt;
-      if (decision.requiredActions.contains('human_approval')) {
-        humanApprovedAt = DateTime.now().toIso8601String();
-      }
-
-      final startResp = await _repository.startCampaign(
-        campaignId,
-        humanApprovedAt: humanApprovedAt,
       );
-      if (!startResp['success']) {
-        throw Exception(startResp['message'] ?? 'Bắt đầu chiến dịch thất bại');
-      }
 
       final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       state = state.copyWith(
@@ -839,6 +773,109 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       );
     }
   }
+}
+
+/// Everything needed to launch a campaign, independent of any UI state, so both
+/// the immediate send ([BulkMessagingNotifier.startSending]) and the scheduled
+/// send ([scheduledCampaignsProvider]) share one code path.
+class CampaignLaunchParams {
+  final String name;
+  final String message; // raw markdown; formatting applied in launchCampaign
+  final bool isGroupMessage;
+  final List<String> recipientIds;
+  final Map<String, String> recipientNames; // id -> display name
+  final String? accountId;
+  final int minDelay;
+  final int maxDelay;
+  final bool requireHumanApproval;
+
+  const CampaignLaunchParams({
+    required this.name,
+    required this.message,
+    required this.isGroupMessage,
+    required this.recipientIds,
+    required this.recipientNames,
+    required this.accountId,
+    required this.minDelay,
+    required this.maxDelay,
+    required this.requireHumanApproval,
+  });
+}
+
+/// Create template + create campaign + start it. Returns the campaignId on
+/// success; throws on any failure. Sending into a group thread uses
+/// targetGroupIds; everything else uses manualRecipients with display names for
+/// personalization.
+Future<String> launchCampaign(
+  BulkCampaignRepository repository,
+  CampaignLaunchParams p,
+) async {
+  final finalMessage = ZaloTextFormatter.formatMarkdownToUnicode(
+    p.message.trim(),
+  );
+  final name = p.name.trim();
+
+  final templateResp = await repository.createTemplate({
+    'name': name.isNotEmpty
+        ? '$name - Nội dung gửi'
+        : 'Bulk template ${DateTime.now().toIso8601String()}',
+    'body': finalMessage,
+    'type': 'zalo',
+    'category': 'bulk',
+    'isQuick': false,
+    'status': 'active',
+    'language': 'vi',
+  });
+  if (templateResp['success'] != true || templateResp['data'] == null) {
+    throw Exception(templateResp['message'] ?? 'Tạo mẫu tin nhắn thất bại');
+  }
+  final templateId =
+      templateResp['data']['_id']?.toString() ??
+      templateResp['data']['id']?.toString();
+  if (templateId == null || templateId.isEmpty) {
+    throw Exception('Máy chủ không trả về templateId hợp lệ.');
+  }
+
+  final targetGroupIds = p.isGroupMessage ? p.recipientIds : const <String>[];
+  final manualRecipients = p.isGroupMessage
+      ? const <Map<String, String>>[]
+      : p.recipientIds
+            .map((r) => {'phone': r, 'name': p.recipientNames[r] ?? ''})
+            .toList();
+
+  final createResp = await repository.createCampaign({
+    'name': name.isNotEmpty
+        ? name
+        : 'Bulk Campaign ${DateTime.now().toIso8601String()}',
+    'templateId': templateId,
+    'channel': 'zalo',
+    'audienceType': p.isGroupMessage ? 'group' : 'manual',
+    'manualRecipients': manualRecipients,
+    if (targetGroupIds.isNotEmpty) 'targetGroupIds': targetGroupIds,
+    if (p.accountId != null && p.accountId!.isNotEmpty)
+      'selectedAccountId': p.accountId,
+    'rateLimit': {
+      'minDelaySeconds': p.minDelay,
+      'maxDelaySeconds': p.maxDelay,
+    },
+    'requireHumanApproval': p.requireHumanApproval,
+  });
+  if (createResp['success'] != true) {
+    throw Exception(createResp['message'] ?? 'Tạo chiến dịch thất bại');
+  }
+  final campaignId = createResp['data']['_id'].toString();
+
+  final humanApprovedAt = p.requireHumanApproval
+      ? DateTime.now().toIso8601String()
+      : null;
+  final startResp = await repository.startCampaign(
+    campaignId,
+    humanApprovedAt: humanApprovedAt,
+  );
+  if (startResp['success'] != true) {
+    throw Exception(startResp['message'] ?? 'Bắt đầu chiến dịch thất bại');
+  }
+  return campaignId;
 }
 
 final bulkMessagingProvider =

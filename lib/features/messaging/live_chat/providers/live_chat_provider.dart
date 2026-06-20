@@ -634,6 +634,31 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     await loadConversations(loadSelectedMessages: true);
   }
 
+  /// Deep-link entry: open the conversation for [accountId] + [threadId]
+  /// (e.g. from a care task linked to a Zalo group). Selects the matching
+  /// account (or all accounts), reloads, then selects the thread.
+  Future<void> openByThread(String accountId, String threadId) async {
+    if (threadId.isEmpty) return;
+    final matched = state.accounts.where((a) => a.id == accountId).toList();
+    final account = matched.isNotEmpty ? matched.first : state.accounts.first;
+    await selectAccount(account);
+    final convs = state.conversations
+        .where(
+          (c) =>
+              c.threadId == threadId &&
+              (accountId.isEmpty || c.accountId == accountId),
+        )
+        .toList();
+    if (convs.isNotEmpty) {
+      await selectConversation(convs.first);
+    } else {
+      state = state.copyWith(
+        errorMessage:
+            'Chưa thấy hội thoại nhóm này trong Live Chat (có thể chưa có tin nhắn).',
+      );
+    }
+  }
+
   Future<void> setSearchQuery(String query) async {
     state = state.copyWith(searchQuery: query);
     await loadConversations(loadSelectedMessages: true);
@@ -1696,6 +1721,17 @@ final liveChatProvider = StateNotifierProvider<LiveChatNotifier, LiveChatState>(
     );
   },
 );
+
+/// Pending deep-link target consumed by [LiveChatScreen] on mount to open a
+/// specific conversation (e.g. from a care task's "Mở Live Chat" button).
+class LiveChatDeepLink {
+  final String accountId;
+  final String threadId;
+
+  const LiveChatDeepLink({required this.accountId, required this.threadId});
+}
+
+final liveChatDeepLinkProvider = StateProvider<LiveChatDeepLink?>((ref) => null);
 
 final _emptyConversation = Conversation(
   id: '',

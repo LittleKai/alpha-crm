@@ -43,7 +43,7 @@ class _ActionItemsPreviewDialogState extends State<_ActionItemsPreviewDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       title: 'Việc cần làm từ tóm tắt',
-      subtitle: 'Chọn các mục để tạo công việc follow-up.',
+      subtitle: 'Chọn các mục để tạo công việc chăm sóc.',
       icon: Icons.checklist_outlined,
       width: 560,
       actions: [
