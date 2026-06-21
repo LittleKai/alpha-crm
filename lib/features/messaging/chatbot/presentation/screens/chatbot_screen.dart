@@ -15,7 +15,7 @@ import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../settings/providers/settings_provider.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
-import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/app_dropdown_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
@@ -1423,85 +1423,124 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     children: [
                       Expanded(
                         flex: 5,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Nhà cung cấp AI', style: AppTextStyles.label),
-                            const SizedBox(height: AppSpacing.xs),
-                            AppSelectField<String>(
-                              value: selectedProvider,
-                              items: chatbotAiProviderConfigs.map((p) {
-                                return DropdownMenuItem(
-                                  value: p.id,
-                                  child: Text(p.label),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                final newConfig = findProviderConfig(value);
-                                if (newConfig == null) return;
-                                setDialogState(() {
-                                  selectedProvider = value;
-                                  providerConfig = newConfig;
-                                  modelTextController.text = newConfig.defaultModel;
-                                });
-                              },
-                            ),
-                          ],
+                        child: AppDropdownField<String>(
+                          labelText: 'Nhà cung cấp AI',
+                          value: selectedProvider,
+                          items: chatbotAiProviderConfigs.map((p) {
+                            return AppDropdownItem(
+                              value: p.id,
+                              label: p.label,
+                              subtitle: p.requiresApiKey ? 'Cần API key' : 'Dùng quota Alpha Studio',
+                              icon: p.id == 'alpha_studio'
+                                  ? Icons.cloud_outlined
+                                  : Icons.key_outlined,
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            final newConfig = findProviderConfig(value);
+                            if (newConfig == null) return;
+                            setDialogState(() {
+                              selectedProvider = value;
+                              providerConfig = newConfig;
+                              modelTextController.text = newConfig.defaultModel;
+                            });
+                          },
                         ),
                       ),
                       const SizedBox(width: AppSpacing.m),
                       Expanded(
                         flex: 7,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text('Model', style: AppTextStyles.label),
-                                const SizedBox(width: AppSpacing.xs),
-                                Tooltip(
-                                  message: 'Chọn từ danh sách hoặc nhập model code tùy ý',
-                                  child: Icon(Icons.info_outline, size: 14, color: AppColors.textMuted),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: modelTextController,
-                                    style: AppTextStyles.body.copyWith(fontSize: 13),
-                                    decoration: InputDecoration(
-                                      hintText: providerConfig.defaultModel,
-                                      hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      border: const OutlineInputBorder(),
-                                    ),
+                        child: selectedProvider == 'alpha_studio'
+                            // ── Alpha Studio: dropdown-only model (no model code) ──
+                            ? AppDropdownField<String>(
+                                labelText: 'Model',
+                                value: providerConfig.presetModels.contains(modelTextController.text)
+                                    ? modelTextController.text
+                                    : providerConfig.defaultModel,
+                                items: providerConfig.presetModels.map((m) {
+                                  return AppDropdownItem(
+                                    value: m,
+                                    label: m,
+                                    subtitle: m == 'gemini-3-flash'
+                                        ? 'Nhanh, tiết kiệm quota'
+                                        : m == 'gemini-2.5-pro'
+                                            ? 'Thông minh, chính xác hơn'
+                                            : null,
+                                  );
+                                }).toList(),
+                                onChanged: (model) {
+                                  setDialogState(() {
+                                    modelTextController.text = model;
+                                  });
+                                },
+                              )
+                            // ── Other providers: AppDropdownField + optional custom text input ──
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text('Model', style: AppTextStyles.label),
+                                      const SizedBox(width: AppSpacing.xs),
+                                      Tooltip(
+                                        message: 'Chọn từ danh sách hoặc nhập model code tùy ý',
+                                        child: Icon(Icons.info_outline, size: 14, color: AppColors.textMuted),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 4),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.expand_more, size: 22),
-                                  tooltip: 'Chọn model có sẵn',
-                                  onSelected: (model) {
-                                    setDialogState(() {
-                                      modelTextController.text = model;
-                                    });
-                                  },
-                                  itemBuilder: (_) => providerConfig.presetModels
-                                      .map((m) => PopupMenuItem(
-                                            value: m,
-                                            child: Text(m, style: AppTextStyles.body.copyWith(fontSize: 13)),
-                                          ))
-                                      .toList(),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: AppDropdownField<String>(
+                                          value: providerConfig.presetModels.contains(modelTextController.text)
+                                              ? modelTextController.text
+                                              : 'custom',
+                                          items: [
+                                            ...providerConfig.presetModels.map((m) => AppDropdownItem(
+                                                  value: m,
+                                                  label: m,
+                                                )),
+                                            const AppDropdownItem(
+                                              value: 'custom',
+                                              label: 'Nhập model khác...',
+                                              icon: Icons.edit_outlined,
+                                            ),
+                                          ],
+                                          onChanged: (model) {
+                                            setDialogState(() {
+                                              if (model != 'custom') {
+                                                modelTextController.text = model;
+                                              } else {
+                                                if (providerConfig.presetModels.contains(modelTextController.text)) {
+                                                  modelTextController.text = '';
+                                                }
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (!providerConfig.presetModels.contains(modelTextController.text)) ...[
+                                    const SizedBox(height: AppSpacing.s),
+                                    TextField(
+                                      controller: modelTextController,
+                                      style: AppTextStyles.body.copyWith(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: 'Nhập model code (VD: ${providerConfig.defaultModel})',
+                                        hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      onChanged: (_) {
+                                        setDialogState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ],
+                              ),
                       ),
                     ],
                   ),

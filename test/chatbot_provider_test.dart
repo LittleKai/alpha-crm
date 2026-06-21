@@ -112,6 +112,7 @@ void main() {
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
       debounceSeconds: 6,
+      aiHistoryLimit: 5,
     );
 
     expect(notifier.state.debounceSeconds, 6);
