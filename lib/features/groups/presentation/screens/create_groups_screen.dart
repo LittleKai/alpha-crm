@@ -422,7 +422,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
                   width: 140,
                   height: 40,
                   child: DropdownButtonFormField<String>(
-                    value: _phoneFilter,
+                    initialValue: _phoneFilter,
                     isExpanded: true,
                     style: AppTextStyles.bodyMedium,
                     decoration: const InputDecoration(

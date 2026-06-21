@@ -35,8 +35,8 @@ class LiveChatLocalBridgeApi {
           ).replace(
             queryParameters: {
               'limit': limit.toString(),
-              if (before != null) 'before': before,
-              if (after != null) 'after': after,
+              'before': ?before,
+              'after': ?after,
             },
           );
 
@@ -101,16 +101,16 @@ class LiveChatLocalBridgeApi {
               'content': content,
               'messageType': messageType,
               'origin': 'operator',
-              if (clientMessageId != null) 'clientMessageId': clientMessageId,
-              if (quote != null) 'quote': quote,
-              if (mentions != null) 'mentions': mentions,
-              if (styles != null) 'styles': styles,
-              if (link != null) 'link': link,
-              if (sticker != null) 'sticker': sticker,
-              if (video != null) 'video': video,
-              if (voice != null) 'voice': voice,
-              if (metadata != null) 'metadata': metadata,
-              if (attachments != null) 'attachments': attachments,
+              'clientMessageId': ?clientMessageId,
+              'quote': ?quote,
+              'mentions': ?mentions,
+              'styles': ?styles,
+              'link': ?link,
+              'sticker': ?sticker,
+              'video': ?video,
+              'voice': ?voice,
+              'metadata': ?metadata,
+              'attachments': ?attachments,
             }),
           )
           .timeout(const Duration(seconds: 5));
@@ -143,8 +143,8 @@ class LiveChatLocalBridgeApi {
             body: jsonEncode({
               'conversationId': conversationId,
               'attachments': attachments,
-              if (content != null) 'content': content,
-              if (messageType != null) 'messageType': messageType,
+              'content': ?content,
+              'messageType': ?messageType,
               'origin': 'operator',
             }),
           )
@@ -240,7 +240,7 @@ class LiveChatLocalBridgeApi {
     final key = Uri.encodeComponent('$accountId:$threadId');
     return _put('/local/conversations/$key/chatbot', {
       'mode': mode,
-      if (reason != null) 'reason': reason,
+      'reason': ?reason,
     });
   }
 
@@ -334,8 +334,8 @@ class LiveChatLocalBridgeApi {
     final uri = Uri.parse('$baseUrl/local/messages/search').replace(
       queryParameters: {
         'q': query,
-        if (accountId != null) 'accountId': accountId,
-        if (threadId != null) 'threadId': threadId,
+        'accountId': ?accountId,
+        'threadId': ?threadId,
       },
     );
     return _decodeResponse(

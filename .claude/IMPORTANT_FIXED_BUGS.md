@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-20 +07:00
+**Last Updated:** 2026-06-21 +07:00
 
 ---
 
@@ -51,6 +51,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 ---
 
 ## Fixed Bugs
+
+### 2026-06-21 - Windows debug run must not reuse a stale single-instance window
+
+- Symptom: `flutter run -d windows` built successfully, then failed with `Error waiting for a debug connection: The log reader stopped unexpectedly, or never started.` The visible `alpha_crm.exe` window could be an old hung instance that could not be focused, clicked, or scrolled.
+- Root cause: the native Windows runner enforced `Global\AlphaCRM_SingleInstance` even in Debug builds. A stale/hung previous `alpha_crm.exe` kept the mutex, so every new `flutter run` process exited after trying to focus the old window. Flutter never got a debug connection to the newly launched process because no new debug process survived.
+- Fix summary: disable the single-instance mutex in `_DEBUG` builds so `flutter run` always launches its own debuggable process. Release builds still enforce single-instance, but now probe the existing window with `SendMessageTimeoutW(WM_NULL, SMTO_ABORTIFHUNG)` before treating it as reusable.
+- Rule: do not apply production single-instance focus-forward logic to Flutter Debug runs. If single-instance is used in Release, never assume an existing HWND is usable without a hang-safe responsiveness probe.
+- Related files: `tools/alpha-crm/windows/runner/main.cpp`.
 
 ### 2026-06-19 - Microsecond clientMessageId pinned Date.now() and evicted the live `zpw_sek` cookie
 

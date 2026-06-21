@@ -12,8 +12,7 @@ class AppLogger {
 
   Logger? _customLogger;
   Logger get _logger {
-    if (_customLogger == null) {
-      _customLogger = Logger(
+    _customLogger ??= Logger(
         filter: _AlwaysLogFilter(),
         printer: PrettyPrinter(
           methodCount: 0,
@@ -25,7 +24,6 @@ class AppLogger {
         ),
         output: ConsoleOutput(),
       );
-    }
     return _customLogger!;
   }
   File? _logFile;

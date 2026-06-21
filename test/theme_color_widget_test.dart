@@ -19,8 +19,8 @@ void main() {
     
     final container = tester.widget<Container>(find.byType(Container));
     final boxDecoration = container.decoration as BoxDecoration?;
-    print('DECORATION COLOR VALUE: ${boxDecoration?.color?.value.toRadixString(16)}');
+    print('DECORATION COLOR VALUE: ${boxDecoration?.color?.toARGB32().toRadixString(16)}');
     
-    expect(boxDecoration?.color?.value, 0xFF111827);
+    expect(boxDecoration?.color?.toARGB32(), 0xFF111827);
   });
 }

@@ -219,7 +219,7 @@ class CrmTasksNotifier extends StateNotifier<CrmTasksState> {
     final response = await CrmCloudApi.put('/crm/tasks/${task.id}', {
       if (title != null) 'title': title.trim(),
       if (description != null) 'description': description.trim(),
-      if (priority != null) 'priority': priority,
+      'priority': ?priority,
       if (dueAt != null) 'dueAt': dueAt.toIso8601String(),
     });
     state = state.copyWith(isSaving: false);
