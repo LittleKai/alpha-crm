@@ -117,6 +117,14 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     );
   }
 
+  Future<void> updateShowTokenAnalytics(bool value) async {
+    state = state.copyWith(
+      settings: state.settings.copyWith(showTokenAnalytics: value),
+      isSaved: true,
+    );
+    await _saveSettingsToFile(state.settings);
+  }
+
   Future<void> updateLiveChatNotifications(bool value) async {
     state = state.copyWith(
       settings: state.settings.copyWith(liveChatNotifications: value),

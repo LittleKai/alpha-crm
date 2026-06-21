@@ -13,6 +13,7 @@ import '../../../../../shared/widgets/app_badge.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
+import '../../../../settings/providers/settings_provider.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
@@ -2456,6 +2457,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Widget _buildLogsTab(ChatbotState state, ChatbotNotifier notifier) {
+    final showTokens = ref.watch(settingsProvider).settings.showTokenAnalytics;
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -2498,12 +2500,22 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               emptyTitle: 'Chưa có lượt kích hoạt nào',
               emptyDescription:
                   'Lịch sử phản hồi tự động của chatbot sẽ được lưu trữ ở đây.',
-              columns: const [
-                AppTableColumn(label: 'Khách hàng', size: ColumnSize.M),
-                AppTableColumn(label: 'Từ khóa kích hoạt', size: ColumnSize.S),
-                AppTableColumn(label: 'Nội dung phản hồi', size: ColumnSize.L),
-                AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
-                AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
+              columns: [
+                const AppTableColumn(label: 'Khách hàng', size: ColumnSize.M),
+                const AppTableColumn(
+                  label: 'Từ khóa kích hoạt',
+                  size: ColumnSize.S,
+                ),
+                const AppTableColumn(
+                  label: 'Nội dung phản hồi',
+                  size: ColumnSize.L,
+                ),
+                const AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
+                const AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
+                if (showTokens)
+                  const AppTableColumn(label: 'Token vào', size: ColumnSize.S),
+                if (showTokens)
+                  const AppTableColumn(label: 'Token ra', size: ColumnSize.S),
               ],
               rows: state.logs.map((log) {
                 final succeeded = log.status == 'succeeded';
@@ -2540,6 +2552,20 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         variant: _chatbotStatusVariant(log.status),
                       ),
                     ),
+                    if (showTokens)
+                      DataCell(
+                        Text(
+                          '${log.tokenIn}',
+                          style: AppTextStyles.caption,
+                        ),
+                      ),
+                    if (showTokens)
+                      DataCell(
+                        Text(
+                          '${log.tokenOut}',
+                          style: AppTextStyles.caption,
+                        ),
+                      ),
                   ],
                 );
               }).toList(),

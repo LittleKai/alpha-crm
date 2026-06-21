@@ -48,6 +48,9 @@ class SystemSettings {
   // Show a desktop notification when a new inbound Live Chat message arrives.
   final bool liveChatNotifications;
 
+  // Show AI token in/out analytics (chatbot log columns + overview chart).
+  final bool showTokenAnalytics;
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -87,6 +90,7 @@ class SystemSettings {
     this.liveChatMediaCacheMaxAgeDays = 90,
     this.liveChatMediaCacheMaxGb = 20,
     this.liveChatNotifications = true,
+    this.showTokenAnalytics = true,
   });
 
   SystemSettings copyWith({
@@ -128,6 +132,7 @@ class SystemSettings {
     int? liveChatMediaCacheMaxAgeDays,
     int? liveChatMediaCacheMaxGb,
     bool? liveChatNotifications,
+    bool? showTokenAnalytics,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -183,6 +188,7 @@ class SystemSettings {
           liveChatMediaCacheMaxGb ?? this.liveChatMediaCacheMaxGb,
       liveChatNotifications:
           liveChatNotifications ?? this.liveChatNotifications,
+      showTokenAnalytics: showTokenAnalytics ?? this.showTokenAnalytics,
     );
   }
 
@@ -232,6 +238,7 @@ class SystemSettings {
       'liveChatMediaCacheMaxAgeDays': liveChatMediaCacheMaxAgeDays,
       'liveChatMediaCacheMaxGb': liveChatMediaCacheMaxGb,
       'liveChatNotifications': liveChatNotifications,
+      'showTokenAnalytics': showTokenAnalytics,
     };
   }
 
@@ -296,6 +303,7 @@ class SystemSettings {
       liveChatMediaCacheMaxAgeDays: json['liveChatMediaCacheMaxAgeDays'] ?? 90,
       liveChatMediaCacheMaxGb: json['liveChatMediaCacheMaxGb'] ?? 20,
       liveChatNotifications: json['liveChatNotifications'] != false,
+      showTokenAnalytics: json['showTokenAnalytics'] != false,
     );
   }
 }

@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/utils/zalo_backend_manager.dart';
 import '../../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
-import '../../../tasks/providers/crm_tasks_provider.dart' show defaultDueByPriority;
+import '../../../tasks/providers/crm_tasks_provider.dart'
+    show defaultDueByPriority, crmTasksProvider;
 import '../data/managed_groups_repository.dart';
 
 final managedGroupsRepositoryProvider = Provider<ManagedGroupsRepository>((
@@ -368,9 +369,10 @@ class ManagedGroupsState {
 }
 
 class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
+  final Ref _ref;
   final ManagedGroupsRepository _repository;
 
-  ManagedGroupsNotifier(this._repository)
+  ManagedGroupsNotifier(this._ref, this._repository)
     : super(ManagedGroupsState.initial()) {
     refresh();
   }
@@ -676,6 +678,8 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
             .toList(),
       );
       await loadInsights();
+      // Refresh the care-tasks tab + sidebar badge with the newly created tasks.
+      await _ref.read(crmTasksProvider.notifier).loadTasks();
     }
     return created;
   }
@@ -698,5 +702,8 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
 
 final managedGroupsProvider =
     StateNotifierProvider<ManagedGroupsNotifier, ManagedGroupsState>((ref) {
-      return ManagedGroupsNotifier(ref.read(managedGroupsRepositoryProvider));
+      return ManagedGroupsNotifier(
+        ref,
+        ref.read(managedGroupsRepositoryProvider),
+      );
     });

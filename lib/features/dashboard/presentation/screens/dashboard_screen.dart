@@ -16,7 +16,9 @@ import '../../../../shared/widgets/app_tabs.dart';
 import '../../../../mock/mock_contacts.dart';
 import '../../../auth/providers/crm_auth_provider.dart';
 import '../../../customers/providers/customers_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../widgets/ai_token_usage_card.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -34,6 +36,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final state = ref.watch(dashboardProvider);
     final notifier = ref.read(dashboardProvider.notifier);
     final customersState = ref.watch(customersProvider);
+    final showTokens = ref.watch(
+      settingsProvider.select((s) => s.settings.showTokenAnalytics),
+    );
 
     return Scaffold(
       body: state.isLoading && state.overview == null
@@ -89,6 +94,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       const SizedBox(height: AppSpacing.l),
                       _buildPerformanceCard(state, notifier),
                       const SizedBox(height: AppSpacing.l),
+                      if (showTokens) ...[
+                        const AiTokenUsageCard(),
+                        const SizedBox(height: AppSpacing.l),
+                      ],
                       _buildCampaignStatusSection(state),
                       const SizedBox(height: AppSpacing.l),
                     ],

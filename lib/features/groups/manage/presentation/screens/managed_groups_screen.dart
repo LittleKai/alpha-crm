@@ -15,6 +15,7 @@ import '../../../../../shared/widgets/compliance_warnings_popup.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/managed_groups_provider.dart';
 import '../widgets/action_items_preview_dialog.dart';
+import '../widgets/group_summary_settings_dialog.dart';
 import '../widgets/group_summary_wizard_dialog.dart';
 
 class ManagedGroupsScreen extends ConsumerWidget {
@@ -196,6 +197,11 @@ class _Header extends ConsumerWidget {
           ],
         ),
         const SizedBox(width: AppSpacing.s),
+        IconButton(
+          tooltip: 'Cài đặt tóm tắt',
+          icon: const Icon(Icons.settings_outlined, color: AppColors.primary),
+          onPressed: () => showGroupSummarySettings(context),
+        ),
         IconButton(
           tooltip: 'Khuyến cáo an toàn',
           icon: const Icon(

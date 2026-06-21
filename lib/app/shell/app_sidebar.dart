@@ -13,6 +13,7 @@ import '../../shared/utils/responsive_breakpoints.dart';
 import '../../features/auth/providers/crm_auth_provider.dart';
 import '../../features/security/providers/app_lock_provider.dart';
 import '../../features/tasks/providers/crm_tasks_provider.dart';
+import '../../features/messaging/bulk/providers/scheduled_campaigns_provider.dart';
 
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
@@ -36,6 +37,9 @@ class AppSidebar extends ConsumerWidget {
     final isMobile = ResponsiveBreakpoints.isMobile(context);
     final int openTaskCount = ref.watch(
       crmTasksProvider.select((s) => s.openCount),
+    );
+    final int scheduledCount = ref.watch(
+      scheduledCampaignsProvider.select((s) => s.length),
     );
 
     return Stack(
@@ -62,8 +66,13 @@ class AppSidebar extends ConsumerWidget {
                       group: group,
                       isCollapsed: isCollapsed,
                       currentRoute: currentRoute,
-                      buildItem: (item, isCollapsed) =>
-                          _buildNavItem(context, item, isCollapsed, openTaskCount),
+                      buildItem: (item, isCollapsed) => _buildNavItem(
+                        context,
+                        item,
+                        isCollapsed,
+                        openTaskCount,
+                        scheduledCount,
+                      ),
                     );
                   }).toList(),
                 ),
@@ -214,9 +223,13 @@ class AppSidebar extends ConsumerWidget {
     NavItem item,
     bool isCollapsed, [
     int openTaskCount = 0,
+    int scheduledCount = 0,
   ]) {
     final isActive = currentRoute == item.routePath;
-    final bool showBadge = item.routePath == '/tasks' && openTaskCount > 0;
+    final int badgeCount = item.routePath == '/messaging/bulk'
+        ? scheduledCount
+        : (item.routePath == '/tasks' ? openTaskCount : 0);
+    final bool showBadge = badgeCount > 0;
     final isDark = true; // Force dark sidebar
     final textSecondary = Colors.white.withValues(alpha: 0.7);
     final activeBg = _activeBgColor(item, isDark);
@@ -256,7 +269,7 @@ class AppSidebar extends ConsumerWidget {
                       Positioned(
                         right: -7,
                         top: -6,
-                        child: _NavCountBadge(count: openTaskCount),
+                        child: _NavCountBadge(count: badgeCount),
                       ),
                   ],
                 ),
@@ -307,7 +320,7 @@ class AppSidebar extends ConsumerWidget {
                         ),
                       ),
                       if (showBadge) ...[
-                        _NavCountBadge(count: openTaskCount),
+                        _NavCountBadge(count: badgeCount),
                         const SizedBox(width: AppSpacing.sm),
                       ],
                     ],

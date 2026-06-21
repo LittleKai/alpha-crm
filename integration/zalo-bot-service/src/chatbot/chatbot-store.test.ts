@@ -326,7 +326,10 @@ describe('ChatbotStore', () => {
     );
   });
 
-  it('rejects invalid persisted config JSON', () => {
+  it('ignores invalid persisted config snapshot instead of throwing', () => {
+    // A corrupt/legacy row must not brick read paths (conversation list,
+    // runtime, sync status) — it degrades to "no config synced" and self-heals
+    // on the next cloud sync.
     localStore.db
       .prepare(
         `INSERT INTO chatbot_config_snapshot
@@ -335,9 +338,9 @@ describe('ChatbotStore', () => {
       )
       .run();
 
-    assert.throws(
-      () => chatbotStore.getConfigSnapshot(),
-      /Invalid chatbot config snapshot JSON/,
+    assert.equal(chatbotStore.getConfigSnapshot(), undefined);
+    assert.doesNotThrow(
+      () => chatbotStore.resolveConversationEnabled('acc-1:thread-1', 'user'),
     );
   });
 

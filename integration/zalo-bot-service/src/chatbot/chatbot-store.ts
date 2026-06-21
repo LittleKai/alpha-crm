@@ -198,17 +198,22 @@ export class ChatbotStore {
       .get() as { version: string; payloadJson: string } | undefined;
     if (!row) return undefined;
 
-    let parsed: unknown;
+    // A persisted snapshot can only be invalid via schema drift (an older build
+    // wrote it; the write path validates strictly). Degrade to "no config synced"
+    // instead of throwing — otherwise one stale row bricks every read path
+    // (conversation list, runtime, sync status). Self-heals on the next cloud
+    // sync, which overwrites the row via saveConfigSnapshot.
     try {
-      parsed = JSON.parse(row.payloadJson);
-    } catch {
-      throw new Error('Invalid chatbot config snapshot JSON');
+      const parsed: unknown = JSON.parse(row.payloadJson);
+      validateConfigSnapshot(parsed);
+      if (parsed.version !== row.version) {
+        throw new Error('Invalid chatbot config snapshot version');
+      }
+      return parsed;
+    } catch (error) {
+      console.error('[chatbot] Ignoring invalid config snapshot:', error);
+      return undefined;
     }
-    validateConfigSnapshot(parsed);
-    if (parsed.version !== row.version) {
-      throw new Error('Invalid chatbot config snapshot version');
-    }
-    return parsed;
   }
 
   enqueueAudit(

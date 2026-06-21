@@ -222,6 +222,11 @@ class ChatbotLogRecord {
   final String accountId;
   final String threadId;
 
+  /// 'chatbot' (auto-reply) or 'group_summary' (group AI summary).
+  final String kind;
+  final int tokenIn;
+  final int tokenOut;
+
   const ChatbotLogRecord({
     required this.id,
     required this.customerName,
@@ -231,6 +236,9 @@ class ChatbotLogRecord {
     required this.status,
     this.accountId = '',
     this.threadId = '',
+    this.kind = 'chatbot',
+    this.tokenIn = 0,
+    this.tokenOut = 0,
   });
 
   ChatbotLogRecord copyWith({String? customerName}) {
@@ -243,6 +251,9 @@ class ChatbotLogRecord {
       status: status,
       accountId: accountId,
       threadId: threadId,
+      kind: kind,
+      tokenIn: tokenIn,
+      tokenOut: tokenOut,
     );
   }
 
@@ -266,6 +277,9 @@ class ChatbotLogRecord {
       status: (json['status'] ?? '').toString(),
       accountId: (json['accountId'] ?? '').toString(),
       threadId: (json['threadId'] ?? '').toString(),
+      kind: (json['kind'] ?? 'chatbot').toString(),
+      tokenIn: int.tryParse((json['tokenIn'] ?? 0).toString()) ?? 0,
+      tokenOut: int.tryParse((json['tokenOut'] ?? 0).toString()) ?? 0,
     );
   }
 }
