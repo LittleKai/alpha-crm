@@ -67,7 +67,9 @@ export class LocalChatbotRuntime {
       delayMs: () => resolveDebounceMs(
         dependencies.getConfigSnapshot()?.settings.debounceSeconds,
       ),
-      maxWaitMs: 12000,
+      // Hard ceiling on total wait from the first buffered message. Must be >=
+      // the max configurable debounce (120s) so a long debounce is not cut short.
+      maxWaitMs: 120000,
       maxItems: 20,
       scheduler: dependencies.scheduler,
       onFlush: (key, values) => this.evaluateBuffered(key, values),
@@ -223,8 +225,8 @@ export class LocalChatbotRuntime {
 }
 
 function resolveDebounceMs(value: number | undefined): number {
-  if (!Number.isFinite(value)) return 5000;
-  return Math.min(15, Math.max(2, Number(value))) * 1000;
+  if (!Number.isFinite(value)) return 20000;
+  return Math.min(120, Math.max(10, Number(value))) * 1000;
 }
 
 function toEngineSettings(

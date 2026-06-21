@@ -222,8 +222,8 @@ describe('ChatbotStore', () => {
       ['aiEnabled', 'yes'],
       ['groupAudience', 'all'],
       ['debounceSeconds', 1],
-      ['debounceSeconds', 16],
-      ['debounceSeconds', '5'],
+      ['debounceSeconds', 200],
+      ['debounceSeconds', '20'],
     ];
 
     for (const [field, value] of invalidSettings) {

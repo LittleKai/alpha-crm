@@ -348,8 +348,8 @@ function isChatbotSettings(value: unknown): boolean {
       || (
         typeof value.debounceSeconds === 'number'
         && Number.isFinite(value.debounceSeconds)
-        && value.debounceSeconds >= 2
-        && value.debounceSeconds <= 15
+        && value.debounceSeconds >= 10
+        && value.debounceSeconds <= 120
       ))
     && (value.handoffKeywords === undefined
       || isStringArray(value.handoffKeywords));

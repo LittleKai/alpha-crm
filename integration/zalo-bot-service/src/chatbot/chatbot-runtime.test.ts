@@ -122,7 +122,7 @@ function createDependencies(
   return { dependencies, evaluations, dispatched, lifecycle };
 }
 
-test('debounces persisted live events for 5 seconds and loads the latest cached snapshot at flush', async () => {
+test('debounces persisted live events for the default 20 seconds and loads the latest cached snapshot at flush', async () => {
   const scheduler = new FakeScheduler();
   let cachedSnapshot = snapshot('v1');
   const fixture = createDependencies(scheduler, () => cachedSnapshot);
@@ -141,7 +141,7 @@ test('debounces persisted live events for 5 seconds and loads the latest cached 
   }), { managedGroup: true });
   cachedSnapshot = snapshot('v2');
 
-  assert.deepEqual(scheduler.delays, [5000, 5000]);
+  assert.deepEqual(scheduler.delays, [20000, 20000]);
   await runtime.flushConversation('account-1:group-1');
 
   assert.equal(fixture.evaluations.length, 1);
@@ -163,14 +163,14 @@ test('debounces persisted live events for 5 seconds and loads the latest cached 
 test('uses the configured debounce duration from the latest snapshot', () => {
   const scheduler = new FakeScheduler();
   const configuredSnapshot = snapshot('v1');
-  configuredSnapshot.settings.debounceSeconds = 7;
+  configuredSnapshot.settings.debounceSeconds = 30;
   const fixture = createDependencies(scheduler, () => configuredSnapshot);
   const runtime = new LocalChatbotRuntime(fixture.dependencies);
   runtime.start();
 
   runtime.handlePersistedInbound(event(), { managedGroup: true });
 
-  assert.deepEqual(scheduler.delays, [7000]);
+  assert.deepEqual(scheduler.delays, [30000]);
   runtime.stop();
 });
 
@@ -193,7 +193,7 @@ test('ignores history and self events and does not infer group triggers from amb
     quote: { content: 'old bot text' },
   }));
 
-  assert.deepEqual(scheduler.delays, [5000]);
+  assert.deepEqual(scheduler.delays, [20000]);
   await runtime.flushConversation('account-1:group-1');
 
   assert.equal(fixture.evaluations.length, 1);

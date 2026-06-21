@@ -1501,9 +1501,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         ),
                         Slider(
                           value: debounceSeconds.toDouble(),
-                          min: 5,
+                          min: 10,
                           max: 120,
-                          divisions: 23,
+                          divisions: 22,
                           activeColor: AppColors.primary,
                           label: '$debounceSeconds giây',
                           onChanged: (value) {

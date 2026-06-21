@@ -105,7 +105,7 @@ String normalizeChatbotAiModel(String value) {
 
 int _normalizeDebounceSeconds(Object? value) {
   final parsed = int.tryParse(value?.toString() ?? '');
-  return (parsed ?? 30).clamp(5, 120);
+  return (parsed ?? 20).clamp(10, 120);
 }
 
 Map<String, List<String>> _parseAiApiKeys(Object? value) {
@@ -327,7 +327,7 @@ class ChatbotState {
       soulPrompt: chatbotDefaultSoul,
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
-      debounceSeconds: 30,
+      debounceSeconds: 20,
       aiEnabled: false,
       personalAudience: 'all',
       groupAudience: 'tagOnly',
