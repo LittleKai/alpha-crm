@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/utils/zalo_backend_manager.dart';
 import '../../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../../tasks/providers/crm_tasks_provider.dart'
     show defaultDueByPriority, crmTasksProvider;
 import '../data/managed_groups_repository.dart';
@@ -518,7 +519,12 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       return const SummarizeOutcome.failure();
     }
 
-    final body = {...config.toSummarizeBody(), 'messages': messages};
+    final body = {
+      ...config.toSummarizeBody(),
+      'messages': messages,
+      // Summary model is a local preference; send it with the request.
+      'aiModel': _ref.read(settingsProvider).settings.summaryAiModel,
+    };
     final response = await _repository.summarizeGroup(group.id, body);
     if (response['success'] != true) {
       state = state.copyWith(

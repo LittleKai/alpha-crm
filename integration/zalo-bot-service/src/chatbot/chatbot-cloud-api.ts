@@ -22,6 +22,9 @@ export interface ChatbotGenerateRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  // Knowledge documents already filtered for this account by the bridge. When
+  // present the cloud uses these instead of the operator's full stored set.
+  knowledgeSnippets?: string[];
 }
 
 export type ChatbotAttachmentType = 'image' | 'video' | 'audio' | 'file';

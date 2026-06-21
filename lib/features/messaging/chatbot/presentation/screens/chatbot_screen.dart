@@ -19,6 +19,8 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
+import '../widgets/account_target_dialog.dart';
+import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
@@ -553,7 +555,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             return '- [File] Tên: ${f.filename} | ID: ${f.id} | Mô tả: ${f.descriptionController.text.trim()}';
                           }).join('\n');
 
-                          final text = [
+                          final baseText = [
                             'Tiêu đề tài liệu: $title',
                             if (keywords.isNotEmpty)
                               'Từ khóa kích hoạt: $keywords',
@@ -561,6 +563,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             if (filesList.isNotEmpty)
                               'Files đính kèm:\n$fileLines\nQuy tắc gửi: AI chỉ chọn file/ảnh phù hợp khi khách hỏi khớp từ khóa hoặc nội dung kiến thức; agent Zalo trên máy người dùng sẽ thực hiện gửi file/ảnh thật.',
                           ].join('\n\n');
+                          // Preserve per-account targeting set via the card action.
+                          final text = setKnowledgeDocAccounts(
+                            baseText,
+                            parsed?.accountIds ?? const [],
+                          );
 
                           final Future<void> action = editIndex != null
                               ? notifier.updateKnowledgeDocument(editIndex, text)
@@ -830,7 +837,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               items: [
                 'Dùng cho các câu hỏi lặp lại như giá, bảo hành, địa chỉ, giờ làm việc hoặc quy trình mua hàng.',
                 'Mỗi kịch bản nên có từ khóa ngắn, tự nhiên và dễ xuất hiện trong tin nhắn khách.',
-                'Bot luôn kiểm tra kịch bản từ khóa trước; nếu không khớp và AI đang bật thì backend mới gọi GCLI để tạo câu trả lời.',
+                'Bot luôn kiểm tra kịch bản từ khóa trước; chỉ khi không khớp và AI đang bật, hệ thống mới dùng AI để tạo câu trả lời.',
+                'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn lượt AI; chỉ câu trả lời do AI tạo (ở tab Trí tuệ nhân tạo) mới tính lượt.',
               ],
             ),
             SizedBox(height: AppSpacing.m),
@@ -1058,7 +1066,115 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
+  Future<void> _showRuleAccountDialog(ChatbotRule rule) async {
+    final accounts = ref.read(zaloIntegrationProvider).accounts;
+    final result = await showAccountTargetDialog(
+      context: context,
+      accounts: accounts,
+      selectedIds: rule.accountIds,
+      title: 'Áp dụng kịch bản cho tài khoản',
+    );
+    if (result == null) return;
+    await ref.read(chatbotProvider.notifier).updateRuleAccounts(rule.id, result);
+  }
+
+  Future<void> _showKnowledgeAccountDialog(int index, String doc) async {
+    final accounts = ref.read(zaloIntegrationProvider).accounts;
+    final parsed = parseKnowledgeDoc(doc);
+    final result = await showAccountTargetDialog(
+      context: context,
+      accounts: accounts,
+      selectedIds: parsed.accountIds,
+      title: 'Áp dụng tài liệu cho tài khoản',
+    );
+    if (result == null) return;
+    await ref
+        .read(chatbotProvider.notifier)
+        .updateKnowledgeDocument(index, setKnowledgeDocAccounts(doc, result));
+  }
+
   Widget _buildKeywordTab(ChatbotState state, ChatbotNotifier notifier) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _keywordMasterHeader(state, notifier),
+        const SizedBox(height: AppSpacing.m),
+        AnimatedOpacity(
+          opacity: state.keywordRulesEnabled ? 1.0 : 0.45,
+          duration: const Duration(milliseconds: 150),
+          child: _buildKeywordRulesContent(state, notifier),
+        ),
+      ],
+    );
+  }
+
+  Widget _keywordMasterHeader(ChatbotState state, ChatbotNotifier notifier) {
+    final on = state.keywordRulesEnabled;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.vpn_key_outlined,
+                  color: AppColors.primary, size: 22),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sử dụng kịch bản từ khóa',
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      on
+                          ? 'Bot trả lời bằng kịch bản cố định khi khớp từ khóa.'
+                          : 'Đang tắt — bỏ qua toàn bộ kịch bản từ khóa.',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: on,
+                activeThumbColor: AppColors.primary,
+                onChanged: (v) => notifier.setKeywordRulesEnabled(v),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.s),
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: Text(
+                    'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn lượt AI. '
+                    'Chỉ câu trả lời do AI tạo (tab Trí tuệ nhân tạo) mới tính lượt.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKeywordRulesContent(
+      ChatbotState state, ChatbotNotifier notifier) {
     if (state.rules.isEmpty) {
       return SizedBox(
         height: 520,
@@ -1128,6 +1244,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                 notifier.toggleRuleStatus(rule.id),
                           ),
                           IconButton(
+                            tooltip: 'Áp dụng cho tài khoản',
+                            icon: Icon(
+                              Icons.groups_outlined,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            onPressed: () => _showRuleAccountDialog(rule),
+                          ),
+                          IconButton(
                             tooltip: 'Chỉnh sửa kịch bản',
                             icon: Icon(
                               Icons.edit_outlined,
@@ -1168,14 +1293,33 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   const SizedBox(height: AppSpacing.s),
                   Divider(height: 1, color: AppColors.borderSoft),
                   const SizedBox(height: AppSpacing.s),
-                  Text(
-                    'Trạng thái: ${rule.isActive ? "Đang hoạt động" : "Tạm ngưng"}',
-                    style: AppTextStyles.caption.copyWith(
-                      color: rule.isActive
-                          ? AppColors.successText
-                          : AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Trạng thái: ${rule.isActive ? "Đang hoạt động" : "Tạm ngưng"}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: rule.isActive
+                              ? AppColors.successText
+                              : AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Icon(Icons.groups_outlined,
+                              size: 14, color: AppColors.textMuted),
+                          const SizedBox(width: 4),
+                          Text(
+                            rule.accountIds.isEmpty
+                                ? 'Mọi TK'
+                                : '${rule.accountIds.length} TK',
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1199,6 +1343,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     final rulesController = TextEditingController(text: state.responseRules);
     var temperature = state.temperature;
     var debounceSeconds = state.debounceSeconds;
+    var aiHistoryLimit = state.aiHistoryLimit;
     final dialogApiKeys = <String, List<String>>{
       for (final e in state.aiApiKeys.entries) e.key: List<String>.from(e.value),
     };
@@ -1245,6 +1390,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           responseRules: rulesController.text.trim(),
                           temperature: temperature,
                           debounceSeconds: debounceSeconds,
+                          aiHistoryLimit: aiHistoryLimit,
                         )
                         .then((_) {
                           if (mounted) {
@@ -1509,6 +1655,42 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           label: '$debounceSeconds giây',
                           onChanged: (value) {
                             setDialogState(() => debounceSeconds = value.round());
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.m),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Số tin nhắn gần nhất AI đọc',
+                              style: AppTextStyles.label,
+                            ),
+                            Text(
+                              aiHistoryLimit == 0
+                                  ? 'Tắt (không đọc lịch sử)'
+                                  : '$aiHistoryLimit lượt',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Mỗi lượt = một loạt tin liên tiếp của cùng một người. '
+                          'AI dùng số lượt này làm ngữ cảnh khi trả lời.',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        Slider(
+                          value: aiHistoryLimit.toDouble(),
+                          min: 0,
+                          max: 20,
+                          divisions: 20,
+                          activeColor: AppColors.primary,
+                          label: aiHistoryLimit == 0 ? 'Tắt' : '$aiHistoryLimit lượt',
+                          onChanged: (value) {
+                            setDialogState(() => aiHistoryLimit = value.round());
                           },
                         ),
                       ],
@@ -2307,6 +2489,22 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.groups_outlined,
+                                      size: 13, color: AppColors.textMuted),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    parsed.accountIds.isEmpty
+                                        ? 'Áp dụng: Mọi tài khoản'
+                                        : 'Áp dụng: ${parsed.accountIds.length} tài khoản',
+                                    style: AppTextStyles.caption
+                                        .copyWith(color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
                               if (parsed.files.isNotEmpty) ...[
                                 const SizedBox(height: AppSpacing.xs),
                                 Wrap(
@@ -2375,6 +2573,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              IconButton(
+                                tooltip: 'Áp dụng cho tài khoản',
+                                icon: Icon(
+                                  Icons.groups_outlined,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () =>
+                                    _showKnowledgeAccountDialog(index, doc),
+                              ),
                               IconButton(
                                 tooltip: 'Chỉnh sửa tài liệu',
                                 icon: Icon(
@@ -2593,12 +2800,28 @@ class ParsedKnowledgeDoc {
   final String content;
   final List<ParsedKnowledgeFile> files;
 
+  /// Zalo account ids this document applies to. Empty = all accounts.
+  final List<String> accountIds;
+
   ParsedKnowledgeDoc({
     required this.title,
     required this.keywords,
     required this.content,
     required this.files,
+    this.accountIds = const [],
   });
+}
+
+final RegExp _knowledgeAccountsLine = RegExp(r'(?:^|\n)\[Accounts\][^\n]*');
+
+/// Replace/append the `[Accounts]` tag on a knowledge snippet. Empty ids = all
+/// accounts (no tag). The tag lives on its own line at the end of the snippet
+/// and is stripped from the AI prompt by the bridge before sending.
+String setKnowledgeDocAccounts(String doc, List<String> accountIds) {
+  final cleaned = doc.replaceAll(_knowledgeAccountsLine, '').trimRight();
+  final ids = accountIds.where((id) => id.trim().isNotEmpty).toList();
+  if (ids.isEmpty) return cleaned;
+  return '$cleaned\n[Accounts] ${ids.join(', ')}';
 }
 
 class ParsedKnowledgeFile {
@@ -2619,6 +2842,21 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
   String keywords = '';
   String content = '';
   List<ParsedKnowledgeFile> files = [];
+
+  // Pull out the per-account targeting tag first so it never pollutes the
+  // title/content/file parsing below.
+  List<String> accountIds = [];
+  final accountsMatch = _knowledgeAccountsLine.firstMatch(doc);
+  if (accountsMatch != null) {
+    final raw = accountsMatch.group(0) ?? '';
+    final value = raw.replaceFirst(RegExp(r'\s*\[Accounts\]'), '').trim();
+    accountIds = value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    doc = doc.replaceAll(_knowledgeAccountsLine, '').trimRight();
+  }
 
   final titleIndex = doc.indexOf('Tiêu đề tài liệu:');
   final keywordIndex = doc.indexOf('Từ khóa kích hoạt:');
@@ -2722,6 +2960,7 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
     keywords: keywords,
     content: content,
     files: files,
+    accountIds: accountIds,
   );
 }
 

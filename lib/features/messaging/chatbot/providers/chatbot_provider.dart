@@ -108,6 +108,11 @@ int _normalizeDebounceSeconds(Object? value) {
   return (parsed ?? 20).clamp(10, 120);
 }
 
+int _normalizeAiHistoryLimit(Object? value) {
+  final parsed = int.tryParse(value?.toString() ?? '');
+  return (parsed ?? 5).clamp(0, 20);
+}
+
 Map<String, List<String>> _parseAiApiKeys(Object? value) {
   if (value is! Map) return {};
   final result = <String, List<String>>{};
@@ -132,6 +137,9 @@ class ChatbotRule {
   final String response;
   final bool isActive;
 
+  /// Zalo account ids this rule applies to. Empty = all accounts.
+  final List<String> accountIds;
+
   const ChatbotRule({
     required this.id,
     required this.name,
@@ -139,6 +147,7 @@ class ChatbotRule {
     required this.keyword,
     required this.response,
     this.isActive = true,
+    this.accountIds = const [],
   });
 
   ChatbotRule copyWith({
@@ -148,6 +157,7 @@ class ChatbotRule {
     String? keyword,
     String? response,
     bool? isActive,
+    List<String>? accountIds,
   }) {
     return ChatbotRule(
       id: id ?? this.id,
@@ -156,6 +166,7 @@ class ChatbotRule {
       keyword: keyword ?? this.keyword,
       response: response ?? this.response,
       isActive: isActive ?? this.isActive,
+      accountIds: accountIds ?? this.accountIds,
     );
   }
 
@@ -176,6 +187,12 @@ class ChatbotRule {
           : (json['name'] ?? '').toString(),
       response: (json['response'] ?? '').toString(),
       isActive: json['isActive'] != false,
+      accountIds: json['accountIds'] is List
+          ? (json['accountIds'] as List)
+                .map((item) => item.toString())
+                .where((item) => item.isNotEmpty)
+                .toList()
+          : <String>[],
     );
   }
 }
@@ -294,7 +311,13 @@ class ChatbotState {
   final String responseRules;
   final double temperature;
   final int debounceSeconds;
+
+  /// Number of recent conversation turns the AI reads as context (0–20).
+  final int aiHistoryLimit;
   final bool aiEnabled;
+
+  /// Master switch for keyword scenarios. When false, no keyword rule runs.
+  final bool keywordRulesEnabled;
   final String personalAudience;
   final String groupAudience;
   final List<String> selectedGroupKeys;
@@ -317,7 +340,9 @@ class ChatbotState {
     required this.responseRules,
     required this.temperature,
     required this.debounceSeconds,
+    this.aiHistoryLimit = 5,
     required this.aiEnabled,
+    this.keywordRulesEnabled = true,
     required this.personalAudience,
     required this.groupAudience,
     this.selectedGroupKeys = const [],
@@ -342,7 +367,9 @@ class ChatbotState {
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
       debounceSeconds: 20,
+      aiHistoryLimit: 5,
       aiEnabled: false,
+      keywordRulesEnabled: true,
       personalAudience: 'all',
       groupAudience: 'tagOnly',
       selectedGroupKeys: [],
@@ -366,7 +393,9 @@ class ChatbotState {
     String? responseRules,
     double? temperature,
     int? debounceSeconds,
+    int? aiHistoryLimit,
     bool? aiEnabled,
+    bool? keywordRulesEnabled,
     String? personalAudience,
     String? groupAudience,
     List<String>? selectedGroupKeys,
@@ -389,7 +418,9 @@ class ChatbotState {
       responseRules: responseRules ?? this.responseRules,
       temperature: temperature ?? this.temperature,
       debounceSeconds: debounceSeconds ?? this.debounceSeconds,
+      aiHistoryLimit: aiHistoryLimit ?? this.aiHistoryLimit,
       aiEnabled: aiEnabled ?? this.aiEnabled,
+      keywordRulesEnabled: keywordRulesEnabled ?? this.keywordRulesEnabled,
       personalAudience: personalAudience ?? this.personalAudience,
       groupAudience: groupAudience ?? this.groupAudience,
       selectedGroupKeys: selectedGroupKeys ?? this.selectedGroupKeys,
@@ -489,7 +520,9 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           ) ??
           state.temperature,
       debounceSeconds: _normalizeDebounceSeconds(json['debounceSeconds']),
+      aiHistoryLimit: _normalizeAiHistoryLimit(json['aiHistoryLimit']),
       aiEnabled: json['aiEnabled'] != false,
+      keywordRulesEnabled: json['keywordRulesEnabled'] != false,
       personalAudience: (json['personalAudience'] ?? state.personalAudience)
           .toString(),
       groupAudience: (json['groupAudience'] ?? state.groupAudience).toString(),
@@ -616,6 +649,22 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   }
 
 
+  /// Scope a keyword rule to specific Zalo accounts (empty = all accounts).
+  Future<void> updateRuleAccounts(String id, List<String> accountIds) async {
+    state = state.copyWith(
+      rules: state.rules
+          .map((rule) =>
+              rule.id == id ? rule.copyWith(accountIds: accountIds) : rule)
+          .toList(),
+    );
+    final response = await _repository.updateRule(id, {'accountIds': accountIds});
+    if (response['success'] != true) {
+      await loadRules();
+    } else {
+      await syncBridgeNow();
+    }
+  }
+
   Future<void> deleteRule(String id) async {
     final response = await _repository.deleteRule(id);
     if (response['success'] == true) {
@@ -639,6 +688,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     String? responseRules,
     double? temperature,
     int? debounceSeconds,
+    int? aiHistoryLimit,
     bool? aiEnabled,
     String? personalAudience,
     String? groupAudience,
@@ -654,6 +704,8 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       'responseRules': responseRules ?? state.responseRules,
       'temperature': temperature ?? state.temperature,
       'debounceSeconds': debounceSeconds ?? state.debounceSeconds,
+      'aiHistoryLimit': aiHistoryLimit ?? state.aiHistoryLimit,
+      'keywordRulesEnabled': state.keywordRulesEnabled,
       'personalAudience': personalAudience ?? state.personalAudience,
       'groupAudience': groupAudience ?? state.groupAudience,
       'selectedGroupKeys': selectedGroupKeys ?? state.selectedGroupKeys,
@@ -669,6 +721,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     required String responseRules,
     required double temperature,
     required int debounceSeconds,
+    required int aiHistoryLimit,
   }) async {
     state = state.copyWith(
       aiProvider: provider,
@@ -678,6 +731,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       responseRules: responseRules,
       temperature: temperature,
       debounceSeconds: _normalizeDebounceSeconds(debounceSeconds),
+      aiHistoryLimit: _normalizeAiHistoryLimit(aiHistoryLimit),
     );
     final response = await _repository.saveSettings(_settingsPayload());
     if (response['success'] != true) {
@@ -692,6 +746,13 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
   Future<void> setAiEnabled(bool enabled) async {
     state = state.copyWith(aiEnabled: enabled);
+    final response = await _repository.saveSettings(_settingsPayload());
+    if (response['success'] == true) await syncBridgeNow();
+  }
+
+  /// Master switch for the keyword-scenarios tab. When off, no keyword rule runs.
+  Future<void> setKeywordRulesEnabled(bool enabled) async {
+    state = state.copyWith(keywordRulesEnabled: enabled);
     final response = await _repository.saveSettings(_settingsPayload());
     if (response['success'] == true) await syncBridgeNow();
   }

@@ -125,6 +125,14 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await _saveSettingsToFile(state.settings);
   }
 
+  Future<void> updateSummaryAiModel(String value) async {
+    state = state.copyWith(
+      settings: state.settings.copyWith(summaryAiModel: value),
+      isSaved: true,
+    );
+    await _saveSettingsToFile(state.settings);
+  }
+
   Future<void> updateLiveChatNotifications(bool value) async {
     state = state.copyWith(
       settings: state.settings.copyWith(liveChatNotifications: value),

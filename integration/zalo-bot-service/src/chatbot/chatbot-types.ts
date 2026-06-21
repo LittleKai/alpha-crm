@@ -18,9 +18,18 @@ export interface ChatbotConversationState {
 export interface ChatbotSettings {
   enabled: boolean;
   aiEnabled?: boolean;
+  // Master switch for keyword scenarios. When false, no keyword rule is applied
+  // (AI still works if enabled). Default true.
+  keywordRulesEnabled?: boolean;
   personalAudience?: 'all' | 'crmOnly' | 'none';
   groupAudience?: 'none' | 'tagOnly' | 'selected';
   debounceSeconds?: number;
+  // Number of recent conversation turns (consecutive same-sender messages
+  // collapsed into one) the bridge sends to the AI as context. 0 = none.
+  aiHistoryLimit?: number;
+  // Knowledge documents (each may carry an `[Accounts]` targeting tag). The
+  // bridge filters these per account before sending them to the cloud.
+  knowledgeSnippets?: string[];
   handoffKeywords?: string[];
 }
 
@@ -42,6 +51,8 @@ export interface ChatbotRule {
   matchMode?: 'contains' | 'exact' | 'startsWith';
   channelScope?: 'all' | 'user' | 'group';
   handoffKeywords?: string[];
+  // Zalo account ids this rule applies to. Empty/undefined = all accounts.
+  accountIds?: string[];
   businessHours?: ChatbotBusinessHours;
 }
 

@@ -51,6 +51,9 @@ class SystemSettings {
   // Show AI token in/out analytics (chatbot log columns + overview chart).
   final bool showTokenAnalytics;
 
+  // AI model used for group summaries (local preference, sent with each request).
+  final String summaryAiModel;
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -91,6 +94,7 @@ class SystemSettings {
     this.liveChatMediaCacheMaxGb = 20,
     this.liveChatNotifications = true,
     this.showTokenAnalytics = true,
+    this.summaryAiModel = 'gemini-3.1-pro',
   });
 
   SystemSettings copyWith({
@@ -133,6 +137,7 @@ class SystemSettings {
     int? liveChatMediaCacheMaxGb,
     bool? liveChatNotifications,
     bool? showTokenAnalytics,
+    String? summaryAiModel,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -189,6 +194,7 @@ class SystemSettings {
       liveChatNotifications:
           liveChatNotifications ?? this.liveChatNotifications,
       showTokenAnalytics: showTokenAnalytics ?? this.showTokenAnalytics,
+      summaryAiModel: summaryAiModel ?? this.summaryAiModel,
     );
   }
 
@@ -239,6 +245,7 @@ class SystemSettings {
       'liveChatMediaCacheMaxGb': liveChatMediaCacheMaxGb,
       'liveChatNotifications': liveChatNotifications,
       'showTokenAnalytics': showTokenAnalytics,
+      'summaryAiModel': summaryAiModel,
     };
   }
 
@@ -304,6 +311,7 @@ class SystemSettings {
       liveChatMediaCacheMaxGb: json['liveChatMediaCacheMaxGb'] ?? 20,
       liveChatNotifications: json['liveChatNotifications'] != false,
       showTokenAnalytics: json['showTokenAnalytics'] != false,
+      summaryAiModel: (json['summaryAiModel'] ?? 'gemini-3.1-pro').toString(),
     );
   }
 }

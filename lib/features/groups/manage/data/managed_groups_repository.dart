@@ -45,14 +45,6 @@ class ManagedGroupsRepository {
     return CrmCloudApi.get('/crm/groups/insights?status=open');
   }
 
-  Future<Map<String, dynamic>> getSummarySettings() {
-    return CrmCloudApi.get('/crm/groups/summary-settings');
-  }
-
-  Future<Map<String, dynamic>> saveSummaryModel(String aiModel) {
-    return CrmCloudApi.put('/crm/groups/summary-settings', {'aiModel': aiModel});
-  }
-
   Future<Map<String, dynamic>> summarizeGroup(
     String id, [
     Map<String, dynamic>? body,

@@ -337,6 +337,7 @@ function isChatbotRule(value: unknown): boolean {
       || matchModes.has(value.matchMode as string))
     && (value.channelScope === undefined
       || channelScopes.has(value.channelScope as string))
+    && (value.accountIds === undefined || isStringArray(value.accountIds))
     && (value.businessHours === undefined
       || isBusinessHours(value.businessHours));
 }
@@ -345,6 +346,8 @@ function isChatbotSettings(value: unknown): boolean {
   return isRecord(value)
     && typeof value.enabled === 'boolean'
     && (value.aiEnabled === undefined || typeof value.aiEnabled === 'boolean')
+    && (value.keywordRulesEnabled === undefined
+      || typeof value.keywordRulesEnabled === 'boolean')
     && (value.personalAudience === undefined
       || personalAudiences.has(value.personalAudience as string))
     && (value.groupAudience === undefined
@@ -355,6 +358,13 @@ function isChatbotSettings(value: unknown): boolean {
         && Number.isFinite(value.debounceSeconds)
         && value.debounceSeconds >= 10
         && value.debounceSeconds <= 120
+      ))
+    && (value.aiHistoryLimit === undefined
+      || (
+        typeof value.aiHistoryLimit === 'number'
+        && Number.isFinite(value.aiHistoryLimit)
+        && value.aiHistoryLimit >= 0
+        && value.aiHistoryLimit <= 20
       ))
     && (value.handoffKeywords === undefined
       || isStringArray(value.handoffKeywords));

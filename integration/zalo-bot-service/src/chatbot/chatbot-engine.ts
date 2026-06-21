@@ -8,6 +8,7 @@ export type ChatbotConversationMode =
 export interface ChatbotSettings {
   enabled: boolean;
   aiEnabled: boolean;
+  keywordRulesEnabled: boolean;
   personalAudience: 'all' | 'crmOnly' | 'none';
   groupAudience: 'none' | 'tagOnly' | 'selected';
   handoffKeywords: string[];
@@ -31,6 +32,8 @@ export interface ChatbotRule {
   priority: number;
   channelScope: 'all' | 'user' | 'group';
   handoffKeywords: string[];
+  // Zalo account ids this rule applies to. Empty = all accounts.
+  accountIds: string[];
   businessHours: ChatbotBusinessHours;
 }
 
@@ -154,14 +157,23 @@ export class LocalChatbotEngine {
       .map((message) => message.content.trim())
       .join('\n');
     const eligibleIds = messages.map((message) => message.providerMessageId);
-    const applicableRules = input.rules
-      .filter(
-        (rule) =>
-          rule.isActive
-          && (rule.channelScope === 'all'
-            || rule.channelScope === input.threadType),
-      )
-      .sort((left, right) => left.priority - right.priority);
+    // conversationKey is `${accountId}:${threadId}`; accountId never contains ':'.
+    const accountId = input.conversationKey.split(':')[0] ?? '';
+    // Master switch off → no keyword scenarios at all (rule matching AND
+    // rule-level handoff keywords). Global handoff keywords still apply; AI still
+    // runs if enabled.
+    const applicableRules = input.settings.keywordRulesEnabled === false
+      ? []
+      : input.rules
+          .filter(
+            (rule) =>
+              rule.isActive
+              && (rule.channelScope === 'all'
+                || rule.channelScope === input.threadType)
+              && (rule.accountIds.length === 0
+                || rule.accountIds.includes(accountId)),
+          )
+          .sort((left, right) => left.priority - right.priority);
 
     const handoffKeywords = [
       ...input.settings.handoffKeywords,

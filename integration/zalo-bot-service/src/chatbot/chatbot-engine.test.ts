@@ -16,6 +16,7 @@ const baseRule: ChatbotRule = {
   priority: 10,
   channelScope: 'all',
   handoffKeywords: [],
+  accountIds: [],
   businessHours: { enabled: false },
 };
 
@@ -36,6 +37,7 @@ function input(
     settings: {
       enabled: true,
       aiEnabled: false,
+      keywordRulesEnabled: true,
       personalAudience: 'all',
       groupAudience: 'none',
       handoffKeywords: ['gặp nhân viên'],
@@ -94,6 +96,35 @@ test('handoff keyword wins and produces no reply', async () => {
   }));
 
   assert.equal(result.kind, 'handoff');
+});
+
+test('rule scoped to other accounts does not apply to this account', async () => {
+  const engine = new LocalChatbotEngine();
+  const result = await engine.evaluate(input({
+    rules: [{ ...baseRule, accountIds: ['account-2'] }],
+  }));
+
+  assert.equal(result.kind, 'skipped');
+  assert.equal('reason' in result ? result.reason : '', 'no_matching_rule');
+});
+
+test('rule scoped to this account still matches', async () => {
+  const engine = new LocalChatbotEngine();
+  const result = await engine.evaluate(input({
+    rules: [{ ...baseRule, accountIds: ['account-1'] }],
+  }));
+
+  assert.equal(result.kind, 'reply');
+});
+
+test('master keyword switch off skips all rules (AI off -> no_matching_rule)', async () => {
+  const engine = new LocalChatbotEngine();
+  const result = await engine.evaluate(input({
+    settings: { ...input().settings, keywordRulesEnabled: false },
+  }));
+
+  assert.equal(result.kind, 'skipped');
+  assert.equal('reason' in result ? result.reason : '', 'no_matching_rule');
 });
 
 test('personal crmOnly audience rejects threads outside cached CRM scope', async () => {

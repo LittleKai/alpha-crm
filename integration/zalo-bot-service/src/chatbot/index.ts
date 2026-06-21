@@ -10,6 +10,8 @@ import { LocalChatbotEngine } from './chatbot-engine.js';
 import { LocalChatbotRuntime } from './chatbot-runtime.js';
 import { ChatbotStore } from './chatbot-store.js';
 import { resolveKnowledgeFilePath } from './chatbot-knowledge-store.js';
+import { buildChatbotHistory } from './chatbot-history.js';
+import { filterKnowledgeSnippetsForAccount } from './chatbot-knowledge.js';
 
 let runtime: LocalChatbotRuntime | null = null;
 let chatbotStore: ChatbotStore | null = null;
@@ -73,6 +75,33 @@ export function startLocalChatbotRuntime(
       const separator = conversationKey.indexOf(':');
       const accountId = conversationKey.slice(0, separator);
       const threadId = conversationKey.slice(separator + 1);
+      // Recent conversation context (collapsed turns) the operator configured the
+      // AI to read. Built locally from the chat store — message text never leaves
+      // this machine except inside this generate request.
+      const snapshot = chatbotStore?.getConfigSnapshot();
+      const limitTurns = snapshot?.settings.aiHistoryLimit ?? 5;
+      let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      if (limitTurns > 0) {
+        const page = localStore.getMessagesByThread(accountId, threadId, {
+          // Fetch enough raw rows to cover `limitTurns` collapsed turns.
+          limit: Math.min(200, Math.max(20, limitTurns * 6)),
+        });
+        if (page) {
+          const excludeIds = new Set(
+            messages
+              .map((message) => message.providerMessageId)
+              .filter((id): id is string => !!id),
+          );
+          history = buildChatbotHistory(page.messages, excludeIds, limitTurns);
+        }
+      }
+      // Knowledge documents filtered for this account (the cloud applies these
+      // instead of its full stored set). Only sent when the operator has
+      // configured knowledge so older configs fall back to the cloud's copy.
+      const rawSnippets = snapshot?.settings.knowledgeSnippets;
+      const knowledgeSnippets = Array.isArray(rawSnippets)
+        ? filterKnowledgeSnippetsForAccount(rawSnippets, accountId)
+        : undefined;
       const result = await cloudApi.generateReply({
         accountId,
         threadId,
@@ -82,7 +111,8 @@ export function startLocalChatbotRuntime(
           content: message.content,
           timestamp: Date.parse(message.timestamp) || Date.now(),
         })),
-        history: [],
+        history,
+        ...(knowledgeSnippets ? { knowledgeSnippets } : {}),
       });
       return { reply: result.reply, attachments: result.attachments };
     },

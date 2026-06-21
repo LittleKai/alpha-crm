@@ -235,6 +235,7 @@ function toEngineSettings(
   return {
     enabled: snapshot.settings.enabled,
     aiEnabled: snapshot.settings.aiEnabled === true,
+    keywordRulesEnabled: snapshot.settings.keywordRulesEnabled !== false,
     personalAudience: snapshot.settings.personalAudience ?? 'all',
     groupAudience: snapshot.settings.groupAudience ?? 'none',
     handoffKeywords: snapshot.settings.handoffKeywords ?? [],
@@ -254,6 +255,7 @@ function toEngineRule(
     priority: rule.priority ?? 100,
     channelScope: rule.channelScope ?? 'user',
     handoffKeywords: rule.handoffKeywords ?? [],
+    accountIds: rule.accountIds ?? [],
     businessHours: rule.businessHours ?? { enabled: false },
   };
 }
