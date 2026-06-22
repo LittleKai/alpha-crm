@@ -1,142 +1,73 @@
-Bạn hãy cho tôi prompt không quá dài để hoàn thiện chức năng của các thứ sau:
-1. Tab Gửi Tin Hàng loạt:
-- không nhận được tài khoản đăng nhập trong tab này.
-- các tab Gửi theo số điện thoại, Gửi vào nhóm Zalo, nhãn phân loại zalo các chức năng của nó chưa hoàn chỉnh và chưa hoạt động đúng, hãy giúp tôi hoàn thiện chúng.
-- Tab gửi vào nhóm zalo thì có dropdown bị lỗi flutter sau và không load được danh sách, và loại bỏ mã số đầu của danh sách, dù không chọn được thành viên nào mà vẫn có thể thực thi được chiến dịch:
+- Thêm nút xóa (có xác nhận) các việc cần làm do AI tạo ra trong trường hợp user không muốn giữ lại chúng.
+- Thêm ô tìm kiếm nhóm.
+- Lỗi:
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-│ 'package:flutter/src/material/dropdown.dart': Failed assertion: line 1060 pos 10: 'items == null ||
-
-│              items.isEmpty ||
-
-│              value == null ||
-
-│              items.where((DropdownMenuItem<T> item) {
-
-│                    return item.value == value;
-
-│                  }).length ==
-
-│                  1': There should be exactly one item with [DropdownButtonFormField]'s value: Instance of 'ManagedZaloGroup'.
-│ Either zero or 2 or more [DropdownMenuItem]s were detected with the same value
+│ 'package:go_router/src/delegate.dart': Failed assertion: line 116 pos 7: 'currentConfiguration.isNotEmpty': You have popped the last page off of the stack, there are no pages left to show
 ├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 │ #0   _AssertionError._doThrowNew (dart:core-patch/errors_patch.dart:67:4)
 │ #1   _AssertionError._throwNew (dart:core-patch/errors_patch.dart:49:5)
-│ #2   new DropdownButton._formField (package:flutter/src/material/dropdown.dart:1060:10)
-│ #3   new DropdownButtonFormField.<anonymous closure> (package:flutter/src/material/dropdown.dart:1853:23)
+│ #2   GoRouterDelegate._debugAssertMatchListNotEmpty (package:go_router/src/delegate.dart:116:7)
+│ #3   GoRouterDelegate._completeRouteMatch.<anonymous closure> (package:go_router/src/delegate.dart:160:7)
 ├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-│ 2026-06-20 11:31:46.009
+│ 2026-06-22 13:08:20.542
 ├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 │ ⛔ Flutter Framework Error
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-══╡ EXCEPTION CAUGHT BY WIDGETS LIBRARY ╞═══════════════════════════════════════════════════════════
-The following assertion was thrown building DropdownButtonFormField<ManagedZaloGroup>(dependencies:
-[InheritedCupertinoTheme, UnmanagedRestorationScope, _InheritedTheme,
-_LocalizationsScope-[GlobalKey#b73d6]], state:
-_DropdownButtonFormFieldState<ManagedZaloGroup>#b32b4):
-There should be exactly one item with [DropdownButtonFormField]'s value: Instance of
-'ManagedZaloGroup'.
-Either zero or 2 or more [DropdownMenuItem]s were detected with the same value
-'package:flutter/src/material/dropdown.dart':
-Failed assertion: line 1060 pos 10: 'items == null ||
-             items.isEmpty ||
-             value == null ||
-             items.where((DropdownMenuItem<T> item) {
-                   return item.value == value;
-                 }).length ==
-                 1'
-
-Either the assertion indicates an error in the framework itself, or we should provide substantially
-more information in this error message to help you determine and fix the underlying cause.
-In either case, please report this assertion by filing a bug on GitHub:
-  https://github.com/flutter/flutter/issues/new?template=02_bug.yml
-
-The relevant error-causing widget was:
-  DropdownButtonFormField<ManagedZaloGroup>
-  DropdownButtonFormField:file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/shared/widgets/app_select_field.dart:48:18
+══╡ EXCEPTION CAUGHT BY GESTURE ╞═══════════════════════════════════════════════════════════════════
+The following assertion was thrown while handling a gesture:
+You have popped the last page off of the stack, there are no pages left to show
+'package:go_router/src/delegate.dart':
+Failed assertion: line 116 pos 7: 'currentConfiguration.isNotEmpty'
 
 When the exception was thrown, this was the stack:
-#2      new DropdownButton._formField (package:flutter/src/material/dropdown.dart:1060:10)
-#3      new DropdownButtonFormField.<anonymous closure> (package:flutter/src/material/dropdown.dart:1853:23)
-#4      FormFieldState.build (package:flutter/src/widgets/form.dart:791:28)
-#5      StatefulElement.build (package:flutter/src/widgets/framework.dart:5934:27)
-#6      ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5820:15)
-#7      StatefulElement.performRebuild (package:flutter/src/widgets/framework.dart:5985:11)
-#8      Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#9      StatefulElement.update (package:flutter/src/widgets/framework.dart:6010:5)
-#10     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#11     SingleChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7125:14)
-#12     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#13     Element.updateChildren (package:flutter/src/widgets/framework.dart:4194:32)
-#14     MultiChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7302:17)
-#15     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#16     ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5844:16)
-#17     Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#18     StatelessElement.update (package:flutter/src/widgets/framework.dart:5898:5)
-#19     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#20     ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5844:16)
-#21     Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#22     ProxyElement.update (package:flutter/src/widgets/framework.dart:6152:5)
-#23     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#24     Element.updateChildren (package:flutter/src/widgets/framework.dart:4194:32)
-#25     MultiChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7302:17)
-#26     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#27     SingleChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7125:14)
-#28     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#29     Element.updateChildren (package:flutter/src/widgets/framework.dart:4194:32)
-#30     MultiChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7302:17)
-#31     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#32     SingleChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7125:14)
-#33     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#34     SingleChildRenderObjectElement.update (package:flutter/src/widgets/framework.dart:7125:14)
-#35     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#36     ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5844:16)
-#37     Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#38     StatelessElement.update (package:flutter/src/widgets/framework.dart:5898:5)
-#39     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#40     ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5844:16)
-#41     Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#42     StatelessElement.update (package:flutter/src/widgets/framework.dart:5898:5)
-#43     Element.updateChild (package:flutter/src/widgets/framework.dart:4037:15)
-#44     ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5844:16)
-#45     StatefulElement.performRebuild (package:flutter/src/widgets/framework.dart:5985:11)
-#46     Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
-#47     BuildScope._tryRebuild (package:flutter/src/widgets/framework.dart:2750:15)
-#48     BuildScope._flushDirtyElements (package:flutter/src/widgets/framework.dart:2807:11)
-#49     BuildOwner.buildScope (package:flutter/src/widgets/framework.dart:3111:18)
-#50     _LayoutBuilderElement._rebuildWithConstraints (package:flutter/src/widgets/layout_builder.dart:271:12)
-#51     RenderAbstractLayoutBuilderMixin.layoutCallback (package:flutter/src/widgets/layout_builder.dart:334:38)
-#52     RenderObjectWithLayoutCallbackMixin.runLayoutCallback.<anonymous closure> (package:flutter/src/rendering/object.dart:4169:33)    
-#53     RenderObject.invokeLayoutCallback.<anonymous closure> (package:flutter/src/rendering/object.dart:2894:17)
-#54     PipelineOwner._enableMutationsToDirtySubtrees (package:flutter/src/rendering/object.dart:1219:15)
-#55     RenderObject.invokeLayoutCallback (package:flutter/src/rendering/object.dart:2893:14)
-#56     RenderObjectWithLayoutCallbackMixin.runLayoutCallback (package:flutter/src/rendering/object.dart:4169:5)
-#57     _RenderLayoutBuilder.performLayout (package:flutter/src/widgets/layout_builder.dart:448:5)
-#58     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
-#59     ChildLayoutHelper.layoutChild (package:flutter/src/rendering/layout_helper.dart:62:11)
-#60     RenderFlex._computeSizes (package:flutter/src/rendering/flex.dart:1203:26)
-#61     RenderFlex.performLayout (package:flutter/src/rendering/flex.dart:1257:32)
-#62     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
-#63     RenderPadding.performLayout (package:flutter/src/rendering/shifted_box.dart:243:12)
-#64     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
-#65     MultiChildLayoutDelegate.layoutChild (package:flutter/src/rendering/custom_layout.dart:180:12)
-#66     _ScaffoldLayout.performLayout (package:flutter/src/material/scaffold.dart:1112:7)
-#67     MultiChildLayoutDelegate._callPerformLayout (package:flutter/src/rendering/custom_layout.dart:249:7)
-#68     RenderCustomMultiChildLayoutBox.performLayout (package:flutter/src/rendering/custom_layout.dart:420:14)
-#69     RenderObject._layoutWithoutResize (package:flutter/src/rendering/object.dart:2623:7)
-#70     PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1170:18)
-#71     PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1183:15)
-#72     RendererBinding.drawFrame (package:flutter/src/rendering/binding.dart:629:23)
-#73     WidgetsBinding.drawFrame (package:flutter/src/widgets/binding.dart:1264:13)
-#74     RendererBinding._handlePersistentFrameCallback (package:flutter/src/rendering/binding.dart:495:5)
-#75     SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
-#76     SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1347:9)
-#77     SchedulerBinding._handleDrawFrame (package:flutter/src/scheduler/binding.dart:1200:5)
-#78     _invoke (dart:ui/hooks.dart:356:13)
-#79     PlatformDispatcher._drawFrame (dart:ui/platform_dispatcher.dart:444:5)
-#80     _drawFrame (dart:ui/hooks.dart:328:31)
+#2      GoRouterDelegate._debugAssertMatchListNotEmpty (package:go_router/src/delegate.dart:116:7)
+#3      GoRouterDelegate._completeRouteMatch.<anonymous closure> (package:go_router/src/delegate.dart:160:7)
+#4      GoRouterDelegate._completeRouteMatch (package:go_router/src/delegate.dart:162:6)
+#5      GoRouterDelegate._handlePopPageWithRouteMatch (package:go_router/src/delegate.dart:132:7)
+#6      _CustomNavigatorState._handlePopPage (package:go_router/src/builder.dart:416:42)
+#7      NavigatorState.pop (package:flutter/src/widgets/navigator.dart:5614:28)
+#8      showGroupSummaryHistory.<anonymous closure>.<anonymous closure>
+(package:alpha_crm/features/groups/manage/presentation/widgets/group_summary_history_dialog.dart:28:50)
+#9      _InkResponseState.handleTap (package:flutter/src/material/ink_well.dart:1224:21)
+#10     GestureRecognizer.invokeCallback (package:flutter/src/gestures/recognizer.dart:345:24)
+#11     TapGestureRecognizer.handleTapUp (package:flutter/src/gestures/tap.dart:758:11)
+#12     BaseTapGestureRecognizer._checkUp (package:flutter/src/gestures/tap.dart:383:5)
+#13     BaseTapGestureRecognizer.handlePrimaryPointer (package:flutter/src/gestures/tap.dart:314:7)
+#14     PrimaryPointerGestureRecognizer.handleEvent (package:flutter/src/gestures/recognizer.dart:721:9)
+#15     PointerRouter._dispatch (package:flutter/src/gestures/pointer_router.dart:97:12)
+#16     PointerRouter._dispatchEventToRoutes.<anonymous closure> (package:flutter/src/gestures/pointer_router.dart:140:9)
+#17     _LinkedHashMapMixin.forEach (dart:_compact_hash:772:13)
+#18     PointerRouter._dispatchEventToRoutes (package:flutter/src/gestures/pointer_router.dart:138:18)
+#19     PointerRouter.route (package:flutter/src/gestures/pointer_router.dart:128:7)
+#20     GestureBinding.handleEvent (package:flutter/src/gestures/binding.dart:528:19)
+#21     GestureBinding.dispatchEvent (package:flutter/src/gestures/binding.dart:498:22)
+#22     RendererBinding.dispatchEvent (package:flutter/src/rendering/binding.dart:473:11)
+#23     GestureBinding._handlePointerEventImmediately (package:flutter/src/gestures/binding.dart:437:7)
+#24     GestureBinding.handlePointerEvent (package:flutter/src/gestures/binding.dart:394:5)
+#25     GestureBinding._flushPointerEventQueue (package:flutter/src/gestures/binding.dart:341:7)
+#26     GestureBinding._handlePointerDataPacket (package:flutter/src/gestures/binding.dart:308:9)
+#27     _invoke1 (dart:ui/hooks.dart:439:13)
+#28     PlatformDispatcher._dispatchPointerDataPacket (dart:ui/platform_dispatcher.dart:470:7)
+#29     _dispatchPointerDataPacket (dart:ui/hooks.dart:374:31)
 (elided 2 frames from class _AssertionError)
 
-- Tab Gửi theo số điện thoại ngoại trừ thêm bằng file txt thì cũng có thể thêm chức năng thêm thủ công được, và sau khi thêm thủ công số điện thoại chú ý cũng cần load avatar và tên nickname của tài khoản đó.
-- Các {{tên}}{{sdt}}{{nhóm}}{A|B|C} hoàn toàn chưa hoạt động đúng.
-- Tab gửi vào nhóm Zalo cần phân biệt thành 2 tính năng: gửi tin nhắn vào nhóm zalo và gửi cho các thành viên trong 1 nhóm nào đó.
+Handler: "onTap"
+Recognizer:
+  TapGestureRecognizer#cab55
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+│ 'package:flutter/src/widgets/navigator.dart': Failed assertion: line 4100 pos 12: '!_debugLocked': is not true.
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ #0   _AssertionError._doThrowNew (dart:core-patch/errors_patch.dart:67:4)
+│ #1   _AssertionError._throwNew (dart:core-patch/errors_patch.dart:49:5)
+│ #2   NavigatorState.dispose (package:flutter/src/widgets/navigator.dart:4100:12)
+│ #3   StatefulElement.unmount (package:flutter/src/widgets/framework.dart:6030:11)
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ 2026-06-22 13:08:20.656
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│ ⛔ Flutter Framework Error
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Another exception was thrown: 'package:flutter/src/widgets/navigator.dart': Failed assertion: line 4100 pos 12: '!_debugLocked': is not
+true.

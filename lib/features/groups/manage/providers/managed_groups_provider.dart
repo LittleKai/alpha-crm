@@ -5,7 +5,25 @@ import '../../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../tasks/providers/crm_tasks_provider.dart'
     show defaultDueByPriority, crmTasksProvider;
+import '../data/group_summary_local_store.dart';
 import '../data/managed_groups_repository.dart';
+
+/// Minimum new messages required before an AI summary is allowed.
+const int kMinSummaryMessages = 5;
+
+/// Strips a leading "[id]" / "[tag]" prefix from a group name.
+String cleanGroupName(String name) =>
+    name.replaceFirst(RegExp(r'^\[.*?\]\s*'), '').trim();
+
+/// Logical identity of a group across accounts. The same real-world group can be
+/// synced by different accounts under different Zalo IDs, so we key by clean name
+/// + member count instead of the raw `groupId`. Records sharing this key are
+/// treated as one group (merged in the list, unioned when summarizing).
+///
+/// ponytail: heuristic, not a true Zalo identity. Groups must have distinct
+/// names (or member counts) to stay separate; rename to disambiguate.
+String groupIdentityKey(ManagedZaloGroup g) =>
+    '${cleanGroupName(g.name).toLowerCase()}|${g.memberCount}';
 
 final managedGroupsRepositoryProvider = Provider<ManagedGroupsRepository>((
   ref,
@@ -97,6 +115,10 @@ class GroupInsight {
   final String priority;
   final String status;
 
+  /// Zalo `groupId` this insight belongs to (from the populated `groupId.groupId`).
+  /// Used to show only insights for the selected group.
+  final String groupZaloId;
+
   const GroupInsight({
     required this.id,
     required this.type,
@@ -104,11 +126,13 @@ class GroupInsight {
     required this.description,
     required this.priority,
     this.status = 'open',
+    this.groupZaloId = '',
   });
 
   bool get isActionItem => type == 'follow_up';
 
   static GroupInsight fromJson(Map<String, dynamic> json) {
+    final group = json['groupId'];
     return GroupInsight(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       type: (json['type'] ?? '').toString(),
@@ -116,6 +140,7 @@ class GroupInsight {
       description: (json['description'] ?? '').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
       status: (json['status'] ?? 'open').toString(),
+      groupZaloId: group is Map ? (group['groupId'] ?? '').toString() : '',
     );
   }
 }
@@ -161,6 +186,23 @@ class GroupSummaryRecord {
       return value.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
     }
     return const [];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'summaryText': summaryText,
+      'createdAt': createdAt.toIso8601String(),
+      'keyTopics': keyTopics,
+      'decisions': decisions,
+      'questions': questions,
+      'risks': risks,
+      'opportunities': opportunities,
+      'sentiment': sentiment,
+      'messageCount': messageCount,
+      'coveredFrom': coveredFrom?.toIso8601String(),
+      'coveredTo': coveredTo?.toIso8601String(),
+    };
   }
 
   static GroupSummaryRecord fromJson(Map<String, dynamic> json) {
@@ -444,7 +486,10 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   }
 
   Future<void> setManaged(ManagedZaloGroup group, bool isManaged) async {
-    final targetGroups = state.groups.where((g) => g.groupId == group.groupId).toList();
+    final key = groupIdentityKey(group);
+    final targetGroups = state.groups
+        .where((g) => groupIdentityKey(g) == key)
+        .toList();
     bool anySuccess = false;
 
     for (final g in targetGroups) {
@@ -460,16 +505,17 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     }
 
     if (anySuccess) {
+      final selected = state.selectedGroup;
       state = state.copyWith(
         groups: state.groups.map((item) {
-          if (item.groupId == group.groupId) {
+          if (groupIdentityKey(item) == key) {
             return item.copyWith(isManaged: isManaged);
           }
           return item;
         }).toList(),
-        selectedGroup: state.selectedGroup?.groupId == group.groupId
-            ? state.selectedGroup?.copyWith(isManaged: isManaged)
-            : state.selectedGroup,
+        selectedGroup: selected != null && groupIdentityKey(selected) == key
+            ? selected.copyWith(isManaged: isManaged)
+            : selected,
       );
     }
   }
@@ -480,16 +526,35 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       selectedSummaries: [],
       proposedActionItems: [],
     );
+
+    final key = groupIdentityKey(group);
+
+    // Local-first: show cached summaries immediately while the cloud refreshes.
+    final cached = await GroupSummaryLocalStore.loadSummaries(key);
+    if (cached.isNotEmpty &&
+        state.selectedGroup != null &&
+        groupIdentityKey(state.selectedGroup!) == key) {
+      state = state.copyWith(
+        selectedSummaries: cached.map(GroupSummaryRecord.fromJson).toList(),
+      );
+    }
+
     final response = await _repository.getSummaries(group.id);
     if (response['success'] == true && response['data'] is List) {
-      state = state.copyWith(
-        selectedSummaries: (response['data'] as List)
-            .whereType<Map>()
-            .map(
-              (item) =>
-                  GroupSummaryRecord.fromJson(Map<String, dynamic>.from(item)),
-            )
-            .toList(),
+      final summaries = (response['data'] as List)
+          .whereType<Map>()
+          .map(
+            (item) =>
+                GroupSummaryRecord.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+      if (state.selectedGroup != null &&
+          groupIdentityKey(state.selectedGroup!) == key) {
+        state = state.copyWith(selectedSummaries: summaries);
+      }
+      await GroupSummaryLocalStore.saveSummaries(
+        key,
+        summaries.map((s) => s.toJson()).toList(),
       );
     }
   }
@@ -506,6 +571,12 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       proposedActionItems: [],
     );
 
+    // Remember the operator's choice locally (per logical group, survives restart).
+    await GroupSummaryLocalStore.saveConfig(
+      groupIdentityKey(group),
+      config.toConfigMap(),
+    );
+
     // Privacy: message content lives only in the local store. Read it here and
     // send transiently to the cloud for AI processing — the backend never stores it.
     final messages = await _gatherLocalGroupMessages(group, config);
@@ -517,6 +588,21 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
             'nhóm đã bật quản lý và có tin nhắn mới).',
       );
       return const SummarizeOutcome.failure();
+    }
+
+    // Too few messages to be worth summarizing.
+    if (messages.length < kMinSummaryMessages) {
+      state = state.copyWith(
+        isWorking: false,
+        errorMessage:
+            'Chỉ có ${messages.length} tin nhắn mới — cần tối thiểu '
+            '$kMinSummaryMessages tin để tóm tắt.',
+      );
+      return SummarizeOutcome(
+        success: false,
+        empty: true,
+        messageCount: messages.length,
+      );
     }
 
     final body = {
@@ -582,8 +668,27 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     );
   }
 
+  /// How many local messages a summary with [config] would cover for the
+  /// selected group. Returns -1 when the local store can't be reached.
+  Future<int> previewMessageCount(GroupSummaryConfig config) async {
+    final group = state.selectedGroup;
+    if (group == null) return -1;
+    try {
+      final messages = await _gatherLocalGroupMessages(group, config);
+      return messages.length;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   /// Reads group messages from the operator's LOCAL store (via the live-chat
-  /// bridge) according to [config] scope. Returns `[{senderName, content, sentAt}]`.
+  /// bridge) according to [config] scope. Returns `[{senderName, content, sentAt}]`
+  /// sorted oldest→newest.
+  ///
+  /// A logical group may be synced by several accounts (different Zalo IDs), each
+  /// holding its OWN local copy with different coverage. We read every sibling's
+  /// conversation and **union + dedupe by message id** so few-vs-many message gaps
+  /// and different senders across accounts collapse into one timeline.
   /// Empty when the local backend is unavailable or no messages match.
   Future<List<Map<String, dynamic>>> _gatherLocalGroupMessages(
     ManagedZaloGroup group,
@@ -591,63 +696,95 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   ) async {
     final port = ZaloBackendManager.activePort ?? 8787;
     final bridge = LiveChatLocalBridgeApi(baseUrl: 'http://127.0.0.1:$port');
-    try {
-      // Map the managed group (accountId + groupId) to a local conversation.
-      // ponytail: scans first 300 threads; raise if an operator has more groups.
-      final convRes = await bridge.getLocalConversations(
-        accountId: group.accountId,
-        limit: 300,
-      );
-      final conversations = (convRes['data'] as List?) ?? const [];
-      String? conversationId;
-      for (final raw in conversations.whereType<Map>()) {
-        if (raw['threadId']?.toString() == group.groupId) {
-          conversationId = raw['id']?.toString();
-          break;
-        }
-      }
-      if (conversationId == null || conversationId.isEmpty) return const [];
 
-      // Scope → cursor + limit.
-      String? after;
-      int limit = 400;
-      if (config.scopeMode == 'recent') {
-        limit = config.recentCount;
-      } else if (config.scopeMode == 'range') {
-        after = DateTime.now()
-            .subtract(Duration(days: config.rangeDays))
-            .millisecondsSinceEpoch
-            .toString();
-      } else {
-        // incremental: continue from the last summary's watermark.
-        final latest = state.selectedSummaries.isNotEmpty
-            ? state.selectedSummaries.first
-            : null;
-        if (latest?.coveredTo != null) {
-          after = latest!.coveredTo!.millisecondsSinceEpoch.toString();
-        }
+    // Scope → cursor + limit (shared across all sibling accounts).
+    String? after;
+    int limit = 400;
+    if (config.scopeMode == 'recent') {
+      limit = config.recentCount;
+    } else if (config.scopeMode == 'range') {
+      after = DateTime.now()
+          .subtract(Duration(days: config.rangeDays))
+          .millisecondsSinceEpoch
+          .toString();
+    } else {
+      // incremental: continue from the last summary's watermark.
+      final latest = state.selectedSummaries.isNotEmpty
+          ? state.selectedSummaries.first
+          : null;
+      if (latest?.coveredTo != null) {
+        after = latest!.coveredTo!.millisecondsSinceEpoch.toString();
       }
-
-      final msgRes = await bridge.getLocalMessages(
-        conversationId,
-        limit: limit,
-        after: after,
-      );
-      final rawMessages = (msgRes['data'] as List?) ?? const [];
-      return rawMessages
-          .whereType<Map>()
-          .map(
-            (m) => <String, dynamic>{
-              'senderName': (m['senderName'] ?? m['senderId'] ?? '').toString(),
-              'content': (m['content'] ?? '').toString(),
-              'sentAt': m['createdAt'],
-            },
-          )
-          .where((m) => (m['content'] as String).trim().isNotEmpty)
-          .toList();
-    } catch (_) {
-      return const [];
     }
+
+    // All account-records that are the same logical group.
+    final key = groupIdentityKey(group);
+    final siblings = state.groups
+        .where((g) => groupIdentityKey(g) == key)
+        .toList();
+    if (siblings.isEmpty) siblings.add(group);
+
+    final byId = <String, Map<String, dynamic>>{};
+    for (final g in siblings) {
+      try {
+        // ponytail: scans first 300 threads; raise if an operator has more groups.
+        final convRes = await bridge.getLocalConversations(
+          accountId: g.accountId,
+          limit: 300,
+        );
+        final conversations = (convRes['data'] as List?) ?? const [];
+        String? conversationId;
+        for (final raw in conversations.whereType<Map>()) {
+          if (raw['threadId']?.toString() == g.groupId) {
+            conversationId = raw['id']?.toString();
+            break;
+          }
+        }
+        if (conversationId == null || conversationId.isEmpty) continue;
+
+        final msgRes = await bridge.getLocalMessages(
+          conversationId,
+          limit: limit,
+          after: after,
+        );
+        for (final m in ((msgRes['data'] as List?) ?? const []).whereType<Map>()) {
+          final content = (m['content'] ?? '').toString();
+          if (content.trim().isEmpty) continue;
+          final sentAt = m['createdAt'];
+          final dedupId =
+              (m['messageId'] ??
+                      m['id'] ??
+                      '${m['senderId']}|$sentAt|$content')
+                  .toString();
+          byId[dedupId] = {
+            'senderName': (m['senderName'] ?? m['senderId'] ?? '').toString(),
+            'content': content,
+            'sentAt': sentAt,
+          };
+        }
+      } catch (_) {
+        // Skip this account's copy; keep whatever the others provided.
+      }
+    }
+
+    final merged = byId.values.toList()
+      ..sort((a, b) => _epochMs(a['sentAt']).compareTo(_epochMs(b['sentAt'])));
+    // recent mode: keep the newest N across the union.
+    if (config.scopeMode == 'recent' && merged.length > limit) {
+      return merged.sublist(merged.length - limit);
+    }
+    return merged;
+  }
+
+  /// Normalizes a message timestamp (ms int or ISO string) to epoch millis.
+  static int _epochMs(dynamic value) {
+    if (value is int) return value;
+    if (value is String) {
+      return int.tryParse(value) ??
+          DateTime.tryParse(value)?.millisecondsSinceEpoch ??
+          0;
+    }
+    return 0;
   }
 
   void clearProposedActionItems() {

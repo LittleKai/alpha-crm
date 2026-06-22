@@ -15,6 +15,7 @@ Future<GroupSummaryConfig?> showGroupSummaryWizard(
   BuildContext context, {
   required String groupName,
   GroupSummaryConfig? initial,
+  Future<int> Function(GroupSummaryConfig)? previewCount,
 }) {
   return showDialog<GroupSummaryConfig>(
     context: context,
@@ -22,6 +23,7 @@ Future<GroupSummaryConfig?> showGroupSummaryWizard(
     builder: (_) => _GroupSummaryWizard(
       groupName: groupName,
       initial: initial ?? const GroupSummaryConfig(),
+      previewCount: previewCount,
     ),
   );
 }
@@ -29,8 +31,13 @@ Future<GroupSummaryConfig?> showGroupSummaryWizard(
 class _GroupSummaryWizard extends StatefulWidget {
   final String groupName;
   final GroupSummaryConfig initial;
+  final Future<int> Function(GroupSummaryConfig)? previewCount;
 
-  const _GroupSummaryWizard({required this.groupName, required this.initial});
+  const _GroupSummaryWizard({
+    required this.groupName,
+    required this.initial,
+    this.previewCount,
+  });
 
   @override
   State<_GroupSummaryWizard> createState() => _GroupSummaryWizardState();
@@ -44,6 +51,17 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
   late String _industry;
   late bool _autoCreateTasks;
   late final TextEditingController _promptController;
+
+  /// Available local messages for the current scope; null = not yet loaded,
+  /// -1 = local store unreachable (don't block on it).
+  int? _availableCount;
+  bool _countLoading = false;
+  int _countRequestId = 0;
+
+  bool get _blocked =>
+      _availableCount != null &&
+      _availableCount! >= 0 &&
+      _availableCount! < kMinSummaryMessages;
 
   @override
   void initState() {
@@ -60,6 +78,19 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
           ? c.prompt
           : industryTemplateByKey(c.industry).prompt,
     );
+    _refreshCount();
+  }
+
+  Future<void> _refreshCount() async {
+    if (widget.previewCount == null) return;
+    final reqId = ++_countRequestId;
+    setState(() => _countLoading = true);
+    final count = await widget.previewCount!(_buildConfig());
+    if (!mounted || reqId != _countRequestId) return;
+    setState(() {
+      _countLoading = false;
+      _availableCount = count;
+    });
   }
 
   @override
@@ -103,7 +134,9 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
         AppDialogAction(
           text: 'Tóm tắt',
           icon: Icons.summarize_outlined,
-          onPressed: () => Navigator.of(context).pop(_buildConfig()),
+          onPressed: _blocked
+              ? null
+              : () => Navigator.of(context).pop(_buildConfig()),
         ),
       ],
       child: Column(
@@ -114,10 +147,27 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
             mode: _scopeMode,
             recentCount: _recentCount,
             rangeDays: _rangeDays,
-            onModeChanged: (m) => setState(() => _scopeMode = m),
-            onRecentCountChanged: (v) => setState(() => _recentCount = v),
-            onRangeDaysChanged: (v) => setState(() => _rangeDays = v),
+            onModeChanged: (m) {
+              setState(() => _scopeMode = m);
+              _refreshCount();
+            },
+            onRecentCountChanged: (v) {
+              setState(() => _recentCount = v);
+              _refreshCount();
+            },
+            onRangeDaysChanged: (v) {
+              setState(() => _rangeDays = v);
+              _refreshCount();
+            },
           ),
+          if (widget.previewCount != null) ...[
+            const SizedBox(height: AppSpacing.s),
+            _CountHint(
+              loading: _countLoading,
+              count: _availableCount,
+              blocked: _blocked,
+            ),
+          ],
           const SizedBox(height: AppSpacing.m),
           _label('Mục tiêu trích xuất'),
           ...kSummaryGoals.map(
@@ -277,6 +327,59 @@ class _ScopeSelector extends StatelessWidget {
         color: selected ? AppColors.primary : AppColors.textSecondary,
         fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
       ),
+    );
+  }
+}
+
+/// Shows how many local messages the current scope covers, and warns when there
+/// are fewer than [kMinSummaryMessages].
+class _CountHint extends StatelessWidget {
+  final bool loading;
+  final int? count;
+  final bool blocked;
+
+  const _CountHint({
+    required this.loading,
+    required this.count,
+    required this.blocked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final IconData icon;
+    final Color color;
+    final String text;
+
+    if (loading) {
+      icon = Icons.hourglass_empty;
+      color = AppColors.textMuted;
+      text = 'Đang đếm tin nhắn khả dụng...';
+    } else if (count == null || count! < 0) {
+      icon = Icons.help_outline;
+      color = AppColors.textMuted;
+      text = 'Không đọc được tin nhắn từ máy (cần bản desktop có backend local).';
+    } else if (blocked) {
+      icon = Icons.warning_amber_rounded;
+      color = AppColors.warning;
+      text =
+          'Chỉ có $count tin nhắn — cần tối thiểu $kMinSummaryMessages tin để tóm tắt.';
+    } else {
+      icon = Icons.chat_bubble_outline;
+      color = AppColors.primary;
+      text = '≈ $count tin nhắn sẽ được tóm tắt.';
+    }
+
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTextStyles.caption.copyWith(color: color),
+          ),
+        ),
+      ],
     );
   }
 }

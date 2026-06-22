@@ -11,11 +11,23 @@ import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/account_avatar_stack.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../data/group_summary_local_store.dart';
 import '../../providers/managed_groups_provider.dart';
 import '../widgets/action_items_preview_dialog.dart';
+import '../widgets/group_summary_history_dialog.dart';
 import '../widgets/group_summary_settings_dialog.dart';
 import '../widgets/group_summary_wizard_dialog.dart';
+
+/// Zalo IDs of every account-record that is the same logical group as [group].
+Set<String> _siblingZaloIds(ManagedGroupsState state, ManagedZaloGroup group) {
+  final key = groupIdentityKey(group);
+  return state.groups
+      .where((g) => groupIdentityKey(g) == key)
+      .map((g) => g.groupId)
+      .toSet();
+}
 
 class ManagedGroupsScreen extends ConsumerWidget {
   const ManagedGroupsScreen({super.key});
@@ -239,14 +251,16 @@ class _GroupsList extends ConsumerWidget {
               builder: (context) {
                 final mergedGroupsMap = <String, ManagedZaloGroup>{};
                 final groupAccountsMap = <String, List<ZaloConnectedAccount>>{};
-                
+
+                // Merge by logical identity: the same group synced by several
+                // accounts (possibly different Zalo IDs) collapses into one row.
                 for (final group in state.groups) {
-                  final gid = group.groupId;
+                  final gid = groupIdentityKey(group);
                   if (!mergedGroupsMap.containsKey(gid)) {
                     mergedGroupsMap[gid] = group;
                     groupAccountsMap[gid] = [];
                   }
-                  
+
                   ZaloConnectedAccount account;
                   try {
                     account = connectedAccounts.firstWhere((a) => a.id == group.accountId);
@@ -259,26 +273,30 @@ class _GroupsList extends ConsumerWidget {
                       avatarUrl: '',
                     );
                   }
-                  
+
                   if (!groupAccountsMap[gid]!.any((a) => a.id == account.id)) {
                     groupAccountsMap[gid]!.add(account);
                   }
                 }
-                
+
                 final mergedGroups = mergedGroupsMap.values.toList();
+                final selectedKey = state.selectedGroup != null
+                    ? groupIdentityKey(state.selectedGroup!)
+                    : null;
 
                 return ListView.separated(
                   itemCount: mergedGroups.length,
                   separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final group = mergedGroups[index];
-                    final accounts = groupAccountsMap[group.groupId] ?? [];
-                    final selected = group.groupId == state.selectedGroup?.groupId;
+                    final gid = groupIdentityKey(group);
+                    final accounts = groupAccountsMap[gid] ?? [];
+                    final selected = gid == selectedKey;
                     final hasAvatar =
                         group.avatarUrl.isNotEmpty &&
                         group.avatarUrl.startsWith('http');
                     
-                    final cleanName = group.name.replaceFirst(RegExp(r'^\[.*?\]\s*'), '');
+                    final cleanName = cleanGroupName(group.name);
 
                     return ListTile(
                       selected: selected,
@@ -297,28 +315,24 @@ class _GroupsList extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      subtitle: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 4,
+                      subtitle: Row(
                         children: [
-                          Text('${group.memberCount} thành viên - '),
-                          ...accounts.map((acc) {
-                            final accCleanName = acc.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (acc.avatarUrl.isNotEmpty)
-                                  CircleAvatar(
-                                    radius: 7,
-                                    backgroundImage: NetworkImage(acc.avatarUrl),
-                                  )
-                                else
-                                  const Icon(Icons.account_circle, size: 14),
-                                const SizedBox(width: 4),
-                                Text(accCleanName, style: const TextStyle(fontSize: 12)),
-                              ],
-                            );
-                          }),
+                          Text(
+                            '${group.memberCount} thành viên',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(width: AppSpacing.s),
+                          AccountAvatarStack(
+                            size: 20,
+                            accounts: accounts
+                                .map(
+                                  (acc) => (
+                                    avatarUrl: acc.avatarUrl,
+                                    name: accountDisplayName(acc.label),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                         ],
                       ),
                       trailing: Switch(
@@ -341,26 +355,29 @@ class _DetailsPanel extends StatelessWidget {
 
   const _DetailsPanel({required this.state, required this.notifier});
 
-  Future<void> _summarizeFlow(
-    BuildContext context, {
-    required bool forceWizard,
-  }) async {
+  Future<void> _summarizeFlow(BuildContext context) async {
     final group = state.selectedGroup;
     if (group == null) return;
-    final saved = GroupSummaryConfig.fromJson(group.summaryConfig);
 
-    GroupSummaryConfig config;
-    if (forceWizard || saved == null) {
-      final picked = await showGroupSummaryWizard(
-        context,
-        groupName: group.name,
-        initial: saved,
-      );
-      if (picked == null) return;
-      config = picked;
-    } else {
-      config = saved;
-    }
+    // Local-first: restore the operator's remembered choice for this group,
+    // falling back to the cloud-mirrored config if no local copy exists.
+    final localCfg = await GroupSummaryLocalStore.loadConfig(
+      groupIdentityKey(group),
+    );
+    final saved =
+        GroupSummaryConfig.fromJson(localCfg) ??
+        GroupSummaryConfig.fromJson(group.summaryConfig);
+    if (!context.mounted) return;
+
+    // Always show the wizard so the operator confirms scope/goals each run.
+    final picked = await showGroupSummaryWizard(
+      context,
+      groupName: cleanGroupName(group.name),
+      initial: saved,
+      previewCount: notifier.previewMessageCount,
+    );
+    if (picked == null) return;
+    final config = picked;
 
     final outcome = await notifier.summarizeWithConfig(config);
     if (!context.mounted || !outcome.success) return;
@@ -436,7 +453,10 @@ class _DetailsPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(group.name, style: AppTextStyles.sectionTitle),
+                    Text(
+                      cleanGroupName(group.name),
+                      style: AppTextStyles.sectionTitle,
+                    ),
                     const SizedBox(height: AppSpacing.xs),
                     Wrap(
                       spacing: AppSpacing.s,
@@ -463,18 +483,20 @@ class _DetailsPanel extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Cấu hình tóm tắt',
-                icon: Icon(Icons.tune, color: AppColors.primary),
-                onPressed: group.isManaged && !state.isWorking
-                    ? () => _summarizeFlow(context, forceWizard: true)
-                    : null,
+                tooltip: 'Lịch sử tóm tắt',
+                icon: Icon(Icons.history, color: AppColors.primary),
+                onPressed: () => showGroupSummaryHistory(
+                  context,
+                  groupName: cleanGroupName(group.name),
+                  summaries: state.selectedSummaries,
+                ),
               ),
               AppButton(
                 text: 'Tóm tắt AI',
                 icon: Icons.summarize_outlined,
                 isLoading: state.isWorking,
                 onPressed: group.isManaged && !state.isWorking
-                    ? () => _summarizeFlow(context, forceWizard: false)
+                    ? () => _summarizeFlow(context)
                     : null,
               ),
               const SizedBox(width: AppSpacing.s),
@@ -547,7 +569,12 @@ class _DetailsPanel extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.m),
-                _InsightsList(insights: state.insights),
+                _InsightsList(
+                  insights: state.insights
+                      .where((i) => _siblingZaloIds(state, group)
+                          .contains(i.groupZaloId))
+                      .toList(),
+                ),
                 if (state.exportCsv != null && state.exportCsv!.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.m),
                   Text(
