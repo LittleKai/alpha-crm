@@ -89,6 +89,8 @@ export type ChatbotDecision =
       // AI token usage (mode 'ai' only) — persisted to the local daily stats.
       tokenIn?: number;
       tokenOut?: number;
+      // CrmAiUsage id from the cloud generate call, for the response-log token link.
+      usageId?: string;
       sourceMessageIds: string[];
     }
   | {
@@ -236,6 +238,12 @@ export class LocalChatbotEngine {
         throw new Error('AI returned an empty reply');
       }
       const usage = generated.usage;
+      const usageId =
+        typeof usage?.id === 'string'
+          ? usage.id
+          : usage?.id != null
+            ? String(usage.id)
+            : undefined;
       return {
         kind: 'reply',
         mode: 'ai',
@@ -243,6 +251,7 @@ export class LocalChatbotEngine {
         ...(attachments.length ? { attachments } : {}),
         tokenIn: toTokenCount(usage?.promptTokens),
         tokenOut: toTokenCount(usage?.completionTokens),
+        ...(usageId ? { usageId } : {}),
         sourceMessageIds: eligibleIds,
       };
     } catch (error) {

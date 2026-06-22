@@ -194,6 +194,13 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
             },
           ),
         ),
+        const SizedBox(width: AppSpacing.s),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Làm mới',
+          onPressed: () =>
+              ref.read(sendHistoryProvider.notifier).loadRecords(),
+        ),
       ],
     );
   }

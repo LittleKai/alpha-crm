@@ -1078,7 +1078,13 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 ),
               ],
               selectedIndex: state.activeTab,
-              onTabSelected: notifier.setActiveTab,
+              onTabSelected: (index) {
+                notifier.setActiveTab(index);
+                // Auto-refresh the response log each time its tab is opened.
+                if (index == 3) {
+                  notifier.loadLogs();
+                }
+              },
             ),
             const SizedBox(height: AppSpacing.m),
             _buildTabContent(state, notifier),
@@ -3056,33 +3062,58 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      'NHẬT KÝ PHẢN HỒI CỦA BOT',
-                      style: AppTextStyles.sectionTitle,
-                    ),
-                    const SizedBox(width: AppSpacing.l),
-                    SizedBox(
-                      width: 160,
-                      child: AppSelectField<String>(
-                        value: _logsFilterCategory,
-                        items: ['Tất cả', 'AI', 'Từ khóa', 'Chuyển NV', 'Khác']
-                            .map(
-                              (e) => DropdownMenuItem(value: e, child: Text(e)),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _logsFilterCategory = val;
-                              _logsCurrentPage = 0;
-                            });
-                          }
-                        },
+                Flexible(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'NHẬT KÝ PHẢN HỒI CỦA BOT',
+                          style: AppTextStyles.sectionTitle,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: AppSpacing.l),
+                      SizedBox(
+                        width: 160,
+                        child: AppSelectField<String>(
+                          value: _logsFilterCategory,
+                          items:
+                              ['Tất cả', 'AI', 'Từ khóa', 'Chuyển NV', 'Khác']
+                                  .map(
+                                    (e) => DropdownMenuItem(
+                                      value: e,
+                                      child: Text(e),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _logsFilterCategory = val;
+                                _logsCurrentPage = 0;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: state.isLoading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  tooltip: 'Làm mới nhật ký',
+                  onPressed: state.isLoading
+                      ? null
+                      : () => ref.read(chatbotProvider.notifier).loadLogs(),
                 ),
               ],
             ),
@@ -3142,12 +3173,19 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 return DataRow(
                   cells: [
                     DataCell(
-                      Text(log.customerName, style: AppTextStyles.bodyMedium),
+                      Text(
+                        log.customerName.isNotEmpty
+                            ? log.customerName
+                            : log.threadId,
+                        style: AppTextStyles.bodyMedium,
+                      ),
                     ),
                     DataCell(
                       Center(
                         child: AppBadge(
-                          label: _chatbotModeLabel(log.keyword),
+                          label: log.kind == 'group_summary'
+                              ? 'Tóm tắt'
+                              : _chatbotModeLabel(log.keyword),
                           variant: badgeVariant,
                         ),
                       ),

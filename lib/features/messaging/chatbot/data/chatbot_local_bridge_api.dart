@@ -93,7 +93,7 @@ class ChatbotLocalBridgeApi {
   Future<Map<String, String>> getConversationNames() async {
     try {
       final response = await _client
-          .get(_baseUri.resolve('/local/conversations?limit=500'))
+          .get(_baseUri.resolve('/local/conversations?limit=2000'))
           .timeout(const Duration(seconds: 4));
       final body = response.body.isEmpty
           ? <String, dynamic>{}

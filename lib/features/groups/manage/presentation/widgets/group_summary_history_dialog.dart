@@ -16,7 +16,7 @@ Future<void> showGroupSummaryHistory(
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => AppDialog(
+    builder: (dialogContext) => AppDialog(
       title: 'Lịch sử tóm tắt',
       subtitle: groupName,
       icon: Icons.history,
@@ -25,7 +25,7 @@ Future<void> showGroupSummaryHistory(
         AppDialogAction(
           text: 'Đóng',
           variant: AppButtonVariant.outline,
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
       ],
       child: summaries.isEmpty

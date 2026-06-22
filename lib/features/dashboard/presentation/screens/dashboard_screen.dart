@@ -352,6 +352,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
         ),
+        IconButton(
+          icon: state.isRefreshing
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              : const Icon(Icons.refresh),
+          tooltip: 'Làm mới',
+          onPressed: state.isRefreshing
+              ? null
+              : () => ref.read(dashboardProvider.notifier).loadDashboard(),
+        ),
       ],
     );
   }

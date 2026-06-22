@@ -50,7 +50,7 @@ class ZaloBackendManager {
 
   // --- Cấu hình supervisor ---
   static const String _serviceId = 'alpha-crm-zalo-bot-service';
-  static const int _defaultPort = 8787;
+  static const int _defaultPort = 28080;
   static const int _fallbackPortLimit = 10;
   static const Duration _watchdogInterval = Duration(seconds: 5);
 
@@ -791,11 +791,12 @@ if (\$process) {
       }
 
       jsonMap['zaloBackendBaseUrl'] = 'http://127.0.0.1:$port';
+      jsonMap['localBridgeBaseUrl'] = 'http://127.0.0.1:$port';
 
       final content = const JsonEncoder.withIndent('  ').convert(jsonMap);
       await settingsFile.writeAsString(content);
       debugPrint(
-        "ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend: http://127.0.0.1:$port",
+        "ZaloBackendManager: Đã tự động cập nhật zalo_settings.json với URL backend/bridge: http://127.0.0.1:$port",
       );
     } catch (e) {
       debugPrint(

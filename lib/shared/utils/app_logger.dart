@@ -149,7 +149,7 @@ class AppLogger {
       };
 
       await http.post(
-        Uri.parse('http://127.0.0.1:8787/api/logs/client'),
+        Uri.parse('http://127.0.0.1:28080/api/logs/client'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 5));

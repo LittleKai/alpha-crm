@@ -513,10 +513,40 @@ class _TaskActions extends StatelessWidget {
         IconButton(
           tooltip: 'Xóa',
           icon: const Icon(Icons.delete_outline, color: AppColors.error),
-          onPressed: () => notifier.deleteTask(task),
+          onPressed: () => _confirmDelete(context),
         ),
       ],
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Xóa công việc',
+        icon: Icons.delete_outline,
+        width: 440,
+        actions: [
+          AppDialogAction(
+            text: 'Hủy',
+            variant: AppButtonVariant.outline,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          AppDialogAction(
+            text: 'Xóa',
+            variant: AppButtonVariant.destructive,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+        child: Text(
+          'Xóa công việc "${task.title}"? Hành động này không thể hoàn tác.',
+          style: AppTextStyles.bodyMedium,
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      await notifier.deleteTask(task);
+    }
   }
 }
 

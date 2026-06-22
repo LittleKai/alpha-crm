@@ -264,8 +264,29 @@ test('calls AI only when no rule matches and returns text reply', async () => {
     kind: 'reply',
     mode: 'ai',
     text: 'AI response',
+    tokenIn: 0,
+    tokenOut: 0,
     sourceMessageIds: ['message-1'],
   });
+});
+
+test('AI reply captures token usage and usage id from generate', async () => {
+  const engine = new LocalChatbotEngine();
+  const result = await engine.evaluate(input({
+    settings: { ...input().settings, aiEnabled: true },
+    rules: [],
+    generateAi: async () => ({
+      reply: 'AI response',
+      usage: { id: 'usage-123', promptTokens: 3409, completionTokens: 404 },
+    }),
+  }));
+
+  assert.equal(result.kind, 'reply');
+  if (result.kind === 'reply') {
+    assert.equal(result.tokenIn, 3409);
+    assert.equal(result.tokenOut, 404);
+    assert.equal(result.usageId, 'usage-123');
+  }
 });
 
 test('AI reply with attachments carries them through; file-only reply is allowed', async () => {
@@ -286,6 +307,8 @@ test('AI reply with attachments carries them through; file-only reply is allowed
     mode: 'ai',
     text: '',
     attachments: [{ type: 'image', id: 'abc123', name: 'a.png' }],
+    tokenIn: 0,
+    tokenOut: 0,
     sourceMessageIds: ['message-1'],
   });
 });

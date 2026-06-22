@@ -97,6 +97,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
+### 2026-06-22 - Dialog "Đóng" button popped the GoRouter page (whole-app crash) via captured outer context
+
+- Symptom: Opening the group AI-summary history dialog ("Lịch sử tóm tắt") then tapping "Đóng" crashed the app: `currentConfiguration.isNotEmpty: You have popped the last page off of the stack` followed by `!_debugLocked` during Navigator dispose.
+- Root cause: `showGroupSummaryHistory(BuildContext context, ...)` built `AppDialog` directly in `showDialog(builder: (_) => AppDialog(... onPressed: () => Navigator.of(context).pop()))`. The action closure captured the **outer caller `context`** (the screen, under the root GoRouter Navigator), so `pop()` popped the last GoRouter page instead of the dialog route.
+- Fix: name the builder's context (`builder: (dialogContext) => ...`) and pop `dialogContext`.
+- Rule: When `showDialog(builder: (ctx) => Widget(...))` builds the dialog inline and its buttons need to close it, always close over the builder's `ctx` — never the function's outer `context`. (If the dialog body is its own widget, e.g. the summary wizard/settings/preview dialogs, its build context is already under the dialog route, so popping there is safe.) Same family as the 2026-06-18 GoRouter pop crash.
+- Related files: `tools/alpha-crm/lib/features/groups/manage/presentation/widgets/group_summary_history_dialog.dart`.
+
 ### 2026-06-19 - Microsecond clientMessageId pinned Date.now() and evicted the live `zpw_sek` cookie
 
 - Symptom: every personal-Zalo send failed with `ZaloApiError ... zpw_sek bị thiếu hoặc không đúng` (code 600), immediately — even right after a fresh QR rescan — then the account was marked `disconnected_expired`. Looked like a dead/expired session but the on-disk credentials were fine.

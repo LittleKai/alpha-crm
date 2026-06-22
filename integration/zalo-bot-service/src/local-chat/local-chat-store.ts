@@ -1217,7 +1217,9 @@ export class LocalChatStore {
     limit?: number;
     offset?: number;
   } = {}): { conversations: LocalConversation[]; total: number } {
-    const limit = Math.min(options.limit || 50, 200);
+    // Ceiling raised to 2000 so the response-log name lookup can resolve more
+    // than the 200 most-recent threads. Paginated callers default to 50.
+    const limit = Math.min(options.limit || 50, 2000);
     const offset = options.offset || 0;
 
     let whereClause = '1=1';

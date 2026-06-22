@@ -20,6 +20,9 @@ import '../widgets/group_summary_history_dialog.dart';
 import '../widgets/group_summary_settings_dialog.dart';
 import '../widgets/group_summary_wizard_dialog.dart';
 
+/// Client-side group name filter (local-first, no API call).
+final _groupSearchProvider = StateProvider<String>((ref) => '');
+
 /// Zalo IDs of every account-record that is the same logical group as [group].
 Set<String> _siblingZaloIds(ManagedGroupsState state, ManagedZaloGroup group) {
   final key = groupIdentityKey(group);
@@ -247,7 +250,24 @@ class _GroupsList extends ConsumerWidget {
                   'Bấm Đồng bộ để hệ thống tải danh sách nhóm Zalo.',
               height: 360,
             )
-          : Builder(
+          : Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: AppSpacing.s),
+                  child: _GroupSearchField(),
+                ),
+                Expanded(child: _buildList(context, ref, connectedAccounts)),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    WidgetRef ref,
+    List<ZaloConnectedAccount> connectedAccounts,
+  ) {
+    return Builder(
               builder: (context) {
                 final mergedGroupsMap = <String, ManagedZaloGroup>{};
                 final groupAccountsMap = <String, List<ZaloConnectedAccount>>{};
@@ -284,11 +304,33 @@ class _GroupsList extends ConsumerWidget {
                     ? groupIdentityKey(state.selectedGroup!)
                     : null;
 
+                final query = ref.watch(_groupSearchProvider).trim().toLowerCase();
+                final visibleGroups = query.isEmpty
+                    ? mergedGroups
+                    : mergedGroups
+                          .where(
+                            (g) => cleanGroupName(
+                              g.name,
+                            ).toLowerCase().contains(query),
+                          )
+                          .toList();
+
+                if (visibleGroups.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Không tìm thấy nhóm phù hợp.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  );
+                }
+
                 return ListView.separated(
-                  itemCount: mergedGroups.length,
+                  itemCount: visibleGroups.length,
                   separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final group = mergedGroups[index];
+                    final group = visibleGroups[index];
                     final gid = groupIdentityKey(group);
                     final accounts = groupAccountsMap[gid] ?? [];
                     final selected = gid == selectedKey;
@@ -344,7 +386,71 @@ class _GroupsList extends ConsumerWidget {
                   },
                 );
               },
-            ),
+            );
+  }
+}
+
+class _GroupSearchField extends ConsumerStatefulWidget {
+  const _GroupSearchField();
+
+  @override
+  ConsumerState<_GroupSearchField> createState() => _GroupSearchFieldState();
+}
+
+class _GroupSearchFieldState extends ConsumerState<_GroupSearchField> {
+  final _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = ref.read(_groupSearchProvider);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      style: AppTextStyles.body,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Tìm nhóm theo tên...',
+        prefixIcon: const Icon(Icons.search, size: 18),
+        suffixIcon: _controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Xóa',
+                onPressed: () {
+                  _controller.clear();
+                  ref.read(_groupSearchProvider.notifier).state = '';
+                  setState(() {});
+                },
+              ),
+        filled: true,
+        fillColor: AppColors.surfaceMuted,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s,
+          vertical: AppSpacing.xs,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: AppSpacing.borderRadiusS,
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: AppSpacing.borderRadiusS,
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+      ),
+      onChanged: (value) {
+        ref.read(_groupSearchProvider.notifier).state = value;
+        setState(() {}); // refresh suffix clear icon
+      },
     );
   }
 }

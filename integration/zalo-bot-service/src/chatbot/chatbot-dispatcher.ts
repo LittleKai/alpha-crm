@@ -108,7 +108,12 @@ export class ChatbotDispatcher {
       return { status: 'failed', error: decision.error };
     }
 
-    await this.recordAudit(input, 'skipped', { reason: decision.reason });
+    // `group_trigger` (group reply only when mentioned/replied-to) is the normal
+    // resting state in groups — it would flood the response log, so don't audit
+    // or count it. Other skip reasons are still logged for visibility.
+    if (decision.reason !== 'group_trigger') {
+      await this.recordAudit(input, 'skipped', { reason: decision.reason });
+    }
     return { status: 'skipped', reason: decision.reason };
   }
 
@@ -393,6 +398,15 @@ export class ChatbotDispatcher {
       tokenIn,
       tokenOut,
     );
+    // Carry token usage to the cloud so the response log shows Token (In/Out)
+    // for personal/live AI replies instead of 0/0.
+    if (decision.kind === 'reply' && decision.mode === 'ai') {
+      payload.tokenIn = tokenIn;
+      payload.tokenOut = tokenOut;
+      if (decision.usageId) {
+        payload.aiUsageId = decision.usageId;
+      }
+    }
     try {
       this.dependencies.enqueueAudit(idempotencyKey, payload);
       await this.dependencies.postAudit({
