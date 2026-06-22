@@ -42,7 +42,7 @@ class AppTabs extends StatelessWidget {
         : AppColors.slateSoft;
     final surfaceColor = theme.cardTheme.color ?? theme.colorScheme.surface;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
 
     return Container(
@@ -104,7 +104,7 @@ class AppTabs extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final borderSoftColor = theme.dividerTheme.color ?? theme.dividerColor;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
 
     return Container(
@@ -168,7 +168,7 @@ class _TabContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
 
     return Row(

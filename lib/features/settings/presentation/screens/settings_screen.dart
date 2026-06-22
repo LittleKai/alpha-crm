@@ -757,7 +757,7 @@ class _AccountCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.account_circle_outlined,
                 color: AppColors.zaloBlue,
                 size: 20,
@@ -827,7 +827,7 @@ class _AccountCard extends StatelessWidget {
                                 acc.label.isNotEmpty
                                     ? acc.label.substring(0, 1).toUpperCase()
                                     : 'Z',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.primary,
@@ -1896,7 +1896,7 @@ class _UpdateCard extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.new_releases_outlined,
                         color: AppColors.primary,
                         size: 20,
@@ -1978,7 +1978,7 @@ class _UpdateCard extends ConsumerWidget {
                     value: state.downloadProgress,
                     minHeight: 6,
                     backgroundColor: AppColors.border,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
+                    valueColor: AlwaysStoppedAnimation<Color>(
                       AppColors.primary,
                     ),
                   ),
@@ -2338,7 +2338,7 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.textOnPrimary,
                             elevation: 4,
                             padding: const EdgeInsets.symmetric(
                               horizontal: AppSpacing.m,
@@ -2472,7 +2472,7 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.textOnPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: AppSpacing.borderRadiusS,
                 ),

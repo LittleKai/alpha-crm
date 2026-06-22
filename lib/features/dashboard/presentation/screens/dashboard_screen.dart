@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,7 +43,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       body: state.isLoading && state.overview == null
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
           : RefreshIndicator(
@@ -67,13 +68,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         // tải, KHÔNG vội hiện banner "cần đăng nhập".
                         if (zaloState.isInitializing) {
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: AppSpacing.l),
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.l,
+                            ),
                             child: _buildBackendLoadingBanner(),
                           );
                         }
-                        if (!zaloState.isLoading && zaloState.accounts.isEmpty) {
+                        if (!zaloState.isLoading &&
+                            zaloState.accounts.isEmpty) {
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: AppSpacing.l),
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.l,
+                            ),
                             child: _buildZaloOnboardingBanner(),
                           );
                         }
@@ -98,7 +104,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         const AiTokenUsageCard(),
                         const SizedBox(height: AppSpacing.l),
                       ],
-                      _buildCampaignStatusSection(state),
+                      _buildCampaignStatusAndPerformance(state),
                       const SizedBox(height: AppSpacing.l),
                     ],
                     _buildQuickActionsSection(),
@@ -128,7 +134,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
@@ -175,9 +181,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           borderRadius: AppSpacing.borderRadiusM,
           boxShadow: [
             BoxShadow(
-              color: isDark
-                  ? const Color(0x3F000000)
-                  : const Color(0x1FCA8A04),
+              color: isDark ? const Color(0x3F000000) : const Color(0x1FCA8A04),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -193,10 +197,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         const Color(0xFF272115),
                         const Color(0xFF78350F).withValues(alpha: 0.15),
                       ]
-                    : [
-                        const Color(0xFFFFFBEB),
-                        const Color(0xFFFEF3C7),
-                      ],
+                    : [const Color(0xFFFFFBEB), const Color(0xFFFEF3C7)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -229,7 +230,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             padding: const EdgeInsets.all(AppSpacing.s),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF78350F).withValues(alpha: 0.6)
+                                  ? const Color(
+                                      0xFF78350F,
+                                    ).withValues(alpha: 0.6)
                                   : const Color(0xFFFDE68A),
                               shape: BoxShape.circle,
                             ),
@@ -290,7 +293,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildHeader(DashboardState state) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppColors.primarySoft,
+            borderRadius: AppSpacing.borderRadiusM,
+            border: Border.all(color: AppColors.primaryBorder),
+          ),
+          child: Icon(
+            Icons.insights_rounded,
+            color: AppColors.primary,
+            size: 26,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.m),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,15 +317,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('Tổng quan chiến dịch', style: AppTextStyles.pageTitle),
+                  Text(
+                    'Tổng quan chiến dịch',
+                    style: AppTextStyles.pageTitle.copyWith(letterSpacing: -0.5),
+                  ),
                   if (state.isRefreshing) ...[
                     const SizedBox(width: AppSpacing.s),
-                    const SizedBox(
+                    SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primary,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
@@ -468,7 +492,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             crossAxisCount: columns,
             crossAxisSpacing: AppSpacing.m,
             mainAxisSpacing: AppSpacing.m,
-            mainAxisExtent: 74,
+            mainAxisExtent: 88,
           ),
           itemCount: metrics.length,
           itemBuilder: (context, index) => metrics[index],
@@ -504,19 +528,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 'Báo cáo hiệu suất chiến dịch',
                 style: AppTextStyles.sectionTitle,
               ),
-              _buildChartControls(
-                state,
-                notifier,
-                totalSuccess,
-                totalFailure,
-              ),
+              _buildChartControls(state, notifier, totalSuccess, totalFailure),
             ],
           ),
           const SizedBox(height: AppSpacing.l),
           SizedBox(
             height: 300,
             child: state.isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
                   )
                 : _buildPerformanceChart(state.performanceData, state),
@@ -562,7 +581,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         _buildRangeButtons(state, notifier),
         if (_selectedTab == 0)
-          _buildChartTotalsLabel('Thành công: $success | Phản hồi Bot: $chatbotTotal')
+          _buildChartTotalsLabel(
+            'Thành công: $success | Phản hồi Bot: $chatbotTotal',
+          )
         else if (_selectedTab == 1)
           _buildChartTotals(success, failure)
         else if (_selectedTab == 2)
@@ -578,7 +599,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
       child: Text(
         label,
-        style: AppTextStyles.captionBold.copyWith(color: AppColors.textSecondary),
+        style: AppTextStyles.captionBold.copyWith(
+          color: AppColors.textSecondary,
+        ),
       ),
     );
   }
@@ -658,7 +681,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildPerformanceChart(List<dynamic> performanceData, DashboardState state) {
+  Widget _buildPerformanceChart(
+    List<dynamic> performanceData,
+    DashboardState state,
+  ) {
     // Generate dummy dates if performanceData is empty to prevent blank charts
     final List<dynamic> chartData = List.from(performanceData);
     if (chartData.isEmpty) {
@@ -666,7 +692,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final now = DateTime.now();
       for (int i = days - 1; i >= 0; i--) {
         final date = now.subtract(Duration(days: i));
-        final label = '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
+        final label =
+            '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
         chartData.add({
           'label': label,
           'success': 0,
@@ -679,7 +706,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
 
     final int len = chartData.length;
-    
+
     // Prepare arrays
     final List<double> messageSuccess = List.generate(
       len,
@@ -690,28 +717,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       (index) => ((chartData[index]['failure'] ?? 0) as num).toDouble(),
     );
 
-    final List<double> friendSuccess = List.generate(
-      len,
-      (index) {
-        final item = chartData[index];
-        return ((item['friendSuccess'] ?? item['friend_success'] ?? item['friends'] ?? 0) as num).toDouble();
-      },
-    );
-    final List<double> friendFailure = List.generate(
-      len,
-      (index) {
-        final item = chartData[index];
-        return ((item['friendFailure'] ?? item['friend_failure'] ?? 0) as num).toDouble();
-      },
-    );
+    final List<double> friendSuccess = List.generate(len, (index) {
+      final item = chartData[index];
+      return ((item['friendSuccess'] ??
+                  item['friend_success'] ??
+                  item['friends'] ??
+                  0)
+              as num)
+          .toDouble();
+    });
+    final List<double> friendFailure = List.generate(len, (index) {
+      final item = chartData[index];
+      return ((item['friendFailure'] ?? item['friend_failure'] ?? 0) as num)
+          .toDouble();
+    });
 
-    final List<double> chatbotValues = List.generate(
-      len,
-      (index) {
-        final item = chartData[index];
-        return ((item['responses'] ?? item['response'] ?? item['replies'] ?? item['reply'] ?? item['chatbot'] ?? 0) as num).toDouble();
-      },
-    );
+    final List<double> chatbotValues = List.generate(len, (index) {
+      final item = chartData[index];
+      return ((item['responses'] ??
+                  item['response'] ??
+                  item['replies'] ??
+                  item['reply'] ??
+                  item['chatbot'] ??
+                  0)
+              as num)
+          .toDouble();
+    });
 
     // Dynamic distribution of chatbot responses if sum is 0 but chatbotTotal > 0
     final chatbotStats = state.analytics['chatbot'];
@@ -773,35 +804,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       lines.addAll([
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageSuccess[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), messageSuccess[i]),
+          ),
           isCurved: true,
           color: AppColors.primary,
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageFailure[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), messageFailure[i]),
+          ),
           isCurved: true,
           color: AppColors.error,
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendSuccess[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), friendSuccess[i]),
+          ),
           isCurved: true,
           color: const Color(0xFFF97316),
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendFailure[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), friendFailure[i]),
+          ),
           isCurved: true,
           color: const Color(0xFF8B5CF6), // Purple
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), chatbotValues[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), chatbotValues[i]),
+          ),
           isCurved: true,
           color: const Color(0xFF10B981),
           barWidth: 3,
@@ -812,7 +858,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       legendItems.addAll([
         _buildLegendItem(label: 'TN thành công', color: AppColors.primary),
         _buildLegendItem(label: 'TN thất bại', color: AppColors.error),
-        _buildLegendItem(label: 'KB thành công', color: const Color(0xFFF97316)),
+        _buildLegendItem(
+          label: 'KB thành công',
+          color: const Color(0xFFF97316),
+        ),
         _buildLegendItem(label: 'KB thất bại', color: const Color(0xFF8B5CF6)),
         _buildLegendItem(label: 'Phản hồi Bot', color: const Color(0xFF10B981)),
       ]);
@@ -822,14 +871,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       lines.addAll([
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageSuccess[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), messageSuccess[i]),
+          ),
           isCurved: true,
           color: AppColors.primary,
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), messageFailure[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), messageFailure[i]),
+          ),
           isCurved: true,
           color: AppColors.error,
           barWidth: 3,
@@ -847,14 +902,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       lines.addAll([
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendSuccess[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), friendSuccess[i]),
+          ),
           isCurved: true,
           color: const Color(0xFFF97316),
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), friendFailure[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), friendFailure[i]),
+          ),
           isCurved: true,
           color: AppColors.error,
           barWidth: 3,
@@ -863,7 +924,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ]);
 
       legendItems.addAll([
-        _buildLegendItem(label: 'Kết bạn thành công', color: const Color(0xFFF97316)),
+        _buildLegendItem(
+          label: 'Kết bạn thành công',
+          color: const Color(0xFFF97316),
+        ),
         _buildLegendItem(label: 'Kết bạn thất bại', color: AppColors.error),
       ]);
     } else {
@@ -871,7 +935,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       lines.add(
         LineChartBarData(
-          spots: List.generate(len, (i) => FlSpot(i.toDouble(), chatbotValues[i])),
+          spots: List.generate(
+            len,
+            (i) => FlSpot(i.toDouble(), chatbotValues[i]),
+          ),
           isCurved: true,
           color: const Color(0xFF10B981),
           barWidth: 3,
@@ -880,7 +947,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
 
       legendItems.add(
-        _buildLegendItem(label: 'Phản hồi của Bot', color: const Color(0xFF10B981)),
+        _buildLegendItem(
+          label: 'Phản hồi của Bot',
+          color: const Color(0xFF10B981),
+        ),
       );
     }
 
@@ -979,12 +1049,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         }
                       } else if (_selectedTab == 1) {
                         final isSuccess = spot.barIndex == 0;
-                        labelText = '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
-                        textColor = isSuccess ? AppColors.primary : AppColors.error;
+                        labelText =
+                            '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
+                        textColor = isSuccess
+                            ? AppColors.primary
+                            : AppColors.error;
                       } else if (_selectedTab == 2) {
                         final isSuccess = spot.barIndex == 0;
-                        labelText = '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
-                        textColor = isSuccess ? const Color(0xFFF97316) : AppColors.error;
+                        labelText =
+                            '${isSuccess ? "Thành công" : "Thất bại"}: ${spot.y.toInt()}';
+                        textColor = isSuccess
+                            ? const Color(0xFFF97316)
+                            : AppColors.error;
                       } else {
                         labelText = 'Phản hồi: ${spot.y.toInt()}';
                         textColor = const Color(0xFF10B981);
@@ -1355,6 +1431,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       color: AppColors.surface,
                       borderRadius: AppSpacing.borderRadiusM,
                       border: Border.all(color: AppColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: item.color.withValues(alpha: 0.06),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
@@ -1363,9 +1446,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           height: 48,
                           decoration: BoxDecoration(
                             color: item.bgColor,
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusS,
-                            ),
+                            borderRadius: AppSpacing.borderRadiusM,
                           ),
                           child: Icon(item.icon, color: item.color, size: 24),
                         ),
@@ -1384,18 +1465,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Text(
                                     item.count.toString(),
-                                    style: AppTextStyles.sectionTitle.copyWith(
-                                      fontWeight: FontWeight.bold,
+                                    style: AppTextStyles.pageTitle.copyWith(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.s),
-                                  Text(
-                                    '(${item.percentage})',
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.textMuted,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.s,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: item.bgColor,
+                                      borderRadius: AppSpacing.borderRadiusS,
+                                    ),
+                                    child: Text(
+                                      item.percentage,
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: item.color,
+                                        fontWeight: FontWeight.w700,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1517,7 +1618,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildCampaignStatusSection(DashboardState state) {
+  Widget _buildCampaignStatusAndPerformance(DashboardState state) {
     final campaignStats = _safeMap(state.overview?['campaignStats']);
     var byStatus = _safeMap(campaignStats['byStatus']);
     if (byStatus.isEmpty) {
@@ -1530,8 +1631,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       };
     }
 
-    String mapCampaignStatus(String status) {
-      switch (status.toLowerCase()) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 720;
+        final children = [
+          _buildCampaignStatusDonut(byStatus),
+          _buildRecentPerformanceBarChart(state),
+        ];
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: children[0]),
+              const SizedBox(width: AppSpacing.l),
+              Expanded(child: children[1]),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            children[0],
+            const SizedBox(height: AppSpacing.l),
+            children[1],
+          ],
+        );
+      },
+    );
+  }
+
+  // --- Campaign Status Donut Chart ---
+  Widget _buildCampaignStatusDonut(Map<String, dynamic> byStatus) {
+    String mapLabel(String s) {
+      switch (s.toLowerCase()) {
         case 'running':
           return 'Đang chạy';
         case 'completed':
@@ -1553,12 +1684,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         case 'cancelled':
           return 'Bị hủy';
         default:
-          return status;
+          return s;
       }
     }
 
-    Color getStatusColor(String status) {
-      switch (status.toLowerCase()) {
+    Color statusColor(String s) {
+      switch (s.toLowerCase()) {
         case 'running':
           return AppColors.primary;
         case 'completed':
@@ -1584,193 +1715,364 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }
 
-    final statusWidgets = byStatus.entries.map((entry) {
-      final label = mapCampaignStatus(entry.key);
-      final count = _safeInt(entry.value);
-      final color = getStatusColor(entry.key);
+    final entries =
+        byStatus.entries
+            .map((e) => MapEntry(e.key, _safeInt(e.value)))
+            .where((e) => e.value > 0)
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
-      return Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.m,
-          vertical: AppSpacing.s,
-        ),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: AppSpacing.s),
-            Text(
-              '$label: ',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              count.toString(),
-              style: AppTextStyles.captionBold.copyWith(color: color),
-            ),
-          ],
-        ),
-      );
-    }).toList();
-
-    final recentPerformance = _safeList(state.performanceData);
+    final total = entries.fold<int>(0, (s, e) => s + e.value);
 
     return AppCard(
-      key: const ValueKey('dashboard_campaign_status_section'),
+      key: const ValueKey('dashboard_status_donut'),
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Trạng thái chiến dịch & Hiệu suất gần đây',
-            style: AppTextStyles.sectionTitle,
+          Text('Trạng thái chiến dịch', style: AppTextStyles.sectionTitle),
+          const SizedBox(height: AppSpacing.m),
+          SizedBox(
+            height: 200,
+            child: Row(
+              children: [
+                Expanded(
+                  child: entries.isEmpty
+                      ? SfCircularChart(
+                          margin: EdgeInsets.zero,
+                          series: <CircularSeries>[
+                            DoughnutSeries<int, String>(
+                              dataSource: [1],
+                              xValueMapper: (int data, _) => '',
+                              yValueMapper: (int data, _) => data,
+                              pointColorMapper: (int data, _) =>
+                                  AppColors.border,
+                              innerRadius: '75%',
+                              radius: '100%',
+                            ),
+                          ],
+                          annotations: <CircularChartAnnotation>[
+                            CircularChartAnnotation(
+                              widget: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '0',
+                                    style: AppTextStyles.pageTitle.copyWith(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    'chiến dịch',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : SfCircularChart(
+                          margin: EdgeInsets.zero,
+                          series: <CircularSeries>[
+                            DoughnutSeries<MapEntry<String, int>, String>(
+                              dataSource: entries,
+                              xValueMapper: (MapEntry<String, int> data, _) =>
+                                  data.key,
+                              yValueMapper: (MapEntry<String, int> data, _) =>
+                                  data.value,
+                              pointColorMapper:
+                                  (MapEntry<String, int> data, _) =>
+                                      statusColor(data.key),
+                              innerRadius: '75%',
+                              radius: '100%',
+                            ),
+                          ],
+                          annotations: <CircularChartAnnotation>[
+                            CircularChartAnnotation(
+                              widget: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    total.toString(),
+                                    style: AppTextStyles.pageTitle.copyWith(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    'chiến dịch',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (entries.isEmpty)
+                        Text(
+                          'Chưa có chiến dịch',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                        )
+                      else
+                        ...entries.map((e) {
+                          final color = statusColor(e.key);
+                          final pct = total > 0
+                              ? (e.value / total * 100).toStringAsFixed(0)
+                              : '0';
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.xs,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.s),
+                                Expanded(
+                                  child: Text(
+                                    mapLabel(e.key),
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  e.value.toString(),
+                                  style: AppTextStyles.captionBold.copyWith(
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.xs),
+                                SizedBox(
+                                  width: 36,
+                                  child: Text(
+                                    pct + '%',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Recent Performance Bar Chart ---
+  Widget _buildRecentPerformanceBarChart(DashboardState state) {
+    final recentPerformance = _safeList(state.performanceData);
+    // Take only latest 7 entries for readability
+    final data = recentPerformance.length > 7
+        ? recentPerformance.sublist(recentPerformance.length - 7)
+        : List<dynamic>.from(recentPerformance);
+
+    int totalSuccess = 0;
+    int totalFailure = 0;
+    double maxY = 4;
+
+    final List<Map<String, dynamic>> chartData = [];
+    for (int i = 0; i < data.length; i++) {
+      final item = _safeMap(data[i]);
+      final success = _safeInt(item['success']);
+      final failure = _safeInt(item['failure']);
+      final label = item['label']?.toString() ?? '';
+      totalSuccess += success;
+      totalFailure += failure;
+
+      chartData.add({
+        'index': i,
+        'label': label,
+        'success': success,
+        'failure': failure,
+      });
+
+      final sum = (success + failure).toDouble();
+      if (sum > maxY) maxY = sum;
+    }
+    maxY = (maxY * 1.25).ceilToDouble();
+    if (maxY == 0) maxY = 4;
+
+    return AppCard(
+      key: const ValueKey('dashboard_recent_performance_bar'),
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Hiệu suất gần đây',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
+              _buildLegendItem(label: 'Thành công', color: AppColors.primary),
+              const SizedBox(width: AppSpacing.m),
+              _buildLegendItem(
+                label: 'Thất bại',
+                color: AppColors.error.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Text(
+                'Thành công: ' + totalSuccess.toString(),
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Text(
+                'Thất bại: ' + totalFailure.toString(),
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.m),
-          if (statusWidgets.isNotEmpty) ...[
-            Wrap(
-              spacing: AppSpacing.s,
-              runSpacing: AppSpacing.s,
-              children: statusWidgets,
-            ),
-            const SizedBox(height: AppSpacing.l),
-          ],
-          Text(
-            'Bảng chi tiết gửi tin gần đây',
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s),
-          if (recentPerformance.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpacing.l),
-                child: Text('Không có dữ liệu hiệu suất gửi tin gần đây.'),
-              ),
-            )
-          else ...[
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: AppSpacing.borderRadiusM,
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    color: AppColors.surfaceMuted,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.m,
-                      vertical: AppSpacing.s,
+          SizedBox(
+            height: 200,
+            child: data.isEmpty
+                ? Center(
+                    child: Text(
+                      'Chưa có dữ liệu gửi tin gần đây.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textMuted,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            'Thời gian',
-                            style: AppTextStyles.captionBold.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            'Thành công',
-                            style: AppTextStyles.captionBold.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            'Thất bại',
-                            style: AppTextStyles.captionBold.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            'Tổng cộng',
-                            style: AppTextStyles.captionBold.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
+                  )
+                : SfCartesianChart(
+                    margin: EdgeInsets.zero,
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: CategoryAxis(
+                      majorGridLines: const MajorGridLines(width: 0),
+                      axisLine: const AxisLine(width: 0),
+                      labelStyle: AppTextStyles.caption.copyWith(fontSize: 10),
                     ),
+                    primaryYAxis: NumericAxis(
+                      minimum: 0,
+                      maximum: maxY,
+                      interval: maxY / 4,
+                      majorGridLines: MajorGridLines(
+                        color: AppColors.borderSoft,
+                        dashArray: const <double>[4, 4],
+                      ),
+                      axisLine: const AxisLine(width: 0),
+                      labelStyle: AppTextStyles.caption,
+                    ),
+                    tooltipBehavior: TooltipBehavior(
+                      enable: true,
+                      color: AppColors.surface,
+                      textStyle: AppTextStyles.captionBold.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                      builder:
+                          (
+                            dynamic data,
+                            dynamic point,
+                            dynamic series,
+                            int pointIndex,
+                            int seriesIndex,
+                          ) {
+                            final isSuccess = seriesIndex == 0;
+                            final val = isSuccess
+                                ? data['success']
+                                : data['failure'];
+                            final color = isSuccess
+                                ? AppColors.primary
+                                : AppColors.error.withValues(alpha: 0.7);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Text(
+                                (isSuccess ? 'Thành công: ' : 'Thất bại: ') +
+                                    val.toString(),
+                                style: AppTextStyles.captionBold.copyWith(
+                                  color: color,
+                                ),
+                              ),
+                            );
+                          },
+                    ),
+                    series: <CartesianSeries>[
+                      ColumnSeries<Map<String, dynamic>, String>(
+                        dataSource: chartData,
+                        xValueMapper: (Map<String, dynamic> data, _) =>
+                            data['label'] as String,
+                        yValueMapper: (Map<String, dynamic> data, _) =>
+                            data['success'] as int,
+                        color: AppColors.primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(3),
+                        ),
+                        width: 0.4,
+                        spacing: 0.1,
+                      ),
+                      ColumnSeries<Map<String, dynamic>, String>(
+                        dataSource: chartData,
+                        xValueMapper: (Map<String, dynamic> data, _) =>
+                            data['label'] as String,
+                        yValueMapper: (Map<String, dynamic> data, _) =>
+                            data['failure'] as int,
+                        color: AppColors.error.withValues(alpha: 0.7),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(3),
+                        ),
+                        width: 0.4,
+                        spacing: 0.1,
+                      ),
+                    ],
                   ),
-                  Divider(height: 1, color: AppColors.border),
-                  ...recentPerformance.map((item) {
-                    final mapItem = _safeMap(item);
-                    final label = mapItem['label']?.toString() ?? '';
-                    final success = _safeInt(mapItem['success']);
-                    final failure = _safeInt(mapItem['failure']);
-                    final total = success + failure;
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.m,
-                        vertical: AppSpacing.s,
-                      ),
-                      decoration: BoxDecoration(color: AppColors.surface),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(label, style: AppTextStyles.bodyMedium),
-                          ),
-                          Expanded(
-                            child: Text(
-                              success.toString(),
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              failure.toString(),
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: AppColors.error,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              total.toString(),
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -1816,21 +2118,59 @@ class _OperationMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(width: AppSpacing.s),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: AppSpacing.borderRadiusM,
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: AppSpacing.m),
           Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: AppTextStyles.pageTitle.copyWith(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
           ),
-          Text(value, style: AppTextStyles.sectionTitle.copyWith(color: color)),
         ],
       ),
     );

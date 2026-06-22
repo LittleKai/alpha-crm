@@ -96,6 +96,11 @@ export function handleLocalRoute(
     handleListKnowledgeFiles(req, res, json);
     return true;
   }
+  // GET /local/chatbot/stats?from=&to=  → durable per-day response/token stats
+  if (method === 'GET' && /^\/local\/chatbot\/stats(\?.*)?$/.test(url)) {
+    handleLocalChatbotStats(url, req, res, json);
+    return true;
+  }
 
   // GET /local/accounts/chat-settings  → map of accountId → { aiAutoReply }
   if (method === 'GET' && url === '/local/accounts/chat-settings') {
@@ -314,6 +319,74 @@ function handleLocalChatbotStatus(
       pendingAudits: store?.countPendingAudits() ?? 0,
     },
   }, req);
+}
+
+function handleLocalChatbotStats(
+  url: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getChatbotStore();
+  if (!store) {
+    json(res, 503, { success: false, error: 'Chatbot store unavailable.' }, req);
+    return;
+  }
+  const query = new URLSearchParams(url.split('?')[1] ?? '');
+  const now = Date.now();
+  const toMs = parseDateParam(query.get('to')) ?? now;
+  const fromMs =
+    parseDateParam(query.get('from')) ?? toMs - 30 * 24 * 60 * 60 * 1000;
+  const fromKey = statsDateKey(Math.min(fromMs, toMs));
+  const toKey = statsDateKey(Math.max(fromMs, toMs));
+  const byDate = new Map(
+    store.getResponseStats(fromKey, toKey).map((row) => [row.date, row]),
+  );
+  // One row per day in range so the chart x-axis stays continuous.
+  const data = eachStatsDate(fromKey, toKey).map((date) => {
+    const row = byDate.get(date);
+    return {
+      date,
+      tokenIn: row?.tokenIn ?? 0,
+      tokenOut: row?.tokenOut ?? 0,
+      aiUses: row?.aiUses ?? 0,
+      keywordUses: row?.keywordUses ?? 0,
+      skipped: row?.skipped ?? 0,
+    };
+  });
+  json(res, 200, { success: true, data }, req);
+}
+
+function parseDateParam(value: string | null): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  if (Number.isFinite(ms)) return ms;
+  const asNum = Number(value);
+  return Number.isFinite(asNum) && value.trim() !== '' ? asNum : null;
+}
+
+/** Local-time `yyyy-MM-dd`, matching how the store buckets responses. */
+function statsDateKey(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function eachStatsDate(fromKey: string, toKey: string): string[] {
+  const [fy, fm, fd] = fromKey.split('-').map(Number);
+  const [ty, tm, td] = toKey.split('-').map(Number);
+  const cursor = new Date(fy, fm - 1, fd);
+  const end = new Date(ty, tm - 1, td);
+  const result: string[] = [];
+  let guard = 0;
+  while (cursor <= end && guard < 1000) {
+    result.push(statsDateKey(cursor.getTime()));
+    cursor.setDate(cursor.getDate() + 1);
+    guard += 1;
+  }
+  return result;
 }
 
 async function handleLocalChatbotSync(

@@ -70,7 +70,12 @@ class _SplashContentState extends State<_SplashContent>
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
+    );
+    final isTest = WidgetsBinding.instance.toString().contains('Test') ||
+        WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    if (!isTest) {
+      _pulse.repeat(reverse: true);
+    }
     _glow = Tween<double>(begin: 8.0, end: 30.0).animate(
       CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
     );

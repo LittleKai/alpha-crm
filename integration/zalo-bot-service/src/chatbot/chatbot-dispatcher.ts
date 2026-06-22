@@ -51,6 +51,15 @@ export interface ChatbotDispatcherDependencies {
   postAudit(request: ChatbotAuditRequest): Promise<void>;
   deleteAudit(idempotencyKey: string): void;
   markAuditFailed(idempotencyKey: string, error: string): void;
+  // Durable per-day response counter, independent of the sync queue. Optional so
+  // existing tests/wiring without it keep working.
+  recordResponseDaily?(
+    outcome: string,
+    accountId: string,
+    timestamp: number,
+    tokenIn: number,
+    tokenOut: number,
+  ): void;
   // Resolve a knowledge-file id to its local file path on this machine, or null
   // if the file is missing (e.g. configured on another machine). zca-js sends
   // the local path directly — no download.
@@ -366,6 +375,24 @@ export class ChatbotDispatcher {
       timestamp: this.now(),
       ...details,
     };
+    // Durable local stats first — independent of cloud upload success, so the
+    // dashboard's response chart is correct even fully offline.
+    const decision = input.decision;
+    const tokenIn =
+      decision.kind === 'reply' && decision.mode === 'ai'
+        ? decision.tokenIn ?? 0
+        : 0;
+    const tokenOut =
+      decision.kind === 'reply' && decision.mode === 'ai'
+        ? decision.tokenOut ?? 0
+        : 0;
+    this.dependencies.recordResponseDaily?.(
+      outcome,
+      input.accountId,
+      Number(payload.timestamp),
+      tokenIn,
+      tokenOut,
+    );
     try {
       this.dependencies.enqueueAudit(idempotencyKey, payload);
       await this.dependencies.postAudit({

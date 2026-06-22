@@ -17,7 +17,7 @@ class ZaloComplianceHelpPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.shield_outlined,
                 color: AppColors.primary,
                 size: 20,

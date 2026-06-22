@@ -177,7 +177,7 @@ class ZaloAccount {
 class SendHistoryRecord {
   final String id;
   final String campaignName;
-  final String phone;
+  final String targetName;
   final String message;
   final String status; // 'Thành công', 'Thất bại', 'Đang chờ'
   final DateTime sentAt;
@@ -185,7 +185,7 @@ class SendHistoryRecord {
   const SendHistoryRecord({
     required this.id,
     required this.campaignName,
-    required this.phone,
+    required this.targetName,
     required this.message,
     required this.status,
     required this.sentAt,
@@ -194,7 +194,7 @@ class SendHistoryRecord {
   SendHistoryRecord copyWith({
     String? id,
     String? campaignName,
-    String? phone,
+    String? targetName,
     String? message,
     String? status,
     DateTime? sentAt,
@@ -202,7 +202,7 @@ class SendHistoryRecord {
     return SendHistoryRecord(
       id: id ?? this.id,
       campaignName: campaignName ?? this.campaignName,
-      phone: phone ?? this.phone,
+      targetName: targetName ?? this.targetName,
       message: message ?? this.message,
       status: status ?? this.status,
       sentAt: sentAt ?? this.sentAt,
@@ -237,7 +237,7 @@ class MockCampaignsData {
     SendHistoryRecord(
       id: '1',
       campaignName: 'CSKH Tháng 5',
-      phone: '0987654321',
+      targetName: 'Nguyễn Văn A',
       message: 'Chào {ho_ten}, chúc bạn một {buoi_trong_ngay} vui vẻ!',
       status: 'Thành công',
       sentAt: DateTime.now().subtract(const Duration(minutes: 5)),
@@ -245,7 +245,7 @@ class MockCampaignsData {
     SendHistoryRecord(
       id: '2',
       campaignName: 'Khuyến mãi hè 2026',
-      phone: '0901234567',
+      targetName: 'Nhóm Khách VIP',
       message:
           'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
       status: 'Thành công',
@@ -254,7 +254,7 @@ class MockCampaignsData {
     SendHistoryRecord(
       id: '3',
       campaignName: 'CSKH Tháng 5',
-      phone: '0912345678',
+      targetName: 'Trần Thị B',
       message: 'Chào {ho_ten}, chúc bạn một {buoi_trong_ngay} vui vẻ!',
       status: 'Thất bại',
       sentAt: DateTime.now().subtract(const Duration(hours: 2)),
@@ -262,7 +262,7 @@ class MockCampaignsData {
     SendHistoryRecord(
       id: '4',
       campaignName: 'Giới thiệu sản phẩm mới',
-      phone: '0933445566',
+      targetName: 'Lê Hoàng C',
       message: 'Chào {ho_ten}, chúng tôi ra mắt sản phẩm mới siêu đột phá.',
       status: 'Đang chờ',
       sentAt: DateTime.now().add(const Duration(minutes: 10)),
@@ -270,7 +270,7 @@ class MockCampaignsData {
     SendHistoryRecord(
       id: '5',
       campaignName: 'Khuyến mãi hè 2026',
-      phone: '0977889900',
+      targetName: 'Nhóm Cộng Tác Viên',
       message:
           'Ưu đãi cực lớn dành cho {ho_ten} trong mùa hè này. Đăng ký ngay!',
       status: 'Thành công',

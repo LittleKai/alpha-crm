@@ -384,7 +384,7 @@ class _ContactAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [AppColors.primary, AppColors.success],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -524,7 +524,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.people_alt_outlined,
           color: AppColors.primary,
           size: 32,
@@ -640,7 +640,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.account_tree_outlined, color: AppColors.primary),
+              Icon(Icons.account_tree_outlined, color: AppColors.primary),
               const SizedBox(width: AppSpacing.s),
               Expanded(
                 child: Text(

@@ -15,6 +15,7 @@ import '../../features/messaging/live_chat/providers/live_chat_provider.dart';
 import '../../features/tasks/providers/crm_tasks_provider.dart';
 import '../../features/zalo_integration/providers/zalo_integration_provider.dart';
 import '../../features/auth/providers/crm_auth_provider.dart';
+import '../../features/messaging/bulk/providers/bulk_messaging_provider.dart';
 
 class AppTopbar extends ConsumerStatefulWidget {
   final String currentRoute;
@@ -50,9 +51,9 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FF); // Xanh lam nhạt hoặc dark
     final dividerColor = isDark ? const Color(0xFF334155) : const Color(0xFFBFD2FF); // Viền xanh lam nhạt hoặc dark
-    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569); // Text màu đậm để dễ đọc
+    final textSecondary = isDark ? Colors.white : const Color(0xFF475569); // Text màu đậm để dễ đọc
     final textPrimary = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textMuted = isDark ? const Color(0xFF64748B) : const Color(0xFF718096);
+    final textMuted = isDark ? Colors.white70 : const Color(0xFF718096);
     final disabledColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
 
     return Container(
@@ -171,7 +172,16 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
             builder: (context) {
               final ZaloActionType? actionType;
               if (widget.currentRoute.startsWith('/messaging/bulk')) {
-                actionType = ZaloActionType.bulkMessageByPhone;
+                final bulkState = ref.watch(bulkMessagingProvider);
+                if (bulkState.selectedTab == 0) {
+                  actionType = ZaloActionType.bulkMessageByPhone;
+                } else if (bulkState.selectedTab == 1) {
+                  actionType = ZaloActionType.bulkMessageToGroup;
+                } else if (bulkState.selectedTab == 2 || bulkState.selectedTab == 3) {
+                  actionType = ZaloActionType.bulkMessageToFriends;
+                } else {
+                  actionType = ZaloActionType.bulkMessageByPhone;
+                }
               } else if (widget.currentRoute.startsWith(
                 '/messaging/live-chat',
               )) {
@@ -419,7 +429,7 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                       'Nhập từ khóa để bắt đầu tìm kiếm...',
                       style: TextStyle(
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF64748B)
+                            ? Colors.white70
                             : AppColors.textMuted,
                       ),
                     ),
@@ -430,7 +440,7 @@ class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
                       'Không tìm thấy kết quả phù hợp.',
                       style: TextStyle(
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF64748B)
+                            ? Colors.white70
                             : AppColors.textMuted,
                       ),
                     ),
@@ -642,7 +652,7 @@ class _NotificationMenuDialog extends ConsumerWidget {
                   'Không có thông báo mới nào.',
                   style: TextStyle(
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF64748B)
+                        ? Colors.white70
                         : AppColors.textMuted,
                   ),
                 ),

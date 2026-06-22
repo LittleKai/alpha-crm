@@ -72,7 +72,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   }
 
   Future<void> _initDashboard() async {
-    if (WidgetsBinding.instance.toString().contains('Test')) {
+    if (WidgetsBinding.instance.toString().contains('Test') ||
+        WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
       state = state.copyWith(
         overview: _emptyOverview(),
         analytics: const {},
@@ -164,7 +165,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   }
 
   Future<void> loadDashboard({bool isBackground = false}) async {
-    if (WidgetsBinding.instance.toString().contains('Test')) {
+    if (WidgetsBinding.instance.toString().contains('Test') ||
+        WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
       state = state.copyWith(
         overview: _emptyOverview(),
         analytics: const {},

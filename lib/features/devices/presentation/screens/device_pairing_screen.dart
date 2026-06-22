@@ -605,19 +605,19 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading ? null : _submitPairingCode,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.textOnPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             child: state.isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 16,
                     width: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.textOnPrimary,
                     ),
                   )
                 : const Text('Xác Nhận Kết Nối'),
@@ -636,7 +636,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             label: const Text('Quét mã QR từ màn hình PC'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              side: const BorderSide(color: AppColors.primary),
+              side: BorderSide(color: AppColors.primary),
               foregroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -682,19 +682,19 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                       .startPairingProcess(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.textOnPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             child: state.isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 16,
                     width: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.textOnPrimary,
                     ),
                   )
                 : const Text('Bắt Đầu Quy Trình Ghép Đôi'),
@@ -724,7 +724,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                   ),
                   child: Text(
                     '${state.pairingCode!.substring(0, 3)} ${state.pairingCode!.substring(3, 6)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 4,

@@ -9,11 +9,13 @@ class AppTableColumn {
   final String label;
   final ColumnSize size;
   final bool numeric;
+  final TextAlign? textAlign;
 
   const AppTableColumn({
     required this.label,
     this.size = ColumnSize.M,
     this.numeric = false,
+    this.textAlign,
   });
 }
 
@@ -48,7 +50,7 @@ class AppTable extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final errorColor = isDark ? const Color(0xFFF87171) : AppColors.errorText;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
     final surfaceColor = isDark ? const Color(0xFF111827) : AppColors.surface;
     final borderSoftColor = isDark
@@ -119,8 +121,12 @@ class AppTable extends StatelessWidget {
               fontSize: 12,
             ),
             columns: columns.map((col) {
+              Widget labelWidget = Text(col.label, textAlign: col.textAlign);
+              if (col.textAlign == TextAlign.center) {
+                labelWidget = Center(child: labelWidget);
+              }
               return DataColumn2(
-                label: Text(col.label),
+                label: labelWidget,
                 size: col.size,
                 numeric: col.numeric,
               );
@@ -132,7 +138,7 @@ class AppTable extends StatelessWidget {
           Positioned.fill(
             child: Container(
               color: overlayColor,
-              child: const Center(
+              child: Center(
                 child: CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                 ),

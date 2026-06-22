@@ -277,6 +277,17 @@ export class LocalChatStore {
         PRIMARY KEY (conversation_key, provider_message_id)
       );
 
+      CREATE TABLE IF NOT EXISTS chatbot_response_daily (
+        date TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        ai INTEGER NOT NULL DEFAULT 0,
+        keyword INTEGER NOT NULL DEFAULT 0,
+        skipped INTEGER NOT NULL DEFAULT 0,
+        token_in INTEGER NOT NULL DEFAULT 0,
+        token_out INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (date, account_id)
+      );
+
       CREATE TABLE IF NOT EXISTS account_chat_settings (
         accountId TEXT PRIMARY KEY,
         aiAutoReply INTEGER NOT NULL DEFAULT 1,

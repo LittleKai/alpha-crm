@@ -58,7 +58,7 @@ class _AppLockOverlayState extends ConsumerState<AppLockOverlay> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.lock_outline_rounded,
                         color: AppColors.primary,
                         size: 42,

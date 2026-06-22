@@ -52,6 +52,14 @@ export function startLocalChatbotRuntime(
     deleteAudit: (key) => chatbotStore!.deleteAudit(key),
     markAuditFailed: (key, error) =>
       chatbotStore!.markAuditFailed(key, error),
+    recordResponseDaily: (outcome, accountId, timestamp, tokenIn, tokenOut) =>
+      chatbotStore!.recordResponseDaily(
+        outcome,
+        accountId,
+        timestamp,
+        tokenIn,
+        tokenOut,
+      ),
     resolveAttachmentPath: (id) => resolveKnowledgeFilePath(id),
   });
 
@@ -114,7 +122,11 @@ export function startLocalChatbotRuntime(
         history,
         ...(knowledgeSnippets ? { knowledgeSnippets } : {}),
       });
-      return { reply: result.reply, attachments: result.attachments };
+      return {
+        reply: result.reply,
+        attachments: result.attachments,
+        ...(result.usage ? { usage: result.usage } : {}),
+      };
     },
     startConfigSync: () => configSync!.start(),
     stopConfigSync: () => configSync!.stop(),

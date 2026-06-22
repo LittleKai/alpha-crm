@@ -84,30 +84,32 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                               color: AppColors.primarySoft,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.rocket_launch_rounded,
                               color: AppColors.primary,
                               size: 32,
                             ),
                           ),
                           const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Alpha CRM',
-                                style: AppTextStyles.pageTitle.copyWith(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Alpha CRM',
+                                  style: AppTextStyles.pageTitle.copyWith(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Production Cloud Portal',
-                                style: AppTextStyles.caption.copyWith(
-                                  color: AppColors.textSecondary,
+                                Text(
+                                  'Production Cloud Portal',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -228,7 +230,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                         onPressed: authState.isLoading ? null : _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.textOnPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -236,20 +238,20 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                           elevation: 0,
                         ),
                         child: authState.isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
+                                    AppColors.textOnPrimary,
                                   ),
                                 ),
                               )
                             : Text(
                                 'Đăng Nhập',
                                 style: AppTextStyles.label.copyWith(
-                                  color: Colors.white,
+                                  color: AppColors.textOnPrimary,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                 ),

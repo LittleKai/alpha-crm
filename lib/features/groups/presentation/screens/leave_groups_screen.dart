@@ -143,7 +143,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.group_off_outlined,
           color: AppColors.primary,
           size: 32,
@@ -369,7 +369,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                 const SizedBox(width: AppSpacing.s),
                 IconButton(
                   icon: state.isLoadingGroups
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
@@ -413,7 +413,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
           Divider(height: 1, color: AppColors.borderSoft),
           Expanded(
             child: state.isLoadingGroups
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(
                         AppColors.primary,

@@ -6,45 +6,16 @@ import '../../app/theme/app_text_styles.dart';
 import '../utils/zalo_compliance_guard.dart';
 export '../utils/zalo_compliance_guard.dart' show ZaloActionType;
 
-/// Một nút Icon cảnh báo nhấp nháy đẹp mắt hiển thị số lượng cảnh báo chủ động
-/// Khi click vào sẽ mở ra popup danh sách các cảnh báo bảo mật & tuân thủ.
-class WarningIconButton extends StatefulWidget {
+/// Một nút Icon cảnh báo (hào quang tĩnh) hiển thị số lượng cảnh báo chủ động.
+///
+/// LƯU Ý HIỆU NĂNG: KHÔNG dùng animation lặp vô hạn ở đây. Nút này nằm trong
+/// header của MỌI màn rủi ro cao; một animation `repeat()` sẽ ép engine dựng
+/// frame 60fps liên tục, khiến các glass-card BackdropFilter (blur) trên màn
+/// hình phải rasterize lại mỗi frame trên luồng raster → treo UI + CPU rất cao
+/// (BackdropFilter không thể cache qua RepaintBoundary). Hào quang để TĨNH.
+class WarningIconButton extends StatelessWidget {
   final ZaloActionType? actionType;
   const WarningIconButton({super.key, this.actionType});
-
-  @override
-  State<WarningIconButton> createState() => _WarningIconButtonState();
-}
-
-class _WarningIconButtonState extends State<WarningIconButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 8.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-
-    // Chỉ kích hoạt lặp vô hạn nếu không chạy trong môi trường Widget Test (tránh treo pumpAndSettle)
-    final isTest = WidgetsBinding.instance.toString().contains('Test');
-    if (!isTest) {
-      _animationController.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
 
   int _getWarningCount(ZaloActionType? actionType) {
     if (actionType == null) return 5;
@@ -73,73 +44,68 @@ class _WarningIconButtonState extends State<WarningIconButton>
 
   @override
   Widget build(BuildContext context) {
-    final int warningCount = _getWarningCount(widget.actionType);
+    final int warningCount = _getWarningCount(actionType);
 
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Hiệu ứng phát hào quang (pulsing glow) xung quanh nút
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.warning.withValues(alpha: 0.25),
-                    blurRadius: _pulseAnimation.value,
-                    spreadRadius: _pulseAnimation.value / 2,
-                  ),
-                ],
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Hào quang TĨNH quanh nút (không animation → không ép vẽ frame liên tục).
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.warning.withValues(alpha: 0.25),
+                blurRadius: 6,
+                spreadRadius: 3,
               ),
-            ),
-            IconButton(
-              tooltip: 'Trung tâm Tuân thủ & An toàn ($warningCount cảnh báo)',
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(
-                    Icons.gpp_maybe_outlined,
-                    color: AppColors.warning,
-                    size: 24,
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Trung tâm Tuân thủ & An toàn ($warningCount cảnh báo)',
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.gpp_maybe_outlined,
+                color: AppColors.warning,
+                size: 24,
+              ),
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningText,
+                    shape: BoxShape.circle,
                   ),
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: AppColors.warningText,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 14,
-                        minHeight: 14,
-                      ),
-                      child: Text(
-                        '$warningCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                  constraints: const BoxConstraints(
+                    minWidth: 14,
+                    minHeight: 14,
+                  ),
+                  child: Text(
+                    '$warningCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                ],
+                ),
               ),
-              onPressed: () => showComplianceWarningsDialog(
-                context,
-                actionType: widget.actionType,
-              ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+          onPressed: () => showComplianceWarningsDialog(
+            context,
+            actionType: actionType,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -170,111 +136,341 @@ class _ComplianceWarningsDialog extends StatelessWidget {
   List<Widget> _buildRulesList() {
     final List<Widget> items = [];
 
-    // Group rules based on ZaloActionType
-    final isBulk =
-        actionType == ZaloActionType.bulkMessageByPhone ||
-        actionType == ZaloActionType.bulkMessageToGroup ||
-        actionType == ZaloActionType.bulkMessageToFriends ||
-        actionType == ZaloActionType.chatbotReply ||
-        actionType == ZaloActionType.liveChatReply;
+    switch (actionType) {
+      case ZaloActionType.bulkMessageByPhone:
+        items.addAll([
+          const _WarningItem(
+            title: 'Thời gian chờ (Delay) tự động',
+            description:
+                'Khuyến nghị cài đặt khoảng trễ ngẫu nhiên từ 30-60 giây giữa các tin nhắn. Giãn cách giúp hoạt động tự động tương tự thao tác của người dùng thật, tránh bị bộ lọc quét khóa tài khoản.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Danh sách SĐT chưa lưu danh bạ',
+            description:
+                'Gửi tin nhắn hàng loạt đến SĐT chưa lưu hoặc chưa tương tác trước có rủi ro bị báo cáo spam rất cao. Alpha CRM khuyên bạn nên chia nhỏ và kiểm soát chất lượng danh sách.',
+            badgeText: 'Nguy cơ cao',
+            badgeColor: Colors.red,
+            icon: Icons.report_gmailerrorred_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Chế độ thử nghiệm (Test Mode)',
+            description:
+                'Hãy bật chế độ thử nghiệm trước khi chạy chiến dịch thật để kiểm tra cấu hình tin nhắn và danh bạ gửi không bị lỗi.',
+            badgeText: 'Mẹo an toàn',
+            badgeColor: Colors.green,
+            icon: Icons.info_outline,
+          ),
+        ]);
+        break;
 
-    final isFriend =
-        actionType == ZaloActionType.friendByPhone ||
-        actionType == ZaloActionType.friendByGroup;
+      case ZaloActionType.bulkMessageToGroup:
+        items.addAll([
+          const _WarningItem(
+            title: 'Khoảng cách gửi tin vào nhóm',
+            description:
+                'Cần giãn cách ít nhất 10-20 giây giữa các nhóm. Đăng tin liên tục vào quá nhiều nhóm cùng một thời điểm sẽ bị hệ thống chống spam của Zalo phát hiện.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Nội dung tin nhắn giá trị',
+            description:
+                'Đảm bảo nội dung hữu ích, đúng chủ đề của nhóm. Nếu thành viên báo cáo xấu (spam) quá nhiều, tài khoản Zalo của bạn sẽ bị giới hạn tính năng chat nhóm.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Xoay vòng nội dung tin nhắn',
+            description:
+                'Sử dụng các biến động nội dung hoặc trộn văn bản (spintax) để các tin gửi vào nhóm không trùng lặp hoàn toàn, giúp tăng độ an toàn.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.orange,
+            icon: Icons.dynamic_feed,
+          ),
+        ]);
+        break;
 
-    final isGroup =
-        actionType == ZaloActionType.joinGroups ||
-        actionType == ZaloActionType.inviteToGroup ||
-        actionType == ZaloActionType.createGroups ||
-        actionType == ZaloActionType.scanGroupMembers;
+      case ZaloActionType.bulkMessageToFriends:
+        items.addAll([
+          const _WarningItem(
+            title: 'Độ trễ gửi tin bạn bè',
+            description:
+                'Gửi tin cho bạn bè an toàn hơn SĐT lạ, nhưng bạn vẫn nên giữ độ trễ từ 15-30 giây giữa các tin nhắn để tài khoản hoạt động tự nhiên.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Giới hạn số lượng hàng ngày',
+            description:
+                'Alpha CRM khuyên bạn không nên gửi vượt quá 200-300 bạn bè mỗi ngày để tránh tài khoản bị đưa vào danh sách theo dõi lưu lượng bất thường.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.security,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Cá nhân hóa nội dung',
+            description:
+                'Dùng thẻ {{tên}} để tự động chèn tên bạn bè vào nội dung. Tin nhắn cá nhân hóa giúp giảm tỷ lệ bị bạn bè đánh dấu là tin nhắn quảng cáo phiền phức.',
+            badgeText: 'Mẹo an toàn',
+            badgeColor: Colors.green,
+            icon: Icons.person_outline,
+          ),
+        ]);
+        break;
 
-    if (isBulk || actionType == null) {
-      items.addAll([
-        const _WarningItem(
-          title: 'Thời gian chờ (Delay) tự động',
-          description:
-              'Khuyến nghị cài đặt khoảng trễ ngẫu nhiên từ 30-60 giây giữa các tin nhắn. Giãn cách giúp hoạt động tự động tương tự thao tác của người dùng thật, giảm thiểu tối đa nguy cơ bị Zalo quét khóa tài khoản.',
-          badgeText: 'Khuyến nghị',
-          badgeColor: Colors.blue,
-          icon: Icons.timer_outlined,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Tự động hóa tài khoản cá nhân',
-          description:
-              'Sử dụng các công cụ tự động hóa thông qua QR login hoặc giả lập có rủi ro bị khóa tài khoản theo Chính sách Zalo. Hãy chuyển sang kết nối Official Account nếu cần gửi tin nhắn số lượng lớn.',
-          badgeText: 'Nguy cơ cao',
-          badgeColor: Colors.red,
-          icon: Icons.report_gmailerrorred_rounded,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Sự đồng ý & Tương tác hai chiều',
-          description:
-              'Để tránh bị Zalo quét vi phạm spam, bạn nên nhận được sự đồng ý trước của khách hàng hoặc họ đã từng nhắn tin trao đổi với bạn trước khi thực hiện gửi tin nhắn hàng loạt.',
-          badgeText: 'Quy định',
-          badgeColor: Colors.indigo,
-          icon: Icons.check_circle_outline_rounded,
-        ),
-      ]);
-    } else if (isFriend) {
-      items.addAll([
-        const _WarningItem(
-          title: 'Thời gian chờ (Delay) tự động',
-          description:
-              'Khuyến nghị cài đặt khoảng trễ từ 30-60 giây giữa các lời mời kết bạn. Giãn cách giúp tài khoản hoạt động tự nhiên, tránh bị Zalo quét spam chặn kết bạn.',
-          badgeText: 'Khuyến nghị',
-          badgeColor: Colors.blue,
-          icon: Icons.timer_outlined,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Giới hạn kết bạn hàng ngày',
-          description:
-              'Zalo quy định hạn mức kết bạn tối đa của tài khoản cá nhân hàng ngày. Tránh gửi quá nhiều lời mời trong 24 giờ để tránh bị khóa tính năng kết bạn.',
-          badgeText: 'Bảo mật',
-          badgeColor: Colors.orange,
-          icon: Icons.person_add_alt_1_outlined,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Tự động hóa tài khoản cá nhân',
-          description:
-              'Sử dụng công cụ tự động gửi kết bạn hàng loạt qua QR login hoặc giả lập có rủi ro bị khóa tài khoản theo Chính sách Zalo. Alpha CRM khuyến khích chia nhỏ chiến dịch để chạy an toàn.',
-          badgeText: 'Nguy cơ cao',
-          badgeColor: Colors.red,
-          icon: Icons.report_gmailerrorred_rounded,
-        ),
-      ]);
-    } else if (isGroup) {
-      items.addAll([
-        const _WarningItem(
-          title: 'Giới hạn hoạt động nhóm',
-          description:
-              'Mời quá nhiều người lạ vào nhóm hoặc tham gia/tạo quá nhiều nhóm trong ngày dễ bị Zalo báo cáo vi phạm cộng đồng. Hãy chia nhỏ chiến dịch ra nhiều ngày.',
-          badgeText: 'Bảo mật',
-          badgeColor: Colors.orange,
-          icon: Icons.group_outlined,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Thời gian chờ (Delay) tự động',
-          description:
-              'Khuyến nghị cài đặt khoảng trễ từ 10-20 giây giữa các thao tác mời, tham gia hoặc tạo nhóm để Zalo không nhận diện hành vi bot tự động.',
-          badgeText: 'Khuyến nghị',
-          badgeColor: Colors.blue,
-          icon: Icons.timer_outlined,
-        ),
-        const SizedBox(height: AppSpacing.m),
-        const _WarningItem(
-          title: 'Tự động hóa tài khoản cá nhân',
-          description:
-              'Sử dụng các công cụ tự động hóa thông qua QR login hoặc giả lập có rủi ro bị khóa tài khoản theo Chính sách Zalo. Alpha CRM khuyến khích kiểm soát tốt số lượng nhóm xử lý.',
-          badgeText: 'Nguy cơ cao',
-          badgeColor: Colors.red,
-          icon: Icons.report_gmailerrorred_rounded,
-        ),
-      ]);
+      case ZaloActionType.friendByPhone:
+        items.addAll([
+          const _WarningItem(
+            title: 'Thời gian chờ gửi lời mời',
+            description:
+                'Khuyến nghị cài đặt khoảng trễ ngẫu nhiên từ 30-60 giây giữa các lời mời kết bạn để Zalo không nhận diện hành vi bot tự động.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Giới hạn kết bạn mỗi ngày',
+            description:
+                'Tránh gửi quá 30-50 lời mời kết bạn qua SĐT mỗi ngày. Vượt quá hạn mức này có thể bị Zalo khóa tính năng tìm kiếm tài khoản qua số điện thoại.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.person_add_alt_1_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Lời nhắn kết bạn thân thiện',
+            description:
+                'Soạn nội dung kết bạn rõ ràng mục đích, xưng hô lịch sự để người nhận dễ dàng chấp nhận và không bấm báo cáo spam/người lạ quấy rối.',
+            badgeText: 'Mẹo an toàn',
+            badgeColor: Colors.green,
+            icon: Icons.rate_review_outlined,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.friendByGroup:
+        items.addAll([
+          const _WarningItem(
+            title: 'Giãn cách kết bạn thành viên',
+            description:
+                'Khuyến nghị cài đặt khoảng trễ từ 30-60 giây giữa các lời mời kết bạn từ thành viên nhóm. Giãn cách tự nhiên giúp tài khoản an toàn hơn.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Lựa chọn nhóm phù hợp',
+            description:
+                'Gửi lời mời kết bạn với thành viên trong các nhóm có chung chủ đề sở thích/công việc sẽ tăng tỷ lệ chấp nhận lời mời lên đáng kể.',
+            badgeText: 'Mẹo an toàn',
+            badgeColor: Colors.green,
+            icon: Icons.group_add_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Giới hạn kết bạn Zalo',
+            description:
+                'Tài khoản cá nhân có hạn mức kết bạn tối đa hàng ngày. Hãy kiểm soát số lượng gửi đi để tránh bị khóa tạm thời tính năng kết bạn.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.security,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.scanGroupMembers:
+        items.addAll([
+          const _WarningItem(
+            title: 'Bảo mật thông tin nhóm',
+            description:
+                'Quét danh sách thành viên chỉ khả dụng với các nhóm công khai hoặc nhóm bạn đã tham gia làm thành viên hoạt động.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.lock_open_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Hạn chế quét liên tục',
+            description:
+                'Không nên quét danh sách thành viên của quá nhiều nhóm lớn cùng lúc để tránh bị Zalo tạm khóa tính năng do truy vấn dữ liệu API bất thường.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.report_gmailerrorred_rounded,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.joinGroups:
+        items.addAll([
+          const _WarningItem(
+            title: 'Hạn mức tham gia nhóm',
+            description:
+                'Không nên tham gia quá 5-10 nhóm mới mỗi ngày. Việc tài khoản đột ngột gia nhập nhiều nhóm trong thời gian ngắn sẽ bị Zalo đánh dấu bất thường.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.group_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Khoảng trễ tham gia nhóm',
+            description:
+                'Khuyến nghị cài đặt khoảng trễ từ 15-30 giây trước khi bấm tham gia nhóm tiếp theo để hoạt động giống người dùng thật.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.inviteToGroup:
+        items.addAll([
+          const _WarningItem(
+            title: 'Mời bạn bè có chọn lọc',
+            description:
+                'Chỉ nên mời những bạn bè thực sự quan tâm đến chủ đề của nhóm. Mời hàng loạt người không quan tâm sẽ làm tăng tỷ lệ bị họ thoát nhóm và báo cáo phiền hà.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Hạn mức mời vào nhóm',
+            description:
+                'Không nên mời quá 50 người vào nhóm mỗi ngày để giữ tài khoản Zalo của bạn luôn an toàn trước các bộ lọc quét tự động.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.group_add_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Giãn cách gửi lời mời',
+            description:
+                'Duy trì khoảng trễ từ 5-10 giây cho mỗi lượt mời thành viên để hạn chế tối đa nguy cơ bị quét bot tự động.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.createGroups:
+        items.addAll([
+          const _WarningItem(
+            title: 'Giới hạn tạo nhóm hàng loạt',
+            description:
+                'Tạo nhiều nhóm trong ngày rất dễ bị Zalo quét khóa tài khoản. Chỉ nên tạo tối đa 3-5 nhóm mỗi ngày tùy vào độ tin cậy của tài khoản.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.group_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Giãn cách khi tạo nhóm',
+            description:
+                'Thiết lập khoảng trễ từ 20-30 giây giữa các thao tác tạo nhóm và tự động thêm các thành viên đã chọn.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Thêm thành viên chọn lọc',
+            description:
+                'Chỉ thêm các bạn bè thân thiết hoặc đã tương tác vào nhóm mới lập để tránh bị họ thoát nhóm ngay lập tức và báo cáo spam nhóm.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.liveChatReply:
+        items.addAll([
+          const _WarningItem(
+            title: 'Tương tác trực tiếp (Live Chat)',
+            description:
+                'Hoạt động chat thủ công trực tiếp từ tư vấn viên có độ an toàn và tin cậy cao nhất. Bạn có thể trò chuyện thoải mái với khách hàng.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.green,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Hạn chế spam tin mẫu',
+            description:
+                'Tránh việc copy-paste gửi cùng một mẫu tin nhắn dài giống hệt nhau liên tục cho nhiều khách hàng khác nhau trong vài giây.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.copy_all,
+          ),
+        ]);
+        break;
+
+      case ZaloActionType.chatbotReply:
+        items.addAll([
+          const _WarningItem(
+            title: 'Giám sát hành vi của Bot',
+            description:
+                'Thiết lập kịch bản chatbot tự nhiên, tránh trả lời liên tục dồn dập khiến khách hàng khó chịu và nhấn nút báo cáo spam tài khoản của bạn.',
+            badgeText: 'Bảo mật',
+            badgeColor: Colors.orange,
+            icon: Icons.smart_toy_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Hỗ trợ chuyển đổi tư vấn viên',
+            description:
+                'Luôn tích hợp nút chuyển tiếp gặp tư vấn viên thật khi chatbot không giải quyết được vấn đề của khách hàng để tối ưu trải nghiệm.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.contact_support_outlined,
+          ),
+        ]);
+        break;
+
+      default:
+        items.addAll([
+          const _WarningItem(
+            title: 'Thời gian chờ (Delay) tự động',
+            description:
+                'Khuyến nghị cài đặt khoảng trễ ngẫu nhiên từ 30-60 giây giữa các tin nhắn. Giãn cách giúp hoạt động tự động tương tự thao tác của người dùng thật, giảm thiểu tối đa nguy cơ bị Zalo quét khóa tài khoản.',
+            badgeText: 'Khuyến nghị',
+            badgeColor: Colors.blue,
+            icon: Icons.timer_outlined,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Tự động hóa tài khoản cá nhân',
+            description:
+                'Sử dụng các công cụ tự động hóa thông qua QR login hoặc giả lập có rủi ro bị khóa tài khoản theo Chính sách Zalo. Alpha CRM khuyến khích chia nhỏ chiến dịch để chạy an toàn.',
+            badgeText: 'Nguy cơ cao',
+            badgeColor: Colors.red,
+            icon: Icons.report_gmailerrorred_rounded,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          const _WarningItem(
+            title: 'Sự đồng ý & Tương tác hai chiều',
+            description:
+                'Để tránh bị Zalo quét vi phạm spam, bạn nên nhận được sự đồng ý trước của khách hàng hoặc họ đã từng nhắn tin trao đổi với bạn trước khi thực hiện gửi tin nhắn hàng loạt.',
+            badgeText: 'Quy định',
+            badgeColor: Colors.indigo,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        ]);
     }
 
     return items;
@@ -284,22 +480,11 @@ class _ComplianceWarningsDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasWarning = activeWarning != null;
 
-    final isBulk =
-        actionType == ZaloActionType.bulkMessageByPhone ||
-        actionType == ZaloActionType.bulkMessageToGroup ||
-        actionType == ZaloActionType.bulkMessageToFriends ||
-        actionType == ZaloActionType.chatbotReply ||
-        actionType == ZaloActionType.liveChatReply;
-
-    final isFriend =
-        actionType == ZaloActionType.friendByPhone ||
-        actionType == ZaloActionType.friendByGroup;
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor =
         Theme.of(context).cardTheme.color ??
         Theme.of(context).colorScheme.surface;
-    final textMuted = isDark ? const Color(0xFF64748B) : AppColors.textMuted;
+    final textMuted = isDark ? Colors.white70 : AppColors.textMuted;
     final appBackground = isDark
         ? const Color(0xFF0B1120)
         : AppColors.appBackground;
@@ -527,13 +712,7 @@ class _ComplianceWarningsDialog extends StatelessWidget {
                     ),
 
                   Text(
-                    actionType == null
-                        ? 'QUY TẮC AN TOÀN CHUNG KHI SỬ DỤNG ZALO'
-                        : (isBulk
-                              ? 'QUY TẮC AN TOÀN GỬI TIN NHẮN'
-                              : (isFriend
-                                    ? 'QUY TẮC AN TOÀN KẾT BẠN'
-                                    : 'QUY TẮC AN TOÀN HOẠT ĐỘNG NHÓM')),
+                    _getDialogTitle(actionType),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -596,6 +775,34 @@ class _ComplianceWarningsDialog extends StatelessWidget {
       ),
     );
   }
+
+  String _getDialogTitle(ZaloActionType? actionType) {
+    if (actionType == null) return 'QUY TẮC AN TOÀN CHUNG KHI SỬ DỤNG ZALO';
+    switch (actionType) {
+      case ZaloActionType.bulkMessageByPhone:
+        return 'QUY TẮC AN TOÀN GỬI TIN THEO SĐT';
+      case ZaloActionType.bulkMessageToGroup:
+        return 'QUY TẮC AN TOÀN GỬI TIN VÀO NHÓM';
+      case ZaloActionType.bulkMessageToFriends:
+        return 'QUY TẮC AN TOÀN GỬI TIN CHO BẠN BÈ';
+      case ZaloActionType.friendByPhone:
+        return 'QUY TẮC AN TOÀN KẾT BẠN THEO SĐT';
+      case ZaloActionType.friendByGroup:
+        return 'QUY TẮC AN TOÀN KẾT BẠN TỪ NHÓM';
+      case ZaloActionType.scanGroupMembers:
+        return 'QUY TẮC AN TOÀN QUÉT THÀNH VIÊN';
+      case ZaloActionType.joinGroups:
+        return 'QUY TẮC AN TOÀN THAM GIA NHÓM';
+      case ZaloActionType.inviteToGroup:
+        return 'QUY TẮC AN TOÀN MỜI VÀO NHÓM';
+      case ZaloActionType.createGroups:
+        return 'QUY TẮC AN TOÀN TẠO NHÓM';
+      case ZaloActionType.liveChatReply:
+        return 'QUY TẮC AN TOÀN LIVE CHAT';
+      case ZaloActionType.chatbotReply:
+        return 'QUY TẮC AN TOÀN CHATBOT TỰ ĐỘNG';
+    }
+  }
 }
 
 class _WarningItem extends StatelessWidget {
@@ -624,7 +831,7 @@ class _WarningItem extends StatelessWidget {
         ? const Color(0xFFF8FAFC)
         : AppColors.textPrimary;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
 
     return Container(

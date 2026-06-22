@@ -284,6 +284,104 @@ export class ChatbotStore {
       )
       .run(idempotencyKey);
   }
+
+  /**
+   * Durable per-day response counter, independent of the cloud sync queue (which
+   * is deleted on upload). This is the local source of truth for the dashboard's
+   * "Thống kê phản hồi" card. `failed`/unknown outcomes are not counted; tokens
+   * only accompany the `ai` outcome.
+   */
+  recordResponseDaily(
+    outcome: string,
+    accountId: string,
+    timestampMs: number,
+    tokenIn = 0,
+    tokenOut = 0,
+  ): void {
+    const column =
+      outcome === 'ai'
+        ? 'ai'
+        : outcome === 'matched'
+          ? 'keyword'
+          : outcome === 'skipped' || outcome === 'handoff'
+            ? 'skipped'
+            : null;
+    if (!column) return;
+    const date = localDateKey(timestampMs);
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO chatbot_response_daily
+         (date, account_id, ai, keyword, skipped, token_in, token_out)
+         VALUES (?, ?, 0, 0, 0, 0, 0)`,
+      )
+      .run(date, accountId);
+    // `column` is from a fixed whitelist above — safe to interpolate.
+    this.db
+      .prepare(
+        `UPDATE chatbot_response_daily
+            SET ${column} = ${column} + 1,
+                token_in = token_in + ?,
+                token_out = token_out + ?
+          WHERE date = ? AND account_id = ?`,
+      )
+      .run(Math.max(0, Math.trunc(tokenIn)), Math.max(0, Math.trunc(tokenOut)), date, accountId);
+  }
+
+  /**
+   * Per-day totals across all accounts in the inclusive `[fromDate, toDate]`
+   * range (both `yyyy-MM-dd` local dates). Days without data are omitted; the
+   * caller fills gaps for a continuous chart.
+   */
+  getResponseStats(
+    fromDate: string,
+    toDate: string,
+  ): Array<{
+    date: string;
+    aiUses: number;
+    keywordUses: number;
+    skipped: number;
+    tokenIn: number;
+    tokenOut: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT date,
+                SUM(ai) AS aiUses,
+                SUM(keyword) AS keywordUses,
+                SUM(skipped) AS skipped,
+                SUM(token_in) AS tokenIn,
+                SUM(token_out) AS tokenOut
+           FROM chatbot_response_daily
+          WHERE date >= ? AND date <= ?
+          GROUP BY date
+          ORDER BY date ASC`,
+      )
+      .all(fromDate, toDate) as Array<{
+      date: string;
+      aiUses: number;
+      keywordUses: number;
+      skipped: number;
+      tokenIn: number;
+      tokenOut: number;
+    }>;
+    return rows.map((row) => ({
+      date: row.date,
+      aiUses: row.aiUses ?? 0,
+      keywordUses: row.keywordUses ?? 0,
+      skipped: row.skipped ?? 0,
+      tokenIn: row.tokenIn ?? 0,
+      tokenOut: row.tokenOut ?? 0,
+    }));
+  }
+}
+
+/** Local-time `yyyy-MM-dd` so day buckets match what the operator sees. */
+function localDateKey(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function validateConversationState(

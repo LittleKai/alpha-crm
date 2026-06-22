@@ -42,11 +42,11 @@ class AppButton extends StatelessWidget {
       switch (variant) {
         case AppButtonVariant.primary:
           bg = AppColors.primary;
-          textCol = Colors.white;
+          textCol = AppColors.textOnPrimary;
           break;
         case AppButtonVariant.outline:
           bg = isDark ? const Color(0xFF111827) : AppColors.surface;
-          textCol = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+          textCol = isDark ? Colors.white : AppColors.textSecondary;
           borderSide = BorderSide(
             color: isDark ? const Color(0xFF253247) : AppColors.border,
             width: 1,
@@ -86,7 +86,7 @@ class AppButton extends StatelessWidget {
           strokeWidth: 2,
           valueColor: AlwaysStoppedAnimation<Color>(
             variant == AppButtonVariant.primary
-                ? Colors.white
+                ? AppColors.textOnPrimary
                 : AppColors.textSecondary,
           ),
         ),

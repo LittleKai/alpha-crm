@@ -7,7 +7,7 @@ class AppMetricCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
-  final Color iconColor;
+  final Color? iconColor;
   final Color? iconBackgroundColor;
   final Widget? trailing;
 
@@ -16,7 +16,7 @@ class AppMetricCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.icon,
-    this.iconColor = AppColors.primary,
+    this.iconColor,
     this.iconBackgroundColor,
     this.trailing,
   });
@@ -26,6 +26,8 @@ class AppMetricCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final resolvedIconColor = iconColor ?? AppColors.primary;
+
     // Resolve icon background if it's default null
     final resolvedIconBg =
         iconBackgroundColor ??
@@ -34,7 +36,7 @@ class AppMetricCard extends StatelessWidget {
     final resolvedBg = isDark ? const Color(0xFF111827) : AppColors.surface;
     final resolvedBorder = isDark ? const Color(0xFF253247) : AppColors.border;
     final resolvedTitleColor = isDark
-        ? const Color(0xFF64748B)
+        ? Colors.white70
         : AppColors.textMuted;
     final resolvedValColor = isDark
         ? const Color(0xFFF8FAFC)
@@ -61,7 +63,7 @@ class AppMetricCard extends StatelessWidget {
               color: resolvedIconBg,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            child: Icon(icon, color: resolvedIconColor, size: 20),
           ),
           const SizedBox(width: AppSpacing.m),
           // Title and Value

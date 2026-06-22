@@ -12,10 +12,10 @@ import '../../../../settings/providers/settings_provider.dart';
 /// Summary AI models the operator can pick. Keys must match the backend
 /// `SUMMARY_ALLOWED_AI_MODELS` list. Stored as a LOCAL setting and sent with
 /// each summarize request — no cloud round-trip.
-const List<({String key, String label})> kSummaryModels = [
-  (key: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (mặc định)'),
-  (key: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro'),
-  (key: 'gemini-3-flash', label: 'Gemini 3 Flash'),
+const List<({String key, String label, String desc})> kSummaryModels = [
+  (key: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (mặc định)', desc: 'Chất lượng cao nhất, tiêu hao 2 quota/lần'),
+  (key: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: 'Tốc độ cực nhanh, tiêu hao 2 quota/lần'),
+  (key: 'gemini-3-flash', label: 'Gemini 3 Flash', desc: 'Cơ bản, tiêu hao 1 quota/lần'),
 ];
 
 Future<void> showGroupSummarySettings(BuildContext context) {
@@ -55,20 +55,39 @@ class _GroupSummarySettingsDialog extends ConsumerWidget {
           const SizedBox(height: AppSpacing.xs),
           AppSelectField<String>(
             value: model,
+            itemHeight: 56,
+            selectedItemBuilder: (BuildContext context) {
+              return kSummaryModels.map<Widget>((m) {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    m.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                );
+              }).toList();
+            },
             items: kSummaryModels
                 .map(
                   (m) =>
-                      DropdownMenuItem(value: m.key, child: Text(m.label)),
+                      DropdownMenuItem(
+                        value: m.key, 
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(m.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text(m.desc, style: TextStyle(fontSize: 12, color: AppColors.primary)),
+                          ],
+                        ),
+                      ),
                 )
                 .toList(),
             onChanged: (v) {
               if (v != null) notifier.updateSummaryAiModel(v);
             },
-          ),
-          const SizedBox(height: AppSpacing.s),
-          Text(
-            'Pro 3.1 cho chất lượng cao nhất (tiêu hao 2 đơn vị quota/lần); 2.5 Pro và Flash tiêu hao 1 đơn vị.',
-            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: AppSpacing.s),
           Divider(color: AppColors.borderSoft),

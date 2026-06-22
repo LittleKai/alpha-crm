@@ -39,7 +39,7 @@ class _CampaignConfigCardState extends State<CampaignConfigCard> {
         ? const Color(0xFFF8FAFC)
         : AppColors.textPrimary;
     final textSecondaryColor = isDark
-        ? const Color(0xFF94A3B8)
+        ? Colors.white
         : AppColors.textSecondary;
 
     return Container(

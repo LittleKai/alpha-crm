@@ -11,7 +11,6 @@ import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
-import '../../../../../shared/widgets/compliance_warnings_popup.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../providers/managed_groups_provider.dart';
 import '../widgets/action_items_preview_dialog.dart';
@@ -90,7 +89,7 @@ class _Header extends ConsumerWidget {
 
     return Row(
       children: [
-        const Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
+        Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -119,7 +118,7 @@ class _Header extends ConsumerWidget {
                     CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.primarySoft,
-                      child: const Icon(
+                      child: Icon(
                         Icons.group_outlined,
                         size: 14,
                         color: AppColors.primary,
@@ -199,20 +198,10 @@ class _Header extends ConsumerWidget {
         const SizedBox(width: AppSpacing.s),
         IconButton(
           tooltip: 'Cài đặt tóm tắt',
-          icon: const Icon(Icons.settings_outlined, color: AppColors.primary),
+          icon: Icon(Icons.settings_outlined, color: AppColors.primary),
           onPressed: () => showGroupSummarySettings(context),
         ),
-        IconButton(
-          tooltip: 'Khuyến cáo an toàn',
-          icon: const Icon(
-            Icons.shield_outlined,
-            color: AppColors.warning,
-          ),
-          onPressed: () => showComplianceWarningsDialog(
-            context,
-            actionType: ZaloActionType.scanGroupMembers,
-          ),
-        ),
+
         const SizedBox(width: AppSpacing.s),
         AppButton(
           text: 'Đồng bộ',
@@ -475,7 +464,7 @@ class _DetailsPanel extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Cấu hình tóm tắt',
-                icon: const Icon(Icons.tune, color: AppColors.primary),
+                icon: Icon(Icons.tune, color: AppColors.primary),
                 onPressed: group.isManaged && !state.isWorking
                     ? () => _summarizeFlow(context, forceWizard: true)
                     : null,
@@ -598,7 +587,7 @@ class _ProposedActionsBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.checklist_outlined, color: AppColors.primary),
+          Icon(Icons.checklist_outlined, color: AppColors.primary),
           const SizedBox(width: AppSpacing.s),
           Expanded(
             child: Text(

@@ -4,9 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../shared/widgets/compliance_warnings_popup.dart';
-import '../../../../shared/utils/zalo_compliance_guard.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_alert.dart';
 import '../../../../shared/widgets/app_button.dart';
@@ -77,27 +74,14 @@ class _ScanMembersScreenState extends ConsumerState<ScanMembersScreen> {
   }
 }
 
-class _Header extends ConsumerWidget {
+class _Header extends StatelessWidget {
   const _Header();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider).settings;
-    final decision = ZaloComplianceGuard.evaluateZaloAction(
-      settings: settings,
-      actionType: ZaloActionType.scanGroupMembers,
-      targetCount: 1,
-    );
-    final activeWarning = decision.allowed
-        ? (decision.riskLevel != ZaloRiskLevel.low
-              ? '${decision.title}: ${decision.message}'
-              : null)
-        : '${decision.title}: ${decision.message}';
-    final hasWarningOrError = activeWarning != null;
-
+  Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
+        Icon(Icons.groups_2_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -111,25 +95,6 @@ class _Header extends ConsumerWidget {
               ),
             ],
           ),
-        ),
-        IconButton(
-          icon: Icon(
-            hasWarningOrError
-                ? Icons.warning_amber_rounded
-                : Icons.gpp_good_outlined,
-            color: hasWarningOrError ? AppColors.warning : AppColors.textMuted,
-            size: 28,
-          ),
-          tooltip: hasWarningOrError
-              ? 'Có khuyến cáo an toàn (Nhấn để xem)'
-              : 'Hệ thống an toàn (Nhấn để xem)',
-          onPressed: () {
-            showComplianceWarningsDialog(
-              context,
-              activeWarning: activeWarning,
-              actionType: ZaloActionType.scanGroupMembers,
-            );
-          },
         ),
         const SizedBox(width: AppSpacing.s),
       ],
@@ -158,7 +123,7 @@ class _ScanFormCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.notifications_none_outlined,
                 color: AppColors.primary,
                 size: 20,
@@ -231,7 +196,7 @@ class _ScanFormCard extends StatelessWidget {
           else ...[
             Row(
               children: [
-                const Icon(Icons.history, size: 16, color: AppColors.primary),
+                Icon(Icons.history, size: 16, color: AppColors.primary),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   'Nhóm đã quét gần đây (${state.savedGroups.length}):',

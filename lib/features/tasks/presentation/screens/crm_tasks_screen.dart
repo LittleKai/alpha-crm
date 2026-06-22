@@ -37,7 +37,7 @@ class CrmTasksScreen extends ConsumerWidget {
                     color: AppColors.primarySoft,
                     borderRadius: AppSpacing.borderRadiusS,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.task_alt_rounded,
                     color: AppColors.primary,
                     size: 26,
@@ -465,7 +465,7 @@ class _TaskCard extends StatelessWidget {
       default:
         return const _TypeMeta(
           Icons.edit_note_outlined,
-          Color(0xFF64748B),
+          Colors.white60,
           'Tự tạo',
         );
     }
@@ -501,7 +501,7 @@ class _TaskActions extends StatelessWidget {
         if (task.status != 'open')
           IconButton(
             tooltip: 'Mở lại',
-            icon: const Icon(Icons.refresh, color: AppColors.primary),
+            icon: Icon(Icons.refresh, color: AppColors.primary),
             onPressed: () => notifier.updateStatus(task, 'open'),
           ),
         IconButton(

@@ -306,7 +306,12 @@ class _FacebookCloudCard extends StatelessWidget {
                 size: 24,
               ),
               const SizedBox(width: AppSpacing.s),
-              Text('Facebook Page API', style: AppTextStyles.sectionTitle),
+              Expanded(
+                child: Text(
+                  'Facebook Page API',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.m),

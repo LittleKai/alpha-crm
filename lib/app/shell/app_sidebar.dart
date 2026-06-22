@@ -30,7 +30,7 @@ class AppSidebar extends ConsumerWidget {
     // Force dark blue (xanh đen) theme cho toàn bộ sidebar
     final surfaceColor = const Color(0xFF0F172A); // Xanh đen (Slate 900)
     final dividerColor = const Color(0xFF1E293B); // Xanh đen nhạt hơn (Slate 800)
-    final textSecondary = Colors.white.withValues(alpha: 0.7);
+    final textSecondary = Colors.white.withValues(alpha: 0.85); // Thay đổi từ 0.7 sang 0.85 để sáng hơn
 
     final bool isCollapsed =
         forceCollapsed ?? ref.watch(sidebarCollapsedProvider);
@@ -115,7 +115,7 @@ class AppSidebar extends ConsumerWidget {
                   child: Icon(
                     isCollapsed ? Icons.chevron_right : Icons.chevron_left,
                     size: 20,
-                    color: Colors.white,
+                    color: AppColors.textOnPrimary,
                   ),
                 ),
               ),
@@ -127,7 +127,7 @@ class AppSidebar extends ConsumerWidget {
 
   Widget _buildBrandingHeader(BuildContext context, bool isCollapsed) {
     final textPrimary = const Color(0xFFFFFFFF);
-    final textMuted = const Color(0xFF94A3B8);
+    final textMuted = Colors.white.withValues(alpha: 0.75); // Sáng hơn một chút so với white60
 
     return Container(
       height: 64,
@@ -147,7 +147,7 @@ class AppSidebar extends ConsumerWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 colors: [AppColors.primary, AppColors.zaloBlue],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -174,11 +174,14 @@ class AppSidebar extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        'ALPHA CRM',
-                        style: AppTextStyles.cardTitle.copyWith(
-                          color: textPrimary,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'ALPHA CRM',
+                          style: AppTextStyles.cardTitle.copyWith(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: AppSpacing.xs),
@@ -200,14 +203,56 @@ class AppSidebar extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  Text(
-                    'PHẦN MỀM MARKETING',
-                    style: AppTextStyles.caption.copyWith(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: textMuted,
-                      letterSpacing: 0.5,
-                    ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        'PHẦN MỀM MARKETING',
+                        style: AppTextStyles.caption.copyWith(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white.withValues(alpha: 0.95),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.isDarkMode 
+                              ? Colors.amber.withValues(alpha: 0.3) 
+                              : Colors.orange.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: AppColors.isDarkMode 
+                                ? Colors.amber.withValues(alpha: 0.8) 
+                                : Colors.orange.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome, // Thay cho icon Beta
+                              size: 10,
+                              color: AppColors.isDarkMode 
+                                  ? Colors.yellowAccent 
+                                  : Colors.orange,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              'BETA',
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.isDarkMode 
+                                    ? Colors.yellowAccent 
+                                    : Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -231,15 +276,15 @@ class AppSidebar extends ConsumerWidget {
         : (item.routePath == '/tasks' ? openTaskCount : 0);
     final bool showBadge = badgeCount > 0;
     final isDark = true; // Force dark sidebar
-    final textSecondary = Colors.white.withValues(alpha: 0.7);
+    final textSecondary = Colors.white.withValues(alpha: 0.85); // Sáng hơn
     final activeBg = _activeBgColor(item, isDark);
     final activeIcon = _activeIconColor(item, isDark);
 
     final Color itemTextColor;
     final Color itemIconColor;
     if (isDark) {
-      itemTextColor = isActive ? Colors.white : Colors.white.withValues(alpha: 0.7);
-      itemIconColor = item.color ?? (isActive ? activeIcon : Colors.white.withValues(alpha: 0.6));
+      itemTextColor = isActive ? Colors.white : Colors.white.withValues(alpha: 0.85); // Sáng hơn
+      itemIconColor = item.color ?? (isActive ? activeIcon : Colors.white.withValues(alpha: 0.75)); // Sáng hơn
     } else {
       itemTextColor = isActive ? activeIcon : textSecondary;
       itemIconColor = item.color ?? (isActive ? activeIcon : textSecondary);
@@ -359,10 +404,10 @@ class AppSidebar extends ConsumerWidget {
     final isDark = true; // Force dark sidebar
     final textPrimary = const Color(0xFFF8FAFC);
     final textSecondary = isDark
-        ? Colors.white.withValues(alpha: 0.7)
+        ? Colors.white.withValues(alpha: 0.85) // Sáng hơn
         : AppColors.textSecondary;
     final textMuted = isDark
-        ? Colors.white.withValues(alpha: 0.5)
+        ? Colors.white.withValues(alpha: 0.75) // Sáng hơn
         : AppColors.textMuted;
     final surfaceMuted = isDark
         ? const Color(0xFF162033)
@@ -477,7 +522,7 @@ class AppSidebar extends ConsumerWidget {
       alignment: Alignment.center,
       child: Text(
         displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.primary,
           fontWeight: FontWeight.bold,
           fontSize: 14,
@@ -518,7 +563,7 @@ class AppSidebar extends ConsumerWidget {
 
   Color _activeIconColor(NavItem item, bool isDark) {
     final path = item.routePath;
-    if (isDark && path == '/settings') return const Color(0xFF94A3B8);
+    if (isDark && path == '/settings') return Colors.white;
     if (path == '/dashboard') return const Color(0xFFF97316);
     if (path == '/customers') return const Color(0xFF0068FF);
     if (path == '/tasks') return const Color(0xFF10B981);
@@ -526,7 +571,7 @@ class AppSidebar extends ConsumerWidget {
     if (path == '/messaging/bulk') return const Color(0xFF6366F1);
     if (path == '/messaging/live-chat') return const Color(0xFF0D9488);
     if (path == '/messaging/chatbot') return const Color(0xFFD946EF);
-    if (path == '/messaging/history') return const Color(0xFF64748B);
+    if (path == '/messaging/history') return Colors.white60;
     if (path.startsWith('/friends')) return const Color(0xFF059669);
     if (path.startsWith('/groups')) return const Color(0xFF0891B2);
     if (path == '/subscription') return const Color(0xFFEC4899);
@@ -636,7 +681,8 @@ class _SidebarGroupWidgetState extends State<_SidebarGroupWidget> {
       (item) => widget.currentRoute == item.routePath,
     );
     final isDark = true;
-    final textMuted = Colors.white.withValues(alpha: 0.4);
+    final textMuted = Colors.white.withValues(alpha: 0.65); // Sáng hơn một chút so với 0.4 trước đây
+    final activeGroupColor = const Color(0xFF60A5FA); // Màu xanh nhạt (Blue 400) để nổi bật khi kích hoạt
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -666,8 +712,8 @@ class _SidebarGroupWidgetState extends State<_SidebarGroupWidget> {
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: isDark
-                            ? (hasActiveItem ? Colors.white.withValues(alpha: 0.9) : textMuted)
-                            : (hasActiveItem ? AppColors.primary : textMuted),
+                            ? (hasActiveItem ? activeGroupColor : textMuted)
+                            : (hasActiveItem ? activeGroupColor : textMuted),
                         letterSpacing: 1.0,
                       ),
                     ),
@@ -676,7 +722,7 @@ class _SidebarGroupWidgetState extends State<_SidebarGroupWidget> {
                     Icon(
                       _isExpanded ? Icons.expand_less : Icons.expand_more,
                       size: 16,
-                      color: textMuted,
+                      color: hasActiveItem ? activeGroupColor : textMuted,
                     ),
                 ],
               ),

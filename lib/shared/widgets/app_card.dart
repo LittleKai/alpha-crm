@@ -34,7 +34,6 @@ class AppCard extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      padding: padding,
       decoration: BoxDecoration(
         color: resolvedBg,
         borderRadius: AppSpacing.borderRadiusM,
@@ -47,7 +46,15 @@ class AppCard extends StatelessWidget {
           ),
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: AppSpacing.borderRadiusM,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: padding,
+          child: child,
+        ),
+      ),
     );
   }
 }

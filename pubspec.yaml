@@ -67,6 +67,7 @@ dependencies:
   # Quản lý cửa sổ desktop (maximize khi mở, chặn nút X) + biểu tượng System Tray.
   window_manager: ^0.4.3
   tray_manager: ^0.3.2
+  syncfusion_flutter_charts: ^33.2.13+1
 
 dev_dependencies:
   flutter_test:

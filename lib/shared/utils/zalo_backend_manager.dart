@@ -513,7 +513,7 @@ class ZaloBackendManager {
       );
 
       // Diệt bản cũ (nếu còn) rồi chờ backoff trước khi spawn lại.
-      _killProcess();
+      await _killProcess();
       if (_restartCount > 1) {
         final backoff = _backoffFor(_restartCount);
         debugPrint(
@@ -552,20 +552,25 @@ class ZaloBackendManager {
   /// Diệt tiến trình backend hiện hành (cả cây con) mà KHÔNG đặt cờ dừng có chủ
   /// đích — dùng nội bộ cho restart. taskkill /T /F là fallback khi Job Object
   /// không khả dụng.
-  static void _killProcess() {
+  static Future<void> _killProcess() async {
     final proc = _backendProcess;
     if (proc == null) return;
     final pid = proc.pid;
+    // Gỡ tham chiếu TRƯỚC để listener exitCode (so identical với _backendProcess)
+    // không tự kích hoạt restart khi taskkill làm tiến trình thoát.
+    _backendProcess = null;
+    _isRunning = false;
+    proc.kill(); // tín hiệu kill bất đồng bộ, không block luồng UI
     if (Platform.isWindows) {
       try {
-        Process.runSync('taskkill', ['/PID', '$pid', '/T', '/F']);
+        // taskkill /T /F BẤT ĐỒNG BỘ (Process.run) — KHÔNG dùng runSync vì nó
+        // chặn isolate UI gây treo cửa sổ trong vòng restart của watchdog.
+        await Process.run('taskkill', ['/PID', '$pid', '/T', '/F'])
+            .timeout(const Duration(seconds: 5));
       } catch (e) {
         debugPrint('ZaloBackendManager: taskkill thất bại: $e');
       }
     }
-    proc.kill();
-    _backendProcess = null;
-    _isRunning = false;
   }
 
   /// Cập nhật trạng thái + thông báo cho UI (chỉ khi đổi).
@@ -810,8 +815,8 @@ if (\$process) {
       debugPrint(
         "ZaloBackendManager: Đang ngắt tiến trình chạy ngầm backend...",
       );
-      _killProcess();
-      debugPrint("ZaloBackendManager: Đã ngắt tiến trình backend hoàn toàn.");
+      unawaited(_killProcess()); // fire-and-forget, không block luồng UI
+      debugPrint("ZaloBackendManager: Đã yêu cầu ngắt tiến trình backend.");
     }
     _setStatus(BackendStatus.stopped);
   }

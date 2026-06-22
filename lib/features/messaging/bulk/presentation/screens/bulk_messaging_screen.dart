@@ -9,7 +9,6 @@ import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../shared/utils/zalo_text_formatter.dart';
-import '../../../../../shared/widgets/compliance_warnings_popup.dart';
 import '../../../../../shared/widgets/activity_log_panel.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_alert.dart';
@@ -244,7 +243,7 @@ class _Header extends ConsumerWidget {
 
     return Row(
       children: [
-        const Icon(Icons.near_me_outlined, color: AppColors.primary, size: 32),
+        Icon(Icons.near_me_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -258,37 +257,6 @@ class _Header extends ConsumerWidget {
               ),
             ],
           ),
-        ),
-        IconButton(
-          icon: Icon(
-            state.complianceWarning != null || state.complianceError != null
-                ? Icons.warning_amber_rounded
-                : Icons.gpp_good_outlined,
-            color:
-                state.complianceWarning != null || state.complianceError != null
-                ? AppColors.warning
-                : AppColors.textMuted,
-            size: 28,
-          ),
-          tooltip:
-              state.complianceWarning != null || state.complianceError != null
-              ? 'Có khuyến cáo an toàn (Nhấn để xem)'
-              : 'Hệ thống an toàn (Nhấn để xem)',
-          onPressed: () {
-            final ZaloActionType actionType;
-            if (state.selectedTab == 0) {
-              actionType = ZaloActionType.bulkMessageByPhone;
-            } else if (state.selectedTab == 1) {
-              actionType = ZaloActionType.bulkMessageToGroup;
-            } else {
-              actionType = ZaloActionType.bulkMessageToFriends;
-            }
-            showComplianceWarningsDialog(
-              context,
-              activeWarning: state.complianceError ?? state.complianceWarning,
-              actionType: actionType,
-            );
-          },
         ),
         const SizedBox(width: AppSpacing.s),
         if (accounts.isNotEmpty)
@@ -1261,7 +1229,7 @@ class _GroupMultiSelector extends ConsumerWidget {
                           ? NetworkImage(g.avatarUrl)
                           : null,
                       child: g.avatarUrl.isEmpty
-                          ? const Icon(
+                          ? Icon(
                               Icons.groups_2,
                               size: 16,
                               color: AppColors.primary,
@@ -1663,7 +1631,7 @@ class _RecipientPreviewState extends ConsumerState<_RecipientPreview> {
                                     ),
                                   ),
                                 )
-                              : const Icon(
+                              : Icon(
                                   Icons.phone,
                                   color: AppColors.primary,
                                   size: 18,
@@ -1732,7 +1700,7 @@ class _ConfigPanel extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.m),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.settings_outlined,
                     color: AppColors.primary,
                     size: 22,
@@ -2133,7 +2101,7 @@ class _ScheduleSection extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.event,
                       size: 18,
                       color: AppColors.primary,
@@ -2186,7 +2154,7 @@ Widget _appPickerTheme(BuildContext context, Widget? child) {
         headerBackgroundColor: headerDark,
         headerForegroundColor: Colors.white,
         shape: dialogShape,
-        todayBorder: const BorderSide(color: AppColors.primary),
+        todayBorder: BorderSide(color: AppColors.primary),
         elevation: 8,
       ),
       timePickerTheme: TimePickerThemeData(
@@ -2703,7 +2671,7 @@ class _ZaloPreview extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.visibility_outlined,
                 color: AppColors.primary,
                 size: 20,
@@ -2733,9 +2701,9 @@ class _ZaloPreview extends StatelessWidget {
                 children: [
                   Container(
                     height: 46,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.zaloBlue,
-                      borderRadius: BorderRadius.only(
+                      borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(10),
                         topRight: Radius.circular(10),
                       ),
@@ -2967,7 +2935,7 @@ class _AppTemplateDialogState extends State<AppTemplateDialog> {
                   children: [
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.bookmark_outline,
                           size: 18,
                           color: AppColors.primary,

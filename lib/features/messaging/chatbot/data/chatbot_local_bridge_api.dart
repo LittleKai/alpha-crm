@@ -140,6 +140,38 @@ class ChatbotLocalBridgeApi {
     }
   }
 
+  /// Durable per-day chatbot response + token stats from the LOCAL store
+  /// (`GET /local/chatbot/stats`). One entry per day in `[from, to]`. Returns an
+  /// empty list if the bridge is unreachable. No cloud call.
+  Future<List<Map<String, dynamic>>> getChatbotStats({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final uri = _baseUri.resolve(
+        '/local/chatbot/stats'
+        '?from=${Uri.encodeQueryComponent(from.toIso8601String())}'
+        '&to=${Uri.encodeQueryComponent(to.toIso8601String())}',
+      );
+      final response = await _client
+          .get(uri)
+          .timeout(const Duration(seconds: 4));
+      final body = response.body.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      final list = body['data'];
+      if (response.statusCode == 200 && list is List) {
+        return list
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+      }
+      return <Map<String, dynamic>>[];
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
   ChatbotBridgeStatus _statusFrom(http.Response response) {
     final body = response.body.isEmpty
         ? <String, dynamic>{}

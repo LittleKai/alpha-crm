@@ -93,7 +93,7 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(Icons.check_rounded, color: AppColors.primary, size: 32),
+        Icon(Icons.check_rounded, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(

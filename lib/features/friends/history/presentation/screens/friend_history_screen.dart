@@ -105,7 +105,7 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.access_time_outlined,
           color: AppColors.primary,
           size: 32,

@@ -358,7 +358,7 @@ class _Header extends ConsumerWidget {
 
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.chat_bubble_outline,
           color: AppColors.primary,
           size: 32,
@@ -395,7 +395,7 @@ class _Header extends ConsumerWidget {
                     CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.primarySoft,
-                      child: const Icon(
+                      child: Icon(
                         Icons.group_outlined,
                         size: 14,
                         color: AppColors.primary,
@@ -630,7 +630,11 @@ class _ConversationList extends ConsumerWidget {
                                 conversation.customerName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.bodyMedium,
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: selected
+                                      ? (AppColors.isDarkMode ? Colors.white : AppColors.primary)
+                                      : AppColors.textPrimary,
+                                ),
                               ),
                             ),
                             if (conversation.tag.isNotEmpty) ...[
@@ -666,6 +670,11 @@ class _ConversationList extends ConsumerWidget {
                               _formatLastMessage(conversation.lastMessage),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.caption.copyWith(
+                                color: selected
+                                    ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : AppColors.primary)
+                                    : AppColors.textMuted,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Row(
@@ -687,7 +696,9 @@ class _ConversationList extends ConsumerWidget {
                                   child: Text(
                                     'Chat qua: $accountLabel',
                                     style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: selected
+                                          ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : AppColors.primary)
+                                          : AppColors.textSecondary,
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -3222,7 +3233,7 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
               children: [
-                const Icon(Icons.account_box, color: AppColors.primary),
+                Icon(Icons.account_box, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text('Thông tin khách hàng', style: AppTextStyles.sectionTitle),
                 const Spacer(),

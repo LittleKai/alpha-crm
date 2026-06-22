@@ -251,7 +251,7 @@ class _AppDialogHeader extends StatelessWidget {
                   title,
                   style: AppTextStyles.sectionTitle.copyWith(
                     color: Colors.white,
-                    fontSize: 19,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -261,7 +261,7 @@ class _AppDialogHeader extends StatelessWidget {
                     subtitle!,
                     style: AppTextStyles.caption.copyWith(
                       color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 11.5,
+                      fontSize: 13,
                     ),
                   ),
                 ],

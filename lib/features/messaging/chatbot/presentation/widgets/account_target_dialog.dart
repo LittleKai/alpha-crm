@@ -1,8 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
+import '../../../../../shared/widgets/account_avatar_stack.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
@@ -147,6 +149,7 @@ class _AccountTargetDialogState extends State<_AccountTargetDialog> {
                   itemBuilder: (_, i) {
                     final acc = filtered[i];
                     final checked = _selected.contains(acc.id);
+                    final name = accountDisplayName(acc.label);
                     return CheckboxListTile(
                       value: checked,
                       activeColor: AppColors.primary,
@@ -159,10 +162,37 @@ class _AccountTargetDialogState extends State<_AccountTargetDialog> {
                           _selected.remove(acc.id);
                         }
                       }),
-                      title: Text(acc.label, style: AppTextStyles.bodyMedium),
-                      subtitle: Text(acc.id,
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textMuted)),
+                      title: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: AppColors.surfaceMuted,
+                            backgroundImage: acc.avatarUrl.isNotEmpty
+                                ? CachedNetworkImageProvider(acc.avatarUrl)
+                                : null,
+                            child: acc.avatarUrl.isEmpty
+                                ? Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : 'A',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: AppSpacing.s),
+                          Expanded(
+                            child: Text(
+                              name.isNotEmpty ? name : 'Tài khoản',
+                              style: AppTextStyles.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),

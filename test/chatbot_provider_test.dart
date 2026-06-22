@@ -9,7 +9,7 @@ class _FakeChatbotRepository extends ChatbotRepository {
   @override
   Future<Map<String, dynamic>> getSettings() async => {
     'success': true,
-    'data': <String, dynamic>{'debounceSeconds': 8},
+    'data': <String, dynamic>{'debounceSeconds': 15},
   };
 
   @override
@@ -102,7 +102,7 @@ void main() {
     final notifier = ChatbotNotifier(repository);
     await Future<void>.delayed(Duration.zero);
 
-    expect(notifier.state.debounceSeconds, 8);
+    expect(notifier.state.debounceSeconds, 15);
 
     await notifier.updateAiConfig(
       provider: chatbotDefaultAiProvider,
@@ -111,11 +111,12 @@ void main() {
       soulPrompt: chatbotDefaultSoul,
       responseRules: chatbotDefaultResponseRules,
       temperature: 0.7,
-      debounceSeconds: 6,
+      debounceSeconds: 12,
+      aiHistoryLimit: 5,
     );
 
-    expect(notifier.state.debounceSeconds, 6);
-    expect(repository.savedSettings?['debounceSeconds'], 6);
+    expect(notifier.state.debounceSeconds, 12);
+    expect(repository.savedSettings?['debounceSeconds'], 12);
   });
 
   test('updateRule edits existing rule successfully', () async {

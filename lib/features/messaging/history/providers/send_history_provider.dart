@@ -21,7 +21,7 @@ extension SendHistoryRecordJson on SendHistoryRecord {
     return SendHistoryRecord(
       id: log.id,
       campaignName: log.campaignSnapshot?['name']?.toString() ?? 'CSKH Zalo',
-      phone: log.recipientPhone,
+      targetName: log.recipientName.isNotEmpty ? log.recipientName : log.recipientPhone,
       message: log.messagePreview.isNotEmpty
           ? log.messagePreview
           : 'Gửi tin nhắn chiến dịch',
@@ -155,15 +155,15 @@ class SendHistoryNotifier extends StateNotifier<SendHistoryState> {
     try {
       final buffer = StringBuffer();
       buffer.write('\xEF\xBB\xBF');
-      buffer.writeln('Chiến dịch,Người nhận,SĐT,Nội dung,Trạng thái,Thời gian');
+      buffer.writeln('Chiến dịch,Tên khách hàng/Nhóm,Nội dung,Trạng thái,Thời gian');
 
       for (final r in state.records) {
         final campaign = '"${r.campaignName.replaceAll('"', '""')}"';
-        final phone = '"${r.phone.replaceAll('"', '""')}"';
+        final targetName = '"${r.targetName.replaceAll('"', '""')}"';
         final message = '"${r.message.replaceAll('"', '""')}"';
         final status = '"${r.status.replaceAll('"', '""')}"';
         final time = '"${r.sentAt.toString().replaceAll('"', '""')}"';
-        buffer.writeln('$campaign,"",$phone,$message,$status,$time');
+        buffer.writeln('$campaign,$targetName,$message,$status,$time');
       }
 
       await Clipboard.setData(ClipboardData(text: buffer.toString()));

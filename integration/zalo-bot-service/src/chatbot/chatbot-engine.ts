@@ -71,7 +71,11 @@ export interface ChatbotEvaluationInput {
   generateAi?: (request: {
     conversationKey: string;
     messages: ChatbotInboundMessage[];
-  }) => Promise<{ reply: string; attachments?: ChatbotAttachment[] }>;
+  }) => Promise<{
+    reply: string;
+    attachments?: ChatbotAttachment[];
+    usage?: Record<string, unknown>;
+  }>;
   now?: Date;
 }
 
@@ -82,6 +86,9 @@ export type ChatbotDecision =
       text: string;
       ruleId?: string;
       attachments?: ChatbotAttachment[];
+      // AI token usage (mode 'ai' only) — persisted to the local daily stats.
+      tokenIn?: number;
+      tokenOut?: number;
       sourceMessageIds: string[];
     }
   | {
@@ -101,6 +108,12 @@ export type ChatbotDecision =
       reason: string;
       sourceMessageIds: string[];
     };
+
+/** Coerce an opaque usage value to a non-negative integer token count. */
+function toTokenCount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
 
 export class LocalChatbotEngine {
   async evaluate(input: ChatbotEvaluationInput): Promise<ChatbotDecision> {
@@ -222,11 +235,14 @@ export class LocalChatbotEngine {
       if (!reply && attachments.length === 0) {
         throw new Error('AI returned an empty reply');
       }
+      const usage = generated.usage;
       return {
         kind: 'reply',
         mode: 'ai',
         text: reply,
         ...(attachments.length ? { attachments } : {}),
+        tokenIn: toTokenCount(usage?.promptTokens),
+        tokenOut: toTokenCount(usage?.completionTokens),
         sourceMessageIds: eligibleIds,
       };
     } catch (error) {

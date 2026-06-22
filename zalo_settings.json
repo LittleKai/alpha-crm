@@ -36,5 +36,7 @@
   "downloadFolder": "",
   "liveChatMediaCacheMaxAgeDays": 90,
   "liveChatMediaCacheMaxGb": 20,
-  "liveChatNotifications": true
+  "liveChatNotifications": true,
+  "showTokenAnalytics": true,
+  "summaryAiModel": "gemini-3.1-pro"
 }

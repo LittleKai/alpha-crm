@@ -70,7 +70,7 @@ class _ContentTemplatesScreenState
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.content_paste_outlined,
           color: AppColors.primary,
           size: 32,

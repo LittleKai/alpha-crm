@@ -35,7 +35,7 @@ class _UpdateDialog extends ConsumerWidget {
         : AppColors.borderSoft;
     final borderColor = isDark ? const Color(0xFF253247) : AppColors.border;
     final textMutedColor = isDark
-        ? const Color(0xFF64748B)
+        ? Colors.white70
         : AppColors.textMuted;
 
     final successSoftColor = isDark
@@ -140,7 +140,7 @@ class _UpdateDialog extends ConsumerWidget {
                 value: state.downloadProgress,
                 minHeight: 8,
                 backgroundColor: borderColor,
-                valueColor: const AlwaysStoppedAnimation<Color>(
+                valueColor: AlwaysStoppedAnimation<Color>(
                   AppColors.primary,
                 ),
               ),

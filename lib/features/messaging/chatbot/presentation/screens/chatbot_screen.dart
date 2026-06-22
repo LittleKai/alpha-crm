@@ -21,6 +21,7 @@ import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
 import '../widgets/account_target_dialog.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
+import '../../../../../shared/widgets/account_avatar_stack.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
@@ -54,8 +55,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Future<void> _refreshKnowledgePresence() async {
-    final ids =
-        await ref.read(chatbotProvider.notifier).knowledgeFileIdsPresent();
+    final ids = await ref
+        .read(chatbotProvider.notifier)
+        .knowledgeFileIdsPresent();
     if (!mounted) return;
     setState(() => _knowledgeIdsPresent = ids);
   }
@@ -101,9 +103,13 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
       if (response['data']['usage'] != null) {
         final usage = response['data']['usage'];
-        final promptTokens = usage['promptTokens'] ?? usage['prompt_tokens'] ?? 0;
-        final completionTokens = usage['completionTokens'] ?? usage['completion_tokens'] ?? 0;
-        print('🧮 [AI TOKENS] Input: $promptTokens | Output: $completionTokens | Total: ${promptTokens + completionTokens}');
+        final promptTokens =
+            usage['promptTokens'] ?? usage['prompt_tokens'] ?? 0;
+        final completionTokens =
+            usage['completionTokens'] ?? usage['completion_tokens'] ?? 0;
+        print(
+          '🧮 [AI TOKENS] Input: $promptTokens | Output: $completionTokens | Total: ${promptTokens + completionTokens}',
+        );
       }
 
       ref.read(crmAuthProvider.notifier).refreshSubscription();
@@ -115,14 +121,19 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
-  Future<void> _showRuleDialog(BuildContext context, {ChatbotRule? rule}) async {
+  Future<void> _showRuleDialog(
+    BuildContext context, {
+    ChatbotRule? rule,
+  }) async {
     final nameController = TextEditingController(text: rule?.name);
-    final descriptionController = TextEditingController(text: rule?.description);
+    final descriptionController = TextEditingController(
+      text: rule?.description,
+    );
     final drafts = rule != null
         ? [
             _KeywordRuleDraft()
               ..keyword.text = rule.keyword
-              ..response.text = rule.response
+              ..response.text = rule.response,
           ]
         : [_KeywordRuleDraft()];
     await showDialog<void>(
@@ -131,7 +142,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AppDialog(
-              title: rule != null ? 'Chỉnh sửa kịch bản chatbot' : 'Tạo kịch bản chatbot mới',
+              title: rule != null
+                  ? 'Chỉnh sửa kịch bản chatbot'
+                  : 'Tạo kịch bản chatbot mới',
               icon: Icons.smart_toy_outlined,
               width: 640,
               actions: [
@@ -216,7 +229,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.rule_folder_outlined,
                               color: AppColors.primary,
                               size: 18,
@@ -383,7 +396,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     int? editIndex,
     String? existingDoc,
   }) async {
-    final ParsedKnowledgeDoc? parsed = existingDoc != null ? parseKnowledgeDoc(existingDoc) : null;
+    final ParsedKnowledgeDoc? parsed = existingDoc != null
+        ? parseKnowledgeDoc(existingDoc)
+        : null;
     final titleController = TextEditingController(text: parsed?.title);
     final keywordsController = TextEditingController(text: parsed?.keywords);
     final contentController = TextEditingController(text: parsed?.content);
@@ -391,11 +406,13 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     final List<_UploadedFileState> filesList = [];
     if (parsed != null) {
       for (final f in parsed.files) {
-        filesList.add(_UploadedFileState(
-          filename: f.name,
-          id: f.id,
-          description: f.description,
-        ));
+        filesList.add(
+          _UploadedFileState(
+            filename: f.name,
+            id: f.id,
+            description: f.description,
+          ),
+        );
       }
     }
 
@@ -437,17 +454,21 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 );
 
                 if (response['success'] == true && response['data'] is Map) {
-                  final data = Map<String, dynamic>.from(response['data'] as Map);
+                  final data = Map<String, dynamic>.from(
+                    response['data'] as Map,
+                  );
                   final id = data['id']?.toString() ?? '';
                   setDialogState(() {
-                    filesList.add(_UploadedFileState(
-                      filename: file.name,
-                      id: id,
-                    ));
+                    filesList.add(
+                      _UploadedFileState(filename: file.name, id: id),
+                    );
                   });
                 } else {
                   setDialogState(() {
-                    uploadError = (response['message'] ?? 'Upload file ${file.name} thất bại.').toString();
+                    uploadError =
+                        (response['message'] ??
+                                'Upload file ${file.name} thất bại.')
+                            .toString();
                   });
                 }
               }
@@ -502,8 +523,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close,
-                                color: AppColors.error, size: 18),
+                            icon: const Icon(
+                              Icons.close,
+                              color: AppColors.error,
+                              size: 18,
+                            ),
                             onPressed: () {
                               setDialogState(() {
                                 filesList.remove(f);
@@ -532,7 +556,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             }
 
             return AppDialog(
-              title: editIndex != null ? 'Chỉnh sửa tài liệu kiến thức' : 'Thêm tài liệu kiến thức mới',
+              title: editIndex != null
+                  ? 'Chỉnh sửa tài liệu kiến thức'
+                  : 'Thêm tài liệu kiến thức mới',
               icon: Icons.description_outlined,
               width: 640,
               actions: [
@@ -543,7 +569,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 ),
                 AppDialogAction(
                   text: editIndex != null ? 'Lưu thay đổi' : 'Thêm tài liệu',
-                  icon: editIndex != null ? Icons.save_rounded : Icons.add_rounded,
+                  icon: editIndex != null
+                      ? Icons.save_rounded
+                      : Icons.add_rounded,
                   onPressed: !isValid() || isUploading
                       ? null
                       : () {
@@ -551,9 +579,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           final keywords = keywordsController.text.trim();
                           final content = contentController.text.trim();
 
-                          final fileLines = filesList.map((f) {
-                            return '- [File] Tên: ${f.filename} | ID: ${f.id} | Mô tả: ${f.descriptionController.text.trim()}';
-                          }).join('\n');
+                          final fileLines = filesList
+                              .map((f) {
+                                return '- [File] Tên: ${f.filename} | ID: ${f.id} | Mô tả: ${f.descriptionController.text.trim()}';
+                              })
+                              .join('\n');
 
                           final baseText = [
                             'Tiêu đề tài liệu: $title',
@@ -570,7 +600,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           );
 
                           final Future<void> action = editIndex != null
-                              ? notifier.updateKnowledgeDocument(editIndex, text)
+                              ? notifier.updateKnowledgeDocument(
+                                  editIndex,
+                                  text,
+                                )
                               : notifier.addKnowledgeDocument(text);
 
                           action.then((_) {
@@ -674,12 +707,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         : Builder(
                             builder: (context) {
                               // Tự phân các file đã đính kèm vào 4 nhóm theo đuôi.
-                              final groups = <KnowledgeAttachmentType,
-                                  List<_UploadedFileState>>{};
+                              final groups =
+                                  <
+                                    KnowledgeAttachmentType,
+                                    List<_UploadedFileState>
+                                  >{};
                               for (final f in filesList) {
                                 groups
                                     .putIfAbsent(
-                                        _attachmentTypeOf(f.filename), () => [])
+                                      _attachmentTypeOf(f.filename),
+                                      () => [],
+                                    )
                                     .add(f);
                               }
                               const order = [
@@ -715,14 +753,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                               size: 16,
                                               color: AppColors.primary,
                                             ),
-                                            const SizedBox(width: AppSpacing.xs),
+                                            const SizedBox(
+                                              width: AppSpacing.xs,
+                                            ),
                                             Text(
                                               '${_attachmentTypeLabel(type)} (${groups[type]!.length})',
-                                              style:
-                                                  AppTextStyles.caption.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.textSecondary,
-                                              ),
+                                              style: AppTextStyles.caption
+                                                  .copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
                                             ),
                                           ],
                                         ),
@@ -972,11 +1013,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
     final header = Row(
       children: [
-        const Icon(
-          Icons.smart_toy_outlined,
-          color: AppColors.primary,
-          size: 32,
-        ),
+        Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -1066,6 +1103,21 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
+  /// Resolves account ids to avatar entries (avatar + clean name) for the
+  /// stacked avatars on a rule/knowledge card. Unknown ids fall back to a
+  /// placeholder so the count still reflects the selection.
+  List<AvatarEntry> _resolveRuleAccounts(List<String> ids) {
+    final accounts = ref.read(zaloIntegrationProvider).accounts;
+    return ids.map((id) {
+      final match = accounts.where((a) => a.id == id);
+      if (match.isNotEmpty) {
+        final a = match.first;
+        return (avatarUrl: a.avatarUrl, name: accountDisplayName(a.label));
+      }
+      return (avatarUrl: '', name: '');
+    }).toList();
+  }
+
   Future<void> _showRuleAccountDialog(ChatbotRule rule) async {
     final accounts = ref.read(zaloIntegrationProvider).accounts;
     final result = await showAccountTargetDialog(
@@ -1075,7 +1127,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       title: 'Áp dụng kịch bản cho tài khoản',
     );
     if (result == null) return;
-    await ref.read(chatbotProvider.notifier).updateRuleAccounts(rule.id, result);
+    await ref
+        .read(chatbotProvider.notifier)
+        .updateRuleAccounts(rule.id, result);
   }
 
   Future<void> _showKnowledgeAccountDialog(int index, String doc) async {
@@ -1117,23 +1171,26 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.vpn_key_outlined,
-                  color: AppColors.primary, size: 22),
+              Icon(Icons.vpn_key_outlined, color: AppColors.primary, size: 22),
               const SizedBox(width: AppSpacing.s),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Sử dụng kịch bản từ khóa',
-                        style: AppTextStyles.bodyMedium
-                            .copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Sử dụng kịch bản từ khóa',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       on
                           ? 'Bot trả lời bằng kịch bản cố định khi khớp từ khóa.'
                           : 'Đang tắt — bỏ qua toàn bộ kịch bản từ khóa.',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textSecondary),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -1154,15 +1211,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline,
-                    size: 16, color: AppColors.primary),
+                Icon(Icons.info_outline, size: 16, color: AppColors.primary),
                 const SizedBox(width: AppSpacing.s),
                 Expanded(
                   child: Text(
                     'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn lượt AI. '
                     'Chỉ câu trả lời do AI tạo (tab Trí tuệ nhân tạo) mới tính lượt.',
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textSecondary),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -1174,7 +1231,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   Widget _buildKeywordRulesContent(
-      ChatbotState state, ChatbotNotifier notifier) {
+    ChatbotState state,
+    ChatbotNotifier notifier,
+  ) {
     if (state.rules.isEmpty) {
       return SizedBox(
         height: 520,
@@ -1259,7 +1318,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                               color: AppColors.textSecondary,
                               size: 20,
                             ),
-                            onPressed: () => _showRuleDialog(context, rule: rule),
+                            onPressed: () =>
+                                _showRuleDialog(context, rule: rule),
                           ),
                           IconButton(
                             tooltip: 'Xóa kịch bản',
@@ -1305,20 +1365,27 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      Row(
-                        children: [
-                          Icon(Icons.groups_outlined,
-                              size: 14, color: AppColors.textMuted),
-                          const SizedBox(width: 4),
-                          Text(
-                            rule.accountIds.isEmpty
-                                ? 'Mọi TK'
-                                : '${rule.accountIds.length} TK',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.textMuted),
-                          ),
-                        ],
-                      ),
+                      rule.accountIds.isEmpty
+                          ? Row(
+                              children: [
+                                Icon(
+                                  Icons.public_outlined,
+                                  size: 14,
+                                  color: AppColors.primary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Mọi TK',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : AccountAvatarStack(
+                              size: 24,
+                              accounts: _resolveRuleAccounts(rule.accountIds),
+                            ),
                     ],
                   ),
                 ],
@@ -1336,7 +1403,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     ChatbotNotifier notifier,
   ) async {
     var selectedProvider = state.aiProvider;
-    var providerConfig = findProviderConfig(selectedProvider) ?? chatbotAiProviderConfigs.first;
+    var providerConfig =
+        findProviderConfig(selectedProvider) ?? chatbotAiProviderConfigs.first;
     final modelTextController = TextEditingController(text: state.aiModel);
     final promptController = TextEditingController(text: state.systemPrompt);
     final soulController = TextEditingController(text: state.soulPrompt);
@@ -1345,7 +1413,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     var debounceSeconds = state.debounceSeconds;
     var aiHistoryLimit = state.aiHistoryLimit;
     final dialogApiKeys = <String, List<String>>{
-      for (final e in state.aiApiKeys.entries) e.key: List<String>.from(e.value),
+      for (final e in state.aiApiKeys.entries)
+        e.key: List<String>.from(e.value),
     };
 
     await showDialog<void>(
@@ -1359,7 +1428,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
             return AppDialog(
               title: 'Cài đặt AI Chatbot',
-              subtitle: 'Chọn nhà cung cấp AI, model và tùy chỉnh prompt cho chatbot tự động.',
+              subtitle:
+                  'Chọn nhà cung cấp AI, model và tùy chỉnh prompt cho chatbot tự động.',
               icon: Icons.psychology_outlined,
               width: 720,
               actions: [
@@ -1378,7 +1448,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     final cleanedKeys = <String, List<String>>{
                       for (final e in dialogApiKeys.entries)
                         if (e.value.any((k) => k.trim().isNotEmpty))
-                          e.key: e.value.where((k) => k.trim().isNotEmpty).toList(),
+                          e.key: e.value
+                              .where((k) => k.trim().isNotEmpty)
+                              .toList(),
                     };
                     notifier.updateAiApiKeys(cleanedKeys);
                     notifier
@@ -1433,7 +1505,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                               items: chatbotAiProviderConfigs.map((p) {
                                 return DropdownMenuItem(
                                   value: p.id,
-                                  child: Text(p.label),
+                                  child: Text(
+                                    p.label,
+                                    style: AppTextStyles.body,
+                                  ),
                                 );
                               }).toList(),
                               onChanged: (value) {
@@ -1443,7 +1518,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                 setDialogState(() {
                                   selectedProvider = value;
                                   providerConfig = newConfig;
-                                  modelTextController.text = newConfig.defaultModel;
+                                  modelTextController.text =
+                                      newConfig.defaultModel;
                                 });
                               },
                             ),
@@ -1459,47 +1535,204 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             Row(
                               children: [
                                 Text('Model', style: AppTextStyles.label),
-                                const SizedBox(width: AppSpacing.xs),
-                                Tooltip(
-                                  message: 'Chọn từ danh sách hoặc nhập model code tùy ý',
-                                  child: Icon(Icons.info_outline, size: 14, color: AppColors.textMuted),
-                                ),
+                                if (selectedProvider != 'alpha_studio') ...[
+                                  const SizedBox(width: AppSpacing.xs),
+                                  Tooltip(
+                                    message:
+                                        'Chọn từ danh sách hoặc nhập model code tùy ý',
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: AppSpacing.xs),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: modelTextController,
-                                    style: AppTextStyles.body.copyWith(fontSize: 13),
-                                    decoration: InputDecoration(
-                                      hintText: providerConfig.defaultModel,
-                                      hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      border: const OutlineInputBorder(),
+                            if (selectedProvider == 'alpha_studio')
+                              AppSelectField<String>(
+                                value:
+                                    [
+                                      'gemini-3-flash',
+                                      'gemini-2.5-pro',
+                                    ].contains(modelTextController.text)
+                                    ? modelTextController.text
+                                    : 'gemini-3-flash',
+                                itemHeight: 56,
+                                items: [
+                                  DropdownMenuItem(
+                                    value: 'gemini-3-flash',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Gemini 3 Flash',
+                                          style: AppTextStyles.body.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Tốc độ phản hồi siêu tốc',
+                                          style: AppTextStyles.caption.copyWith(
+                                            color: AppColors.primary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'gemini-2.5-pro',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Gemini 2.5 Pro',
+                                          style: AppTextStyles.body.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Khả năng suy luận logic phức tạp',
+                                          style: AppTextStyles.caption.copyWith(
+                                            color: AppColors.primary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                selectedItemBuilder: (context) {
+                                  return [
+                                    Text(
+                                      'Gemini 3 Flash',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    Text(
+                                      'Gemini 2.5 Pro',
+                                      style: AppTextStyles.body,
+                                    ),
+                                  ];
+                                },
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setDialogState(() {
+                                      modelTextController.text = val;
+                                    });
+                                  }
+                                },
+                              )
+                            else
+                              SizedBox(
+                                height: 42,
+                                child: TextField(
+                                  controller: modelTextController,
+                                  style: AppTextStyles.body,
+                                  decoration: InputDecoration(
+                                    hintText: providerConfig.defaultModel,
+                                    hintStyle: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                    contentPadding: const EdgeInsets.only(
+                                      left: 12,
+                                      right: 0,
+                                      top: 0,
+                                      bottom: 0,
+                                    ),
+                                    filled: true,
+                                    fillColor:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? const Color(0xFF0F172A)
+                                        : Colors.white,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: AppColors.borderSoft,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: AppColors.borderSoft,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: AppColors.primary,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    suffixIcon: PopupMenuButton<String>(
+                                      icon: Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        size: 20,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      tooltip: 'Chọn preset model',
+                                      offset: const Offset(0, 46),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      color:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(0xFF1E293B)
+                                          : Colors.white,
+                                      elevation: 4,
+                                      onSelected: (model) {
+                                        setDialogState(() {
+                                          modelTextController.text = model;
+                                        });
+                                      },
+                                      itemBuilder: (_) {
+                                        final menuItems =
+                                            <PopupMenuEntry<String>>[];
+                                        for (
+                                          int i = 0;
+                                          i <
+                                              providerConfig
+                                                  .presetModels
+                                                  .length;
+                                          i++
+                                        ) {
+                                          final m =
+                                              providerConfig.presetModels[i];
+                                          menuItems.add(
+                                            PopupMenuItem(
+                                              value: m,
+                                              height: 42,
+                                              child: Text(
+                                                m,
+                                                style: AppTextStyles.body,
+                                              ),
+                                            ),
+                                          );
+                                          if (i <
+                                              providerConfig
+                                                      .presetModels
+                                                      .length -
+                                                  1) {
+                                            menuItems.add(
+                                              const PopupMenuDivider(height: 1),
+                                            );
+                                          }
+                                        }
+                                        return menuItems;
+                                      },
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.expand_more, size: 22),
-                                  tooltip: 'Chọn model có sẵn',
-                                  onSelected: (model) {
-                                    setDialogState(() {
-                                      modelTextController.text = model;
-                                    });
-                                  },
-                                  itemBuilder: (_) => providerConfig.presetModels
-                                      .map((m) => PopupMenuItem(
-                                            value: m,
-                                            child: Text(m, style: AppTextStyles.body.copyWith(fontSize: 13)),
-                                          ))
-                                      .toList(),
-                                ),
-                              ],
-                            ),
+                              ),
                           ],
                         ),
                       ),
@@ -1509,19 +1742,28 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   if (selectedProvider == 'alpha_studio') ...[
                     const SizedBox(height: AppSpacing.s),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.s,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primarySoft,
                         borderRadius: AppSpacing.borderRadiusS,
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.cloud_outlined, size: 16, color: AppColors.primary),
+                          Icon(
+                            Icons.cloud_outlined,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
                           const SizedBox(width: AppSpacing.s),
                           Expanded(
                             child: Text(
                               'Sử dụng quota GCLI từ gói đăng ký Alpha Studio. Không cần API key.',
-                              style: AppTextStyles.caption.copyWith(color: AppColors.primary),
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                         ],
@@ -1530,19 +1772,28 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   ] else if (needsKey && !hasKeys) ...[
                     const SizedBox(height: AppSpacing.s),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.s,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.warningSoft,
                         borderRadius: AppSpacing.borderRadiusS,
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warningText),
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: AppColors.warningText,
+                          ),
                           const SizedBox(width: AppSpacing.s),
                           Expanded(
                             child: Text(
                               'Cần ít nhất 1 API key cho ${providerConfig.label}. Thêm key ở phần bên dưới.',
-                              style: AppTextStyles.caption.copyWith(color: AppColors.warningText),
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.warningText,
+                              ),
                             ),
                           ),
                         ],
@@ -1564,18 +1815,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           controller: promptController,
                           maxLines: 4,
                           decoration: const InputDecoration(
-                            hintText: 'Chỉ định cách chatbot phản hồi khách hàng...',
+                            hintText:
+                                'Chỉ định cách chatbot phản hồi khách hàng...',
                             border: OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: AppSpacing.m),
-                        Text('Soul / đối tượng nhập vai', style: AppTextStyles.label),
+                        Text(
+                          'Soul / đối tượng nhập vai',
+                          style: AppTextStyles.label,
+                        ),
                         const SizedBox(height: AppSpacing.xs),
                         TextField(
                           controller: soulController,
                           maxLines: 3,
                           decoration: const InputDecoration(
-                            hintText: 'VD: Bạn là nhân viên tư vấn Zalo chuyên nghiệp, gần gũi...',
+                            hintText:
+                                'VD: Bạn là nhân viên tư vấn Zalo chuyên nghiệp, gần gũi...',
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -1587,7 +1843,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           minLines: 4,
                           maxLines: 6,
                           decoration: const InputDecoration(
-                            hintText: 'VD: Không bịa thông tin, không lặp lời chào...',
+                            hintText:
+                                'VD: Không bịa thông tin, không lặp lời chào...',
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -1616,7 +1873,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                   : temperature > 0.8
                                   ? 'Sáng tạo'
                                   : 'Cân bằng',
-                              style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+                              style: AppTextStyles.caption.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ],
                         ),
@@ -1642,7 +1901,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                               debounceSeconds >= 60
                                   ? '${(debounceSeconds / 60).toStringAsFixed(1)} phút'
                                   : '$debounceSeconds giây',
-                              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -1654,7 +1915,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           activeColor: AppColors.primary,
                           label: '$debounceSeconds giây',
                           onChanged: (value) {
-                            setDialogState(() => debounceSeconds = value.round());
+                            setDialogState(
+                              () => debounceSeconds = value.round(),
+                            );
                           },
                         ),
                         const SizedBox(height: AppSpacing.m),
@@ -1688,9 +1951,13 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           max: 20,
                           divisions: 20,
                           activeColor: AppColors.primary,
-                          label: aiHistoryLimit == 0 ? 'Tắt' : '$aiHistoryLimit lượt',
+                          label: aiHistoryLimit == 0
+                              ? 'Tắt'
+                              : '$aiHistoryLimit lượt',
                           onChanged: (value) {
-                            setDialogState(() => aiHistoryLimit = value.round());
+                            setDialogState(
+                              () => aiHistoryLimit = value.round(),
+                            );
                           },
                         ),
                       ],
@@ -1701,116 +1968,159 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   _buildCollapsibleSection(
                     title: 'API Keys',
                     icon: Icons.vpn_key_outlined,
-                    subtitle: 'Nhập key riêng cho các nhà cung cấp — hệ thống xoay vòng ngẫu nhiên',
+                    subtitle:
+                        'Nhập key riêng cho các nhà cung cấp — hệ thống xoay vòng ngẫu nhiên',
                     initiallyExpanded: needsKey && !hasKeys,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: chatbotAiProviderConfigs
                           .where((p) => p.requiresApiKey)
                           .map((provider) {
-                        final keys = dialogApiKeys[provider.id] ?? [];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.m),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(provider.label, style: AppTextStyles.bodyMedium),
-                                  const SizedBox(width: AppSpacing.s),
-                                  if (keys.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.successSoft,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '${keys.length} key',
-                                        style: AppTextStyles.caption.copyWith(
-                                          color: AppColors.successText,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  const Spacer(),
-                                  SizedBox(
-                                    height: 28,
-                                    child: TextButton.icon(
-                                      icon: const Icon(Icons.add, size: 16),
-                                      label: const Text('Thêm key'),
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        textStyle: AppTextStyles.caption,
-                                      ),
-                                      onPressed: () {
-                                        setDialogState(() {
-                                          dialogApiKeys[provider.id] = [...keys, ''];
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ],
+                            final keys = dialogApiKeys[provider.id] ?? [];
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.m,
                               ),
-                              ...keys.asMap().entries.map((entry) {
-                                final idx = entry.key;
-                                final keyValue = entry.value;
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: AppSpacing.xs),
-                                  child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
                                     children: [
                                       Text(
-                                        '#${idx + 1}',
-                                        style: AppTextStyles.caption.copyWith(
-                                          color: AppColors.textMuted,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                        provider.label,
+                                        style: AppTextStyles.bodyMedium,
                                       ),
                                       const SizedBox(width: AppSpacing.s),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: TextEditingController(text: keyValue),
-                                          style: AppTextStyles.body.copyWith(fontSize: 13),
-                                          obscureText: true,
-                                          decoration: InputDecoration(
-                                            hintText: provider.keyHint,
-                                            hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-                                            isDense: true,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            border: const OutlineInputBorder(),
+                                      if (keys.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 1,
                                           ),
-                                          onChanged: (v) {
-                                            dialogApiKeys[provider.id]![idx] = v.trim();
-                                          },
+                                          decoration: BoxDecoration(
+                                            color: AppColors.successSoft,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${keys.length} key',
+                                            style: AppTextStyles.caption
+                                                .copyWith(
+                                                  color: AppColors.successText,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 4),
+                                      const Spacer(),
                                       SizedBox(
-                                        width: 28,
                                         height: 28,
-                                        child: IconButton(
-                                          padding: EdgeInsets.zero,
-                                          iconSize: 16,
-                                          icon: const Icon(Icons.close, color: AppColors.error),
-                                          tooltip: 'Xóa key',
+                                        child: TextButton.icon(
+                                          icon: const Icon(Icons.add, size: 16),
+                                          label: const Text('Thêm key'),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                            ),
+                                            textStyle: AppTextStyles.caption,
+                                          ),
                                           onPressed: () {
                                             setDialogState(() {
-                                              dialogApiKeys[provider.id]!.removeAt(idx);
-                                              if (dialogApiKeys[provider.id]!.isEmpty) {
-                                                dialogApiKeys.remove(provider.id);
-                                              }
+                                              dialogApiKeys[provider.id] = [
+                                                ...keys,
+                                                '',
+                                              ];
                                             });
                                           },
                                         ),
                                       ),
                                     ],
                                   ),
-                                );
-                              }),
-                            ],
-                          ),
-                        );
-                      }).toList(),
+                                  ...keys.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final keyValue = entry.value;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: AppSpacing.xs,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            '#${idx + 1}',
+                                            style: AppTextStyles.caption
+                                                .copyWith(
+                                                  color: AppColors.textMuted,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                          const SizedBox(width: AppSpacing.s),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: TextEditingController(
+                                                text: keyValue,
+                                              ),
+                                              style: AppTextStyles.body
+                                                  .copyWith(fontSize: 13),
+                                              obscureText: true,
+                                              decoration: InputDecoration(
+                                                hintText: provider.keyHint,
+                                                hintStyle: AppTextStyles.caption
+                                                    .copyWith(
+                                                      color:
+                                                          AppColors.textMuted,
+                                                    ),
+                                                isDense: true,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 8,
+                                                    ),
+                                                border:
+                                                    const OutlineInputBorder(),
+                                              ),
+                                              onChanged: (v) {
+                                                dialogApiKeys[provider
+                                                    .id]![idx] = v
+                                                    .trim();
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          SizedBox(
+                                            width: 28,
+                                            height: 28,
+                                            child: IconButton(
+                                              padding: EdgeInsets.zero,
+                                              iconSize: 16,
+                                              icon: const Icon(
+                                                Icons.close,
+                                                color: AppColors.error,
+                                              ),
+                                              tooltip: 'Xóa key',
+                                              onPressed: () {
+                                                setDialogState(() {
+                                                  dialogApiKeys[provider.id]!
+                                                      .removeAt(idx);
+                                                  if (dialogApiKeys[provider
+                                                          .id]!
+                                                      .isEmpty) {
+                                                    dialogApiKeys.remove(
+                                                      provider.id,
+                                                    );
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            );
+                          })
+                          .toList(),
                     ),
                   ),
                 ],
@@ -1842,14 +2152,27 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
-        childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.m, 0, AppSpacing.m, AppSpacing.m),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.m,
+          0,
+          AppSpacing.m,
+          AppSpacing.m,
+        ),
         initiallyExpanded: initiallyExpanded,
         shape: const Border(),
         collapsedShape: const Border(),
         leading: Icon(icon, size: 18, color: AppColors.primary),
-        title: Text(title, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+        title: Text(
+          title,
+          style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+        ),
         subtitle: subtitle != null
-            ? Text(subtitle, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary))
+            ? Text(
+                subtitle,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              )
             : null,
         children: [child],
       ),
@@ -1876,7 +2199,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.assignment_outlined,
                 color: AppColors.primary,
                 size: 20,
@@ -2074,7 +2397,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.psychology_outlined,
                 color: AppColors.primary,
                 size: 22,
@@ -2141,7 +2464,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.alternate_email_rounded,
                   color: AppColors.primary,
                   size: 20,
@@ -2186,7 +2509,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             children: [
               AppBadge(
                 label:
-                    '${state.aiModel} (${state.aiModel == 'gemini-3.1-pro-preview' ? '2' : '1'} quota/lượt)',
+                    '${state.aiModel} (${state.aiModel == 'gemini-3.1-pro-preview' || state.aiModel == 'gemini-3.5-flash' ? '2' : '1'} quota/lượt)',
                 variant: AppBadgeVariant.info,
               ),
               AppBadge(
@@ -2201,11 +2524,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ),
             ],
           ),
-          if (state.aiModel == 'gemini-3.1-pro-preview') ...[
+          if (state.aiModel == 'gemini-3.1-pro-preview' || state.aiModel == 'gemini-3.5-flash') ...[
             const SizedBox(height: AppSpacing.m),
-            const AppAlert(
+            AppAlert(
               message:
-                  'Model gemini-3.1-pro-preview dùng quota gấp đôi. Backend sẽ trừ 2 lượt cho mỗi lần AI trả lời thành công và hoàn lại nếu upstream GCLI lỗi.',
+                  'Model ${state.aiModel} dùng quota gấp đôi. Backend sẽ trừ 2 lượt cho mỗi lần AI trả lời thành công và hoàn lại nếu upstream GCLI lỗi.',
               variant: AppAlertVariant.warning,
             ),
           ],
@@ -2441,9 +2764,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         side: BorderSide(color: AppColors.border),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.xs,
+                        ),
                         child: ListTile(
-                          leading: const Icon(
+                          leading: Icon(
                             Icons.description,
                             color: AppColors.primary,
                             size: 28,
@@ -2491,83 +2816,109 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Row(
-                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.groups_outlined,
-                                      size: 13, color: AppColors.textMuted),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    parsed.accountIds.isEmpty
-                                        ? 'Áp dụng: Mọi tài khoản'
-                                        : 'Áp dụng: ${parsed.accountIds.length} tài khoản',
-                                    style: AppTextStyles.caption
-                                        .copyWith(color: AppColors.textMuted),
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: AppSpacing.xs,
+                                      runSpacing: AppSpacing.xs,
+                                      children: [
+                                        ...parsed.files.map((file) {
+                                          final present = _knowledgeIdsPresent;
+                                          final isMissing =
+                                              present != null &&
+                                              (file.id.isEmpty ||
+                                                  !present.contains(file.id));
+                                          final chipColor = isMissing
+                                              ? AppColors.error
+                                              : AppColors.primary;
+                                          return Tooltip(
+                                            message: isMissing
+                                                ? 'File chưa có trên máy này — hãy đính lại để bot gửi được.'
+                                                : (file.description.isNotEmpty
+                                                      ? 'Mô tả: ${file.description}'
+                                                      : 'Tài liệu đính kèm'),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: isMissing
+                                                    ? AppColors.error
+                                                          .withValues(
+                                                            alpha: 0.10,
+                                                          )
+                                                    : AppColors.primarySoft,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: isMissing
+                                                      ? AppColors.error
+                                                      : AppColors.borderSoft,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    isMissing
+                                                        ? Icons
+                                                              .warning_amber_rounded
+                                                        : Icons.attach_file,
+                                                    size: 10,
+                                                    color: chipColor,
+                                                  ),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    isMissing
+                                                        ? '${file.name} • thiếu file'
+                                                        : file.name,
+                                                    style: AppTextStyles.caption
+                                                        .copyWith(
+                                                          color: chipColor,
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
                                   ),
-                                ],
-                              ),
-                              if (parsed.files.isNotEmpty) ...[
-                                const SizedBox(height: AppSpacing.xs),
-                                Wrap(
-                                  spacing: AppSpacing.xs,
-                                  runSpacing: AppSpacing.xs,
-                                  children: parsed.files.map((file) {
-                                    final present = _knowledgeIdsPresent;
-                                    final isMissing = present != null &&
-                                        (file.id.isEmpty ||
-                                            !present.contains(file.id));
-                                    final chipColor = isMissing
-                                        ? AppColors.error
-                                        : AppColors.primary;
-                                    return Tooltip(
-                                      message: isMissing
-                                          ? 'File chưa có trên máy này — hãy đính lại để bot gửi được.'
-                                          : (file.description.isNotEmpty
-                                              ? 'Mô tả: ${file.description}'
-                                              : 'Tài liệu đính kèm'),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isMissing
-                                              ? AppColors.error.withValues(alpha: 0.10)
-                                              : AppColors.primarySoft,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: isMissing
-                                                ? AppColors.error
-                                                : AppColors.borderSoft,
-                                          ),
-                                        ),
-                                        child: Row(
+                                  const SizedBox(width: AppSpacing.s),
+                                  parsed.accountIds.isEmpty
+                                      ? Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
-                                              isMissing
-                                                  ? Icons.warning_amber_rounded
-                                                  : Icons.attach_file,
-                                              size: 10,
-                                              color: chipColor,
+                                              Icons.public_outlined,
+                                              size: 14,
+                                              color: AppColors.primary,
                                             ),
-                                            const SizedBox(width: 2),
+                                            const SizedBox(width: 4),
                                             Text(
-                                              isMissing
-                                                  ? '${file.name} • thiếu file'
-                                                  : file.name,
-                                              style: AppTextStyles.caption.copyWith(
-                                                color: chipColor,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                              'Mọi tài khoản',
+                                              style: AppTextStyles.caption
+                                                  .copyWith(
+                                                    color: AppColors.textMuted,
+                                                  ),
                                             ),
                                           ],
+                                        )
+                                      : AccountAvatarStack(
+                                          size: 22,
+                                          accounts: _resolveRuleAccounts(
+                                            parsed.accountIds,
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
+                                ],
+                              ),
                             ],
                           ),
                           trailing: Row(
@@ -2607,7 +2958,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                 onPressed: () {
                                   notifier.removeKnowledgeDocument(doc);
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Đã xóa tài liệu: ${parsed.title}')),
+                                    SnackBar(
+                                      content: Text(
+                                        'Đã xóa tài liệu: ${parsed.title}',
+                                      ),
+                                    ),
                                   );
                                 },
                               ),
@@ -2663,8 +3018,34 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
+  int _logsCurrentPage = 0;
+  final int _logsItemsPerPage = 30;
+  String _logsFilterCategory = 'Tất cả';
+
   Widget _buildLogsTab(ChatbotState state, ChatbotNotifier notifier) {
     final showTokens = ref.watch(settingsProvider).settings.showTokenAnalytics;
+
+    // Filter logs
+    final filteredLogs = state.logs.where((log) {
+      if (_logsFilterCategory == 'Tất cả') return true;
+      if (_logsFilterCategory == 'AI') return log.keyword == 'ai';
+      if (_logsFilterCategory == 'Từ khóa') return log.keyword == 'keyword';
+      if (_logsFilterCategory == 'Chuyển NV') return log.keyword == 'handoff';
+      if (_logsFilterCategory == 'Khác')
+        return !['ai', 'keyword', 'handoff'].contains(log.keyword);
+      return true;
+    }).toList();
+
+    // Pagination
+    final int totalPages = (filteredLogs.length / _logsItemsPerPage).ceil();
+    if (_logsCurrentPage >= totalPages && totalPages > 0) {
+      _logsCurrentPage = totalPages - 1;
+    }
+    final paginatedLogs = filteredLogs
+        .skip(_logsCurrentPage * _logsItemsPerPage)
+        .take(_logsItemsPerPage)
+        .toList();
+
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -2675,24 +3056,34 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'NHẬT KÝ PHẢN HỒI CỦA BOT',
-                  style: AppTextStyles.sectionTitle,
+                Row(
+                  children: [
+                    Text(
+                      'NHẬT KÝ PHẢN HỒI CỦA BOT',
+                      style: AppTextStyles.sectionTitle,
+                    ),
+                    const SizedBox(width: AppSpacing.l),
+                    SizedBox(
+                      width: 160,
+                      child: AppSelectField<String>(
+                        value: _logsFilterCategory,
+                        items: ['Tất cả', 'AI', 'Từ khóa', 'Chuyển NV', 'Khác']
+                            .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _logsFilterCategory = val;
+                              _logsCurrentPage = 0;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                if (state.logs.isNotEmpty)
-                  AppButton(
-                    text: 'Xóa nhật ký',
-                    icon: Icons.delete_outline,
-                    variant: AppButtonVariant.outline,
-                    onPressed: () {
-                      notifier.clearLogs();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã xóa toàn bộ nhật ký phản hồi.'),
-                        ),
-                      );
-                    },
-                  ),
               ],
             ),
           ),
@@ -2700,51 +3091,76 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           SizedBox(
             // Fill the viewport instead of a small fixed box (the screen body
             // is a scroll view, so Expanded cannot be used here).
-            height: (MediaQuery.of(context).size.height - 320)
-                .clamp(350.0, double.infinity),
+            height: (MediaQuery.of(context).size.height - 320).clamp(
+              350.0,
+              double.infinity,
+            ),
             child: AppTable(
-              isEmpty: state.logs.isEmpty,
-              emptyTitle: 'Chưa có lượt kích hoạt nào',
+              isEmpty: filteredLogs.isEmpty,
+              emptyTitle: 'Không có dữ liệu',
               emptyDescription:
-                  'Lịch sử phản hồi tự động của chatbot sẽ được lưu trữ ở đây.',
+                  'Không tìm thấy nhật ký nào phù hợp với bộ lọc.',
               columns: [
                 const AppTableColumn(label: 'Khách hàng', size: ColumnSize.M),
                 const AppTableColumn(
                   label: 'Từ khóa kích hoạt',
                   size: ColumnSize.S,
+                  textAlign: TextAlign.center,
                 ),
                 const AppTableColumn(
                   label: 'Nội dung phản hồi',
                   size: ColumnSize.L,
                 ),
                 const AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
-                const AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
+                const AppTableColumn(
+                  label: 'Trạng thái',
+                  size: ColumnSize.S,
+                  textAlign: TextAlign.center,
+                ),
                 if (showTokens)
-                  const AppTableColumn(label: 'Token vào', size: ColumnSize.S),
-                if (showTokens)
-                  const AppTableColumn(label: 'Token ra', size: ColumnSize.S),
+                  const AppTableColumn(
+                    label: 'Token (Vào/Ra)',
+                    size: ColumnSize.S,
+                  ),
               ],
-              rows: state.logs.map((log) {
+              rows: paginatedLogs.map((log) {
                 final succeeded = log.status == 'succeeded';
+
+                AppBadgeVariant badgeVariant = AppBadgeVariant.neutral;
+                if (succeeded) {
+                  if (log.keyword == 'ai') {
+                    badgeVariant = AppBadgeVariant.info;
+                  } else if (log.keyword == 'keyword') {
+                    badgeVariant = AppBadgeVariant.success;
+                  } else if (log.keyword == 'handoff') {
+                    badgeVariant = AppBadgeVariant.warning;
+                  } else {
+                    badgeVariant = AppBadgeVariant.neutral;
+                  }
+                }
+
                 return DataRow(
                   cells: [
                     DataCell(
                       Text(log.customerName, style: AppTextStyles.bodyMedium),
                     ),
                     DataCell(
-                      AppBadge(
-                        label: _chatbotModeLabel(log.keyword),
-                        variant: succeeded
-                            ? AppBadgeVariant.info
-                            : AppBadgeVariant.neutral,
+                      Center(
+                        child: AppBadge(
+                          label: _chatbotModeLabel(log.keyword),
+                          variant: badgeVariant,
+                        ),
                       ),
                     ),
                     DataCell(
-                      Text(
-                        log.response,
-                        style: AppTextStyles.body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Tooltip(
+                        message: log.response,
+                        child: Text(
+                          log.response,
+                          style: AppTextStyles.body,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                     DataCell(
@@ -2754,22 +3170,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       ),
                     ),
                     DataCell(
-                      AppBadge(
-                        label: _chatbotStatusLabel(log.status),
-                        variant: _chatbotStatusVariant(log.status),
+                      Center(
+                        child: AppBadge(
+                          label: _chatbotStatusLabel(log.status),
+                          variant: _chatbotStatusVariant(log.status),
+                        ),
                       ),
                     ),
                     if (showTokens)
                       DataCell(
                         Text(
-                          '${log.tokenIn}',
-                          style: AppTextStyles.caption,
-                        ),
-                      ),
-                    if (showTokens)
-                      DataCell(
-                        Text(
-                          '${log.tokenOut}',
+                          '${log.tokenIn} / ${log.tokenOut}',
                           style: AppTextStyles.caption,
                         ),
                       ),
@@ -2778,6 +3189,31 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               }).toList(),
             ),
           ),
+          if (totalPages > 1)
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _logsCurrentPage > 0
+                        ? () => setState(() => _logsCurrentPage--)
+                        : null,
+                  ),
+                  Text(
+                    'Trang ${_logsCurrentPage + 1} / $totalPages',
+                    style: AppTextStyles.bodyMedium,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: _logsCurrentPage < totalPages - 1
+                        ? () => setState(() => _logsCurrentPage++)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -2887,7 +3323,9 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
     } else if (fileIndex != -1 && fileIndex > keywordIndex) {
       end = fileIndex;
     }
-    keywords = doc.substring(keywordIndex + 'Từ khóa kích hoạt:'.length, end).trim();
+    keywords = doc
+        .substring(keywordIndex + 'Từ khóa kích hoạt:'.length, end)
+        .trim();
   }
 
   // Extract content
@@ -2896,7 +3334,9 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
     if (fileIndex != -1 && fileIndex > contentIndex) {
       end = fileIndex;
     }
-    content = doc.substring(contentIndex + 'Nội dung kiến thức bắt buộc:\n'.length, end).trim();
+    content = doc
+        .substring(contentIndex + 'Nội dung kiến thức bắt buộc:\n'.length, end)
+        .trim();
   }
 
   // Extract files
@@ -2928,7 +3368,9 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
             }
           }
           if (name.isNotEmpty) {
-            files.add(ParsedKnowledgeFile(name: name, description: desc, id: id));
+            files.add(
+              ParsedKnowledgeFile(name: name, description: desc, id: id),
+            );
           }
         }
       }
@@ -2946,7 +3388,13 @@ ParsedKnowledgeDoc parseKnowledgeDoc(String doc) {
         }
       }
       if (name.isNotEmpty) {
-        files.add(ParsedKnowledgeFile(name: name, description: 'Tài liệu đính kèm', id: ''));
+        files.add(
+          ParsedKnowledgeFile(
+            name: name,
+            description: 'Tài liệu đính kèm',
+            id: '',
+          ),
+        );
       }
     }
   }
@@ -2972,9 +3420,39 @@ KnowledgeAttachmentType _attachmentTypeOf(String filename) {
   final ext = filename.contains('.')
       ? filename.split('.').last.toLowerCase()
       : '';
-  const image = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'svg'};
-  const video = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v', '3gp', 'flv', 'wmv'};
-  const audio = {'mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'amr', 'wma'};
+  const image = {
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'bmp',
+    'heic',
+    'heif',
+    'svg',
+  };
+  const video = {
+    'mp4',
+    'mov',
+    'avi',
+    'webm',
+    'mkv',
+    'm4v',
+    '3gp',
+    'flv',
+    'wmv',
+  };
+  const audio = {
+    'mp3',
+    'wav',
+    'm4a',
+    'aac',
+    'ogg',
+    'opus',
+    'flac',
+    'amr',
+    'wma',
+  };
   if (image.contains(ext)) return KnowledgeAttachmentType.image;
   if (video.contains(ext)) return KnowledgeAttachmentType.video;
   if (audio.contains(ext)) return KnowledgeAttachmentType.audio;
@@ -2982,18 +3460,18 @@ KnowledgeAttachmentType _attachmentTypeOf(String filename) {
 }
 
 String _attachmentTypeLabel(KnowledgeAttachmentType type) => switch (type) {
-      KnowledgeAttachmentType.image => 'Hình ảnh',
-      KnowledgeAttachmentType.video => 'Video',
-      KnowledgeAttachmentType.audio => 'Âm thanh',
-      KnowledgeAttachmentType.file => 'Tệp tài liệu',
-    };
+  KnowledgeAttachmentType.image => 'Hình ảnh',
+  KnowledgeAttachmentType.video => 'Video',
+  KnowledgeAttachmentType.audio => 'Âm thanh',
+  KnowledgeAttachmentType.file => 'Tệp tài liệu',
+};
 
 IconData _attachmentTypeIcon(KnowledgeAttachmentType type) => switch (type) {
-      KnowledgeAttachmentType.image => Icons.image_outlined,
-      KnowledgeAttachmentType.video => Icons.videocam_outlined,
-      KnowledgeAttachmentType.audio => Icons.audiotrack_outlined,
-      KnowledgeAttachmentType.file => Icons.insert_drive_file_outlined,
-    };
+  KnowledgeAttachmentType.image => Icons.image_outlined,
+  KnowledgeAttachmentType.video => Icons.videocam_outlined,
+  KnowledgeAttachmentType.audio => Icons.audiotrack_outlined,
+  KnowledgeAttachmentType.file => Icons.insert_drive_file_outlined,
+};
 
 class _UploadedFileState {
   final String filename;
@@ -3012,5 +3490,3 @@ class _UploadedFileState {
     descriptionController.dispose();
   }
 }
-
-

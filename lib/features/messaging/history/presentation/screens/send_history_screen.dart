@@ -29,6 +29,8 @@ class SendHistoryScreen extends ConsumerStatefulWidget {
 class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedAccountId;
+  int _currentPage = 0;
+  final int _itemsPerPage = 30;
 
   @override
   void dispose() {
@@ -56,7 +58,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     final filteredRecords = _getFilteredRecords(state);
 
     return Scaffold(
-      body: SingleChildScrollView(
+      body: Padding(
         padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,7 +69,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
             const SizedBox(height: AppSpacing.l),
             _buildToolbar(state, notifier),
             const SizedBox(height: AppSpacing.l),
-            _buildTableCard(state, filteredRecords),
+            Expanded(child: _buildTableCard(state, filteredRecords)),
           ],
         ),
       ),
@@ -80,7 +82,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
       final matchesQuery =
           query.isEmpty ||
           record.campaignName.toLowerCase().contains(query) ||
-          record.phone.contains(query) ||
+          record.targetName.toLowerCase().contains(query) ||
           record.message.toLowerCase().contains(query);
 
       final matchesStatus =
@@ -97,7 +99,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
   ) {
     return Row(
       children: [
-        const Icon(Icons.history_outlined, color: AppColors.primary, size: 32),
+        Icon(Icons.history_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -126,7 +128,7 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
                     CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.primarySoft,
-                      child: const Icon(
+                      child: Icon(
                         Icons.group_outlined,
                         size: 14,
                         color: AppColors.primary,
@@ -262,9 +264,12 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
     final statusList = ['Tất cả', 'Thành công', 'Thất bại', 'Đang chờ'];
 
     final search = AppSearchField(
-      hintText: 'Tìm kiếm theo chiến dịch, tên, SĐT, nội dung...',
+      hintText: 'Tìm kiếm theo chiến dịch, tên khách hàng/nhóm, nội dung...',
       controller: _searchController,
-      onChanged: notifier.setSearchQuery,
+      onChanged: (val) {
+        setState(() => _currentPage = 0);
+        notifier.setSearchQuery(val);
+      },
     );
 
     final filter = AppSelectField<String>(
@@ -273,7 +278,10 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
           .map((status) => DropdownMenuItem(value: status, child: Text(status)))
           .toList(),
       onChanged: (val) {
-        if (val != null) notifier.setSelectedStatus(val);
+        if (val != null) {
+          setState(() => _currentPage = 0);
+          notifier.setSelectedStatus(val);
+        }
       },
     );
 
@@ -350,51 +358,89 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
       );
     }
 
+    final int totalPages = (filteredRecords.length / _itemsPerPage).ceil();
+    if (_currentPage >= totalPages && totalPages > 0) {
+      _currentPage = totalPages - 1;
+    }
+    final paginatedRecords = filteredRecords
+        .skip(_currentPage * _itemsPerPage)
+        .take(_itemsPerPage)
+        .toList();
+
     return AppCard(
       padding: EdgeInsets.zero,
-      child: SizedBox(
-        height: 400,
-        child: AppTable(
-          isEmpty: filteredRecords.isEmpty,
-          emptyTitle: 'Không tìm thấy lịch sử phù hợp',
-          emptyDescription:
-              'Hãy thử tìm kiếm với từ khóa khác hoặc đổi bộ lọc trạng thái.',
-          columns: const [
-            AppTableColumn(label: 'Tên chiến dịch', size: ColumnSize.M),
-            AppTableColumn(label: 'SĐT Nhận', size: ColumnSize.S),
-            AppTableColumn(label: 'Nội dung tin nhắn', size: ColumnSize.L),
-            AppTableColumn(label: 'Trạng thái', size: ColumnSize.S),
-            AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
-          ],
-          rows: filteredRecords.map((record) {
-            return DataRow(
-              cells: [
-                DataCell(
-                  Text(record.campaignName, style: AppTextStyles.bodyMedium),
-                ),
-                DataCell(Text(record.phone, style: AppTextStyles.body)),
-                DataCell(
-                  Tooltip(
-                    message: record.message,
-                    child: Text(
-                      record.message,
-                      style: AppTextStyles.body,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                DataCell(_buildStatusBadge(record.status)),
-                DataCell(
-                  Text(
-                    DateFormat('dd/MM HH:mm').format(record.sentAt),
-                    style: AppTextStyles.caption,
-                  ),
-                ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: AppTable(
+              isEmpty: filteredRecords.isEmpty,
+              emptyTitle: 'Không tìm thấy lịch sử phù hợp',
+              emptyDescription:
+                  'Hãy thử tìm kiếm với từ khóa khác hoặc đổi bộ lọc trạng thái.',
+              columns: const [
+                AppTableColumn(label: 'Tên chiến dịch', size: ColumnSize.M),
+                AppTableColumn(label: 'Tên khách hàng/Nhóm', size: ColumnSize.S),
+                AppTableColumn(label: 'Nội dung tin nhắn', size: ColumnSize.L),
+                AppTableColumn(label: 'Trạng thái', size: ColumnSize.S, textAlign: TextAlign.center),
+                AppTableColumn(label: 'Thời gian', size: ColumnSize.S),
               ],
-            );
-          }).toList(),
-        ),
+              rows: paginatedRecords.map((record) {
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Text(record.campaignName, style: AppTextStyles.bodyMedium),
+                    ),
+                    DataCell(Text(record.targetName, style: AppTextStyles.body)),
+                    DataCell(
+                      Tooltip(
+                        message: record.message,
+                        child: Text(
+                          record.message,
+                          style: AppTextStyles.body,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(Center(child: _buildStatusBadge(record.status))),
+                    DataCell(
+                      Text(
+                        DateFormat('dd/MM HH:mm').format(record.sentAt),
+                        style: AppTextStyles.caption,
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+          if (totalPages > 1)
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _currentPage > 0
+                        ? () => setState(() => _currentPage--)
+                        : null,
+                  ),
+                  Text(
+                    'Trang ${_currentPage + 1} / $totalPages',
+                    style: AppTextStyles.bodyMedium,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: _currentPage < totalPages - 1
+                        ? () => setState(() => _currentPage++)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

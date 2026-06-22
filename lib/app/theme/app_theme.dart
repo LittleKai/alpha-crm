@@ -34,19 +34,19 @@ class AppTheme {
         fillColor: const Color(0xFFFFFFFF),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.m,
-          vertical: AppSpacing.sm,
+          vertical: AppSpacing.sm, // Standardized padding
         ),
         border: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
+          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
+          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
@@ -99,18 +99,18 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF162033),
+        fillColor: const Color(0xFF0F172A), // Matches our recent standard
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.m,
           vertical: AppSpacing.sm,
         ),
         border: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
+          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
+          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,

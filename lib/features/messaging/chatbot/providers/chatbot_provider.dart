@@ -12,11 +12,11 @@ final chatbotLocalBridgeApiProvider = Provider<ChatbotLocalBridgeApi>((ref) {
 });
 
 const chatbotAiModels = [
-  'gemini-3-flash-preview',
+  'gemini-3-flash',
   'gemini-2.5-pro',
   'gemini-3.1-pro-preview',
 ];
-const chatbotDefaultAiModel = 'gemini-3-flash-preview';
+const chatbotDefaultAiModel = 'gemini-3-flash';
 const chatbotDefaultSystemPrompt =
     'Bạn là một người hỗ trợ tư vấn khách hàng Zalo. Hãy phản hồi tự nhiên, ngắn gọn và đời thường như một người thật, tránh viết quá dài (dưới 40 từ). Đặc biệt: CHỈ gửi lời chào (như Chào bạn, Dạ chào anh/chị) ở câu đầu tiên của cuộc hội thoại, từ các câu tiếp theo tuyệt đối không lặp lại câu chào hỏi nữa mà trả lời thẳng vào vấn đề.';
 const chatbotDefaultSoul =
@@ -49,8 +49,8 @@ const chatbotAiProviderConfigs = <ChatbotAiProviderConfig>[
   ChatbotAiProviderConfig(
     id: 'alpha_studio',
     label: 'Alpha Studio',
-    presetModels: ['gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-3.1-pro-preview'],
-    defaultModel: 'gemini-3-flash-preview',
+    presetModels: ['gemini-3-flash'],
+    defaultModel: 'gemini-3-flash',
     requiresApiKey: false,
   ),
   ChatbotAiProviderConfig(
@@ -66,13 +66,6 @@ const chatbotAiProviderConfigs = <ChatbotAiProviderConfig>[
     keyHint: 'sk-...',
     presetModels: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'o4-mini', 'o3'],
     defaultModel: 'gpt-4o-mini',
-  ),
-  ChatbotAiProviderConfig(
-    id: 'anthropic',
-    label: 'Anthropic (Claude)',
-    keyHint: 'sk-ant-...',
-    presetModels: ['claude-sonnet-4-5-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
-    defaultModel: 'claude-sonnet-4-5-20250514',
   ),
   ChatbotAiProviderConfig(
     id: 'deepseek',

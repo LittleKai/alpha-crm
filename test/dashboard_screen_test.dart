@@ -31,11 +31,11 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('dashboard_source_section')),
+        find.byKey(const ValueKey('dashboard_status_donut')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('dashboard_campaign_status_section')),
+        find.byKey(const ValueKey('dashboard_recent_performance_bar')),
         findsOneWidget,
       );
       expect(

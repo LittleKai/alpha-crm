@@ -1,6 +1,51 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-20 +07:00
+**Last Updated:** 2026-06-21 +07:00
+
+---
+
+## App Windows treo hoàn toàn (render được màn chính nhưng không click/scroll/focus, CPU ~1.3 lõi)
+
+**Triệu chứng:** App mở lên, vẽ được màn hình chính nhưng đơ tuyệt đối — không
+focus/scroll/click. Clean/pub get/cài lại Flutter/xóa build/revert git **đều vô tác
+dụng**; dự án Flutter khác chạy bình thường; cả bản Release cũng treo. App vẫn
+`Responding=True` nhưng đốt ~1.3 lõi CPU liên tục.
+
+**Nguyên nhân THẬT (xác nhận bằng VM Service + `debugPrintRebuildDirtyWidgets`):**
+`WarningIconButton` (nút "Trung tâm Tuân thủ & An toàn" — có ở header MỌI màn rủi ro
+cao) chạy `AnimationController.repeat(reverse: true)` **vô hạn** cho hiệu ứng hào quang
+nhấp nháy. Animation này ép engine dựng frame ở 60fps **mãi mãi**. Màn chính có các
+glass-card **`BackdropFilter` (blur)** — loại layer **không thể cache** → mỗi frame
+phải rasterize lại trên **luồng raster của engine** (không phải Dart isolate). Trên
+máy này chi phí blur/frame vượt ngân sách → frame dồn ứ → luồng platform (xử lý input
+Win32 + present) nghẽn → cửa sổ render nhưng chết input.
+
+**Bằng chứng quyết định:**
+- VM `getCpuSamples` trên main isolate ≈ **0 mẫu** dù CPU 1.3 lõi → chi phí nằm ở luồng
+  raster (C++/Skia), không phải Dart.
+- Tắt `repeat()` → CPU **0.02s/6s (idle)**, hết treo. Bật lại → 1.3 lõi.
+- `RepaintBoundary` quanh nút **KHÔNG cứu được** vì `BackdropFilter` re-raster mỗi frame
+  bất kể ai vẽ; vấn đề là "có frame được dựng liên tục", không phải vùng vẽ của nút.
+
+**Khắc phục:** Bỏ animation lặp vô hạn — `WarningIconButton` thành `StatelessWidget`
+với hào quang **TĨNH** (BoxShadow blur cố định). Không còn frame 60fps liên tục →
+BackdropFilter chỉ vẽ khi có tương tác thật → idle khi rảnh.
+
+**Bài học:**
+1. "Render được nhưng chết input" trên Flutter desktop = luồng UI/raster bị bão hoà,
+   KHÔNG phải lỗi layout.
+2. CPU cao + `getCpuSamples` main isolate ~0 ⇒ thủ phạm ở **luồng raster** (paint/composite).
+3. TUYỆT ĐỐI tránh `AnimationController.repeat()` vô hạn (glow/shimmer/pulse trang trí)
+   khi sau/ quanh nó có `BackdropFilter`/glass-card — nó biến hiệu ứng trang trí thành
+   re-blur toàn màn 60fps. Nếu cần animation, phải bỏ BackdropFilter ở vùng đó hoặc dùng
+   hiệu ứng không cần re-raster nền.
+
+**Phụ (hardening, KHÔNG phải nguyên nhân treo này):** `ZaloBackendManager._killProcess`
+trước đây gọi `Process.runSync('taskkill'...)` ĐỒNG BỘ trên isolate UI (chính tác giả
+đã ghi chú gây treo ở `prepareForShutdown`). Đã đổi sang `Process.run` bất đồng bộ
+(timeout 5s) để vòng restart của watchdog không bao giờ block UI. Mọi spawn/kill backend
+phải BẤT ĐỒNG BỘ — không `*Sync`/blocking trên main isolate. Cũng đừng để backend dev
+`node --watch` sót giữa các phiên (gây tranh cổng 8787 + storm reconnect riêng).
 
 ---
 

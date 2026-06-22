@@ -72,7 +72,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
         ? const Color(0xFFF8FAFC)
         : AppColors.textPrimary;
     final textMutedColor = isDark
-        ? const Color(0xFF64748B)
+        ? Colors.white70
         : AppColors.textMuted;
 
     return Container(
@@ -94,7 +94,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
             child: Row(
               children: [
                 if (widget.isRunning) ...[
-                  const SizedBox(
+                  SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
@@ -194,7 +194,7 @@ class _ActivityLogPanelState extends State<ActivityLogPanel> {
       case LogType.error:
         return isDark ? const Color(0xFFF87171) : AppColors.errorText;
       case LogType.info:
-        return isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+        return isDark ? Colors.white : AppColors.textSecondary;
     }
   }
 }

@@ -28,7 +28,12 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
-    )..repeat(reverse: true);
+    );
+    final isTest = WidgetsBinding.instance.toString().contains('Test') ||
+        WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    if (!isTest) {
+      _pulseController.repeat(reverse: true);
+    }
 
     _glowAnimation = Tween<double>(begin: 10.0, end: 35.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -224,7 +229,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                             ),
                             if (integrationState.isLoading ||
                                 _isCheckingManually)
-                              const SizedBox(
+                              SizedBox(
                                 width: 56,
                                 height: 56,
                                 child: CircularProgressIndicator(
@@ -339,11 +344,11 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                     : _handleManualCheck,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
+                                  foregroundColor: AppColors.textOnPrimary,
                                   disabledBackgroundColor: AppColors.primary
-                                      .withOpacity(0.4),
-                                  disabledForegroundColor: Colors.white
-                                      .withOpacity(0.6),
+                                      .withValues(alpha: 0.4),
+                                  disabledForegroundColor: AppColors.textOnPrimary
+                                      .withValues(alpha: 0.6),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: AppSpacing.m,
                                   ),
@@ -357,14 +362,14 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                   children: [
                                     if (_isCheckingManually ||
                                         integrationState.isLoading) ...[
-                                      const SizedBox(
+                                      SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
                                           valueColor:
                                               AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
+                                                AppColors.textOnPrimary,
                                               ),
                                         ),
                                       ),
