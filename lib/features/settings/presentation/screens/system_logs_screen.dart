@@ -6,6 +6,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../shared/widgets/app_dialog.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/utils/zalo_backend_manager.dart';
 
 class SystemLogsScreen extends StatefulWidget {
   const SystemLogsScreen({super.key});
@@ -32,7 +33,9 @@ class _SystemLogsScreenState extends State<SystemLogsScreen> {
     });
 
     try {
-      final response = await http.get(Uri.parse('http://127.0.0.1:8787/api/logs/client'));
+      final port = ZaloBackendManager.activePort ?? 28080;
+      final response = await http
+          .get(Uri.parse('http://127.0.0.1:$port/api/logs/client'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {

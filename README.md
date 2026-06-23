@@ -8,8 +8,6 @@ Alpha CRM is a cross-platform CRM user interface (CRM UI) application developed 
 
 The system strictly adheres to the standard **Design System** (defined in [docs/01-design-system.md](docs/01-design-system.md)), featuring modern color palettes, consistent spacing, elegant Inter typography, and smooth responsive layouts across Mobile, Tablet, and Desktop platforms.
 
-Sample UI design screenshots are stored in the [img/](img/) directory to reference the visual accuracy and similarity of the actual UI.
-
 ![Alpha CRM Dashboard](img/crm_dashboard.png)
 
 ---
@@ -85,66 +83,6 @@ lib/
 └── mock/                       # Mock data for UI flows (Contacts, Campaigns, Groups,...)
 ```
 
----
-
-## 🚀 Development Setup
-
-### System Prerequisites
-*   **Flutter SDK** installed and compatible with Dart SDK `^3.10.7`.
-*   Build tools configured for target platforms (Chrome for Web, Android Studio for Android, Visual Studio C++ for Windows).
-
-### Installation & Run
-
-1.  **Get dependencies:**
-    ```bash
-    flutter pub get
-    ```
-
-2.  **Run static analysis:**
-    ```bash
-    flutter analyze
-    ```
-
-3.  **Run tests (Unit/Widget Tests):**
-    ```bash
-    flutter test
-    ```
-
-4.  **Run locally:**
-    *   *Web (Chrome):*
-        ```bash
-        flutter run -d chrome
-        ```
-    *   *Windows Desktop:*
-        ```bash
-        flutter run -d windows
-        ```
-
-### Building Production Packages
-
-*   **Web:**
-    ```bash
-    flutter build web
-    ```
-*   **Android (APK):**
-    ```bash
-    flutter build apk
-    ```
-*   **Windows Desktop:**
-    ```bash
-    flutter build windows
-    ```
-
----
-
-## 📄 Documentation Reference
-
-Structured documents are stored in the `docs/` directory:
-*   **[docs/guides/](docs/guides/)**: Installation and operation manuals for CRM and Zalo integration.
-*   **[docs/compliance/](docs/compliance/)**: Safety policies and risk control checklists to prevent Zalo account blocks.
-*   **[docs/specs/](docs/specs/)**: Feature integration specs, implementation plans, and data flow gap analyses.
-*   **[docs/api-catalog/](docs/api-catalog/)**: API catalog and references for the core Zalo library (`zca-js`).
-*   **[docs/releases/](docs/releases/)**: Release checklist for production builds.
 
 ---
 

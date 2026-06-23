@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/zalo_backend_manager.dart';
+import '../utils/app_logger.dart';
+import '../../features/zalo_integration/providers/zalo_integration_provider.dart';
 
 /// Splash toàn màn che app trong lúc backend Zalo cục bộ khởi động LẦN ĐẦU.
 ///
@@ -8,40 +12,49 @@ import '../utils/zalo_backend_manager.dart';
 ///   chỉ dùng dải [BackendStatusBanner] mỏng, KHÔNG che lại toàn app.
 /// - Nếu khởi động thất bại (circuit breaker mở) ở lần đầu → splash hiện lỗi kèm
 ///   nút "Thử lại" (`retryManually`).
-class BackendSplashOverlay extends StatefulWidget {
+class BackendSplashOverlay extends ConsumerStatefulWidget {
   final Widget child;
 
   const BackendSplashOverlay({super.key, required this.child});
 
   @override
-  State<BackendSplashOverlay> createState() => _BackendSplashOverlayState();
+  ConsumerState<BackendSplashOverlay> createState() =>
+      _BackendSplashOverlayState();
 }
 
-class _BackendSplashOverlayState extends State<BackendSplashOverlay> {
-  /// Một khi backend đã khỏe lần đầu thì không bao giờ che splash nữa.
-  bool _everHealthy = false;
+class _BackendSplashOverlayState extends ConsumerState<BackendSplashOverlay> {
+  /// Latch: một khi app đã thực sự sẵn sàng (backend khỏe + nạp xong tài khoản
+  /// lần đầu) thì splash biến mất VĨNH VIỄN. Các gián đoạn sau đó do
+  /// BackendStatusBanner đảm nhiệm, KHÔNG che lại toàn màn hình.
+  bool _everReady = false;
 
   @override
   Widget build(BuildContext context) {
+    // Lắng nghe pha nạp tài khoản Zalo lần đầu để splash che TRỌN quá trình khởi
+    // động (tiến trình backend + nạp tài khoản) — không để lọt sang giao diện
+    // chính khi chưa sẵn sàng.
+    final isInitializing = ref.watch(
+      zaloIntegrationProvider.select((s) => s.isInitializing),
+    );
+
     return ValueListenableBuilder<BackendStatus>(
       valueListenable: ZaloBackendManager.status,
-      builder: (context, status, child) {
-        if (status == BackendStatus.healthy ||
-            status == BackendStatus.stopped) {
-          _everHealthy = true;
+      builder: (context, status, _) {
+        if (status == BackendStatus.healthy && !isInitializing) {
+          _everReady = true;
         }
-
-        final showSplash = !_everHealthy &&
-            (status == BackendStatus.starting ||
-                status == BackendStatus.restarting ||
-                status == BackendStatus.degraded ||
-                status == BackendStatus.failed);
-
+        final showSplash = !_everReady;
         return Stack(
           children: [
             widget.child,
             if (showSplash)
-              Positioned.fill(child: _SplashContent(status: status)),
+              Positioned.fill(
+                child: _SplashContent(
+                  status: status,
+                  initializingAccounts:
+                      status == BackendStatus.healthy && isInitializing,
+                ),
+              ),
           ],
         );
       },
@@ -52,7 +65,13 @@ class _BackendSplashOverlayState extends State<BackendSplashOverlay> {
 class _SplashContent extends StatefulWidget {
   final BackendStatus status;
 
-  const _SplashContent({required this.status});
+  /// Backend đã khỏe nhưng đang nạp danh sách tài khoản Zalo lần đầu.
+  final bool initializingAccounts;
+
+  const _SplashContent({
+    required this.status,
+    this.initializingAccounts = false,
+  });
 
   @override
   State<_SplashContent> createState() => _SplashContentState();
@@ -63,6 +82,9 @@ class _SplashContentState extends State<_SplashContent>
   late final AnimationController _pulse;
   late final Animation<double> _glow;
   late final Animation<double> _scale;
+
+  /// Hiện trạng thái "Đã sao chép" trong 2s sau khi bấm nút copy.
+  bool _copied = false;
 
   @override
   void initState() {
@@ -164,7 +186,7 @@ class _SplashContentState extends State<_SplashContent>
               ),
               const SizedBox(height: 10),
               Text(
-                _messageFor(widget.status),
+                _messageFor(widget.status, widget.initializingAccounts),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13.5,
@@ -173,28 +195,88 @@ class _SplashContentState extends State<_SplashContent>
                 ),
               ),
               const SizedBox(height: 28),
-              if (isFailed)
-                ElevatedButton.icon(
-                  onPressed: () => ZaloBackendManager.retryManually(),
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
+              if (isFailed) ...[
+                // Bảng debug có thể chọn & copy để gửi nhà phát triển.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Container(
+                      width: double.infinity,
+                      height: 180,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          _debugText(),
+                          style: GoogleFonts.robotoMono(
+                            fontSize: 11,
+                            height: 1.4,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
+                        ),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _copyDebug,
+                      icon: Icon(
+                        _copied ? Icons.check_rounded : Icons.copy_rounded,
+                        size: 18,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      label: Text(
+                        _copied ? 'Đã sao chép' : 'Sao chép log',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  label: Text(
-                    'Thử lại',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-                  ),
-                )
-              else
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => ZaloBackendManager.retryManually(),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6366F1),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      label: Text(
+                        'Thử lại',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else
                 const SizedBox(
                   width: 26,
                   height: 26,
@@ -211,7 +293,33 @@ class _SplashContentState extends State<_SplashContent>
     );
   }
 
-  String _messageFor(BackendStatus status) {
+  /// Gom thông tin chẩn đoán khởi động backend để hiển thị & copy.
+  String _debugText() {
+    final buffer = StringBuffer()
+      ..writeln('=== Alpha CRM — Chẩn đoán khởi động backend ===')
+      ..writeln('Thời điểm: ${DateTime.now().toIso8601String()}')
+      ..writeln('Trạng thái: ${ZaloBackendManager.status.value.name}')
+      ..writeln('Cổng (active): ${ZaloBackendManager.activePort ?? "—"}')
+      ..writeln('Lỗi gần nhất: ${ZaloBackendManager.lastStartupError ?? "—"}')
+      ..writeln('File log: ${AppLogger().logFilePath ?? "—"}')
+      ..writeln('--- Log gần đây ---')
+      ..writeln(AppLogger().recentLogsText);
+    return buffer.toString();
+  }
+
+  Future<void> _copyDebug() async {
+    await Clipboard.setData(ClipboardData(text: _debugText()));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  String _messageFor(BackendStatus status, bool initializingAccounts) {
+    if (initializingAccounts) {
+      return 'Đang nạp các tài khoản Zalo đã đăng nhập...';
+    }
     switch (status) {
       case BackendStatus.restarting:
         return 'Dịch vụ vừa dừng — đang tự khởi động lại...';

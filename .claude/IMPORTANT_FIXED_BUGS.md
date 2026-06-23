@@ -100,6 +100,7 @@ trước đây gọi `Process.runSync('taskkill'...)` ĐỒNG BỘ trên isolate
 phải BẤT ĐỒNG BỘ — không `*Sync`/blocking trên main isolate. Cũng đừng để backend dev
 `node --watch` sót giữa các phiên (gây tranh cổng 8787 + storm reconnect riêng).
 
+
 ---
 
 ## Toggle Bot trong Live Chat tự tắt (sai đường route lên cloud)
@@ -150,14 +151,6 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
-### 2026-06-23 - Per-Account `blockTyping` Setting Was Never Enforced
-
-- Symptom: Bật "block typing" cho một tài khoản Zalo nhưng hệ thống vẫn gửi sự kiện "đang soạn tin" (typing) tới Zalo từ Live Chat và chatbot.
-- Root cause: `account-settings.json` lưu cả `blockSeen` và `blockTyping`. `blockSeen` được kiểm tra trước khi gửi seen (`local-chat-api.ts`), nhưng `blockTyping` không được kiểm tra ở bất kỳ đâu — `handleLocalTyping` gọi thẳng `sendTyping`.
-- Fix summary: Chặn ngay tại chokepoint `PersonalZcaChannel.sendTyping` (`if (readAccountSettings()[accountId]?.blockTyping === true) return false;`) để áp dụng cho mọi đường gọi (Live Chat + chatbot), thay vì chỉ vá riêng endpoint typing.
-- Rule: Khi thêm một cờ cấu hình hành vi gửi tới Zalo (kiểu `blockSeen`/`blockTyping`), phải nối dây cờ đó ở chokepoint của hành động tương ứng, không để cờ "định nghĩa nhưng không thực thi".
-- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`.
-
 ### 2026-06-22 - Dialog "Đóng" button popped the GoRouter page (whole-app crash) via captured outer context
 
 - Symptom: Opening the group AI-summary history dialog ("Lịch sử tóm tắt") then tapping "Đóng" crashed the app: `currentConfiguration.isNotEmpty: You have popped the last page off of the stack` followed by `!_debugLocked` during Navigator dispose.
@@ -173,6 +166,7 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Fix summary: disable the single-instance mutex in `_DEBUG` builds so `flutter run` always launches its own debuggable process. Release builds still enforce single-instance, but now probe the existing window with `SendMessageTimeoutW(WM_NULL, SMTO_ABORTIFHUNG)` before treating it as reusable.
 - Rule: do not apply production single-instance focus-forward logic to Flutter Debug runs. If single-instance is used in Release, never assume an existing HWND is usable without a hang-safe responsiveness probe.
 - Related files: `tools/alpha-crm/windows/runner/main.cpp`.
+
 
 ### 2026-06-19 - Microsecond clientMessageId pinned Date.now() and evicted the live `zpw_sek` cookie
 
@@ -227,6 +221,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Rule: Mỗi instance Zalo cá nhân chỉ được có **một** listener websocket sống tại một thời điểm — luôn stop instance cũ trước khi tạo phiên mới cho cùng `uId`. Trạng thái kết nối hiển thị cho UI phải dựa trên account còn sống (`status !== 'disconnected_expired'`), không phải số lượng account trong pool. Không nuốt các mã `closed` khác 3000/3003: tối thiểu hạ `listenerRunning` để health monitor phục hồi và badge phản ánh đúng.
 - Đa tài khoản: `ListenerHealthMonitor` cũ xét ở mức pool (`connected && !some(listenerRunning)`), nên account thứ 2 rớt khi account thứ nhất vẫn chạy sẽ KHÔNG tự reconnect. Đã sửa: thêm `needsListenerRecovery` (account-aware) vào `ZaloChannelStatus`, `getStatus()` tính `some(acc.status !== 'disconnected_expired' && !acc.listenerRunning)`, và `shouldRecoverZaloListener` ưu tiên cờ này (fallback logic cũ cho mock/official). `addAccountInstance` chỉ dọn instance trùng `uId` nên đăng nhập 2 tài khoản khác nhau không đụng nhau. Recovery (`startListener()`) restart mọi instance dừng, instance đang chạy được guard nên không nhân đôi.
 - Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `.../src/channels/types.ts`, `.../src/local-session/listener-health.ts`, `.../src/server.ts` (luồng QR login gọi `addAccountInstance`), `tools/alpha-crm/lib/app/shell/app_topbar.dart` (badge cảnh báo per-account), `tools/alpha-crm/lib/features/zalo_integration/providers/zalo_integration_provider.dart`.
+
+### 2026-06-23 - Release `flutter build windows` chết vì CMakeCache cũ lệch generator platform
+
+- Symptom: `node scripts/release-to-b2.js --windows --local` chạy `flutter build windows --release` báo `CMake Error: Error: generator platform: x64 Does not match the platform used previously:` (vế "used previously" RỖNG) → `Unable to generate build files` → abort release. Lỗi xảy ra DÙ đã `flutter clean` trước đó.
+- Root cause: `build/windows/x64/CMakeCache.txt` còn sót (hoặc bị một lần build hỏng tái tạo dở) với `CMAKE_GENERATOR_PLATFORM` rỗng/lệch. `flutter clean` không phải lúc nào cũng xóa được `build/windows` (file bị khóa bởi một tiến trình app/smoke-test đang chạy, hoặc bị một lần build lỗi tạo lại cache dở).
+- Fix summary: Xóa cứng thư mục `tools/alpha-crm/build/windows` (`Remove-Item -Recurse -Force`) rồi chạy lại script release. Build sạch tái sinh CMakeCache đúng x64 và đi qua tới bước stage backend + zip.
+- Rule: Khi release Windows báo lỗi CMake "generator platform … does not match", ĐỪNG chỉ `flutter clean` — xóa hẳn `build/windows` (đảm bảo không còn `alpha_crm.exe`/node smoke-test nào đang giữ file) rồi build lại. Đây là tiền điều kiện trước mọi lần `release-to-b2.js --windows`.
+- Related files: `alpha-studio-backend/scripts/release-to-b2.js`, `tools/alpha-crm/build/windows/` (build artifact, gitignored).
 
 ### 2026-06-16 - esbuild CJS bundle làm `import.meta.url` rỗng → vỡ `projectRoot`/active-port
 

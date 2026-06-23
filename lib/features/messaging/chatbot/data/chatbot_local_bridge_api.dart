@@ -55,7 +55,7 @@ class ChatbotLocalBridgeApi {
   final http.Client _client;
 
   ChatbotLocalBridgeApi({
-    String baseUrl = 'http://127.0.0.1:8787',
+    String baseUrl = 'http://127.0.0.1:28080',
     http.Client? client,
   }) : _baseUri = Uri.parse(baseUrl),
        _client = client ?? http.Client();

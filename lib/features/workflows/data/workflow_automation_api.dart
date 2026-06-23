@@ -14,7 +14,7 @@ class WorkflowAutomationApi {
 
   static String normalizeUrl(String url) {
     var cleaned = url.trim();
-    if (cleaned.isEmpty) return 'http://127.0.0.1:8787';
+    if (cleaned.isEmpty) return 'http://127.0.0.1:28080';
     if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
       cleaned = 'http://$cleaned';
     }

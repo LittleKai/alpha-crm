@@ -15,7 +15,7 @@ import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../settings/providers/settings_provider.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
-import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/app_dropdown_field.dart';
 import '../../../../../shared/widgets/app_table.dart';
 import '../../../../../shared/widgets/app_tabs.dart';
 import '../../providers/chatbot_provider.dart';
@@ -1501,246 +1501,128 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     children: [
                       Expanded(
                         flex: 5,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Nhà cung cấp AI', style: AppTextStyles.label),
-                            const SizedBox(height: AppSpacing.xs),
-                            AppSelectField<String>(
-                              value: selectedProvider,
-                              items: chatbotAiProviderConfigs.map((p) {
-                                return DropdownMenuItem(
-                                  value: p.id,
-                                  child: Text(
-                                    p.label,
-                                    style: AppTextStyles.body,
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                final newConfig = findProviderConfig(value);
-                                if (newConfig == null) return;
-                                setDialogState(() {
-                                  selectedProvider = value;
-                                  providerConfig = newConfig;
-                                  modelTextController.text =
-                                      newConfig.defaultModel;
-                                });
-                              },
-                            ),
-                          ],
+
+                        child: AppDropdownField<String>(
+                          labelText: 'Nhà cung cấp AI',
+                          value: selectedProvider,
+                          items: chatbotAiProviderConfigs.map((p) {
+                            return AppDropdownItem(
+                              value: p.id,
+                              label: p.label,
+                              subtitle: p.requiresApiKey ? 'Cần API key' : 'Dùng quota Alpha Studio',
+                              icon: p.id == 'alpha_studio'
+                                  ? Icons.cloud_outlined
+                                  : Icons.key_outlined,
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            final newConfig = findProviderConfig(value);
+                            if (newConfig == null) return;
+                            setDialogState(() {
+                              selectedProvider = value;
+                              providerConfig = newConfig;
+                              modelTextController.text = newConfig.defaultModel;
+                            });
+                          },
+
                         ),
                       ),
                       const SizedBox(width: AppSpacing.m),
                       Expanded(
                         flex: 7,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text('Model', style: AppTextStyles.label),
-                                if (selectedProvider != 'alpha_studio') ...[
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Tooltip(
-                                    message:
-                                        'Chọn từ danh sách hoặc nhập model code tùy ý',
-                                    child: Icon(
-                                      Icons.info_outline,
-                                      size: 14,
-                                      color: AppColors.textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            if (selectedProvider == 'alpha_studio')
-                              AppSelectField<String>(
-                                value:
-                                    [
-                                      'gemini-3-flash',
-                                      'gemini-2.5-pro',
-                                    ].contains(modelTextController.text)
+
+                        child: selectedProvider == 'alpha_studio'
+                            // ── Alpha Studio: dropdown-only model (no model code) ──
+                            ? AppDropdownField<String>(
+                                labelText: 'Model',
+                                value: providerConfig.presetModels.contains(modelTextController.text)
                                     ? modelTextController.text
-                                    : 'gemini-3-flash',
-                                itemHeight: 56,
-                                items: [
-                                  DropdownMenuItem(
-                                    value: 'gemini-3-flash',
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'Gemini 3 Flash',
-                                          style: AppTextStyles.body.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Tốc độ phản hồi siêu tốc',
-                                          style: AppTextStyles.caption.copyWith(
-                                            color: AppColors.primary,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'gemini-2.5-pro',
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'Gemini 2.5 Pro',
-                                          style: AppTextStyles.body.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Khả năng suy luận logic phức tạp',
-                                          style: AppTextStyles.caption.copyWith(
-                                            color: AppColors.primary,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                                selectedItemBuilder: (context) {
-                                  return [
-                                    Text(
-                                      'Gemini 3 Flash',
-                                      style: AppTextStyles.body,
-                                    ),
-                                    Text(
-                                      'Gemini 2.5 Pro',
-                                      style: AppTextStyles.body,
-                                    ),
-                                  ];
-                                },
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setDialogState(() {
-                                      modelTextController.text = val;
-                                    });
-                                  }
+                                    : providerConfig.defaultModel,
+                                items: providerConfig.presetModels.map((m) {
+                                  return AppDropdownItem(
+                                    value: m,
+                                    label: m,
+                                    subtitle: m == 'gemini-3-flash'
+                                        ? 'Nhanh, tiết kiệm quota'
+                                        : m == 'gemini-2.5-pro'
+                                            ? 'Thông minh, chính xác hơn'
+                                            : null,
+                                  );
+                                }).toList(),
+                                onChanged: (model) {
+                                  setDialogState(() {
+                                    modelTextController.text = model;
+                                  });
                                 },
                               )
-                            else
-                              SizedBox(
-                                height: 42,
-                                child: TextField(
-                                  controller: modelTextController,
-                                  style: AppTextStyles.body,
-                                  decoration: InputDecoration(
-                                    hintText: providerConfig.defaultModel,
-                                    hintStyle: AppTextStyles.caption.copyWith(
-                                      color: AppColors.textMuted,
-                                    ),
-                                    contentPadding: const EdgeInsets.only(
-                                      left: 12,
-                                      right: 0,
-                                      top: 0,
-                                      bottom: 0,
-                                    ),
-                                    filled: true,
-                                    fillColor:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? const Color(0xFF0F172A)
-                                        : Colors.white,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: AppColors.borderSoft,
+                            // ── Other providers: AppDropdownField + optional custom text input ──
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text('Model', style: AppTextStyles.label),
+                                      const SizedBox(width: AppSpacing.xs),
+                                      Tooltip(
+                                        message: 'Chọn từ danh sách hoặc nhập model code tùy ý',
+                                        child: Icon(Icons.info_outline, size: 14, color: AppColors.textMuted),
                                       ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: AppColors.borderSoft,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: AppColors.primary,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    suffixIcon: PopupMenuButton<String>(
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        size: 20,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      tooltip: 'Chọn preset model',
-                                      offset: const Offset(0, 46),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      color:
-                                          Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const Color(0xFF1E293B)
-                                          : Colors.white,
-                                      elevation: 4,
-                                      onSelected: (model) {
-                                        setDialogState(() {
-                                          modelTextController.text = model;
-                                        });
-                                      },
-                                      itemBuilder: (_) {
-                                        final menuItems =
-                                            <PopupMenuEntry<String>>[];
-                                        for (
-                                          int i = 0;
-                                          i <
-                                              providerConfig
-                                                  .presetModels
-                                                  .length;
-                                          i++
-                                        ) {
-                                          final m =
-                                              providerConfig.presetModels[i];
-                                          menuItems.add(
-                                            PopupMenuItem(
-                                              value: m,
-                                              height: 42,
-                                              child: Text(
-                                                m,
-                                                style: AppTextStyles.body,
-                                              ),
-                                            ),
-                                          );
-                                          if (i <
-                                              providerConfig
-                                                      .presetModels
-                                                      .length -
-                                                  1) {
-                                            menuItems.add(
-                                              const PopupMenuDivider(height: 1),
-                                            );
-                                          }
-                                        }
-                                        return menuItems;
-                                      },
-                                    ),
+                                    ],
                                   ),
-                                ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: AppDropdownField<String>(
+                                          value: providerConfig.presetModels.contains(modelTextController.text)
+                                              ? modelTextController.text
+                                              : 'custom',
+                                          items: [
+                                            ...providerConfig.presetModels.map((m) => AppDropdownItem(
+                                                  value: m,
+                                                  label: m,
+                                                )),
+                                            const AppDropdownItem(
+                                              value: 'custom',
+                                              label: 'Nhập model khác...',
+                                              icon: Icons.edit_outlined,
+                                            ),
+                                          ],
+                                          onChanged: (model) {
+                                            setDialogState(() {
+                                              if (model != 'custom') {
+                                                modelTextController.text = model;
+                                              } else {
+                                                if (providerConfig.presetModels.contains(modelTextController.text)) {
+                                                  modelTextController.text = '';
+                                                }
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (!providerConfig.presetModels.contains(modelTextController.text)) ...[
+                                    const SizedBox(height: AppSpacing.s),
+                                    TextField(
+                                      controller: modelTextController,
+                                      style: AppTextStyles.body.copyWith(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: 'Nhập model code (VD: ${providerConfig.defaultModel})',
+                                        hintStyle: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      onChanged: (_) {
+                                        setDialogState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ],
                               ),
-                          ],
-                        ),
+
                       ),
                     ],
                   ),
@@ -3075,24 +2957,22 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       const SizedBox(width: AppSpacing.l),
                       SizedBox(
                         width: 160,
-                        child: AppSelectField<String>(
+                        child: AppDropdownField<String>(
                           value: _logsFilterCategory,
                           items:
                               ['Tất cả', 'AI', 'Từ khóa', 'Chuyển NV', 'Khác']
                                   .map(
-                                    (e) => DropdownMenuItem(
+                                    (e) => AppDropdownItem(
                                       value: e,
-                                      child: Text(e),
+                                      label: e,
                                     ),
                                   )
                                   .toList(),
                           onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _logsFilterCategory = val;
-                                _logsCurrentPage = 0;
-                              });
-                            }
+                            setState(() {
+                              _logsFilterCategory = val;
+                              _logsCurrentPage = 0;
+                            });
                           },
                         ),
                       ),

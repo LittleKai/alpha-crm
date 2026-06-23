@@ -29,6 +29,17 @@ class AppLogger {
   File? _logFile;
   bool _isInitialized = false;
 
+  /// Vòng đệm log gần nhất trong bộ nhớ (mới ở cuối) để splash/UI hiển thị và
+  /// cho người dùng copy gửi nhà phát triển — hoạt động cả khi file log chưa tạo.
+  static const int _ringCapacity = 300;
+  final List<String> _ring = <String>[];
+
+  /// Các dòng log gần nhất, một dòng mỗi mục (mới ở cuối).
+  String get recentLogsText => _ring.join('\n');
+
+  /// Đường dẫn file log hiện hành (null nếu chưa tạo được).
+  String? get logFilePath => _logFile?.path;
+
   /// Hàng đợi ghi file (nối tiếp) để các dòng KHÔNG bị xen kẽ/cắt vụn.
   Future<void> _writeQueue = Future<void>.value();
 
@@ -120,14 +131,22 @@ class AppLogger {
   /// Ghi 1 dòng sạch `HH:mm:ss.mmm [LEVEL] message [| error]` vào file, nối tiếp
   /// qua hàng đợi để không bị xen kẽ giữa các lần ghi bất đồng bộ.
   void _appendCleanLine(String level, String message, dynamic error) {
-    final file = _logFile;
-    if (file == null) return;
     final ts = DateTime.now().toIso8601String();
     final errPart = error != null ? '  |  $error' : '';
-    final line = '$ts [$level] $message$errPart\n';
+    final line = '$ts [$level] $message$errPart';
+
+    // Lưu vào vòng đệm trong bộ nhớ TRƯỚC (kể cả khi file log chưa sẵn sàng) để
+    // splash chẩn đoán lỗi luôn có dữ liệu.
+    _ring.add(line);
+    if (_ring.length > _ringCapacity) {
+      _ring.removeRange(0, _ring.length - _ringCapacity);
+    }
+
+    final file = _logFile;
+    if (file == null) return;
     _writeQueue = _writeQueue.then((_) async {
       try {
-        await file.writeAsString(line, mode: FileMode.append);
+        await file.writeAsString('$line\n', mode: FileMode.append);
       } catch (e) {
         debugPrint('Failed to write to log file: $e');
       }

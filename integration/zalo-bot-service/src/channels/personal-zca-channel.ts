@@ -1956,8 +1956,26 @@ export class PersonalZcaChannel implements ZaloChannel {
               instanceGroups = [];
             } else {
               console.log(`[PersonalZcaChannel - ${instance.label}] Fetching details for ${groupIds.length} groups from API...`);
-              const infoData = await instance.api.getGroupInfo(groupIds);
-              const gridInfoMap = infoData.gridInfoMap || {};
+              // zca-js getGroupInfo can error/return empty when too many IDs are
+              // requested at once, which silently breaks group sync for accounts
+              // with many groups. Fetch in chunks and merge so a single bad chunk
+              // doesn't lose the whole account.
+              // ponytail: chunk size 50, raise if the API tolerates more.
+              const gridInfoMap: Record<string, any> = {};
+              const chunkSize = 50;
+              for (let i = 0; i < groupIds.length; i += chunkSize) {
+                const chunk = groupIds.slice(i, i + chunkSize);
+                try {
+                  const infoData = await instance.api.getGroupInfo(chunk);
+                  Object.assign(gridInfoMap, infoData.gridInfoMap || {});
+                } catch (chunkErr) {
+                  console.error(`[PersonalZcaChannel - ${instance.label}] getGroupInfo failed for chunk ${i}-${i + chunk.length} (${chunk.length} ids):`, chunkErr);
+                }
+              }
+              const resolvedCount = Object.keys(gridInfoMap).length;
+              if (resolvedCount < groupIds.length) {
+                console.warn(`[PersonalZcaChannel - ${instance.label}] Resolved info for only ${resolvedCount}/${groupIds.length} groups.`);
+              }
               const myUid = instance.uId;
 
               instanceGroups = groupIds.map((id) => {

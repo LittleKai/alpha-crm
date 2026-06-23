@@ -16,7 +16,6 @@ final chatbotLocalBridgeApiProvider = Provider<ChatbotLocalBridgeApi>((ref) {
 const chatbotAiModels = [
   'gemini-3-flash',
   'gemini-2.5-pro',
-  'gemini-3.1-pro-preview',
 ];
 const chatbotDefaultAiModel = 'gemini-3-flash';
 const chatbotDefaultSystemPrompt =
@@ -51,7 +50,7 @@ const chatbotAiProviderConfigs = <ChatbotAiProviderConfig>[
   ChatbotAiProviderConfig(
     id: 'alpha_studio',
     label: 'Alpha Studio',
-    presetModels: ['gemini-3-flash'],
+    presetModels: ['gemini-3-flash', 'gemini-2.5-pro'],
     defaultModel: 'gemini-3-flash',
     requiresApiKey: false,
   ),

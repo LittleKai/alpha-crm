@@ -5,7 +5,7 @@ import 'live_chat_event.dart';
 class LiveChatLocalBridgeApi {
   final String baseUrl;
 
-  LiveChatLocalBridgeApi({this.baseUrl = 'http://127.0.0.1:8787'});
+  LiveChatLocalBridgeApi({this.baseUrl = 'http://127.0.0.1:28080'});
 
   Future<bool> getLocalHealth() async {
     try {

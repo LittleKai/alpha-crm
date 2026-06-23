@@ -346,13 +346,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.m),
-              _AdvancedCard(
-                enabled: state.settings.autoApproveFriend,
-                isLoading: state.isLoading,
-                onChanged: notifier.updateAutoApproveFriend,
-                onSave: notifier.saveSettings,
-              ),
+
             ],
             if (Platform.isWindows || Platform.isAndroid) ...[
               const SizedBox(height: AppSpacing.m),
@@ -1706,75 +1700,6 @@ class _ChannelModeRow extends StatelessWidget {
               ),
             ],
             onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdvancedCard extends StatelessWidget {
-  final bool enabled;
-  final bool isLoading;
-  final ValueChanged<bool> onChanged;
-  final VoidCallback onSave;
-
-  const _AdvancedCard({
-    required this.enabled,
-    required this.isLoading,
-    required this.onChanged,
-    required this.onSave,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.settings_suggest_outlined,
-                color: Color(0xFF10B981),
-                size: 20,
-              ),
-              const SizedBox(width: AppSpacing.s),
-              Text(
-                'Tính năng tự động nâng cao',
-                style: AppTextStyles.sectionTitle,
-              ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'Các thiết lập tự động hóa bổ sung như tự động đồng ý kết bạn từ người dùng Zalo.',
-                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.m),
-          CheckboxListTile(
-            value: enabled,
-            onChanged: (value) => onChanged(value ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              'Tự động đồng ý kết bạn',
-              style: AppTextStyles.bodyMedium,
-            ),
-            subtitle: Text(
-              'Tự động chấp nhận lời mời kết bạn từ người lạ trong thời gian thực (realtime & offline check).',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.m),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppButton(
-              text: 'Lưu cài đặt',
-              icon: Icons.save_outlined,
-              isLoading: isLoading,
-              onPressed: onSave,
-            ),
           ),
         ],
       ),

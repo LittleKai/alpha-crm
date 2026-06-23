@@ -45,7 +45,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
 
   LocalAgentSessionClient({
     http.Client? client,
-    String baseUrl = 'http://127.0.0.1:8787',
+    String baseUrl = 'http://127.0.0.1:28080',
     String Function()? baseUrlResolver,
     bool? isSupportedPlatform,
   }) : _client = client ?? http.Client(),

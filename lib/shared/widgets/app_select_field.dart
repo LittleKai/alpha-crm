@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme/app_colors.dart';
-import '../../../app/theme/app_spacing.dart';
-import '../../../app/theme/app_text_styles.dart';
+import 'app_dropdown_field.dart';
 
+@Deprecated('Use AppDropdownField directly instead')
 class AppSelectField<T> extends StatelessWidget {
   final T? value;
   final List<DropdownMenuItem<T>> items;
@@ -27,87 +26,36 @@ class AppSelectField<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimaryColor = isDark
-        ? const Color(0xFFF8FAFC)
-        : AppColors.textPrimary;
-    final textSecondaryColor = isDark
-        ? Colors.white
-        : AppColors.textSecondary;
-    final textMutedColor = isDark
-        ? Colors.white60
-        : AppColors.textMuted;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (labelText != null) ...[
-          Text(
-            labelText!,
-            style: AppTextStyles.label.copyWith(color: textPrimaryColor),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-        ],
-        SizedBox(
-          height: 42,
-          child: DropdownButtonFormField<T>(
-            value:
-                (value != null &&
-                    items.where((item) => item.value == value).length == 1)
-                ? value
-                : null,
-            items: items,
-            selectedItemBuilder: selectedItemBuilder,
-            onChanged: onChanged,
-            isExpanded: true,
-            itemHeight: itemHeight,
-            style: AppTextStyles.body.copyWith(color: textPrimaryColor),
-            icon: Icon(
-              Icons.unfold_more_rounded,
-              size: 20,
-              color: textSecondaryColor,
-            ),
-            dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            elevation: 4,
-            decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: AppTextStyles.body.copyWith(color: textMutedColor),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.m,
-                vertical: 0,
-              ),
-              filled: true,
-              fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: AppColors.borderSoft),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: AppColors.borderSoft),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-              ),
-              hoverColor: Colors.transparent,
-            ),
-          ),
-        ),
-        if (helperText != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            helperText!,
-            style: AppTextStyles.caption.copyWith(
-              color: textMutedColor,
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ],
+    return AppDropdownField<T>(
+      value: value,
+      items: items.map((e) {
+        return AppDropdownItem<T>(
+          value: e.value as T,
+          label: _extractLabel(e.child),
+        );
+      }).toList(),
+      onChanged: onChanged == null ? null : (v) => onChanged!(v),
+      hintText: hintText,
+      labelText: labelText,
     );
+  }
+
+  /// Recursively pull the first non-empty [Text] string out of a rich item
+  /// child (e.g. Row(avatar + name)). Without this, items built as anything
+  /// other than a bare [Text] render blank in the dropdown.
+  static String _extractLabel(Widget? w) {
+    if (w == null) return '';
+    if (w is Text) return w.data ?? '';
+    if (w is Flexible) return _extractLabel(w.child); // covers Expanded
+    if (w is Padding) return _extractLabel(w.child);
+    if (w is Align) return _extractLabel(w.child);
+    if (w is Container) return _extractLabel(w.child);
+    if (w is MultiChildRenderObjectWidget) {
+      for (final child in w.children) {
+        final label = _extractLabel(child);
+        if (label.isNotEmpty) return label;
+      }
+    }
+    return '';
   }
 }
