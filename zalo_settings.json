@@ -23,7 +23,7 @@
   "perRecipientCooldownHours": 24,
   "maxFailureRatePercent": 10,
   "stopOnReportCount": 1,
-  "quietHoursStart": "22:00",
+  "quietHoursStart": "15:00",
   "quietHoursEnd": "08:00",
   "allowTestModeOnlyForRiskyActions": true,
   "zaloBackendBaseUrl": "http://127.0.0.1:28080",

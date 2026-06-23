@@ -4,6 +4,28 @@
 
 ---
 
+## Tóm tắt nhóm "Tiếp tục từ lần trước" (incremental) luôn lấy TOÀN BỘ tin nhắn dù đã có lịch sử tóm tắt
+
+**Triệu chứng:** Trong Tab Quản lý nhóm CRM, chế độ tóm tắt incremental đáng lẽ chỉ lấy tin
+nhắn MỚI sau lần tóm tắt trước (vd 0 tin), nhưng `previewMessageCount`/`summarizeWithConfig`
+lại lấy hết 92 tin (toàn bộ nhóm).
+
+**Nguyên nhân:** Local store (`local-chat-store.ts`) lưu `messages.createdAt` là cột **TEXT**
+ISO-8601 UTC (`2026-06-23T11:30:47.000Z`) và lọc con trỏ `after` bằng **so sánh chuỗi**
+(`WHERE createdAt > ?`). Nhưng `_gatherLocalGroupMessages` (managed_groups_provider.dart) lại
+truyền `after` dưới dạng **epoch-milliseconds** (`coveredTo.millisecondsSinceEpoch`, vd
+`"1718000000001"`). So sánh chuỗi `"2026-…Z" > "1718…"` → `'2' > '1'` → ĐÚNG với MỌI hàng →
+watermark không lọc gì → lấy hết tin. Mode `range` dính cùng lỗi.
+
+**Cách sửa:** Truyền `after` dạng UTC ISO string khớp cột TEXT (bỏ `+1ms` vì `>` đã exclusive),
+range `after = DateTime.now().subtract(...).toUtc().toIso8601String()`. Đồng thời watermark
+incremental lấy từ **local cache** `GroupSummaryLocalStore.loadSummaries` (max `coveredTo`) thay vì
+`state.selectedSummaries` in-memory — để nhóm CÓ lịch sử không rơi về "đọc hết" khi danh sách
+summary cloud chưa load / offline. **Chỉ sửa Flutter**, không đụng backend. Bài học: con trỏ
+phân trang của local-chat là ISO TEXT, KHÔNG phải epoch.
+
+---
+
 ## Biểu đồ "Hiệu suất chiến dịch" luôn count = 0 cho chuỗi Bạn bè (dù lịch sử kết bạn có dữ liệu)
 
 **Triệu chứng:** Tab "Lịch sử kết bạn" hiển thị đúng số liệu (vd 3 thất bại), nhưng

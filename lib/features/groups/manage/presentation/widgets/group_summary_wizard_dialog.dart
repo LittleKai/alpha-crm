@@ -146,7 +146,13 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Row(
               children: [
-                Text('Phạm vi tóm tắt', style: AppTextStyles.bodyMedium),
+                Text(
+                  'Phạm vi tóm tắt',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(width: AppSpacing.xs),
                 Tooltip(
                   message: 'Giới hạn tóm tắt tối đa 200 tin và tối thiểu 10 tin nhắn mới nhất trong phạm vi được chọn.',
@@ -260,7 +266,13 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
   Widget _label(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Text(text, style: AppTextStyles.bodyMedium),
+      child: Text(
+        text,
+        style: AppTextStyles.bodyMedium.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

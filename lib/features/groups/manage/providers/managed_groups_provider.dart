@@ -749,6 +749,10 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     final bridge = LiveChatLocalBridgeApi(baseUrl: 'http://127.0.0.1:$port');
 
     // Scope → cursor + limit (shared across all sibling accounts).
+    // The local store keeps `messages.createdAt` as a UTC ISO-8601 TEXT column and
+    // compares the `after` cursor as a STRING (`createdAt > ?`). The cursor MUST be a
+    // UTC ISO string — an epoch-ms string would string-compare as "1…" < "2026-…Z"
+    // and match every row (the watermark would cover nothing).
     String? after;
     int limit = 200;
     if (config.scopeMode == 'recent') {
@@ -756,15 +760,27 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     } else if (config.scopeMode == 'range') {
       after = DateTime.now()
           .subtract(Duration(days: config.rangeDays))
-          .millisecondsSinceEpoch
-          .toString();
+          .toUtc()
+          .toIso8601String();
     } else {
-      // incremental: continue from the last summary's watermark.
-      final latest = state.selectedSummaries.isNotEmpty
-          ? state.selectedSummaries.first
-          : null;
-      if (latest?.coveredTo != null) {
-        after = (latest!.coveredTo!.millisecondsSinceEpoch + 1).toString();
+      // incremental: continue strictly after the last summary's watermark.
+      // Read the watermark from the LOCAL summary cache (not in-memory UI state):
+      // it stays correct even if the cloud summary list hasn't loaded yet or the
+      // backend is offline, so a group WITH history never falls back to reading
+      // every message. `createdAt > ?` is exclusive, so the watermark is skipped.
+      final cached = await GroupSummaryLocalStore.loadSummaries(
+        groupIdentityKey(group),
+      );
+      DateTime? watermark;
+      for (final raw in cached) {
+        final coveredTo = DateTime.tryParse((raw['coveredTo'] ?? '').toString());
+        if (coveredTo != null &&
+            (watermark == null || coveredTo.isAfter(watermark))) {
+          watermark = coveredTo;
+        }
+      }
+      if (watermark != null) {
+        after = watermark.toUtc().toIso8601String();
       }
     }
 
