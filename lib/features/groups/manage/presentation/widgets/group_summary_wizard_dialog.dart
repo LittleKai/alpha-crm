@@ -142,7 +142,24 @@ class _GroupSummaryWizardState extends State<_GroupSummaryWizard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('Phạm vi tóm tắt'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+            child: Row(
+              children: [
+                Text('Phạm vi tóm tắt', style: AppTextStyles.bodyMedium),
+                const SizedBox(width: AppSpacing.xs),
+                Tooltip(
+                  message: 'Giới hạn tóm tắt tối đa 200 tin và tối thiểu 10 tin nhắn mới nhất trong phạm vi được chọn.',
+                  triggerMode: TooltipTriggerMode.tap,
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 16,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
           _ScopeSelector(
             mode: _scopeMode,
             recentCount: _recentCount,

@@ -834,7 +834,13 @@ class _StructuredSummaryView extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: AppSpacing.xs),
-              Text(title, style: AppTextStyles.bodyMedium),
+              Text(
+                title,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.xs),

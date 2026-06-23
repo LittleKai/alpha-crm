@@ -10,7 +10,7 @@ import '../data/group_summary_local_store.dart';
 import '../data/managed_groups_repository.dart';
 
 /// Minimum new messages required before an AI summary is allowed.
-const int kMinSummaryMessages = 5;
+const int kMinSummaryMessages = 10;
 
 /// Strips a leading "[id]" / "[tag]" prefix from a group name.
 String cleanGroupName(String name) =>
@@ -750,7 +750,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
 
     // Scope → cursor + limit (shared across all sibling accounts).
     String? after;
-    int limit = 400;
+    int limit = 200;
     if (config.scopeMode == 'recent') {
       limit = config.recentCount;
     } else if (config.scopeMode == 'range') {
