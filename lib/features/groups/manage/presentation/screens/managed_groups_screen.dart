@@ -6,6 +6,7 @@ import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
+import '../../../../../shared/utils/desktop_notifier.dart';
 import '../../../../../shared/widgets/app_badge.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
@@ -486,20 +487,32 @@ class _DetailsPanel extends StatelessWidget {
     final config = picked;
 
     final outcome = await notifier.summarizeWithConfig(config);
-    if (!context.mounted || !outcome.success) return;
+    if (!outcome.success) return;
 
     if (outcome.empty) {
-      _notify(context, 'Không có tin nhắn mới để tóm tắt.');
+      if (context.mounted) {
+        _notify(context, 'Không có tin nhắn mới để tóm tắt.');
+      }
       return;
     }
-    _notify(
-      context,
-      'Đã tóm tắt ${outcome.messageCount} tin · ${outcome.leadCount} lead · '
-      '${outcome.questionCount} câu hỏi · ${outcome.actionItems.length} việc cần làm.',
-    );
+    
+    // Gửi thông báo hệ thống (Toast notification) để user biết dù đang ở tab khác
+    try {
+      await DesktopNotifier.instance.show(
+        'Tóm tắt AI hoàn tất',
+        'Đã trích xuất xong ${outcome.actionItems.length} việc cần làm cho nhóm ${cleanGroupName(group.name)}.',
+      );
+    } catch (_) {}
 
-    if (config.autoCreateTasks && outcome.actionItems.isNotEmpty) {
-      await _previewAndCreate(context, outcome.actionItems);
+    if (context.mounted) {
+      _notify(
+        context,
+        'Đã tóm tắt ${outcome.messageCount} tin · ${outcome.leadCount} lead · '
+        '${outcome.questionCount} câu hỏi · ${outcome.actionItems.length} việc cần làm.',
+      );
+      if (config.autoCreateTasks && outcome.actionItems.isNotEmpty) {
+        await _previewAndCreate(context, outcome.actionItems);
+      }
     }
   }
 

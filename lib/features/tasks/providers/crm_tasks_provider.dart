@@ -64,7 +64,10 @@ class CrmTask {
       relatedType: (json['relatedType'] ?? 'manual').toString(),
       dueAt: DateTime.tryParse((json['dueAt'] ?? '').toString()),
       ownerNote: (json['ownerNote'] ?? '').toString(),
-      groupName: (group['name'] ?? '').toString(),
+      groupName: (group['name'] ?? '')
+          .toString()
+          .replaceFirst(RegExp(r'^\[.*?\]\s*'), '')
+          .trim(),
       groupAccountId: (group['accountId'] ?? '').toString(),
       groupThreadId: (group['groupId'] ?? '').toString(),
     );
