@@ -384,7 +384,7 @@ class _DropdownOverlay<T> extends StatelessWidget {
                                       ),
                                     ),
                                     if (isSelected)
-                                      const Icon(
+                                      Icon(
                                         Icons.check_rounded,
                                         size: 16,
                                         color: AppColors.primary,

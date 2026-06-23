@@ -150,6 +150,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
+### 2026-06-23 - Per-Account `blockTyping` Setting Was Never Enforced
+
+- Symptom: Bật "block typing" cho một tài khoản Zalo nhưng hệ thống vẫn gửi sự kiện "đang soạn tin" (typing) tới Zalo từ Live Chat và chatbot.
+- Root cause: `account-settings.json` lưu cả `blockSeen` và `blockTyping`. `blockSeen` được kiểm tra trước khi gửi seen (`local-chat-api.ts`), nhưng `blockTyping` không được kiểm tra ở bất kỳ đâu — `handleLocalTyping` gọi thẳng `sendTyping`.
+- Fix summary: Chặn ngay tại chokepoint `PersonalZcaChannel.sendTyping` (`if (readAccountSettings()[accountId]?.blockTyping === true) return false;`) để áp dụng cho mọi đường gọi (Live Chat + chatbot), thay vì chỉ vá riêng endpoint typing.
+- Rule: Khi thêm một cờ cấu hình hành vi gửi tới Zalo (kiểu `blockSeen`/`blockTyping`), phải nối dây cờ đó ở chokepoint của hành động tương ứng, không để cờ "định nghĩa nhưng không thực thi".
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`.
+
 ### 2026-06-22 - Dialog "Đóng" button popped the GoRouter page (whole-app crash) via captured outer context
 
 - Symptom: Opening the group AI-summary history dialog ("Lịch sử tóm tắt") then tapping "Đóng" crashed the app: `currentConfiguration.isNotEmpty: You have popped the last page off of the stack` followed by `!_debugLocked` during Navigator dispose.
@@ -157,6 +165,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Fix: name the builder's context (`builder: (dialogContext) => ...`) and pop `dialogContext`.
 - Rule: When `showDialog(builder: (ctx) => Widget(...))` builds the dialog inline and its buttons need to close it, always close over the builder's `ctx` — never the function's outer `context`. (If the dialog body is its own widget, e.g. the summary wizard/settings/preview dialogs, its build context is already under the dialog route, so popping there is safe.) Same family as the 2026-06-18 GoRouter pop crash.
 - Related files: `tools/alpha-crm/lib/features/groups/manage/presentation/widgets/group_summary_history_dialog.dart`.
+
+### 2026-06-21 - Windows debug run must not reuse a stale single-instance window
+
+- Symptom: `flutter run -d windows` built successfully, then failed with `Error waiting for a debug connection: The log reader stopped unexpectedly, or never started.` The visible `alpha_crm.exe` window could be an old hung instance that could not be focused, clicked, or scrolled.
+- Root cause: the native Windows runner enforced `Global\AlphaCRM_SingleInstance` even in Debug builds. A stale/hung previous `alpha_crm.exe` kept the mutex, so every new `flutter run` process exited after trying to focus the old window. Flutter never got a debug connection to the newly launched process because no new debug process survived.
+- Fix summary: disable the single-instance mutex in `_DEBUG` builds so `flutter run` always launches its own debuggable process. Release builds still enforce single-instance, but now probe the existing window with `SendMessageTimeoutW(WM_NULL, SMTO_ABORTIFHUNG)` before treating it as reusable.
+- Rule: do not apply production single-instance focus-forward logic to Flutter Debug runs. If single-instance is used in Release, never assume an existing HWND is usable without a hang-safe responsiveness probe.
+- Related files: `tools/alpha-crm/windows/runner/main.cpp`.
 
 ### 2026-06-19 - Microsecond clientMessageId pinned Date.now() and evicted the live `zpw_sek` cookie
 

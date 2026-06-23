@@ -6,12 +6,14 @@ class AutoApproveState {
   final bool autoApprove;
   final bool sendWelcome;
   final String welcomeMessage;
+  final bool autoReplyNewFriend;
   final int runningAccountsCount;
 
   const AutoApproveState({
     required this.autoApprove,
     required this.sendWelcome,
     required this.welcomeMessage,
+    required this.autoReplyNewFriend,
     required this.runningAccountsCount,
   });
 }
@@ -31,6 +33,10 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
               .read(settingsProvider)
               .settings
               .welcomeMessageText,
+          autoReplyNewFriend: _ref
+              .read(settingsProvider)
+              .settings
+              .autoReplyNewFriend,
           runningAccountsCount: _ref
               .read(zaloIntegrationProvider)
               .accounts
@@ -43,6 +49,7 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
         autoApprove: next.settings.autoApproveFriend,
         sendWelcome: next.settings.autoSendWelcomeMessage,
         welcomeMessage: next.settings.welcomeMessageText,
+        autoReplyNewFriend: next.settings.autoReplyNewFriend,
         runningAccountsCount: _ref
             .read(zaloIntegrationProvider)
             .accounts
@@ -62,6 +69,8 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
             .settings
             .autoSendWelcomeMessage,
         welcomeMessage: _ref.read(settingsProvider).settings.welcomeMessageText,
+        autoReplyNewFriend:
+            _ref.read(settingsProvider).settings.autoReplyNewFriend,
         runningAccountsCount: next.accounts.length,
       );
     });
@@ -77,6 +86,16 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
 
   void updateWelcomeMessage(String val) {
     _ref.read(settingsProvider.notifier).updateWelcomeMessageText(val);
+  }
+
+  /// Toggles whether the AI chatbot may auto-reply to a contact that was just
+  /// auto-approved. This setting only reaches the backend compliance gate via
+  /// [saveSettings], so we persist+sync immediately here (unlike the sibling
+  /// toggles, which rely on a separate save action).
+  Future<void> toggleAutoReplyNewFriend(bool val) async {
+    final notifier = _ref.read(settingsProvider.notifier);
+    notifier.updateAutoReplyNewFriend(val);
+    await notifier.saveSettings();
   }
 }
 

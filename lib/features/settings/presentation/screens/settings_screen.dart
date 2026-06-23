@@ -349,10 +349,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: AppSpacing.m),
               _AdvancedCard(
                 enabled: state.settings.autoApproveFriend,
-                autoReplyEnabled: state.settings.autoReplyNewFriend,
                 isLoading: state.isLoading,
                 onChanged: notifier.updateAutoApproveFriend,
-                onAutoReplyChanged: notifier.updateAutoReplyNewFriend,
                 onSave: notifier.saveSettings,
               ),
             ],
@@ -1717,18 +1715,14 @@ class _ChannelModeRow extends StatelessWidget {
 
 class _AdvancedCard extends StatelessWidget {
   final bool enabled;
-  final bool autoReplyEnabled;
   final bool isLoading;
   final ValueChanged<bool> onChanged;
-  final ValueChanged<bool> onAutoReplyChanged;
   final VoidCallback onSave;
 
   const _AdvancedCard({
     required this.enabled,
-    required this.autoReplyEnabled,
     required this.isLoading,
     required this.onChanged,
-    required this.onAutoReplyChanged,
     required this.onSave,
   });
 
@@ -1769,20 +1763,6 @@ class _AdvancedCard extends StatelessWidget {
             ),
             subtitle: Text(
               'Tự động chấp nhận lời mời kết bạn từ người lạ trong thời gian thực (realtime & offline check).',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-            ),
-          ),
-          CheckboxListTile(
-            value: autoReplyEnabled,
-            onChanged: (value) => onAutoReplyChanged(value ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              'Tự động trả lời bạn mới được duyệt',
-              style: AppTextStyles.bodyMedium,
-            ),
-            subtitle: Text(
-              'Cho phép chatbot AI tự động trả lời tin nhắn đầu tiên từ người vừa được tự động đồng ý kết bạn. Tắt nếu chỉ muốn duyệt mà không trả lời.',
               style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
             ),
           ),

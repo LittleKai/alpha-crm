@@ -176,6 +176,15 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: AppSpacing.m),
+            _buildSwitchRow(
+              title:
+                  'AI tự động trả lời bạn mới: ${state.autoReplyNewFriend ? "ĐANG BẬT" : "ĐANG TẮT"}',
+              subtitle:
+                  'Cho phép chatbot AI trả lời tin nhắn đầu tiên của người vừa được tự động duyệt. Tắt nếu chỉ muốn duyệt (và gửi inbox chào mừng) mà không để AI trả lời.',
+              value: state.autoReplyNewFriend,
+              onChanged: notifier.toggleAutoReplyNewFriend,
+            ),
             const SizedBox(height: AppSpacing.l),
             const AppAlert(
               message:
