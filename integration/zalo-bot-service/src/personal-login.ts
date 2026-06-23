@@ -8,12 +8,13 @@
  * credentials via HTTP. Cookie/token values are NOT printed to console.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { config, projectRoot } from './config.js';
 import { LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { createZaloClient } from './channels/personal-zca-channel.js';
+import { writeSecure } from './secure-store.js';
 
 async function main(): Promise<void> {
   const credPath = resolve(projectRoot, config.personalCredentialsPath);
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
     switch (event.type) {
       case LoginQRCallbackEventType.GotLoginInfo:
         if (event.data) {
-          writeFileSync(credPath, JSON.stringify(event.data, null, 2), 'utf-8');
+          writeSecure(credPath, JSON.stringify(event.data, null, 2));
           console.log(`[login] ✅ Credentials saved to: ${credPath}`);
           console.log('[login] DO NOT commit this file to version control.');
         }

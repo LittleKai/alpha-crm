@@ -48,7 +48,8 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
   }
 
   Future<void> _load() async {
-    final isTest = WidgetsBinding.instance.toString().contains('Test') ||
+    final isTest =
+        WidgetsBinding.instance.toString().contains('Test') ||
         WidgetsBinding.instance.runtimeType.toString().contains('Test');
     if (isTest) {
       setState(() {
@@ -59,7 +60,7 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
     }
     setState(() => _loading = true);
     final to = DateTime.now();
-    final from = to.subtract(Duration(days: _rangeDays));
+    final from = to.subtract(Duration(days: _rangeDays - 1));
     // Local-first: durable per-day stats from the on-device Zalo bridge. No cloud
     // call — counts/tokens are authoritative from the local store, not a recent
     // log cache, so the chart no longer mis-reads response counts.
@@ -98,7 +99,18 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
         children: [
           Row(
             children: [
-              Icon(Icons.smart_toy_outlined, color: AppColors.primary),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+              ),
               const SizedBox(width: AppSpacing.s),
               Expanded(
                 child: Text(
@@ -122,34 +134,66 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(3)),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  Text('AI phản hồi: $totalAiUses ', style: AppTextStyles.captionBold.copyWith(color: AppColors.primary)),
-                  Text('(Vào: ${_fmt(totalIn)} | Ra: ${_fmt(totalOut)})', style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                  Text(
+                    'AI phản hồi: $totalAiUses ',
+                    style: AppTextStyles.captionBold.copyWith(
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  Text(
+                    '(Vào: ${_fmt(totalIn)} | Ra: ${_fmt(totalOut)})',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(color: AppColors.textSecondary, borderRadius: BorderRadius.circular(3)),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: AppColors.textSecondary,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  Text('Bỏ qua (Skip): $totalSkipped', style: AppTextStyles.captionBold.copyWith(color: AppColors.textSecondary)),
+                  Text(
+                    'Bỏ qua (Skip): $totalSkipped',
+                    style: AppTextStyles.captionBold.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(color: const Color(0xFFF97316), borderRadius: BorderRadius.circular(3)),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF97316),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  Text('Từ khóa: $totalKeyword', style: AppTextStyles.captionBold.copyWith(color: const Color(0xFFF97316))),
+                  Text(
+                    'Từ khóa: $totalKeyword',
+                    style: AppTextStyles.captionBold.copyWith(
+                      color: const Color(0xFFF97316),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -175,12 +219,17 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
     );
   }
 
-      Widget _chart(List<_TokenPoint> points) {
+  Widget _chart(List<_TokenPoint> points) {
     final maxY = points.fold<double>(
       1,
-      (m, p) => [m, p.aiUses.toDouble(), p.skipped.toDouble(), p.keywordUses.toDouble()].reduce((a, b) => a > b ? a : b),
+      (m, p) => [
+        m,
+        p.aiUses.toDouble(),
+        p.skipped.toDouble(),
+        p.keywordUses.toDouble(),
+      ].reduce((a, b) => a > b ? a : b),
     );
-    
+
     return LineChart(
       LineChartData(
         minY: 0,
@@ -189,8 +238,11 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: (maxY / 4) > 0 ? (maxY / 4) : 1,
-          getDrawingHorizontalLine: (_) =>
-              FlLine(color: AppColors.borderSoft, strokeWidth: 1, dashArray: [4, 4]),
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: AppColors.borderSoft,
+            strokeWidth: 1,
+            dashArray: [4, 4],
+          ),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -241,68 +293,77 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
             tooltipBgColor: AppColors.surface,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) {
-                final i = spot.x.toInt();
-                final p = (i >= 0 && i < points.length) ? points[i] : null;
-                if (p == null) return null;
-                
-                if (spot.barIndex == 0) {
-                  return LineTooltipItem(
-                    'AI phản hồi: ${spot.y.toInt()}\nToken vào: ${_fmt(p.tokenIn)} | Token ra: ${_fmt(p.tokenOut)}',
-                    AppTextStyles.captionBold.copyWith(color: AppColors.primary),
-                  );
-                } else if (spot.barIndex == 1) {
-                  return LineTooltipItem(
-                    'Bỏ qua: ${spot.y.toInt()}',
-                    AppTextStyles.captionBold.copyWith(color: AppColors.textSecondary),
-                  );
-                } else {
-                  return LineTooltipItem(
-                    'Từ khóa: ${spot.y.toInt()}',
-                    AppTextStyles.captionBold.copyWith(color: const Color(0xFFF97316)),
-                  );
-                }
-              }).toList().whereType<LineTooltipItem>().toList();
+              return touchedSpots
+                  .map((spot) {
+                    final i = spot.x.toInt();
+                    final p = (i >= 0 && i < points.length) ? points[i] : null;
+                    if (p == null) return null;
+
+                    if (spot.barIndex == 0) {
+                      return LineTooltipItem(
+                        'AI phản hồi: ${spot.y.toInt()}\nToken vào: ${_fmt(p.tokenIn)} | Token ra: ${_fmt(p.tokenOut)}',
+                        AppTextStyles.captionBold.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      );
+                    } else if (spot.barIndex == 1) {
+                      return LineTooltipItem(
+                        'Bỏ qua: ${spot.y.toInt()}',
+                        AppTextStyles.captionBold.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      );
+                    } else {
+                      return LineTooltipItem(
+                        'Từ khóa: ${spot.y.toInt()}',
+                        AppTextStyles.captionBold.copyWith(
+                          color: const Color(0xFFF97316),
+                        ),
+                      );
+                    }
+                  })
+                  .toList()
+                  .whereType<LineTooltipItem>()
+                  .toList();
             },
           ),
         ),
         lineBarsData: [
           _line((p) => p.aiUses.toDouble(), AppColors.primary, points),
           _line((p) => p.skipped.toDouble(), AppColors.textSecondary, points),
-          _line((p) => p.keywordUses.toDouble(), const Color(0xFFF97316), points),
+          _line(
+            (p) => p.keywordUses.toDouble(),
+            const Color(0xFFF97316),
+            points,
+          ),
         ],
       ),
     );
   }
 
-  
-  LineChartBarData _line(double Function(_TokenPoint) sel, Color color, List<_TokenPoint> points) {
+  LineChartBarData _line(
+    double Function(_TokenPoint) sel,
+    Color color,
+    List<_TokenPoint> points,
+  ) {
     return LineChartBarData(
       isCurved: true,
       curveSmoothness: 0.3,
       color: color,
-      barWidth: 2.5,
+      barWidth: 3,
       dotData: FlDotData(
-        show: points.length <= 14,
-        getDotPainter: (spot, xPct, bar, idx) => FlDotCirclePainter(
-          radius: 2.5,
-          color: AppColors.surface,
-          strokeColor: color,
-          strokeWidth: 2,
-        ),
-      ),
-      belowBarData: BarAreaData(
         show: true,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.18),
-            color.withValues(alpha: 0.0),
-          ],
+        getDotPainter: (spot, xPct, bar, idx) => FlDotCirclePainter(
+          radius: 3,
+          color: color,
+          strokeColor: color,
+          strokeWidth: 1,
         ),
       ),
+      belowBarData: BarAreaData(show: false),
       spots: [
         for (int i = 0; i < points.length; i++)
           FlSpot(i.toDouble(), sel(points[i])),
@@ -329,7 +390,7 @@ class _AiTokenUsageCardState extends ConsumerState<AiTokenUsageCard> {
     );
   }
 
-    String _fmt(double v) {
+  String _fmt(double v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
     return v.toStringAsFixed(0);

@@ -1,6 +1,37 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-21 +07:00
+**Last Updated:** 2026-06-23 +07:00
+
+---
+
+## Biểu đồ "Hiệu suất chiến dịch" luôn count = 0 cho chuỗi Bạn bè (dù lịch sử kết bạn có dữ liệu)
+
+**Triệu chứng:** Tab "Lịch sử kết bạn" hiển thị đúng số liệu (vd 3 thất bại), nhưng
+biểu đồ Báo cáo hiệu suất chiến dịch trên Dashboard luôn vẽ `friendSuccess`/`friendFailure` = 0.
+
+**Nguyên nhân:** Hai bề mặt dùng hai nguồn dữ liệu KHÁC nhau:
+- Tab lịch sử đọc SQLite **local** `friend_history` (ghi bởi `friendHistoryProvider.addRecord` trong các campaign by_phone/by_group).
+- Biểu đồ đọc **cloud** `CrmExecutionLog` qua `/crm/dashboard/campaign-performance`, vốn CHỈ log campaign *gửi tin nhắn*. Kết bạn chạy qua local zalo-bot-service, không bao giờ tạo `CrmExecutionLog` → endpoint không trả `friendSuccess/friendFailure` → chuỗi friend luôn 0.
+
+**Cách sửa:** Nạp chuỗi friend của biểu đồ từ chính `friend_history` local (giống cách
+đã merge chatbot stats local). Xem `dashboard_chart_data.dart::mergeFriendStatsIntoPerformanceData`
+và `dashboard_provider.dart::_buildFriendDailyStats`. KHÔNG cần sửa cloud backend.
+
+---
+
+## Giờ im lặng (và mọi thiết lập kiểm soát rủi ro) trong UI không có tác dụng — backend vẫn chặn theo env mặc định
+
+**Triệu chứng:** Đặt "giờ im lặng từ 23:00" trong UI Kiểm soát rủi ro nhưng gửi kết bạn/tin nhắn vẫn bị chặn.
+
+**Nguyên nhân:** Compliance enforce ở backend (`zalo-bot-service/src/compliance.ts`)
+đọc cấu hình CHỈ từ **env vars** lúc khởi động (`config.ts`, mặc định quiet hours `21:00–08:00`,
+`allowFriendAutomation=false`...). UI Flutter lưu `SystemSettings` local nhưng `saveSettings()`
+**không** gửi các field này xuống backend → backend luôn dùng mặc định env.
+
+**Cách sửa:** Thêm endpoint backend `POST /api/zalo/compliance/settings` (xem
+`risk-control-store.ts`) persist vào `dataRoot/integrations/risk-control.json` và overlay
+lên `config` lúc runtime + khởi động. Flutter `saveSettings()` POST các field risk-control
+xuống endpoint này. **Lưu ý:** thay đổi backend cần `npm run bundle` lại cho bản release đóng gói.
 
 ---
 
@@ -276,3 +307,11 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Local bridge action lookup accepts either its SQLite row ID or the provider ID, but successful recall must mark the resolved local row ID deleted only after the Zalo API succeeds.
 - Cached media is exposed through `/local/media/:attachmentId`; video responses must preserve HTTP Range support.
 - Never call `Uri.decodeComponent` on untrusted attachment names without catching malformed percent encoding.
+
+### 2026-06-23 - Per-Account `blockTyping` Setting Was Never Enforced
+
+- Symptom: Bật "block typing" cho một tài khoản Zalo nhưng hệ thống vẫn gửi sự kiện "đang soạn tin" (typing) tới Zalo từ Live Chat và chatbot.
+- Root cause: `account-settings.json` lưu cả `blockSeen` và `blockTyping`. `blockSeen` được kiểm tra trước khi gửi seen (`local-chat-api.ts`), nhưng `blockTyping` không được kiểm tra ở bất kỳ đâu — `handleLocalTyping` gọi thẳng `sendTyping`.
+- Fix summary: Chặn ngay tại chokepoint `PersonalZcaChannel.sendTyping` (`if (readAccountSettings()[accountId]?.blockTyping === true) return false;`) để áp dụng cho mọi đường gọi (Live Chat + chatbot), thay vì chỉ vá riêng endpoint typing.
+- Rule: Khi thêm một cờ cấu hình hành vi gửi tới Zalo (kiểu `blockSeen`/`blockTyping`), phải nối dây cờ đó ở chokepoint của hành động tương ứng, không để cờ "định nghĩa nhưng không thực thi".
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`.

@@ -4,6 +4,7 @@
   "maxDelay": 60,
   "autoApproveFriend": true,
   "autoSendWelcomeMessage": true,
+  "autoReplyNewFriend": true,
   "welcomeMessageText": "Chào bạn! Rất vui được kết nối.",
   "autoAddFriendGroup": true,
   "zaloChannelMode": "personalZca",
@@ -28,7 +29,9 @@
   "zaloBackendBaseUrl": "http://127.0.0.1:28080",
   "zaloWebhookPath": "/api/zalo/webhook",
   "appThemeMode": "light",
-  "accountNicknames": {},
+  "accountNicknames": {
+    "1945245474113271229": "Main"
+  },
   "localFirstLiveChat": false,
   "localBridgeBaseUrl": "http://127.0.0.1:28080",
   "liveChatConversationCacheTtlSeconds": 30,
@@ -38,5 +41,5 @@
   "liveChatMediaCacheMaxGb": 20,
   "liveChatNotifications": true,
   "showTokenAnalytics": true,
-  "summaryAiModel": "gemini-3.1-pro"
+  "summaryAiModel": "gemini-3-flash"
 }

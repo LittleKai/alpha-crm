@@ -50,6 +50,9 @@ interface Config {
   allowGroupAutomation: boolean;
   requireHumanApproval: boolean;
   humanApprovalThreshold: number;
+  // Whether the chatbot may auto-reply to a contact that was just auto-approved
+  // as a friend. Independent of friend auto-approval itself.
+  autoReplyNewFriend: boolean;
   // Agent configuration
   localBindHost: string;
   localBindPort: number;
@@ -181,6 +184,7 @@ export const config: Config = {
   allowGroupAutomation: parseBool(process.env['ZALO_ALLOW_GROUP_AUTOMATION'], false),
   requireHumanApproval: parseBool(process.env['ZALO_REQUIRE_HUMAN_APPROVAL'], true),
   humanApprovalThreshold: parseInt(process.env['ZALO_HUMAN_APPROVAL_THRESHOLD'] || '20', 10),
+  autoReplyNewFriend: parseBool(process.env['ZALO_AUTO_REPLY_NEW_FRIEND'], true),
   // Agent configuration
   localBindHost: process.env['LOCAL_BIND_HOST'] || '127.0.0.1',
   localBindPort: parseInt(process.env['LOCAL_BIND_PORT'] || process.env['PORT'] || '8787', 10),

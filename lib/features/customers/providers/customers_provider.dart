@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../mock/mock_contacts.dart';
 import '../../../shared/models/crm_customer.dart';
+import '../../../shared/local_db/local_db.dart';
 import '../data/customers_repository.dart';
 import '../data/segments_repository.dart';
 import '../../auth/providers/crm_auth_provider.dart';
@@ -146,14 +148,51 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
           .map((json) => ContactJson.fromJson(json))
           .toList();
       state = state.copyWith(contacts: loaded, isLoading: false);
+      _cacheContacts(raw);
     } else {
-      state = state.copyWith(
-        contacts: const [],
-        isLoading: false,
-        errorMessage:
-            response['message'] ??
-            'Không thể tải dữ liệu khách hàng từ đám mây.',
-      );
+      // Cloud unreachable — fall back to the last cached snapshot so the
+      // workspace still shows known contacts offline.
+      final cached = await _readCachedContacts();
+      if (cached != null && cached.isNotEmpty) {
+        state = state.copyWith(
+          contacts: cached,
+          isLoading: false,
+          errorMessage:
+              'Không kết nối được máy chủ. Đang hiển thị dữ liệu đã lưu (ngoại tuyến).',
+        );
+      } else {
+        state = state.copyWith(
+          contacts: const [],
+          isLoading: false,
+          errorMessage:
+              response['message'] ??
+              'Không thể tải dữ liệu khách hàng từ đám mây.',
+        );
+      }
+    }
+  }
+
+  String get _contactsCacheKey {
+    final userId = _ref.read(crmAuthProvider).user?.id ?? 'anon';
+    return 'customers_cache:$userId';
+  }
+
+  Future<void> _cacheContacts(List<dynamic> raw) async {
+    try {
+      await LocalDb.putCache(_contactsCacheKey, jsonEncode(raw));
+    } catch (_) {
+      // Caching is best-effort (e.g. unsupported on web) — ignore failures.
+    }
+  }
+
+  Future<List<Contact>?> _readCachedContacts() async {
+    try {
+      final cached = await LocalDb.getCache(_contactsCacheKey);
+      if (cached == null) return null;
+      final List<dynamic> raw = jsonDecode(cached);
+      return raw.map((json) => ContactJson.fromJson(json)).toList();
+    } catch (_) {
+      return null;
     }
   }
 

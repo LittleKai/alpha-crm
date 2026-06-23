@@ -1,4 +1,6 @@
 import type { ZaloInboundMessageEvent } from '../channels/types.js';
+import { config } from '../config.js';
+import { wasRecentlyAutoApproved } from '../recent-friend-approvals.js';
 import {
   ConversationDebouncer,
   type DebounceScheduler,
@@ -108,6 +110,16 @@ export class LocalChatbotRuntime {
             : 'no providerMessageId';
       console.log(
         `[chatbot-flow] runtime skip pmid=${event.providerMessageId ?? '-'}: ${why}`,
+      );
+      return;
+    }
+    if (
+      !config.autoReplyNewFriend
+      && event.threadType === 'user'
+      && wasRecentlyAutoApproved(event.senderId)
+    ) {
+      console.log(
+        `[chatbot-flow] runtime skip pmid=${event.providerMessageId}: new friend auto-reply disabled`,
       );
       return;
     }

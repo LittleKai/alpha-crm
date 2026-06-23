@@ -1,5 +1,5 @@
 class LocalDbSchema {
-  static const int version = 3;
+  static const int version = 4;
 
   // Snapshot of a scheduled (pending) bulk campaign so it survives navigation
   // and app restart. Recipients are stored as a JSON array of {id,name}.
@@ -17,6 +17,18 @@ class LocalDbSchema {
       scheduledAt INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       createdAt INTEGER NOT NULL
+    )
+    ''';
+
+  static const String _friendHistoryTable = '''
+    CREATE TABLE IF NOT EXISTS friend_history (
+      id TEXT PRIMARY KEY,
+      targetName TEXT NOT NULL DEFAULT '',
+      targetPhone TEXT NOT NULL DEFAULT '',
+      accountLabel TEXT NOT NULL DEFAULT '',
+      timestamp TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL DEFAULT ''
     )
     ''';
 
@@ -114,6 +126,7 @@ class LocalDbSchema {
     ''',
 
     _scheduledCampaignsTable,
+    _friendHistoryTable,
   ];
 
   static const List<String> version2Scripts = [
@@ -154,4 +167,6 @@ class LocalDbSchema {
   ];
 
   static const List<String> version3Scripts = [_scheduledCampaignsTable];
+
+  static const List<String> version4Scripts = [_friendHistoryTable];
 }

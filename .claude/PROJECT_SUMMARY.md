@@ -38,7 +38,9 @@ integration/
     src/agent/                 Production outbound agent layer (runner, command executor, machine fingerprinting, cloud-api)
     src/integrations/           n8n settings/client/template builder, n8n event dispatcher, and proxy helper tests/utilities
     src/compliance.ts          Channel-aware backend compliance guard
-    src/config.ts              Environment config with ZaloChannelMode and Agent configs
+    src/risk-control-store.ts  Persists client risk-control settings (dataRoot/integrations/risk-control.json) and overlays them onto live config (quiet hours, limits, automation gates)
+    src/recent-friend-approvals.ts  TTL tracker of just auto-approved friends; lets chatbot suppress auto-reply when autoReplyNewFriend=false
+    src/config.ts              Environment config with ZaloChannelMode and Agent configs (compliance defaults overridable at runtime via risk-control-store)
     src/server.ts              HTTP API server (hardened to bind to 127.0.0.1 and restrict CORS)
     src/personal-login.ts      CLI bootstrap for personal Zalo QR login
     src/zalo.ts                Channel selector/router
@@ -56,6 +58,7 @@ docs/
     deplao-feature-integration-spec.md           Features integrated from Deplao
     crm-domain-contract-gap.md                   Gap analysis for future domain models
     zalo-message-processing-gap-vs-deplao.md     Zalo Live Chat handling parity audit against Deplao
+    sqlite-encryption-at-rest-proposal.md        Proposal for encrypting the message SQLite DBs (SQLCipher vs field-level)
     n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
@@ -69,17 +72,22 @@ docs/
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl (`^0.20.2`), flutter_localizations (SDK, for Vietnamese Material pickers), http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter, ffi + win32 (Windows Job Object), window_manager + tray_manager (Windows maximize/tray). Declares `assets/app_icon.ico` (tray icon). |
+| `pubspec.yaml` | Flutter package metadata and dependencies | Uses Dart SDK `^3.10.7`; dependencies include GoRouter, Riverpod, fl_chart, data_table_2, google_fonts, intl (`^0.20.2`), flutter_localizations (SDK, for Vietnamese Material pickers), http, package_info_plus, path_provider, url_launcher, open_filex, mobile_scanner, qr_flutter, flutter_secure_storage (native CRM token storage), ffi + win32 (Windows Job Object), window_manager + tray_manager (Windows maximize/tray). Declares `assets/app_icon.ico` (tray icon). |
 | `integration/zalo-bot-service/package.json` | Local backend package metadata | Uses `zca-js@^2.1.2` and `proxy-agent@^6.5.0` for per-account HTTP/HTTPS/SOCKS proxy enforcement. |
+| `integration/zalo-bot-service/src/secure-store.ts` | Encryption-at-rest helper | `readSecure`/`writeSecure` wrap sensitive local files (Zalo `credentials_*.json`, `account-settings.json`) with AES-256-GCM. Key is a random 32-byte key sealed by Windows DPAPI (CurrentUser, one-shot PowerShell) in `dataRoot/.secure-key`; raw 0600 key file on non-Windows (dev). Magic-header detection gives transparent plaintext fallback (no forced re-login) and best-effort degradation to plaintext if the key is unavailable. Does NOT re-serialize the cookie jar — decrypted bytes are identical, preserving `zpw_sek` immutability. |
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. Boot is non-blocking: fires `ZaloBackendManager.startSupervised()` (fire-and-forget) and mounts `BackendStatusBanner` above the router child. |
 | `lib/shared/api/crm_cloud_api.dart` | Alpha Studio cloud API client | Uses `ALPHA_STUDIO_API_URL` with production fallback and Bearer JWT headers. |
-| `lib/shared/auth/crm_auth_token_store.dart` | CRM JWT storage abstraction | Web uses localStorage; native Android/Windows currently use an app-support JSON file via `path_provider` (fallback, not secure storage). |
+| `lib/shared/auth/crm_auth_token_store.dart` | CRM JWT storage abstraction | Conditional import: web → localStorage; native Android/Windows → `token_store_native.dart`. |
+| `lib/shared/auth/token_store_native.dart` | Native CRM token store | Stores the JWT in the OS keystore via `flutter_secure_storage` (Windows DPAPI / Android Keystore). One-time migration imports any legacy plaintext `crm_token.json` then deletes it. All ops are best-effort (swallow errors → null). |
 | `lib/shared/auth/web_auth_bridge.dart` | Flutter web iframe SSO bridge | Accepts Alpha Studio `{ type: 'AUTH_TOKEN', token }` postMessage and sends `AUTH_READY`. |
 | `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 17 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
 | `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, selected-contact actions, and a desktop/tablet detail panel. |
+| `lib/features/customers/providers/customers_provider.dart` | Customers state + offline cache | `loadContacts()` caches each successful cloud load into the `cache_entries` table (keyed by user id, 30-day TTL) via `LocalDb.putCache`; when the cloud call fails it falls back to the cached snapshot and surfaces an offline notice instead of an empty list. Caching is best-effort. |
+| `lib/shared/local_db/local_db.dart` | Local SQLite (sqflite/ffi) | Adds generic `putCache(key,value,{ttl})` / `getCache(key)` over the `cache_entries` table (expired rows purged on read) used by the Customers offline cache. |
+| `lib/features/dashboard/utils/dashboard_chart_data.dart` | Dashboard chart data helpers | Normalizes daily dashboard chart metrics, merges local chatbot daily stats into campaign performance data, and protects cumulative message series from rendering as per-day values. |
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |

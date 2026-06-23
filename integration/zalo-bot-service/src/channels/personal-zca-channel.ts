@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync, copyFileSync, rmdirSync } from 'fs';
 import { resolve, dirname, basename } from 'path';
 import { config, projectRoot } from '../config.js';
+import { readSecure, writeSecure } from '../secure-store.js';
 import type {
   ZaloChannel,
   ZaloChannelStatus,
@@ -19,6 +20,7 @@ import type {
 } from './types.js';
 import { emitInboundMessage, emitInboundMessages } from './types.js';
 import { createProxyAgent, redactProxyUrl } from '../integrations/proxy-helper.js';
+import { markAutoApproved } from '../recent-friend-approvals.js';
 
 // zca-js imports
 import { Zalo, ThreadType, FriendEventType } from 'zca-js';
@@ -209,19 +211,17 @@ function accountSettingsPath(): string {
 }
 
 function readAccountSettings(): Record<string, AccountSettings> {
-  const filePath = accountSettingsPath();
-  if (!existsSync(filePath)) return {};
   try {
-    return JSON.parse(readFileSync(filePath, 'utf-8'));
+    const raw = readSecure(accountSettingsPath());
+    if (!raw) return {};
+    return JSON.parse(raw);
   } catch {
     return {};
   }
 }
 
 function writeAccountSettings(settings: Record<string, AccountSettings>): void {
-  const filePath = accountSettingsPath();
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+  writeSecure(accountSettingsPath(), JSON.stringify(settings, null, 2));
 }
 
 function accountIdFromCredentialsPath(filePath: string): string | undefined {
@@ -1077,7 +1077,10 @@ function describeFailedCredentials(accountId?: string): string | null {
 async function loadCredentialsFile(filePath: string): Promise<void> {
   const accountId = accountIdFromCredentialsPath(filePath);
   try {
-    const raw = readFileSync(filePath, 'utf-8');
+    const raw = readSecure(filePath);
+    if (raw === null) {
+      throw new Error(`Không đọc được file ${basename(filePath)} (giải mã thất bại).`);
+    }
     const credentials: Credentials = JSON.parse(raw);
 
     const zpw_sek = (credentials.cookie as any)?.zpw_sek || raw.includes('zpw_sek');
@@ -1152,8 +1155,8 @@ async function reloginAccountFromDisk(
     return null;
   }
   try {
-    const raw = readFileSync(filePath, 'utf-8');
-    if (!raw.includes('zpw_sek')) {
+    const raw = readSecure(filePath);
+    if (raw === null || !raw.includes('zpw_sek')) {
       console.error(
         `[PersonalZcaChannel - ${instance.label}] Cannot re-login: credentials file is missing zpw_sek (needs a fresh QR login).`,
       );
@@ -1248,6 +1251,7 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
             console.log(`[PersonalZcaChannel - ${instance.label}] Auto-approving friend request for ${senderId}...`);
             try {
               await instance.api.acceptFriendRequest(senderId);
+              markAutoApproved(senderId);
               console.log(`[PersonalZcaChannel - ${instance.label}] Successfully approved friend request for ${senderId}`);
             } catch (acceptErr) {
               console.error(`[PersonalZcaChannel - ${instance.label}] Failed to auto-approve friend for ${senderId}:`, acceptErr);
@@ -1834,6 +1838,9 @@ export class PersonalZcaChannel implements ZaloChannel {
     threadId: string,
     threadType: 'user' | 'group',
   ): Promise<boolean> {
+    // Respect the per-account "block typing" privacy setting: when enabled we
+    // never emit typing events for this account (live chat or chatbot).
+    if (readAccountSettings()[accountId]?.blockTyping === true) return false;
     await ensureLoginPool();
     const instance = accountPool.get(accountId);
     const api = instance?.api as any;

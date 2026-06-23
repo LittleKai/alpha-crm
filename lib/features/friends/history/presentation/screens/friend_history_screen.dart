@@ -66,7 +66,7 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildHeader(),
+            _buildHeader(notifier),
             const SizedBox(height: AppSpacing.m),
             _buildMetricsGrid(totalCount, successCount, failedCount, isMobile),
             const SizedBox(height: AppSpacing.m),
@@ -102,7 +102,7 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(FriendHistoryNotifier notifier) {
     return Row(
       children: [
         Icon(
@@ -126,6 +126,12 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
               ),
             ],
           ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Làm mới',
+          onPressed: notifier.loadHistory,
         ),
       ],
     );
@@ -208,6 +214,13 @@ class _FriendHistoryScreenState extends ConsumerState<FriendHistoryScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.m),
+        AppButton(
+          text: 'Làm mới',
+          icon: Icons.refresh,
+          variant: AppButtonVariant.outline,
+          onPressed: notifier.loadHistory,
+        ),
+        const SizedBox(width: AppSpacing.s),
         AppButton(
           text: 'Xóa lịch sử',
           icon: Icons.delete_outline_rounded,

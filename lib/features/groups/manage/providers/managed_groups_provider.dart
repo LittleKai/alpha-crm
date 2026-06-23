@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/utils/zalo_backend_manager.dart';
 import '../../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import '../../../settings/providers/settings_provider.dart';
@@ -559,6 +560,28 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     }
   }
 
+  Future<void> deleteSummary(String summaryId) async {
+    final group = state.selectedGroup;
+    if (group == null) return;
+    final key = groupIdentityKey(group);
+
+    // Xóa từ cloud / DB
+    final response = await CrmCloudApi.delete('/crm/groups/summaries/$summaryId');
+    if (response['success'] == true) {
+      // Xóa thành công trên cloud thì cập nhật lại local list của state
+      final updatedSummaries = state.selectedSummaries
+          .where((s) => s.id != summaryId)
+          .toList();
+      state = state.copyWith(selectedSummaries: updatedSummaries);
+
+      // Lưu lại vào local store
+      await GroupSummaryLocalStore.saveSummaries(
+        key,
+        updatedSummaries.map((s) => s.toJson()).toList(),
+      );
+    }
+  }
+
   /// Run an incremental/structured summary for the selected group using [config].
   Future<SummarizeOutcome> summarizeWithConfig(
     GroupSummaryConfig config,
@@ -644,6 +667,32 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     }
     final isEmpty = data is Map && data['empty'] == true;
 
+    // Save action items as tasks immediately if proposed is not empty
+    if (proposed.isNotEmpty) {
+      final doneIds = <String>{};
+      for (final item in proposed) {
+        final ok = await _repository.createTask({
+          'title': item.title,
+          'description': item.description,
+          'priority': item.priority,
+          'relatedType': 'insight',
+          'insightId': item.id,
+          'groupId': group.id,
+          'ownerNote': 'Từ tóm tắt nhóm',
+          'dueAt': defaultDueByPriority(item.priority).toIso8601String(),
+        });
+        if (ok['success'] == true) {
+          doneIds.add(item.id);
+          await _repository.updateInsightStatus(item.id, 'done');
+        }
+      }
+      if (doneIds.isNotEmpty) {
+        proposed.removeWhere((item) => doneIds.contains(item.id));
+        await loadInsights();
+        await _ref.read(crmTasksProvider.notifier).loadTasks();
+      }
+    }
+
     final updatedGroup = group.copyWith(summaryConfig: config.toConfigMap());
     state = state.copyWith(
       selectedGroup: updatedGroup,
@@ -713,7 +762,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
           ? state.selectedSummaries.first
           : null;
       if (latest?.coveredTo != null) {
-        after = latest!.coveredTo!.millisecondsSinceEpoch.toString();
+        after = (latest!.coveredTo!.millisecondsSinceEpoch + 1).toString();
       }
     }
 

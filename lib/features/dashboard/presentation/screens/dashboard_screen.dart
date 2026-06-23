@@ -14,11 +14,10 @@ import '../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_tabs.dart';
-import '../../../../mock/mock_contacts.dart';
 import '../../../auth/providers/crm_auth_provider.dart';
-import '../../../customers/providers/customers_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../utils/dashboard_chart_data.dart';
 import '../widgets/ai_token_usage_card.dart';
 import '../../../zalo_integration/providers/zalo_integration_provider.dart';
 
@@ -36,16 +35,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
     final notifier = ref.read(dashboardProvider.notifier);
-    final customersState = ref.watch(customersProvider);
     final showTokens = ref.watch(
       settingsProvider.select((s) => s.settings.showTokenAnalytics),
     );
 
     return Scaffold(
-      body: state.isLoading && state.overview == null
-          ? Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+      floatingActionButton: Theme.of(context).platform == TargetPlatform.windows
+          ? FloatingActionButton(
+              tooltip: 'Làm mới',
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.surface,
+              onPressed: state.isLoading || state.isRefreshing
+                  ? null
+                  : notifier.loadDashboard,
+              child: state.isRefreshing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.surface,
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
             )
+          : FloatingActionButton.small(
+              tooltip: 'Làm mới',
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.surface,
+              onPressed: state.isLoading || state.isRefreshing
+                  ? null
+                  : notifier.loadDashboard,
+              child: state.isRefreshing
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.surface,
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
+            ),
+      body: state.isLoading && state.overview == null
+          ? Center(child: CircularProgressIndicator(color: AppColors.primary))
           : RefreshIndicator(
               onRefresh: notifier.loadDashboard,
               color: AppColors.primary,
@@ -92,11 +125,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _buildOperationsMetrics(state),
                       const SizedBox(height: AppSpacing.l),
                       _buildCrmPipelineSection(state),
-                      const SizedBox(height: AppSpacing.l),
-                      _buildSourceDistributionSection(
-                        state,
-                        customersState.contacts,
-                      ),
                       const SizedBox(height: AppSpacing.l),
                       _buildPerformanceCard(state, notifier),
                       const SizedBox(height: AppSpacing.l),
@@ -319,7 +347,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   Text(
                     'Tổng quan chiến dịch',
-                    style: AppTextStyles.pageTitle.copyWith(letterSpacing: -0.5),
+                    style: AppTextStyles.pageTitle.copyWith(
+                      letterSpacing: -0.5,
+                    ),
                   ),
                   if (state.isRefreshing) ...[
                     const SizedBox(width: AppSpacing.s),
@@ -351,22 +381,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ],
           ),
-        ),
-        IconButton(
-          icon: state.isRefreshing
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                )
-              : const Icon(Icons.refresh),
-          tooltip: 'Làm mới',
-          onPressed: state.isRefreshing
-              ? null
-              : () => ref.read(dashboardProvider.notifier).loadDashboard(),
         ),
       ],
     );
@@ -540,9 +554,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                'Báo cáo hiệu suất chiến dịch',
-                style: AppTextStyles.sectionTitle,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.analytics_outlined,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Text(
+                    'Báo cáo hiệu suất chiến dịch',
+                    style: AppTextStyles.sectionTitle,
+                  ),
+                ],
               ),
               _buildChartControls(state, notifier, totalSuccess, totalFailure),
             ],
@@ -554,7 +586,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ? Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
                   )
-                : _buildPerformanceChart(state.performanceData, state),
+                : _buildPerformanceChart(
+                    state.performanceData,
+                    state,
+                    totalSuccess: totalSuccess,
+                    totalFailure: totalFailure,
+                  ),
           ),
         ],
       ),
@@ -699,8 +736,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildPerformanceChart(
     List<dynamic> performanceData,
-    DashboardState state,
-  ) {
+    DashboardState state, {
+    required int totalSuccess,
+    required int totalFailure,
+  }) {
     // Generate dummy dates if performanceData is empty to prevent blank charts
     final List<dynamic> chartData = List.from(performanceData);
     if (chartData.isEmpty) {
@@ -724,81 +763,64 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final int len = chartData.length;
 
     // Prepare arrays
-    final List<double> messageSuccess = List.generate(
-      len,
-      (index) => ((chartData[index]['success'] ?? 0) as num).toDouble(),
+    final List<double> messageSuccess = normalizeDailySeries(
+      List.generate(
+        len,
+        (index) => readDashboardMetric(chartData[index] as Map, const [
+          'success',
+          'sentSuccess',
+          'sent_success',
+        ]),
+      ),
+      rangeTotal: totalSuccess,
     );
-    final List<double> messageFailure = List.generate(
-      len,
-      (index) => ((chartData[index]['failure'] ?? 0) as num).toDouble(),
+    final List<double> messageFailure = normalizeDailySeries(
+      List.generate(
+        len,
+        (index) => readDashboardMetric(chartData[index] as Map, const [
+          'failure',
+          'failed',
+          'sentFailed',
+          'sent_failed',
+        ]),
+      ),
+      rangeTotal: totalFailure,
     );
 
     final List<double> friendSuccess = List.generate(len, (index) {
-      final item = chartData[index];
-      return ((item['friendSuccess'] ??
-                  item['friend_success'] ??
-                  item['friends'] ??
-                  0)
-              as num)
-          .toDouble();
+      final item = chartData[index] as Map;
+      return readDashboardMetric(item, const [
+        'friendSuccess',
+        'friend_success',
+        'friendAccepted',
+        'friend_accepted',
+        'acceptedFriends',
+        'friends',
+      ]);
     });
     final List<double> friendFailure = List.generate(len, (index) {
-      final item = chartData[index];
-      return ((item['friendFailure'] ?? item['friend_failure'] ?? 0) as num)
-          .toDouble();
+      final item = chartData[index] as Map;
+      return readDashboardMetric(item, const [
+        'friendFailure',
+        'friend_failure',
+        'friendFailed',
+        'friend_failed',
+        'failedFriends',
+        'friendRejected',
+        'friend_rejected',
+      ]);
     });
 
     final List<double> chatbotValues = List.generate(len, (index) {
-      final item = chartData[index];
-      return ((item['responses'] ??
-                  item['response'] ??
-                  item['replies'] ??
-                  item['reply'] ??
-                  item['chatbot'] ??
-                  0)
-              as num)
-          .toDouble();
+      final item = chartData[index] as Map;
+      return readDashboardMetric(item, const [
+        'responses',
+        'response',
+        'replies',
+        'reply',
+        'chatbot',
+      ]);
     });
-
-    // Dynamic distribution of chatbot responses if sum is 0 but chatbotTotal > 0
-    final chatbotStats = state.analytics['chatbot'];
-    final chatbotTotalVal = chatbotStats is List
-        ? chatbotStats.fold<int>(
-            0,
-            (sum, item) => sum + ((item['count'] ?? 0) as num).toInt(),
-          )
-        : 0;
-
-    final double chatbotSum = chatbotValues.fold<double>(0, (a, b) => a + b);
-    if (chatbotSum == 0 && chatbotTotalVal > 0) {
-      int remaining = chatbotTotalVal;
-      if (len >= 4) {
-        for (int i = 0; i < len; i++) {
-          if (i < len - 4) {
-            chatbotValues[i] = 0;
-          } else if (i == len - 4) {
-            final chunk = (chatbotTotalVal * 0.1).round();
-            chatbotValues[i] = chunk.toDouble();
-            remaining -= chunk;
-          } else if (i == len - 3) {
-            final chunk = (chatbotTotalVal * 0.2).round();
-            chatbotValues[i] = chunk.toDouble();
-            remaining -= chunk;
-          } else if (i == len - 2) {
-            final chunk = (chatbotTotalVal * 0.3).round();
-            chatbotValues[i] = chunk.toDouble();
-            remaining -= chunk;
-          } else if (i == len - 1) {
-            chatbotValues[i] = remaining.toDouble();
-          }
-        }
-      } else if (len > 0) {
-        for (int i = 0; i < len - 1; i++) {
-          chatbotValues[i] = 0;
-        }
-        chatbotValues[len - 1] = remaining.toDouble();
-      }
-    }
 
     final List<LineChartBarData> lines = [];
     final List<Widget> legendItems = [];
@@ -1041,6 +1063,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 enabled: true,
                 touchTooltipData: LineTouchTooltipData(
                   tooltipBgColor: AppColors.surface,
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
                   getTooltipItems: (touchedSpots) {
                     return touchedSpots.map((spot) {
                       String labelText = '';
@@ -1133,7 +1157,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Bắt đầu nhanh', style: AppTextStyles.sectionTitle),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.bolt_rounded,
+                  color: Colors.amber,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Bắt đầu nhanh',
+                  style: AppTextStyles.sectionTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.m),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1209,7 +1257,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.textSecondary,
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -1228,9 +1276,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Hướng dẫn & Mẹo sử dụng nhanh',
-            style: AppTextStyles.sectionTitle,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.cyan.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.lightbulb_outline_rounded,
+                  color: Colors.cyan,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Hướng dẫn & Mẹo sử dụng nhanh',
+                  style: AppTextStyles.sectionTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.m),
           LayoutBuilder(
@@ -1420,7 +1489,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Phễu khách hàng CRM', style: AppTextStyles.sectionTitle),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.filter_alt_outlined,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Phễu khách hàng CRM',
+                  style: AppTextStyles.sectionTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.m),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1527,108 +1620,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               );
             },
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSourceDistributionSection(
-    DashboardState state,
-    List<Contact> contacts,
-  ) {
-    final Map<String, int> sourceCounts = {};
-
-    final overview = state.overview;
-    if (overview != null) {
-      final customerStats = _safeMap(overview['customerStats']);
-      final bySource = _safeMap(
-        customerStats['bySource'] ?? overview['sourceStats'],
-      );
-      if (bySource.isNotEmpty) {
-        bySource.forEach((key, value) {
-          sourceCounts[key.toString()] = _safeInt(value);
-        });
-      }
-    }
-
-    if (sourceCounts.isEmpty && contacts.isNotEmpty) {
-      for (final contact in contacts) {
-        final source = contact.source.isEmpty ? 'Không rõ' : contact.source;
-        sourceCounts[source] = (sourceCounts[source] ?? 0) + 1;
-      }
-    }
-
-    final sortedEntries = sourceCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final totalSources = sortedEntries.fold<int>(
-      0,
-      (sum, item) => sum + item.value,
-    );
-
-    return AppCard(
-      key: const ValueKey('dashboard_source_section'),
-      padding: const EdgeInsets.all(AppSpacing.l),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Nguồn khách hàng', style: AppTextStyles.sectionTitle),
-          const SizedBox(height: AppSpacing.m),
-          if (sortedEntries.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpacing.l),
-                child: Text('Không có dữ liệu nguồn khách hàng.'),
-              ),
-            )
-          else ...[
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: sortedEntries.length > 5 ? 5 : sortedEntries.length,
-              separatorBuilder: (context, index) =>
-                  const SizedBox(height: AppSpacing.m),
-              itemBuilder: (context, index) {
-                final entry = sortedEntries[index];
-                final percent = totalSources > 0
-                    ? entry.value / totalSources
-                    : 0.0;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          entry.key,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '${entry.value} (${(percent * 100).toStringAsFixed(1)}%)',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-                      child: LinearProgressIndicator(
-                        value: percent,
-                        backgroundColor: AppColors.slateSoft,
-                        color: AppColors.primary,
-                        minHeight: 8,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
         ],
       ),
     );
@@ -1746,7 +1737,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Trạng thái chiến dịch', style: AppTextStyles.sectionTitle),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.donut_large_rounded,
+                  color: Colors.teal,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Trạng thái chiến dịch',
+                  style: AppTextStyles.sectionTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.m),
           SizedBox(
             height: 200,
@@ -1954,9 +1969,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Hiệu suất gần đây',
-                  style: AppTextStyles.sectionTitle,
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.leaderboard_outlined,
+                        color: Colors.deepPurple,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Hiệu suất gần đây',
+                        style: AppTextStyles.sectionTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               _buildLegendItem(label: 'Thành công', color: AppColors.primary),

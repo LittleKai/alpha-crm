@@ -4,7 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../../shared/local_db/local_db.dart';
+import '../../friends/history/providers/friend_history_provider.dart';
+import '../../messaging/chatbot/data/chatbot_local_bridge_api.dart';
+import '../../messaging/chatbot/providers/chatbot_provider.dart';
 import '../data/dashboard_repository.dart';
+import '../utils/dashboard_chart_data.dart';
 
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   return DashboardRepository();
@@ -64,9 +68,13 @@ class DashboardState {
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
+  final ChatbotLocalBridgeApi _chatbotBridge;
+  final Ref _ref;
 
   DashboardNotifier(Ref ref)
     : _repository = ref.read(dashboardRepositoryProvider),
+      _chatbotBridge = ref.read(chatbotLocalBridgeApiProvider),
+      _ref = ref,
       super(DashboardState.initial()) {
     _initDashboard();
   }
@@ -122,15 +130,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         'timeRange': dashboardState.timeRange,
       };
 
-      await db.insert(
-        'cache_entries',
-        {
-          'key': 'dashboard_cache',
-          'value': jsonEncode(data),
-          'expiresAt': expiresAt,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('cache_entries', {
+        'key': 'dashboard_cache',
+        'value': jsonEncode(data),
+        'expiresAt': expiresAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (e) {
       debugPrint('Error saving dashboard to cache: $e');
     }
@@ -178,7 +182,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     }
 
     if (!isBackground) {
-      state = state.copyWith(isLoading: true, isRefreshing: false, errorMessage: null);
+      state = state.copyWith(
+        isLoading: true,
+        isRefreshing: false,
+        errorMessage: null,
+      );
     } else {
       state = state.copyWith(isRefreshing: true, errorMessage: null);
     }
@@ -189,6 +197,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       final performanceResponse = await _repository.getCampaignPerformance(
         range: rangeParam,
       );
+      final rawPerformanceData = performanceResponse['data'] is List
+          ? List<dynamic>.from(performanceResponse['data'] as List)
+          : const <dynamic>[];
+      final chatbotStats = await _loadChatbotStats(rangeParam);
       final analyticsResponses = await Future.wait([
         _repository.getFunnelAnalytics(),
         _repository.getCampaignAnalytics(),
@@ -206,7 +218,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             'chatbot': analyticsResponses[2]['data'] ?? const [],
             'groups': analyticsResponses[3]['data'] ?? const {},
           },
-          performanceData: performanceResponse['data'] ?? const [],
+          performanceData: mergeFriendStatsIntoPerformanceData(
+            mergeChatbotStatsIntoPerformanceData(
+              rawPerformanceData,
+              chatbotStats,
+            ),
+            _buildFriendDailyStats(rangeParam),
+          ),
           isLoading: false,
           isRefreshing: false,
         );
@@ -217,11 +235,82 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             overviewResponse['message'] ??
             performanceResponse['message'] ??
             'Lỗi tải tổng quan từ đám mây';
-        state = state.copyWith(isLoading: false, isRefreshing: false, errorMessage: err);
+        state = state.copyWith(
+          isLoading: false,
+          isRefreshing: false,
+          errorMessage: err,
+        );
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, isRefreshing: false, errorMessage: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        isRefreshing: false,
+        errorMessage: e.toString(),
+      );
     }
+  }
+
+  /// Buckets the locally-stored friend history into per-day success/failure
+  /// counts keyed by `yyyy-MM-dd`, so the campaign chart can show the friend
+  /// series from the same data as the Friend History tab.
+  List<Map<String, dynamic>> _buildFriendDailyStats(String rangeParam) {
+    final records = _ref.read(friendHistoryProvider).records;
+    if (records.isEmpty) return const [];
+
+    final days = rangeParam == '7d' ? 7 : 30;
+    final now = DateTime.now();
+    final startDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
+
+    final byDate = <String, List<int>>{}; // key -> [success, failure]
+    for (final record in records) {
+      final date = _parseFriendTimestamp(record.timestamp);
+      if (date == null) continue;
+      final dayOnly = DateTime(date.year, date.month, date.day);
+      if (dayOnly.isBefore(startDate)) continue;
+      final key =
+          '${dayOnly.year.toString().padLeft(4, '0')}-'
+          '${dayOnly.month.toString().padLeft(2, '0')}-'
+          '${dayOnly.day.toString().padLeft(2, '0')}';
+      final bucket = byDate.putIfAbsent(key, () => [0, 0]);
+      if (record.status == 'Thành công') {
+        bucket[0]++;
+      } else if (record.status == 'Thất bại') {
+        bucket[1]++;
+      }
+    }
+
+    return byDate.entries
+        .map(
+          (entry) => {
+            'date': entry.key,
+            'friendSuccess': entry.value[0],
+            'friendFailure': entry.value[1],
+          },
+        )
+        .toList();
+  }
+
+  /// Parses the `dd/MM/yyyy HH:mm:ss` timestamp stored by FriendHistoryRecord.
+  DateTime? _parseFriendTimestamp(String timestamp) {
+    final datePart = timestamp.split(' ').first;
+    final parts = datePart.split('/');
+    if (parts.length != 3) return null;
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (day == null || month == null || year == null) return null;
+    return DateTime(year, month, day);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadChatbotStats(String rangeParam) {
+    final days = rangeParam == '7d' ? 7 : 30;
+    final to = DateTime.now();
+    final from = to.subtract(Duration(days: days - 1));
+    return _chatbotBridge.getChatbotStats(from: from, to: to);
   }
 
   void setTimeRange(String range) {

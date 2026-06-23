@@ -371,9 +371,9 @@ describe('ChatbotStore', () => {
     assert.equal(resolved.chatbotMode, 'enabled');
   });
 
-  it('defaults personal threads ON when no config snapshot is synced', () => {
+  it('defaults personal and group threads ON when no config snapshot is synced', () => {
     // Local-first install with no cloud chatbot config: the Bot toggle must
-    // start enabled for personal (user) threads, off for groups.
+    // start enabled for personal (user) and group threads.
     assert.equal(
       chatbotStore.resolveConversationEnabled('acc-1:fresh-user', 'user')
         .chatbotEnabled,
@@ -382,12 +382,17 @@ describe('ChatbotStore', () => {
     assert.equal(
       chatbotStore.resolveConversationEnabled('acc-1:fresh-group', 'group')
         .chatbotEnabled,
-      false,
+      true,
     );
     // getEffectiveConversationState (no snapshot) agrees so the GET endpoint
     // and the list serializer stay consistent.
     assert.equal(
       chatbotStore.getEffectiveConversationState('acc-1:fresh-user', 'user')
+        ?.mode,
+      'enabled',
+    );
+    assert.equal(
+      chatbotStore.getEffectiveConversationState('acc-1:fresh-group', 'group')
         ?.mode,
       'enabled',
     );

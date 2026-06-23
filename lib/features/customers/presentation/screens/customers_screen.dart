@@ -430,7 +430,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
+            _buildHeader(state.isLoading, notifier.loadContacts),
             const SizedBox(height: AppSpacing.l),
             _buildStatsGrid(isEmpty, state.contacts.length),
             const SizedBox(height: AppSpacing.l),
@@ -521,7 +521,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     return null;
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isLoading, VoidCallback onRefresh) {
     return Row(
       children: [
         Icon(
@@ -542,6 +542,21 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ),
             ],
           ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        IconButton(
+          icon: isLoading
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              : const Icon(Icons.refresh),
+          tooltip: 'Làm mới',
+          onPressed: isLoading ? null : onRefresh,
         ),
       ],
     );

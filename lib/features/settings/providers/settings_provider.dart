@@ -312,6 +312,13 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     );
   }
 
+  void updateAutoReplyNewFriend(bool value) {
+    state = state.copyWith(
+      settings: state.settings.copyWith(autoReplyNewFriend: value),
+      isSaved: false,
+    );
+  }
+
   void updateZaloBackendBaseUrl(String value) {
     state = state.copyWith(
       settings: state.settings.copyWith(zaloBackendBaseUrl: value),
@@ -420,6 +427,35 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           .timeout(const Duration(seconds: 3));
     } catch (_) {
       // Settings remain persisted locally; the bridge applies them next save.
+    }
+    // Push risk-control settings to the local Zalo backend so server-side
+    // compliance enforcement (quiet hours, daily limits, automation gates)
+    // reflects the operator's choices instead of startup env defaults.
+    try {
+      await http
+          .post(
+            Uri.parse(
+              '${enforcedSettings.zaloBackendBaseUrl}/api/zalo/compliance/settings',
+            ),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'maxBatchSize': enforcedSettings.maxBatchSize,
+              'dailySendLimit': enforcedSettings.dailySendLimit,
+              'quietHoursStart': enforcedSettings.quietHoursStart,
+              'quietHoursEnd': enforcedSettings.quietHoursEnd,
+              'maxFailureRatePercent': enforcedSettings.maxFailureRatePercent,
+              'stopOnReportCount': enforcedSettings.stopOnReportCount,
+              'allowFriendAutomation': enforcedSettings.allowFriendAutomation,
+              'allowGroupAutomation': enforcedSettings.allowGroupAutomation,
+              'requireHumanApproval': enforcedSettings.requireHumanApproval,
+              'humanApprovalThreshold': enforcedSettings.humanApprovalThreshold,
+              'autoReplyNewFriend': enforcedSettings.autoReplyNewFriend,
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Backend may be offline; settings are persisted locally and re-sent
+      // on the next save. The backend also applies its own persisted copy.
     }
     await Future.delayed(const Duration(milliseconds: 600));
     state = state.copyWith(isLoading: false, isSaved: true);

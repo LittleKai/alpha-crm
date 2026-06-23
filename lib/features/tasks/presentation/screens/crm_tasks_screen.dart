@@ -59,6 +59,22 @@ class CrmTasksScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                const SizedBox(width: AppSpacing.s),
+                IconButton(
+                  icon: state.isLoading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  tooltip: 'Làm mới',
+                  onPressed: state.isLoading ? null : notifier.loadTasks,
+                ),
+                const SizedBox(width: AppSpacing.s),
                 AppButton(
                   text: 'Tạo công việc',
                   icon: Icons.add_rounded,

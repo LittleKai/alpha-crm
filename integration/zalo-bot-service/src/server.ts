@@ -19,9 +19,11 @@ import { resolve, dirname, join } from 'path';
 import { LoginQRCallbackEventType } from 'zca-js';
 import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance, createZaloClient } from './channels/personal-zca-channel.js';
+import { writeSecure } from './secure-store.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
 import { startPairingSession } from './agent/cloud-api.js';
 import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSettings } from './integrations/integration-store.js';
+import { readRiskControlSettings, writeRiskControlSettings, applyRiskControlToConfig } from './risk-control-store.js';
 import { N8nClient } from './integrations/n8n-client.js';
 import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
 import { testProxyConnection } from './integrations/proxy-helper.js';
@@ -205,6 +207,26 @@ const server = createServer(async (req, res) => {
   if (method === 'GET' && url === '/api/integrations/n8n/settings') {
     const settings = readIntegrationSettings();
     json(res, 200, { success: true, settings: maskIntegrationSettings(settings) });
+    return;
+  }
+
+  // GET /api/zalo/compliance/settings
+  if (method === 'GET' && url === '/api/zalo/compliance/settings') {
+    json(res, 200, { success: true, settings: readRiskControlSettings() });
+    return;
+  }
+
+  // POST|PUT /api/zalo/compliance/settings
+  // Client (Flutter risk-control UI) pushes its settings; backend persists and
+  // applies them to the live compliance config.
+  if ((method === 'POST' || method === 'PUT') && url === '/api/zalo/compliance/settings') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const saved = writeRiskControlSettings(payload);
+      json(res, 200, { success: true, settings: saved });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
     return;
   }
 
@@ -494,7 +516,7 @@ const server = createServer(async (req, res) => {
           if (existsSync(tempPath)) {
             try {
               const raw = readFileSync(tempPath, 'utf-8');
-              writeFileSync(targetPath, raw, 'utf-8');
+              writeSecure(targetPath, raw);
               unlinkSync(tempPath);
               console.log(`[server - ${sessionId}] Saved credentials to ${targetPath}`);
             } catch (moveErr) {

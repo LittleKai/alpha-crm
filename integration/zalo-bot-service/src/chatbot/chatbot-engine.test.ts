@@ -143,12 +143,12 @@ test('personal crmOnly audience rejects threads outside cached CRM scope', async
   });
 });
 
-test('group requires managed scope and mention or quote', async () => {
+test('group requires group audience enabled and mention or quote', async () => {
   const engine = new LocalChatbotEngine();
   const groupInput = input({
     conversationKey: 'account-1:group-1',
     threadType: 'group',
-    managedGroup: true,
+    managedGroup: false,
     settings: {
       ...input().settings,
       groupAudience: 'tagOnly',

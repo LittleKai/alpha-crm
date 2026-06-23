@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/chatbot_repository.dart';
 import '../data/chatbot_local_bridge_api.dart';
 import '../data/local_ai_key_store.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 final chatbotRepositoryProvider = Provider<ChatbotRepository>((ref) {
   return ChatbotRepository();
 });
 final chatbotLocalBridgeApiProvider = Provider<ChatbotLocalBridgeApi>((ref) {
-  return ChatbotLocalBridgeApi();
+  final baseUrl = ref.watch(settingsProvider).settings.zaloBackendBaseUrl;
+  return ChatbotLocalBridgeApi(baseUrl: baseUrl);
 });
 
 const chatbotAiModels = [
@@ -18,7 +20,7 @@ const chatbotAiModels = [
 ];
 const chatbotDefaultAiModel = 'gemini-3-flash';
 const chatbotDefaultSystemPrompt =
-    'Bạn là một người hỗ trợ tư vấn khách hàng Zalo. Hãy phản hồi tự nhiên, ngắn gọn và đời thường như một người thật, tránh viết quá dài (dưới 40 từ). Đặc biệt: CHỈ gửi lời chào (như Chào bạn, Dạ chào anh/chị) ở câu đầu tiên của cuộc hội thoại, từ các câu tiếp theo tuyệt đối không lặp lại câu chào hỏi nữa mà trả lời thẳng vào vấn đề.';
+    'Bạn là một người hỗ trợ tư vấn khách hàng Zalo. Hãy phản hồi tự nhiên, ngắn gọn và đời thường như một người thật, tránh viết quá dài (dưới 100 từ). Đặc biệt: Chỉ gửi lời chào (như Chào bạn, Dạ chào anh/chị) ở câu đầu tiên của cuộc hội thoại, từ các câu tiếp theo tuyệt đối không lặp lại câu chào hỏi nữa mà trả lời thẳng vào vấn đề.';
 const chatbotDefaultSoul =
     'Bạn là nhân viên tư vấn Zalo của doanh nghiệp: chuyên nghiệp, gần gũi, hiểu sản phẩm/dịch vụ, không tiết lộ mình là AI, không nói về hệ thống nội bộ.';
 const chatbotDefaultResponseRules =

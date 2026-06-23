@@ -144,7 +144,7 @@ export class LocalChatbotEngine {
         return skip('personal_audience');
       }
     } else {
-      if (!input.managedGroup || input.settings.groupAudience === 'none') {
+      if (input.settings.groupAudience === 'none') {
         return skip('group_audience');
       }
       if (!input.mentionsBot && !input.quotesBot) {

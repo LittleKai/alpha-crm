@@ -2,6 +2,25 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+Map<String, String> chatbotConversationNameAliases(Map<dynamic, dynamic> item) {
+  final name = (item['displayName'] ?? item['name'] ?? '').toString().trim();
+  if (name.isEmpty) return const {};
+
+  final result = <String, String>{};
+  final id = (item['id'] ?? '').toString();
+  final accountId = (item['accountId'] ?? '').toString();
+  final threadId = (item['threadId'] ?? '').toString();
+  final cloudConversationId = (item['cloudConversationId'] ?? '').toString();
+
+  for (final key in [id, threadId, cloudConversationId]) {
+    if (key.isNotEmpty) result[key] = name;
+  }
+  if (accountId.isNotEmpty && threadId.isNotEmpty) {
+    result['$accountId:$threadId'] = name;
+  }
+  return result;
+}
+
 class ChatbotBridgeStatus {
   final bool running;
   final String? configVersion;
@@ -103,13 +122,7 @@ class ChatbotLocalBridgeApi {
       if (list is List) {
         for (final item in list) {
           if (item is! Map) continue;
-          final threadId = (item['threadId'] ?? '').toString();
-          final name = (item['displayName'] ?? item['name'] ?? '')
-              .toString()
-              .trim();
-          if (threadId.isNotEmpty && name.isNotEmpty) {
-            result[threadId] = name;
-          }
+          result.addAll(chatbotConversationNameAliases(item));
         }
       }
       return result;

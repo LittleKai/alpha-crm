@@ -6,6 +6,7 @@ class SystemSettings {
   final int maxDelay;
   final bool autoApproveFriend;
   final bool autoSendWelcomeMessage;
+  final bool autoReplyNewFriend;
   final String welcomeMessageText;
   final bool autoAddFriendGroup;
 
@@ -60,6 +61,7 @@ class SystemSettings {
     required this.maxDelay,
     required this.autoApproveFriend,
     required this.autoSendWelcomeMessage,
+    this.autoReplyNewFriend = true,
     required this.welcomeMessageText,
     required this.autoAddFriendGroup,
     this.zaloChannelMode = ZaloChannelMode.personalZca,
@@ -103,6 +105,7 @@ class SystemSettings {
     int? maxDelay,
     bool? autoApproveFriend,
     bool? autoSendWelcomeMessage,
+    bool? autoReplyNewFriend,
     String? welcomeMessageText,
     bool? autoAddFriendGroup,
     ZaloChannelMode? zaloChannelMode,
@@ -146,6 +149,7 @@ class SystemSettings {
       autoApproveFriend: autoApproveFriend ?? this.autoApproveFriend,
       autoSendWelcomeMessage:
           autoSendWelcomeMessage ?? this.autoSendWelcomeMessage,
+      autoReplyNewFriend: autoReplyNewFriend ?? this.autoReplyNewFriend,
       welcomeMessageText: welcomeMessageText ?? this.welcomeMessageText,
       autoAddFriendGroup: autoAddFriendGroup ?? this.autoAddFriendGroup,
       zaloChannelMode: zaloChannelMode ?? this.zaloChannelMode,
@@ -210,6 +214,7 @@ class SystemSettings {
       'maxDelay': maxDelay,
       'autoApproveFriend': autoApproveFriend,
       'autoSendWelcomeMessage': autoSendWelcomeMessage,
+      'autoReplyNewFriend': autoReplyNewFriend,
       'welcomeMessageText': welcomeMessageText,
       'autoAddFriendGroup': autoAddFriendGroup,
       'zaloChannelMode': zaloChannelMode.name,
@@ -262,6 +267,7 @@ class SystemSettings {
       maxDelay: json['maxDelay'] ?? 60,
       autoApproveFriend: json['autoApproveFriend'] ?? true,
       autoSendWelcomeMessage: json['autoSendWelcomeMessage'] ?? true,
+      autoReplyNewFriend: json['autoReplyNewFriend'] ?? true,
       welcomeMessageText:
           json['welcomeMessageText'] ?? 'Chào bạn! Rất vui được kết nối.',
       autoAddFriendGroup: json['autoAddFriendGroup'] ?? true,
@@ -323,6 +329,7 @@ class MockAccounts {
     maxDelay: 60,
     autoApproveFriend: true,
     autoSendWelcomeMessage: true,
+    autoReplyNewFriend: true,
     welcomeMessageText: 'Chào bạn! Rất vui được kết nối.',
     autoAddFriendGroup: true,
     zaloChannelMode: ZaloChannelMode.personalZca,

@@ -83,31 +83,52 @@ export class ChatbotStore {
     const explicit = this.getConversationState(conversationKey);
     if (explicit) return explicit;
     // No global config synced yet (local-first install) → default personal
-    // (user) threads ON so the operator's Bot toggle starts enabled. Group
-    // threads stay off until explicitly enabled.
+    // (user) and group threads ON so the operator's Bot toggle starts enabled.
     if (!snapshot) {
-      return threadType === 'user'
-        ? { mode: 'enabled', reason: 'default_personal_on', inherited: true }
-        : undefined;
+      return {
+        mode: 'enabled',
+        reason: threadType === 'user' ? 'default_personal_on' : 'default_group_on',
+        inherited: true,
+      };
     }
-    if (!snapshot.settings.enabled || threadType !== 'user') return undefined;
+    if (!snapshot.settings.enabled) return undefined;
 
-    if (snapshot.settings.personalAudience === 'all') {
-      return {
-        mode: 'enabled',
-        reason: 'global_personal_audience',
-        inherited: true,
-      };
-    }
-    if (
-      snapshot.settings.personalAudience === 'crmOnly'
-      && snapshot.scope.crmThreadKeys.includes(conversationKey)
-    ) {
-      return {
-        mode: 'enabled',
-        reason: 'crm_personal_audience',
-        inherited: true,
-      };
+    if (threadType === 'user') {
+      if (snapshot.settings.personalAudience === 'all') {
+        return {
+          mode: 'enabled',
+          reason: 'global_personal_audience',
+          inherited: true,
+        };
+      }
+      if (
+        snapshot.settings.personalAudience === 'crmOnly'
+        && snapshot.scope.crmThreadKeys.includes(conversationKey)
+      ) {
+        return {
+          mode: 'enabled',
+          reason: 'crm_personal_audience',
+          inherited: true,
+        };
+      }
+    } else {
+      if (snapshot.settings.groupAudience === 'tagOnly') {
+        return {
+          mode: 'enabled',
+          reason: 'global_group_audience',
+          inherited: true,
+        };
+      }
+      if (
+        snapshot.settings.groupAudience === 'selected'
+        && snapshot.scope.selectedGroupKeys.includes(conversationKey)
+      ) {
+        return {
+          mode: 'enabled',
+          reason: 'selected_group_audience',
+          inherited: true,
+        };
+      }
     }
     return undefined;
   }

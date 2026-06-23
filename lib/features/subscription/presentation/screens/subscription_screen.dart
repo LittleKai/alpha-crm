@@ -379,6 +379,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   status: authState.subscriptionStatus ?? 'none',
                   isTrial: isTrial,
                   creditBalance: authState.creditBalance,
+                  onRefresh: () =>
+                      ref.read(crmAuthProvider.notifier).refreshSubscription(),
+                  isLoading: authState.isLoading,
                 ),
                 const SizedBox(height: AppSpacing.l),
                 LayoutBuilder(
@@ -735,11 +738,15 @@ class _HeaderSection extends StatelessWidget {
   final String status;
   final bool isTrial;
   final int creditBalance;
+  final VoidCallback onRefresh;
+  final bool isLoading;
 
   const _HeaderSection({
     required this.status,
     required this.isTrial,
     required this.creditBalance,
+    required this.onRefresh,
+    required this.isLoading,
   });
 
   @override
@@ -772,6 +779,21 @@ class _HeaderSection extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: AppSpacing.m),
+          IconButton(
+            icon: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+            tooltip: 'Làm mới',
+            onPressed: isLoading ? null : onRefresh,
           ),
           const SizedBox(width: AppSpacing.m),
           Column(

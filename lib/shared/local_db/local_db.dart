@@ -48,6 +48,7 @@ class LocalDb {
           }
         },
         onUpgrade: (db, oldVersion, newVersion) async {
+          print('DEBUG: LocalDb onUpgrade from $oldVersion to $newVersion');
           if (oldVersion < 2) {
             for (final script in LocalDbSchema.version2Scripts) {
               await db.execute(script);
@@ -55,6 +56,11 @@ class LocalDb {
           }
           if (oldVersion < 3) {
             for (final script in LocalDbSchema.version3Scripts) {
+              await db.execute(script);
+            }
+          }
+          if (oldVersion < 4) {
+            for (final script in LocalDbSchema.version4Scripts) {
               await db.execute(script);
             }
           }
@@ -71,6 +77,42 @@ class LocalDb {
     }
     _db = await _initDb(inMemory: true);
     return _db!;
+  }
+
+  /// Store a value in the generic key/value cache (offline-first fallback).
+  static Future<void> putCache(
+    String key,
+    String value, {
+    Duration ttl = const Duration(days: 30),
+  }) async {
+    final db = await instance;
+    await db.insert(
+      'cache_entries',
+      {
+        'key': key,
+        'value': value,
+        'expiresAt': DateTime.now().add(ttl).millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Read a cached value, or null if missing/expired (expired rows are purged).
+  static Future<String?> getCache(String key) async {
+    final db = await instance;
+    final rows = await db.query(
+      'cache_entries',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final expiresAt = rows.first['expiresAt'] as int;
+    if (expiresAt < DateTime.now().millisecondsSinceEpoch) {
+      await db.delete('cache_entries', where: 'key = ?', whereArgs: [key]);
+      return null;
+    }
+    return rows.first['value'] as String?;
   }
 
   /// Convenience method to clear expired cache entries periodically.

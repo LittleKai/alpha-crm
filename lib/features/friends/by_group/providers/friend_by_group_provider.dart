@@ -456,6 +456,18 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
             ),
           ],
         );
+
+        _ref.read(friendHistoryProvider.notifier).addRecord(
+              FriendHistoryRecord(
+                id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                targetName: member.name,
+                targetPhone: 'Quét từ nhóm',
+                accountLabel: 'Không rõ',
+                timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
+                status: 'Thất bại',
+                message: 'Lỗi ngoại lệ: $err',
+              ),
+            );
       }
 
       _currentIndex++;

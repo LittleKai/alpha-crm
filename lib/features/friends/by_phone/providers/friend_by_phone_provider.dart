@@ -307,6 +307,18 @@ class FriendByPhoneNotifier extends StateNotifier<FriendByPhoneState> {
             ),
           ],
         );
+
+        _ref.read(friendHistoryProvider.notifier).addRecord(
+              FriendHistoryRecord(
+                id: 'fh_${DateTime.now().millisecondsSinceEpoch}',
+                targetName: currentPhone, // We might not have the display name
+                targetPhone: currentPhone,
+                accountLabel: 'Không rõ',
+                timestamp: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
+                status: 'Thất bại',
+                message: 'Lỗi ngoại lệ: $err',
+              ),
+            );
       }
 
       _currentIndex++;
