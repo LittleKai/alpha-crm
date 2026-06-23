@@ -1225,7 +1225,7 @@ class _ConversationPanel extends ConsumerWidget {
                       : ListView.separated(
                           padding: EdgeInsets.zero,
                           itemCount: results.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, _) =>
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final message = results[index];
@@ -3306,7 +3306,7 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
                 ),
                 const SizedBox(height: AppSpacing.m),
                 DropdownButtonFormField<String>(
-                  value: widget.statusController.text.isEmpty
+                  initialValue: widget.statusController.text.isEmpty
                       ? 'lead'
                       : widget.statusController.text,
                   decoration: const InputDecoration(

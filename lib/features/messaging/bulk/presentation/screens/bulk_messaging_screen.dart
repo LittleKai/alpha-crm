@@ -788,9 +788,9 @@ class _TargetPanel extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
               children: [
-                if (filterField != null) filterField,
+                ?filterField,
                 const Spacer(),
-                if (actionButton != null) actionButton,
+                ?actionButton,
               ],
             ),
           ),
@@ -2067,7 +2067,7 @@ class _ScheduleSection extends StatelessWidget {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: on,
-            activeColor: AppColors.primary,
+            activeThumbColor: AppColors.primary,
             title: Text('Hẹn giờ gửi tự động', style: AppTextStyles.bodyMedium),
             subtitle: Text(
               'Máy phải bật và ứng dụng phải mở tới thời điểm gửi.',

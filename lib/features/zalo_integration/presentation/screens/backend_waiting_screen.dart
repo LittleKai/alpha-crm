@@ -127,10 +127,10 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                         height: 250,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.primary.withOpacity(0.15),
+                          color: AppColors.primary.withValues(alpha: 0.15),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withOpacity(0.2),
+                              color: AppColors.primary.withValues(alpha: 0.2),
                               blurRadius: 100 + _glowAnimation.value * 2,
                               spreadRadius: 20 + _glowAnimation.value,
                             ),
@@ -150,10 +150,10 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                         height: 300,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.purple.withOpacity(0.12),
+                          color: Colors.purple.withValues(alpha: 0.12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.purple.withOpacity(0.18),
+                              color: Colors.purple.withValues(alpha: 0.18),
                               blurRadius: 120 + _glowAnimation.value * 2,
                               spreadRadius: 30 + _glowAnimation.value,
                             ),
@@ -179,15 +179,15 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                     width: 520,
                     padding: const EdgeInsets.all(AppSpacing.xl),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.08),
+                        color: Colors.white.withValues(alpha: 0.08),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           blurRadius: 40,
                           offset: const Offset(0, 15),
                         ),
@@ -209,15 +209,15 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                                   height: 90,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.white.withOpacity(0.02),
+                                    color: Colors.white.withValues(alpha: 0.02),
                                     border: Border.all(
-                                      color: AppColors.primary.withOpacity(0.3),
+                                      color: AppColors.primary.withValues(alpha: 0.3),
                                       width: 2,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primary.withOpacity(
-                                          0.1,
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.1,
                                         ),
                                         blurRadius: _glowAnimation.value,
                                         spreadRadius: 2,
@@ -267,7 +267,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                           'Hệ thống đang tự động kết nối tới Node.js Backend service (port 8787).',
                           style: GoogleFonts.inter(
                             fontSize: 14,
-                            color: Colors.white.withOpacity(0.6),
+                            color: Colors.white.withValues(alpha: 0.6),
                             height: 1.5,
                           ),
                           textAlign: TextAlign.center,
@@ -279,10 +279,10 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                           width: double.infinity,
                           padding: const EdgeInsets.all(AppSpacing.m),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.02),
+                            color: Colors.white.withValues(alpha: 0.02),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.04),
+                              color: Colors.white.withValues(alpha: 0.04),
                               width: 1,
                             ),
                           ),
@@ -419,7 +419,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                               'Đang tự động ping mỗi 5 giây...',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: Colors.white.withOpacity(0.4),
+                                color: Colors.white.withValues(alpha: 0.4),
                               ),
                             ),
                           ],
@@ -454,7 +454,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white.withOpacity(0.85),
+                  color: Colors.white.withValues(alpha: 0.85),
                 ),
               ),
               Expanded(
@@ -462,7 +462,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                   instruction,
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                   ),
                 ),
               ),
@@ -477,7 +477,7 @@ class _BackendWaitingScreenState extends ConsumerState<BackendWaitingScreen>
                 vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(

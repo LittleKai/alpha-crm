@@ -8,7 +8,6 @@ import '../theme/app_text_styles.dart';
 import '../routing/app_routes.dart';
 import '../../shared/widgets/compliance_warnings_popup.dart';
 import '../../shared/widgets/app_dialog.dart';
-import '../../shared/widgets/app_button.dart';
 
 import '../../features/customers/providers/customers_provider.dart';
 import '../../features/messaging/live_chat/providers/live_chat_provider.dart';

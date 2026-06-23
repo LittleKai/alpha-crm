@@ -2041,7 +2041,7 @@ class _UpdateCard extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: AppColors.successSoft,
                 borderRadius: AppSpacing.borderRadiusS,
-                border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
