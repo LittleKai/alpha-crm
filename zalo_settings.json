@@ -23,7 +23,7 @@
   "perRecipientCooldownHours": 24,
   "maxFailureRatePercent": 10,
   "stopOnReportCount": 1,
-  "quietHoursStart": "21:00",
+  "quietHoursStart": "22:00",
   "quietHoursEnd": "08:00",
   "allowTestModeOnlyForRiskyActions": true,
   "zaloBackendBaseUrl": "http://127.0.0.1:28080",
@@ -41,5 +41,5 @@
   "liveChatMediaCacheMaxGb": 20,
   "liveChatNotifications": true,
   "showTokenAnalytics": true,
-  "summaryAiModel": "gemini-3-flash"
+  "summaryAiModel": "gemini-3.1-pro"
 }

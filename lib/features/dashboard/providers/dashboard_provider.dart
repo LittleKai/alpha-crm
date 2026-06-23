@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../../shared/local_db/local_db.dart';
-import '../../friends/history/providers/friend_history_provider.dart';
 import '../../messaging/chatbot/data/chatbot_local_bridge_api.dart';
 import '../../messaging/chatbot/providers/chatbot_provider.dart';
 import '../data/dashboard_repository.dart';
@@ -69,12 +68,10 @@ class DashboardState {
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
   final ChatbotLocalBridgeApi _chatbotBridge;
-  final Ref _ref;
 
   DashboardNotifier(Ref ref)
     : _repository = ref.read(dashboardRepositoryProvider),
       _chatbotBridge = ref.read(chatbotLocalBridgeApiProvider),
-      _ref = ref,
       super(DashboardState.initial()) {
     _initDashboard();
   }
@@ -201,6 +198,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           ? List<dynamic>.from(performanceResponse['data'] as List)
           : const <dynamic>[];
       final chatbotStats = await _loadChatbotStats(rangeParam);
+      final friendStats = await _buildFriendDailyStats(rangeParam);
       final analyticsResponses = await Future.wait([
         _repository.getFunnelAnalytics(),
         _repository.getCampaignAnalytics(),
@@ -223,7 +221,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
               rawPerformanceData,
               chatbotStats,
             ),
-            _buildFriendDailyStats(rangeParam),
+            friendStats,
           ),
           isLoading: false,
           isRefreshing: false,
@@ -253,8 +251,22 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   /// Buckets the locally-stored friend history into per-day success/failure
   /// counts keyed by `yyyy-MM-dd`, so the campaign chart can show the friend
   /// series from the same data as the Friend History tab.
-  List<Map<String, dynamic>> _buildFriendDailyStats(String rangeParam) {
-    final records = _ref.read(friendHistoryProvider).records;
+  Future<List<Map<String, dynamic>>> _buildFriendDailyStats(
+    String rangeParam,
+  ) async {
+    // Query the friend_history table directly (same data the Friend History tab
+    // shows) so the chart does not depend on friendHistoryProvider being loaded
+    // yet when the dashboard refreshes.
+    List<Map<String, Object?>> records;
+    try {
+      final db = await LocalDb.instance;
+      records = await db.query(
+        'friend_history',
+        columns: const ['timestamp', 'status'],
+      );
+    } catch (_) {
+      return const [];
+    }
     if (records.isEmpty) return const [];
 
     final days = rangeParam == '7d' ? 7 : 30;
@@ -267,7 +279,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
     final byDate = <String, List<int>>{}; // key -> [success, failure]
     for (final record in records) {
-      final date = _parseFriendTimestamp(record.timestamp);
+      final date = _parseFriendTimestamp((record['timestamp'] ?? '').toString());
       if (date == null) continue;
       final dayOnly = DateTime(date.year, date.month, date.day);
       if (dayOnly.isBefore(startDate)) continue;
@@ -276,9 +288,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           '${dayOnly.month.toString().padLeft(2, '0')}-'
           '${dayOnly.day.toString().padLeft(2, '0')}';
       final bucket = byDate.putIfAbsent(key, () => [0, 0]);
-      if (record.status == 'Thành công') {
+      final status = (record['status'] ?? '').toString();
+      if (status == 'Thành công') {
         bucket[0]++;
-      } else if (record.status == 'Thất bại') {
+      } else if (status == 'Thất bại') {
         bucket[1]++;
       }
     }

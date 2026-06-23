@@ -132,6 +132,18 @@ class GroupInsight {
 
   bool get isActionItem => type == 'follow_up';
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'title': title,
+      'description': description,
+      'priority': priority,
+      'status': status,
+      'groupZaloId': groupZaloId,
+    };
+  }
+
   static GroupInsight fromJson(Map<String, dynamic> json) {
     final group = json['groupId'];
     return GroupInsight(
@@ -141,7 +153,9 @@ class GroupInsight {
       description: (json['description'] ?? '').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
       status: (json['status'] ?? 'open').toString(),
-      groupZaloId: group is Map ? (group['groupId'] ?? '').toString() : '',
+      groupZaloId: group is Map
+          ? (group['groupId'] ?? '').toString()
+          : (json['groupZaloId'] ?? '').toString(),
     );
   }
 }
@@ -540,6 +554,12 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
       );
     }
 
+    // Load các công việc đang chờ duyệt (insights) từ local store
+    final cachedInsights = await GroupSummaryLocalStore.loadInsights(key);
+    state = state.copyWith(
+      proposedActionItems: cachedInsights.map(GroupInsight.fromJson).toList(),
+    );
+
     final response = await _repository.getSummaries(group.id);
     if (response['success'] == true && response['data'] is List) {
       final summaries = (response['data'] as List)
@@ -566,7 +586,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     final key = groupIdentityKey(group);
 
     // Xóa từ cloud / DB
-    final response = await CrmCloudApi.delete('/crm/groups/summaries/$summaryId');
+    final response = await CrmCloudApi.delete('/crm/groups/${group.id}/summaries/$summaryId');
     if (response['success'] == true) {
       // Xóa thành công trên cloud thì cập nhật lại local list của state
       final updatedSummaries = state.selectedSummaries
@@ -667,32 +687,6 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     }
     final isEmpty = data is Map && data['empty'] == true;
 
-    // Save action items as tasks immediately if proposed is not empty
-    if (proposed.isNotEmpty) {
-      final doneIds = <String>{};
-      for (final item in proposed) {
-        final ok = await _repository.createTask({
-          'title': item.title,
-          'description': item.description,
-          'priority': item.priority,
-          'relatedType': 'insight',
-          'insightId': item.id,
-          'groupId': group.id,
-          'ownerNote': 'Từ tóm tắt nhóm',
-          'dueAt': defaultDueByPriority(item.priority).toIso8601String(),
-        });
-        if (ok['success'] == true) {
-          doneIds.add(item.id);
-          await _repository.updateInsightStatus(item.id, 'done');
-        }
-      }
-      if (doneIds.isNotEmpty) {
-        proposed.removeWhere((item) => doneIds.contains(item.id));
-        await loadInsights();
-        await _ref.read(crmTasksProvider.notifier).loadTasks();
-      }
-    }
-
     final updatedGroup = group.copyWith(summaryConfig: config.toConfigMap());
     state = state.copyWith(
       selectedGroup: updatedGroup,
@@ -701,10 +695,18 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
           .toList(),
     );
     await selectGroup(updatedGroup);
-    await loadInsights();
+
+    final key = groupIdentityKey(updatedGroup);
+    await GroupSummaryLocalStore.saveInsights(
+      key,
+      proposed.map((item) => item.toJson()).toList(),
+    );
+    state = state.copyWith(
+      proposedActionItems: proposed,
+    );
+
     state = state.copyWith(
       isWorking: false,
-      proposedActionItems: proposed,
       errorMessage: isEmpty ? 'Không có tin nhắn mới để tóm tắt.' : null,
     );
     return SummarizeOutcome(
@@ -836,14 +838,40 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     return 0;
   }
 
-  void clearProposedActionItems() {
-    state = state.copyWith(proposedActionItems: []);
+  Future<void> deleteInsight(String insightId) async {
+    final response = await CrmCloudApi.delete('/crm/groups/insights/$insightId');
+    if (response['success'] == true) {
+      state = state.copyWith(
+        proposedActionItems: state.proposedActionItems
+            .where((item) => item.id != insightId)
+            .toList(),
+      );
+      await loadInsights();
+    }
+  }
+
+  Future<void> deleteInsights(List<String> insightIds) async {
+    if (insightIds.isEmpty) return;
+    final group = state.selectedGroup;
+    if (group == null) return;
+    final key = groupIdentityKey(group);
+
+    final updated = state.proposedActionItems
+        .where((item) => !insightIds.contains(item.id))
+        .toList();
+    state = state.copyWith(proposedActionItems: updated);
+    await GroupSummaryLocalStore.saveInsights(
+      key,
+      updated.map((item) => item.toJson()).toList(),
+    );
   }
 
   /// Create follow-up tasks from selected action items and mark them done so
   /// they are skipped on the next incremental summary. Returns count created.
   Future<int> createTasksFromInsights(List<GroupInsight> items) async {
     final group = state.selectedGroup;
+    if (group == null) return 0;
+    final key = groupIdentityKey(group);
     int created = 0;
     final doneIds = <String>{};
     for (final item in items) {
@@ -853,23 +881,26 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
         'priority': item.priority,
         'relatedType': 'insight',
         'insightId': item.id,
-        if (group != null) 'groupId': group.id,
+        'groupId': group.id,
         'ownerNote': 'Từ tóm tắt nhóm',
         'dueAt': defaultDueByPriority(item.priority).toIso8601String(),
       });
       if (ok['success'] == true) {
         created++;
         doneIds.add(item.id);
-        await _repository.updateInsightStatus(item.id, 'done');
       }
     }
     if (created > 0) {
+      final updated = state.proposedActionItems
+          .where((e) => !doneIds.contains(e.id))
+          .toList();
       state = state.copyWith(
-        proposedActionItems: state.proposedActionItems
-            .where((e) => !doneIds.contains(e.id))
-            .toList(),
+        proposedActionItems: updated,
       );
-      await loadInsights();
+      await GroupSummaryLocalStore.saveInsights(
+        key,
+        updated.map((item) => item.toJson()).toList(),
+      );
       // Refresh the care-tasks tab + sidebar badge with the newly created tasks.
       await _ref.read(crmTasksProvider.notifier).loadTasks();
     }

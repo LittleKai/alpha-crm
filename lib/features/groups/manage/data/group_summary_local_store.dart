@@ -90,4 +90,28 @@ class GroupSummaryLocalStore {
     all[groupId] = entry;
     await _writeAll(all);
   }
+
+  static Future<List<Map<String, dynamic>>> loadInsights(
+    String groupId,
+  ) async {
+    final all = await _readAll();
+    final entry = _entry(all, groupId);
+    final list = entry['insights'];
+    if (list is! List) return const [];
+    return list
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<void> saveInsights(
+    String groupId,
+    List<Map<String, dynamic>> insights,
+  ) async {
+    final all = await _readAll();
+    final entry = _entry(all, groupId);
+    entry['insights'] = insights;
+    all[groupId] = entry;
+    await _writeAll(all);
+  }
 }

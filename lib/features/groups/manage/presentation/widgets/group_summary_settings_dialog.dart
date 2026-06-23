@@ -13,9 +13,8 @@ import '../../../../settings/providers/settings_provider.dart';
 /// `SUMMARY_ALLOWED_AI_MODELS` list. Stored as a LOCAL setting and sent with
 /// each summarize request — no cloud round-trip.
 const List<({String key, String label, String desc})> kSummaryModels = [
-  (key: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (mặc định)', desc: 'Chất lượng cao nhất, tiêu hao 2 quota/lần'),
-  (key: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: 'Tốc độ cực nhanh, tiêu hao 2 quota/lần'),
-  (key: 'gemini-3-flash', label: 'Gemini 3 Flash', desc: 'Cơ bản, tiêu hao 1 quota/lần'),
+  (key: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (mặc định)', desc: 'Chất lượng cao nhất, tiêu hao 1 quota/lần'),
+  (key: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: 'Tốc độ cực nhanh, tiêu hao 1 quota/lần'),
 ];
 
 Future<void> showGroupSummarySettings(BuildContext context) {

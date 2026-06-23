@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
@@ -16,7 +17,14 @@ Future<List<GroupInsight>?> showActionItemsPreview(
 }) {
   return showDialog<List<GroupInsight>>(
     context: context,
-    builder: (_) => _ActionItemsPreviewDialog(items: items),
+    builder: (_) => Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(managedGroupsProvider);
+        // Lấy danh sách insights thực tế đang lưu trong proposedActionItems của state để đồng bộ khi xóa
+        final currentItems = state.proposedActionItems.where((x) => items.any((y) => y.id == x.id)).toList();
+        return _ActionItemsPreviewDialog(items: currentItems);
+      },
+    ),
   );
 }
 
@@ -41,73 +49,119 @@ class _ActionItemsPreviewDialogState extends State<_ActionItemsPreviewDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AppDialog(
-      title: 'Việc cần làm từ tóm tắt',
-      subtitle: 'Chọn các mục để tạo công việc chăm sóc.',
-      icon: Icons.checklist_outlined,
-      width: 560,
-      actions: [
-        AppDialogAction(
-          text: 'Bỏ qua',
-          variant: AppButtonVariant.outline,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        AppDialogAction(
-          text: 'Tạo ${_selected.length} công việc',
-          icon: Icons.add_task_outlined,
-          onPressed: _selected.isEmpty
-              ? null
-              : () => Navigator.of(context).pop(
-                  widget.items
-                      .where((e) => _selected.contains(e.id))
-                      .toList(),
-                ),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: widget.items.map((item) {
-          final checked = _selected.contains(item.id);
-          return Container(
-            margin: const EdgeInsets.only(bottom: AppSpacing.s),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: AppSpacing.borderRadiusS,
+    return Consumer(
+      builder: (context, ref, _) {
+        return AppDialog(
+          title: 'Việc cần làm từ tóm tắt',
+          subtitle: 'Chọn các mục để tạo công việc chăm sóc.',
+          icon: Icons.checklist_outlined,
+          width: 560,
+          actions: [
+            AppDialogAction(
+              text: 'Đóng',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            child: CheckboxListTile(
-              value: checked,
-              controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (v) => setState(() {
-                if (v == true) {
-                  _selected.add(item.id);
-                } else {
-                  _selected.remove(item.id);
-                }
-              }),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(item.title, style: AppTextStyles.bodyMedium),
-                  ),
-                  const SizedBox(width: AppSpacing.s),
-                  AppBadge(
-                    label: _priorityLabel(item.priority),
-                    variant: _priorityVariant(item.priority),
-                  ),
-                ],
-              ),
-              subtitle: item.description.isEmpty
+            AppDialogAction(
+              text: 'Xóa mục chọn',
+              variant: AppButtonVariant.destructive,
+              onPressed: _selected.isEmpty
                   ? null
-                  : Text(
-                      item.description,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
-                      ),
+                  : () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (confirmContext) => AppDialog(
+                          title: 'Xác nhận xóa',
+                          subtitle: 'Xóa các đề xuất công việc đã chọn khỏi DB?',
+                          icon: Icons.warning_amber_rounded,
+                          actions: [
+                            AppDialogAction(
+                              text: 'Hủy',
+                              variant: AppButtonVariant.outline,
+                              onPressed: () => Navigator.of(confirmContext).pop(false),
+                            ),
+                            AppDialogAction(
+                              text: 'Xóa',
+                              variant: AppButtonVariant.destructive,
+                              onPressed: () => Navigator.of(confirmContext).pop(true),
+                            ),
+                          ],
+                          child: Text(
+                            'Hành động này không thể hoàn tác.',
+                            style: AppTextStyles.body,
+                          ),
+                        ),
+                      );
+
+                      if (confirm == true) {
+                        final idsToDelete = _selected.intersection(widget.items.map((e) => e.id).toSet()).toList();
+                        await ref
+                            .read(managedGroupsProvider.notifier)
+                            .deleteInsights(idsToDelete);
+                        setState(() {
+                          _selected.removeAll(idsToDelete);
+                        });
+                      }
+                    },
+            ),
+            AppDialogAction(
+              text: 'Xác nhận (${_selected.intersection(widget.items.map((e) => e.id).toSet()).length})',
+              icon: Icons.add_task_outlined,
+              onPressed: _selected.isEmpty
+                  ? null
+                  : () => Navigator.of(context).pop(
+                      widget.items
+                          .where((e) => _selected.contains(e.id))
+                          .toList(),
                     ),
             ),
-          );
-        }).toList(),
-      ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: widget.items.map((item) {
+              final checked = _selected.contains(item.id);
+              return Container(
+                margin: const EdgeInsets.only(bottom: AppSpacing.s),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: AppSpacing.borderRadiusS,
+                ),
+                child: CheckboxListTile(
+                  value: checked,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selected.add(item.id);
+                    } else {
+                      _selected.remove(item.id);
+                    }
+                  }),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.title, style: AppTextStyles.bodyMedium),
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      AppBadge(
+                        label: _priorityLabel(item.priority),
+                        variant: _priorityVariant(item.priority),
+                      ),
+                    ],
+                  ),
+                  subtitle: item.description.isEmpty
+                      ? null
+                      : Text(
+                          item.description,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
