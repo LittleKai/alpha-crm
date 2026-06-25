@@ -461,6 +461,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isLoading: false, isSaved: true);
   }
 
+  Future<void> updateFontSettings(double multiplier, String family) async {
+    final updated = state.settings.copyWith(
+      fontSizeMultiplier: multiplier,
+      fontFamily: family,
+    );
+    state = state.copyWith(settings: updated, isSaved: false);
+    await _saveSettingsToFile(updated);
+  }
+
   void resetSavedState() {
     state = state.copyWith(isSaved: false);
   }

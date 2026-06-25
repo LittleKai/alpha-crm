@@ -8,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
 import 'app/theme/app_colors.dart';
+import 'app/theme/app_text_styles.dart';
 import 'features/security/presentation/app_lock_overlay.dart';
 import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
@@ -124,10 +125,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    final themeMode = switch (ref
-        .watch(settingsProvider)
-        .settings
-        .appThemeMode) {
+    final settingsState = ref.watch(settingsProvider);
+
+    // Apply global font settings dynamically
+    AppTextStyles.fontSizeMultiplier = settingsState.settings.fontSizeMultiplier;
+    AppTextStyles.fontFamily = settingsState.settings.fontFamily;
+
+    final themeMode = switch (settingsState.settings.appThemeMode) {
       'dark' => ThemeMode.dark,
       'system' => ThemeMode.system,
       _ => ThemeMode.light,

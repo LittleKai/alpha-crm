@@ -1,4 +1,4 @@
-import 'dart:io' show Platform, Directory, Process;
+import 'dart:io' show Platform, Directory, Process, File;
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -9,6 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' show join;
+import '../../../../shared/local_db/local_db.dart';
 
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -151,6 +154,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _AppearanceCard(
               themeMode: state.settings.appThemeMode,
               onChanged: notifier.setAppThemeMode,
+              fontFamily: state.settings.fontFamily,
+              fontSizeMultiplier: state.settings.fontSizeMultiplier,
+              onFontSettingsPressed: () => _showFontSettingsDialog(context),
             ),
             const SizedBox(height: AppSpacing.m),
             _AccountCard(
@@ -352,6 +358,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: AppSpacing.m),
               const _UpdateCard(),
             ],
+            const SizedBox(height: AppSpacing.m),
+            _DangerZoneCard(
+              onDeletePressed: () => _showDeleteDataDialog(context),
+            ),
           ],
         ),
       ),
@@ -457,6 +467,317 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       barrierDismissible: false,
       builder: (context) {
         return _AddAccountQrDialog(baseUrl: baseUrl, ref: ref);
+      },
+    );
+  }
+
+  void _showDeleteDataDialog(BuildContext context) {
+    bool deleteDb = false;
+    bool deleteCache = false;
+    bool deleteZaloAccounts = false;
+    bool isDeleting = false;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AppDialog(
+              title: 'Xóa dữ liệu hệ thống',
+              subtitle: 'Lựa chọn các loại dữ liệu cần xóa. Thao tác này không thể khôi phục.',
+              icon: Icons.delete_forever_rounded,
+              width: 500,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: isDeleting ? null : () => Navigator.of(dialogContext).pop(),
+                ),
+                AppDialogAction(
+                  text: isDeleting ? 'Đang xóa...' : 'Xác nhận xóa',
+                  variant: AppButtonVariant.destructive,
+                  onPressed: isDeleting || (!deleteDb && !deleteCache && !deleteZaloAccounts)
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isDeleting = true;
+                          });
+
+                          try {
+                            if (deleteZaloAccounts) {
+                              final accounts = ref.read(zaloIntegrationProvider).accounts;
+                              for (final account in accounts) {
+                                await ref
+                                    .read(zaloIntegrationProvider.notifier)
+                                    .deleteAccount(account.id);
+                              }
+                            }
+
+                            if (deleteDb) {
+                              try {
+                                final db = await LocalDb.instance;
+                                await db.close();
+                              } catch (_) {}
+                              
+                              final appSupportDir = await getApplicationSupportDirectory();
+                              final dbFile = File(join(appSupportDir.path, 'alpha_crm_local_v1.db'));
+                              if (await dbFile.exists()) {
+                                await dbFile.delete();
+                              }
+                            }
+
+                            if (deleteCache) {
+                              final downloadsDir = await getDownloadsDirectory();
+                              if (downloadsDir != null) {
+                                final dir = Directory(join(downloadsDir.path, 'AlphaCRM'));
+                                if (await dir.exists()) {
+                                  await dir.delete(recursive: true);
+                                }
+                              }
+                              final tempDir = await getTemporaryDirectory();
+                              if (await tempDir.exists()) {
+                                await tempDir.delete(recursive: true);
+                              }
+                            }
+
+                            if (!dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
+                            
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã xóa thành công các dữ liệu được chọn.'),
+                              ),
+                            );
+
+                            if (deleteZaloAccounts) {
+                              ref.read(zaloIntegrationProvider.notifier).checkConnection();
+                            }
+                          } catch (e) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              isDeleting = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Có lỗi xảy ra khi xóa dữ liệu: $e'),
+                              ),
+                            );
+                          }
+                        },
+                ),
+              ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  CheckboxListTile(
+                    title: Text('Xóa Cơ sở dữ liệu cục bộ', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                    subtitle: Text('Xóa lịch sử khách hàng offline, các phân đoạn, cache cục bộ...', style: AppTextStyles.caption),
+                    value: deleteDb,
+                    activeColor: AppColors.errorText,
+                    onChanged: isDeleting
+                        ? null
+                        : (val) {
+                            setDialogState(() {
+                              deleteDb = val ?? false;
+                            });
+                          },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const Divider(),
+                  CheckboxListTile(
+                    title: Text('Xóa Cache ứng dụng', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                    subtitle: Text('Xóa file/media tải xuống trong thư mục AlphaCRM và cache tạm thời...', style: AppTextStyles.caption),
+                    value: deleteCache,
+                    activeColor: AppColors.errorText,
+                    onChanged: isDeleting
+                        ? null
+                        : (val) {
+                            setDialogState(() {
+                              deleteCache = val ?? false;
+                            });
+                          },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const Divider(),
+                  CheckboxListTile(
+                    title: Text('Xóa toàn bộ tài khoản Zalo kết nối', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                    subtitle: Text('Đăng xuất toàn bộ các tài khoản Zalo và xóa thông tin phiên đăng nhập khỏi hệ thống...', style: AppTextStyles.caption),
+                    value: deleteZaloAccounts,
+                    activeColor: AppColors.errorText,
+                    onChanged: isDeleting
+                        ? null
+                        : (val) {
+                            setDialogState(() {
+                              deleteZaloAccounts = val ?? false;
+                            });
+                          },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: AppColors.isDarkMode ? const Color(0xFF3F1D1D) : const Color(0xFFFEF2F2),
+                      borderRadius: AppSpacing.borderRadiusS,
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Color(0xFFEF4444)),
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: Text(
+                            'Lưu ý: Hành động này sẽ xóa vĩnh viễn các dữ liệu đã chọn trên thiết bị này và không thể phục hồi.',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.isDarkMode ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showFontSettingsDialog(BuildContext context) {
+    final settings = ref.read(settingsProvider).settings;
+    double currentMultiplier = settings.fontSizeMultiplier;
+    String currentFamily = settings.fontFamily;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            TextStyle previewTitleStyle = GoogleFonts.getFont(
+              currentFamily,
+            ).copyWith(
+              fontSize: 20 * currentMultiplier,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            );
+            TextStyle previewBodyStyle = GoogleFonts.getFont(
+              currentFamily,
+            ).copyWith(
+              fontSize: 14 * currentMultiplier,
+              color: AppColors.textSecondary,
+            );
+
+            return AppDialog(
+              title: 'Cấu hình Font & Cỡ chữ',
+              subtitle: 'Thiết lập kích cỡ chữ và kiểu font chữ cho toàn hệ thống',
+              icon: Icons.font_download_rounded,
+              width: 500,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+                AppDialogAction(
+                  text: 'Lưu cấu hình',
+                  variant: AppButtonVariant.primary,
+                  onPressed: () async {
+                    await ref
+                        .read(settingsProvider.notifier)
+                        .updateFontSettings(currentMultiplier, currentFamily);
+                    if (!dialogContext.mounted) return;
+                    Navigator.of(dialogContext).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã cập nhật cấu hình Font & Cỡ chữ.'),
+                      ),
+                    );
+                  },
+                ),
+              ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Kiểu chữ hệ thống (Font Family)', style: AppTextStyles.label),
+                  const SizedBox(height: AppSpacing.xs),
+                  DropdownButtonFormField<String>(
+                    value: currentFamily,
+                    decoration: const InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Be Vietnam Pro', child: Text('Be Vietnam Pro (Mặc định)')),
+                      DropdownMenuItem(value: 'Inter', child: Text('Inter')),
+                      DropdownMenuItem(value: 'Roboto', child: Text('Roboto')),
+                      DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat')),
+                      DropdownMenuItem(value: 'Outfit', child: Text('Outfit')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          currentFamily = value;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Kích thước chữ (Font Size)', style: AppTextStyles.label),
+                      Text(
+                        '${(currentMultiplier * 100).toInt()}%',
+                        style: AppTextStyles.label.copyWith(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: currentMultiplier,
+                    min: 0.8,
+                    max: 1.4,
+                    divisions: 6,
+                    label: '${(currentMultiplier * 100).toInt()}%',
+                    onChanged: (value) {
+                      setDialogState(() {
+                        currentMultiplier = double.parse(value.toStringAsFixed(1));
+                      });
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Text('Khu vực xem trước (Live Preview)', style: AppTextStyles.label),
+                  const SizedBox(height: AppSpacing.xs),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: AppColors.isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: AppSpacing.borderRadiusS,
+                      border: Border.all(color: AppColors.borderSoft),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Alpha CRM - Tiêu đề', style: previewTitleStyle),
+                        const SizedBox(height: AppSpacing.s),
+                        Text(
+                          'Đây là nội dung hiển thị mẫu của hệ thống Alpha CRM giúp bạn dễ dàng so sánh kích thước và độ hiển thị của font chữ tiếng Việt.',
+                          style: previewBodyStyle,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }
@@ -667,8 +988,17 @@ class _Header extends StatelessWidget {
 class _AppearanceCard extends StatelessWidget {
   final String themeMode;
   final ValueChanged<String> onChanged;
+  final String fontFamily;
+  final double fontSizeMultiplier;
+  final VoidCallback onFontSettingsPressed;
 
-  const _AppearanceCard({required this.themeMode, required this.onChanged});
+  const _AppearanceCard({
+    required this.themeMode,
+    required this.onChanged,
+    required this.fontFamily,
+    required this.fontSizeMultiplier,
+    required this.onFontSettingsPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -688,37 +1018,93 @@ class _AppearanceCard extends StatelessWidget {
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s),
-              Text('Giao diện', style: AppTextStyles.sectionTitle),
+              Text('Giao diện & Chữ viết', style: AppTextStyles.sectionTitle),
               const SizedBox(width: 6),
               Tooltip(
-                message: 'Cấu hình chế độ hiển thị giao diện của ứng dụng (Sáng, Tối hoặc theo hệ thống).',
+                message: 'Cấu hình chế độ hiển thị giao diện và phông chữ của ứng dụng.',
                 child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.m),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                value: 'light',
-                icon: Icon(Icons.light_mode_outlined),
-                label: Text('Sáng'),
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'light',
+                      icon: Icon(Icons.light_mode_outlined),
+                      label: Text('Sáng'),
+                    ),
+                    ButtonSegment(
+                      value: 'dark',
+                      icon: Icon(Icons.dark_mode_outlined),
+                      label: Text('Tối'),
+                    ),
+                    ButtonSegment(
+                      value: 'system',
+                      icon: Icon(Icons.brightness_auto_outlined),
+                      label: Text('Hệ thống'),
+                    ),
+                  ],
+                  selected: selected,
+                  onSelectionChanged: (values) {
+                    if (values.isNotEmpty) onChanged(values.first);
+                  },
+                ),
               ),
-              ButtonSegment(
-                value: 'dark',
-                icon: Icon(Icons.dark_mode_outlined),
-                label: Text('Tối'),
-              ),
-              ButtonSegment(
-                value: 'system',
-                icon: Icon(Icons.brightness_auto_outlined),
-                label: Text('Hệ thống'),
+              const SizedBox(width: AppSpacing.m),
+              AppButton(
+                text: 'Cấu hình Font & Cỡ chữ',
+                icon: Icons.font_download_outlined,
+                variant: AppButtonVariant.outline,
+                onPressed: onFontSettingsPressed,
               ),
             ],
-            selected: selected,
-            onSelectionChanged: (values) {
-              if (values.isNotEmpty) onChanged(values.first);
-            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DangerZoneCard extends StatelessWidget {
+  final VoidCallback onDeletePressed;
+
+  const _DangerZoneCard({required this.onDeletePressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text('Vùng nguy hiểm (Danger Zone)', style: AppTextStyles.sectionTitle.copyWith(color: const Color(0xFFEF4444))),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Text(
+            'Các thao tác xóa dữ liệu không thể hoàn tác. Vui lòng cẩn trọng trước khi thực hiện.',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AppButton(
+              text: 'Xóa dữ liệu hệ thống...',
+              icon: Icons.delete_forever_outlined,
+              variant: AppButtonVariant.destructive,
+              onPressed: onDeletePressed,
+            ),
           ),
         ],
       ),

@@ -166,6 +166,14 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.s),
+        IconButton(
+          tooltip: 'Làm mới dữ liệu',
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            ref.read(zaloIntegrationProvider.notifier).checkConnection();
+            ref.read(friendByGroupProvider.notifier).loadGroups();
+          },
+        ),
       ],
     );
   }

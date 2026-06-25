@@ -34,6 +34,7 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
   @override
   void initState() {
     super.initState();
+    _searchController.text = ref.read(createGroupsProvider).searchQuery;
     _namesController.addListener(() {
       ref
           .read(createGroupsProvider.notifier)
@@ -168,6 +169,14 @@ class _CreateGroupsScreenState extends ConsumerState<CreateGroupsScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.s),
+        IconButton(
+          tooltip: 'Làm mới dữ liệu',
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            ref.read(zaloIntegrationProvider.notifier).checkConnection();
+            ref.read(createGroupsProvider.notifier).loadFriends();
+          },
+        ),
       ],
     );
   }

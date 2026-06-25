@@ -35,6 +35,7 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
   @override
   void initState() {
     super.initState();
+    _searchController.text = ref.read(inviteToGroupProvider).searchQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(zaloIntegrationProvider.notifier).checkConnection();
       ref.read(inviteToGroupProvider.notifier).loadFriends();
@@ -184,6 +185,15 @@ class _InviteToGroupScreenState extends ConsumerState<InviteToGroupScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.s),
+        IconButton(
+          tooltip: 'Làm mới dữ liệu',
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            ref.read(zaloIntegrationProvider.notifier).checkConnection();
+            ref.read(inviteToGroupProvider.notifier).loadFriends();
+            ref.read(inviteToGroupProvider.notifier).loadGroups();
+          },
+        ),
       ],
     );
   }

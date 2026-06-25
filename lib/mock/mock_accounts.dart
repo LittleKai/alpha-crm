@@ -55,6 +55,10 @@ class SystemSettings {
   // AI model used for group summaries (local preference, sent with each request).
   final String summaryAiModel;
 
+  // Font and size settings
+  final double fontSizeMultiplier;
+  final String fontFamily;
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -97,6 +101,8 @@ class SystemSettings {
     this.liveChatNotifications = true,
     this.showTokenAnalytics = true,
     this.summaryAiModel = 'gemini-3.1-pro',
+    this.fontSizeMultiplier = 1.0,
+    this.fontFamily = 'Be Vietnam Pro',
   });
 
   SystemSettings copyWith({
@@ -141,6 +147,8 @@ class SystemSettings {
     bool? liveChatNotifications,
     bool? showTokenAnalytics,
     String? summaryAiModel,
+    double? fontSizeMultiplier,
+    String? fontFamily,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -199,6 +207,8 @@ class SystemSettings {
           liveChatNotifications ?? this.liveChatNotifications,
       showTokenAnalytics: showTokenAnalytics ?? this.showTokenAnalytics,
       summaryAiModel: summaryAiModel ?? this.summaryAiModel,
+      fontSizeMultiplier: fontSizeMultiplier ?? this.fontSizeMultiplier,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 
@@ -251,6 +261,8 @@ class SystemSettings {
       'liveChatNotifications': liveChatNotifications,
       'showTokenAnalytics': showTokenAnalytics,
       'summaryAiModel': summaryAiModel,
+      'fontSizeMultiplier': fontSizeMultiplier,
+      'fontFamily': fontFamily,
     };
   }
 
@@ -318,6 +330,8 @@ class SystemSettings {
       liveChatNotifications: json['liveChatNotifications'] != false,
       showTokenAnalytics: json['showTokenAnalytics'] != false,
       summaryAiModel: (json['summaryAiModel'] ?? 'gemini-3.1-pro').toString(),
+      fontSizeMultiplier: json['fontSizeMultiplier']?.toDouble() ?? 1.0,
+      fontFamily: json['fontFamily'] ?? 'Be Vietnam Pro',
     );
   }
 }
@@ -359,5 +373,7 @@ class MockAccounts {
     localBridgeBaseUrl: 'http://127.0.0.1:8787',
     liveChatConversationCacheTtlSeconds: 30,
     liveChatMessageCacheTtlSeconds: 300,
+    fontSizeMultiplier: 1.0,
+    fontFamily: 'Be Vietnam Pro',
   );
 }

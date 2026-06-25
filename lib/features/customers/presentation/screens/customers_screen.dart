@@ -409,6 +409,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   String? _activeContactId;
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.text = ref.read(customersProvider).searchQuery;
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();

@@ -33,6 +33,12 @@ class _SendHistoryScreenState extends ConsumerState<SendHistoryScreen> {
   final int _itemsPerPage = 30;
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.text = ref.read(sendHistoryProvider).searchQuery;
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();

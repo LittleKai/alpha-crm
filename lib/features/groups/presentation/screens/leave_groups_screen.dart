@@ -33,6 +33,7 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
   @override
   void initState() {
     super.initState();
+    _searchController.text = ref.read(leaveGroupsProvider).searchQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(zaloIntegrationProvider.notifier).checkConnection().then((_) {
         ref.read(leaveGroupsProvider.notifier).reloadGroups();

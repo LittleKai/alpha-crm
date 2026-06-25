@@ -27,6 +27,12 @@ class _ContentTemplatesScreenState
   final TextEditingController _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.text = ref.read(templatesProvider).searchQuery;
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
