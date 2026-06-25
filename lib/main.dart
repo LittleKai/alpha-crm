@@ -14,6 +14,7 @@ import 'features/security/providers/app_lock_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'features/settings/providers/update_provider.dart';
 import 'features/messaging/bulk/providers/scheduled_campaigns_provider.dart';
+import 'features/messaging/live_chat/providers/live_chat_provider.dart';
 import 'shared/utils/zalo_backend_manager.dart';
 import 'shared/utils/desktop_window_manager.dart';
 import 'shared/utils/desktop_notifier.dart';
@@ -94,6 +95,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // loads persisted jobs and re-arms Timers (or marks past-due as missed)
       // even if the user never opens the bulk messaging screen this session.
       ref.read(scheduledCampaignsProvider);
+      // Instantiate the live-chat manager at startup so it listens to events and
+      // processes desktop notifications even if the user hasn't visited the live chat tab yet.
+      ref.read(liveChatProvider.notifier);
       unawaited(_checkPostUpdate());
     });
   }

@@ -17,7 +17,6 @@ import '../../features/friends/by_phone/presentation/screens/friend_by_phone_scr
 import '../../features/friends/by_group/presentation/screens/friend_by_group_screen_placeholder.dart';
 import '../../features/friends/auto_approve/presentation/screens/auto_approve_screen_placeholder.dart';
 import '../../features/friends/history/presentation/screens/friend_history_screen_placeholder.dart';
-import '../../features/groups/presentation/screens/scan_members_screen_placeholder.dart';
 import '../../features/groups/presentation/screens/join_groups_screen_placeholder.dart';
 import '../../features/groups/presentation/screens/invite_to_group_screen_placeholder.dart';
 import '../../features/groups/presentation/screens/create_groups_screen_placeholder.dart';
@@ -133,10 +132,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.friendsHistory,
             builder: (context, state) => const FriendHistoryScreenPlaceholder(),
-          ),
-          GoRoute(
-            path: AppRoutes.groupsScanMembers,
-            builder: (context, state) => const ScanMembersScreenPlaceholder(),
           ),
           GoRoute(
             path: AppRoutes.groupsJoin,

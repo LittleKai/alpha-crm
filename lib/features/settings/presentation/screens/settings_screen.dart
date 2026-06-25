@@ -1027,42 +1027,53 @@ class _AppearanceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.m),
-          Row(
-            children: [
-              Expanded(
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'light',
-                      icon: Icon(Icons.light_mode_outlined),
-                      label: Text('Sáng'),
-                    ),
-                    ButtonSegment(
-                      value: 'dark',
-                      icon: Icon(Icons.dark_mode_outlined),
-                      label: Text('Tối'),
-                    ),
-                    ButtonSegment(
-                      value: 'system',
-                      icon: Icon(Icons.brightness_auto_outlined),
-                      label: Text('Hệ thống'),
-                    ),
-                  ],
-                  selected: selected,
-                  onSelectionChanged: (values) {
-                    if (values.isNotEmpty) onChanged(values.first);
-                  },
-                ),
+          (() {
+            final isMobile = MediaQuery.of(context).size.width < 650;
+            final itemChildren = [
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'light',
+                    icon: Icon(Icons.light_mode_outlined),
+                    label: Text('Sáng'),
+                  ),
+                  ButtonSegment(
+                    value: 'dark',
+                    icon: Icon(Icons.dark_mode_outlined),
+                    label: Text('Tối'),
+                  ),
+                  ButtonSegment(
+                    value: 'system',
+                    icon: Icon(Icons.brightness_auto_outlined),
+                    label: Text('Hệ thống'),
+                  ),
+                ],
+                selected: selected,
+                onSelectionChanged: (values) {
+                  if (values.isNotEmpty) onChanged(values.first);
+                },
               ),
-              const SizedBox(width: AppSpacing.m),
+              if (!isMobile) const Spacer() else const SizedBox(height: AppSpacing.m),
               AppButton(
                 text: 'Cấu hình Font & Cỡ chữ',
                 icon: Icons.font_download_outlined,
                 variant: AppButtonVariant.outline,
                 onPressed: onFontSettingsPressed,
+                width: isMobile ? double.infinity : null,
               ),
-            ],
-          ),
+            ];
+
+            if (isMobile) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: itemChildren,
+              );
+            } else {
+              return Row(
+                children: itemChildren,
+              );
+            }
+          })(),
         ],
       ),
     );

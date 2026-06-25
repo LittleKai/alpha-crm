@@ -129,12 +129,6 @@ final List<NavGroup> navigationGroups = [
     defaultExpanded: false,
     items: [
       NavItem(
-        title: 'Quét thành viên',
-        icon: Icons.person_search_outlined,
-        routePath: '/groups/scan-members',
-        color: Colors.cyan,
-      ),
-      NavItem(
         title: 'Tham gia nhóm',
         icon: Icons.login_outlined,
         routePath: '/groups/join',

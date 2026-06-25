@@ -62,3 +62,17 @@ export function getClientLogs(): ClientLog[] {
     return [];
   }
 }
+
+export function deleteClientLogs(ids: string[]): void {
+  if (!fs.existsSync(clientLogFilePath)) {
+    return;
+  }
+  try {
+    const content = fs.readFileSync(clientLogFilePath, 'utf-8');
+    let logs: ClientLog[] = JSON.parse(content);
+    logs = logs.filter(log => !ids.includes(log.id));
+    fs.writeFileSync(clientLogFilePath, JSON.stringify(logs, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to delete client logs:', err);
+  }
+}

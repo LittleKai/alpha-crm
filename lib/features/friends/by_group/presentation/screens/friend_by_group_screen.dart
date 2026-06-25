@@ -188,7 +188,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
       return id == state.selectedAccountId;
     }
     
-    final selectableMembers = state.members.where((m) => !isSelf(m.id)).toList();
+    final selectableMembers = state.members.where((m) => !isSelf(m.id) && m.status != 'Đã kết bạn').toList();
 
     final allSelected =
         selectableMembers.isNotEmpty &&
@@ -222,7 +222,7 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s),
-                if (_sourceTab == 0)
+                if (_sourceTab == 0) ...[
                   Row(
                     children: [
                       Expanded(
@@ -243,7 +243,169 @@ class _FriendByGroupScreenState extends ConsumerState<FriendByGroupScreen> {
                             notifier.scanGroupLink(_linkController.text),
                       ),
                     ],
-                  )
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  Divider(color: AppColors.borderSoft),
+                  const SizedBox(height: AppSpacing.s),
+                  if (state.savedGroups.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+                      child: Text(
+                        'Chưa có nhóm nào được quét hoặc lưu.',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Row(
+                      children: [
+                        Icon(Icons.history, size: 16, color: AppColors.primary),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text(
+                          'Nhóm đã quét gần đây (${state.savedGroups.length}):',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    SizedBox(
+                      height: 105,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: state.savedGroups.length,
+                        itemBuilder: (context, index) {
+                          final group = state.savedGroups[index];
+                          final isSelected = state.selectedGroupId == group.id;
+
+                          return Container(
+                            width: 220,
+                            margin: const EdgeInsets.only(right: AppSpacing.sm),
+                            child: Stack(
+                              children: [
+                                Material(
+                                  color: isSelected
+                                      ? AppColors.primarySoft
+                                      : AppColors.surface,
+                                  borderRadius: AppSpacing.borderRadiusM,
+                                  child: InkWell(
+                                    onTap: () {
+                                      if (isSelected) {
+                                        notifier.selectSavedGroup(null);
+                                        _linkController.clear();
+                                      } else {
+                                        notifier.selectSavedGroup(group.id);
+                                        _linkController.text =
+                                            'https://zalo.me/g/${group.id}';
+                                      }
+                                    },
+                                    borderRadius: AppSpacing.borderRadiusM,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        borderRadius: AppSpacing.borderRadiusM,
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.borderSoft,
+                                          width: isSelected ? 1.5 : 1.0,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: AppColors.surfaceMuted,
+                                            backgroundImage: group.avatarUrl.isNotEmpty
+                                                ? NetworkImage(group.avatarUrl)
+                                                : null,
+                                            child: group.avatarUrl.isEmpty
+                                                ? Text(
+                                                    group.name.isNotEmpty
+                                                        ? group.name
+                                                              .substring(0, 1)
+                                                              .toUpperCase()
+                                                        : 'G',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppColors.textSecondary,
+                                                    ),
+                                                  )
+                                                : null,
+                                          ),
+                                          const SizedBox(width: AppSpacing.s),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  group.name,
+                                                  style: AppTextStyles.bodyMedium
+                                                      .copyWith(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 12.5,
+                                                      ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${group.memberCount} thành viên',
+                                                  style: AppTextStyles.caption.copyWith(
+                                                    color: AppColors.textMuted,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: InkWell(
+                                    onTap: () {
+                                      notifier.removeSavedGroup(group.id);
+                                      if (state.selectedGroupId == group.id) {
+                                        _linkController.clear();
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surfaceMuted,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: AppColors.borderSoft),
+                                      ),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 12,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ]
                 else
                   Row(
                     children: [

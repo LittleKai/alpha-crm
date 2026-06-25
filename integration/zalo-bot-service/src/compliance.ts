@@ -170,21 +170,7 @@ export function evaluateCompliance(req: ComplianceRequest): ComplianceDecision {
 
   // ── Channel-specific gating ──
 
-  // Mock mode: only test sends
-  if (channelMode === 'mock' && !isTestMode) {
-    return {
-      allowed: false,
-      riskLevel: 'medium',
-      reason: 'Mock mode only allows test sends. Switch to a real channel for production.',
-    };
-  }
-  if (channelMode === 'mock' && isTestMode) {
-    return {
-      allowed: true,
-      riskLevel: 'low',
-      reason: 'Test mode in mock channel.',
-    };
-  }
+
 
   // Personal mode: check server-side automation flags
   if (channelMode === 'personal_zca') {

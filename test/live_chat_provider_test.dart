@@ -371,6 +371,26 @@ void main() {
       expect(notifier.state.selectedConversation?.id, 'conv-1');
     },
   );
+
+  test(
+    'silent refresh loads messages after initial offline startup',
+    () async {
+      final repository = _FakeLiveChatRepository()
+        ..failNextConversations = true;
+      final notifier = LiveChatNotifier(repository);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.selectedConversation, isNull);
+      repository.resetCounters();
+
+      await notifier.loadConversations(silent: true);
+
+      expect(repository.getConversationsCalls, 1);
+      expect(repository.getMessagesCalls, 1);
+      expect(notifier.state.selectedConversation?.id, 'conv-1');
+      expect(notifier.state.selectedConversation?.messages, isNotEmpty);
+    },
+  );
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {
@@ -386,6 +406,7 @@ class _FakeLiveChatRepository extends LiveChatRepository {
   int sendMessageCalls = 0;
   bool failNextSend = false;
   bool failReaction = false;
+  bool failNextConversations = false;
   bool includeGroupConversation = false;
   bool returnAlternateOnly = false;
   String? retriedMessageId;
@@ -444,6 +465,10 @@ class _FakeLiveChatRepository extends LiveChatRepository {
     int limit = 30,
   }) async {
     getConversationsCalls += 1;
+    if (failNextConversations) {
+      failNextConversations = false;
+      return {'success': false, 'message': 'Bridge offline'};
+    }
     if (returnAlternateOnly) {
       return {
         'success': true,

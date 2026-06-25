@@ -191,10 +191,6 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
                 actionType = ZaloActionType.friendByPhone;
               } else if (widget.currentRoute.startsWith('/friends/by-group')) {
                 actionType = ZaloActionType.friendByGroup;
-              } else if (widget.currentRoute.startsWith(
-                '/groups/scan-members',
-              )) {
-                actionType = ZaloActionType.scanGroupMembers;
               } else if (widget.currentRoute.startsWith('/groups/join')) {
                 actionType = ZaloActionType.joinGroups;
               } else if (widget.currentRoute.startsWith('/groups/invite')) {
@@ -260,9 +256,6 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
     }
     if (route.startsWith('/friends/history')) {
       return ['Chức năng kết bạn', 'Lịch sử kết bạn'];
-    }
-    if (route.startsWith('/groups/scan-members')) {
-      return ['Quản lý nhóm', 'Quét thành viên'];
     }
     if (route.startsWith('/groups/join')) {
       return ['Quản lý nhóm', 'Tham gia nhóm tự động'];

@@ -7,7 +7,6 @@ import { config } from './config.js';
 import type { ZaloChannel, ZaloSendMessageRequest, ZaloSendMessageResult, ZaloRecallMessageRequest, ZaloChannelStatus, ZaloFriend, ZaloGroupMember } from './channels/types.js';
 import { PersonalZcaChannel } from './channels/personal-zca-channel.js';
 import { OfficialOaChannel } from './channels/official-oa-channel.js';
-import { MockZaloChannel } from './channels/mock-channel.js';
 
 function createChannel(): ZaloChannel {
   switch (config.channelMode) {
@@ -15,13 +14,11 @@ function createChannel(): ZaloChannel {
       return new PersonalZcaChannel();
     case 'official_oa':
       return new OfficialOaChannel();
-    case 'mock':
-      return new MockZaloChannel();
     default:
       console.warn(
-        `[zalo] Unknown channel mode "${config.channelMode}", falling back to mock.`,
+        `[zalo] Unknown channel mode "${config.channelMode}", falling back to personal_zca.`,
       );
-      return new MockZaloChannel();
+      return new PersonalZcaChannel();
   }
 }
 

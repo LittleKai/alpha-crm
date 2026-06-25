@@ -454,6 +454,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         ? AppColors.errorSoft
         : AppColors.warningSoft;
 
+    final features = [
+      'Kết nối thiết bị Windows Client & Android Connector',
+      isTrial ? '100 yêu cầu AI chất lượng cao' : '1.000 yêu cầu AI chất lượng cao mỗi tháng',
+      'Chatbot tự động phản hồi & Live Chat tập trung',
+      'Gửi tin nhắn hàng loạt & Chiến dịch Zalo marketing',
+      'Tự động tóm tắt cuộc hội thoại nhóm bằng AI',
+    ];
+
     return _SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,7 +478,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                       isTrial
                           ? 'Gói dùng thử Alpha CRM'
                           : 'Gói Alpha CRM hàng tháng',
-                      style: AppTextStyles.cardTitle,
+                      style: AppTextStyles.cardTitle.copyWith(fontSize: 18),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -508,32 +516,77 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.l),
+          Divider(height: 1, color: AppColors.borderSoft),
+          const SizedBox(height: AppSpacing.l),
           Wrap(
-            spacing: AppSpacing.m,
-            runSpacing: AppSpacing.m,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.s,
+            runSpacing: AppSpacing.xs,
             children: [
-              _MetricPill(
-                label: 'Chi phí',
-                value: isTrial
-                    ? 'Miễn phí'
-                    : '${crmMonthlyPlan.priceCredits} Credits',
-                note: isTrial
-                    ? 'Chỉ 1 lần / tài khoản'
-                    : formatVnd(crmMonthlyPlan.priceVnd),
+              Text(
+                isTrial ? 'Miễn phí' : '500.000đ',
+                style: AppTextStyles.pageTitle.copyWith(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
               ),
-              _MetricPill(
-                label: 'Chu kỳ',
-                value: isTrial ? '7 ngày' : '30 ngày',
-                note: isTrial ? 'Tự hết hạn' : 'Gia hạn thủ công',
-              ),
-              _MetricPill(
-                label: 'Quota AI',
-                value:
-                    '${isTrial ? crmTrialPlan.aiRequests : crmMonthlyPlan.aiRequests}',
-                note: 'yêu cầu / chu kỳ',
-              ),
+              if (!isTrial) ...[
+                Text(
+                  '/ tháng',
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+                ),
+                Text(
+                  'hoặc',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                ),
+                Text(
+                  '5.250 Credits',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  '/ 14 ngày',
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+                ),
+              ]
             ],
           ),
+          const SizedBox(height: AppSpacing.l),
+          Text(
+            'Tính năng bao gồm:',
+            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          ...features.map((feature) => Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.s),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.success,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: Text(
+                    feature,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )),
           const SizedBox(height: AppSpacing.l),
           Container(
             width: double.infinity,
@@ -548,9 +601,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   ? 'Gói đã hết hạn. Hãy gia hạn để mở lại gửi tin, chatbot và sử dụng quota AI.'
                   : isActive
                   ? isTrial
-                        ? 'Gói dùng thử chỉ cấp 1 lần cho tài khoản mới: 7 ngày và 50 yêu cầu AI. Nâng cấp sẽ chuyển sang gói trả phí 30 ngày.'
+                        ? 'Gói dùng thử chỉ cấp 1 lần cho tài khoản mới. Bạn có thể nâng cấp lên gói chính bất cứ lúc nào.'
                         : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 1000 yêu cầu AI.'
-                  : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị.',
+                  : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị Zalo.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
                 height: 1.45,
@@ -580,6 +633,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget _buildQuotaCard(CrmAuthState authState) {
     final totalRemaining =
         authState.includedAiRemaining + authState.extraAiRemaining;
+    final isTrial = authState.isTrialSubscription;
+    final totalLimit = isTrial ? 100 : 1000;
+    final double progress = (totalRemaining / totalLimit).clamp(0.0, 1.0);
 
     return _SurfaceCard(
       child: Column(
@@ -591,33 +647,47 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               const SizedBox(width: AppSpacing.m),
               Expanded(
                 child: Text(
-                  'Hạn mức AI hiện tại',
-                  style: AppTextStyles.cardTitle,
+                  'Hạn mức AI khả dụng',
+                  style: AppTextStyles.cardTitle.copyWith(fontSize: 18),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.l),
+          const SizedBox(height: AppSpacing.xl),
           Center(
             child: Column(
               children: [
                 Text(
                   '$totalRemaining',
                   style: AppTextStyles.pageTitle.copyWith(
-                    fontSize: 48,
+                    fontSize: 56,
                     color: totalRemaining > 0
-                        ? AppColors.successText
+                        ? AppColors.primary
                         : AppColors.errorText,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'yêu cầu AI khả dụng',
+                  'trong tổng số $totalLimit yêu cầu AI',
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.l),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: AppColors.borderSoft,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                totalRemaining > 0 ? AppColors.primary : AppColors.error
+              ),
+              minHeight: 8,
             ),
           ),
           const SizedBox(height: AppSpacing.l),
@@ -632,15 +702,15 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               const SizedBox(width: AppSpacing.m),
               Expanded(
                 child: _QuotaBucket(
-                  label: 'Mua thêm',
+                  label: 'Mua thêm (Top-up)',
                   value: authState.extraAiRemaining,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.m),
+          const SizedBox(height: AppSpacing.l),
           Text(
-            'Quota mua thêm được giữ lại, nhưng chỉ dùng khi gói Alpha CRM đang hoạt động.',
+            'Hạn mức mua thêm sẽ được bảo lưu vô thời hạn, tuy nhiên chỉ có thể sử dụng khi gói Alpha CRM đang hoạt động.',
             style: AppTextStyles.caption.copyWith(
               color: AppColors.textMuted,
               height: 1.45,
@@ -751,6 +821,85 @@ class _HeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    if (isMobile) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppSpacing.borderRadiusM,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const _IconBadge(icon: Icons.subscriptions_rounded, size: 40),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: Text(
+                    'Đăng ký & gói AI',
+                    style: AppTextStyles.pageTitle.copyWith(fontSize: 20),
+                  ),
+                ),
+                IconButton(
+                  icon: isLoading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : const Icon(Icons.refresh, size: 20),
+                  tooltip: 'Làm mới',
+                  onPressed: isLoading ? null : onRefresh,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s),
+            Text(
+              'Quản lý gói Alpha CRM, mua thêm quota AI và tạo mã VietQR chuyển khoản cho từng giao dịch.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Divider(height: 1, color: AppColors.borderSoft),
+            const SizedBox(height: AppSpacing.m),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Credits', style: AppTextStyles.caption),
+                Row(
+                  children: [
+                    Text(
+                      '$creditBalance',
+                      style: AppTextStyles.cardTitle.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Text(
+                      '(${status == 'active' ? (isTrial ? 'Đang dùng thử' : 'Gói đang hoạt động') : (status == 'expired' ? 'Gói đã hết hạn' : 'Chưa có gói')})',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
@@ -873,43 +1022,6 @@ class _IconBadge extends StatelessWidget {
   }
 }
 
-class _MetricPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final String note;
-
-  const _MetricPill({
-    required this.label,
-    required this.value,
-    required this.note,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: AppSpacing.borderRadiusM,
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: AppTextStyles.caption),
-          const SizedBox(height: AppSpacing.xs),
-          Text(value, style: AppTextStyles.bodyMedium),
-          Text(
-            note,
-            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _QuotaBucket extends StatelessWidget {
   final String label;
   final int value;
@@ -957,7 +1069,25 @@ class _TopUpCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPopular = product.productId == 'crm_ai_pack_500';
 
-    return _SurfaceCard(
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(
+          color: isPopular ? AppColors.primary : AppColors.border,
+          width: isPopular ? 2.0 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isPopular 
+                ? AppColors.primary.withValues(alpha: 0.08) 
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: isPopular ? 24 : 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -991,29 +1121,40 @@ class _TopUpCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.m),
-          Text(product.name, style: AppTextStyles.cardTitle),
+          Text(
+            product.name, 
+            style: AppTextStyles.cardTitle.copyWith(fontSize: 18),
+          ),
           const SizedBox(height: AppSpacing.s),
           Text(
             '+${product.aiRequests} yêu cầu AI dùng cho chatbot, phân tích khách hàng và soạn chiến dịch.',
             style: AppTextStyles.body.copyWith(
               color: AppColors.textSecondary,
               height: 1.45,
+              fontSize: 14,
             ),
           ),
           const SizedBox(height: AppSpacing.l),
           Text(
             formatVnd(product.priceVnd),
-            style: AppTextStyles.pageTitle.copyWith(fontSize: 24),
+            style: AppTextStyles.pageTitle.copyWith(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           Text(
             'hoặc ${product.priceCredits} Credits',
-            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: AppSpacing.l),
           AppButton(
             text: enabled ? 'Mua gói này' : 'Cần gói CRM',
             icon: Icons.shopping_cart_checkout_rounded,
             width: double.infinity,
+            variant: isPopular ? AppButtonVariant.primary : AppButtonVariant.outline,
             onPressed: enabled ? onBuy : null,
           ),
         ],

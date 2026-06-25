@@ -24,7 +24,7 @@ import '../../providers/scheduled_campaigns_provider.dart';
 import '../../data/scheduled_campaign.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
 import '../../../../groups/providers/invite_to_group_provider.dart';
-import '../../../../groups/providers/scan_members_provider.dart';
+import '../../../../friends/by_group/providers/friend_by_group_provider.dart';
 import '../../../../customers/providers/customers_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../../zalo_integration/data/zalo_integration_api.dart';
@@ -1058,7 +1058,7 @@ class _GroupTargetPanel extends ConsumerWidget {
                                   recipientsController.text = '';
                                   if (group != null) {
                                     ref
-                                        .read(scanMembersProvider.notifier)
+                                        .read(friendByGroupProvider.notifier)
                                         .selectSavedGroup(group.groupId);
                                   }
                                 },
@@ -1282,7 +1282,7 @@ class _GroupMemberSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scanState = ref.watch(scanMembersProvider);
+    final scanState = ref.watch(friendByGroupProvider);
     final notifier = ref.read(bulkMessagingProvider.notifier);
     final accountId = bulkAccountFilterId(ref.read(bulkMessagingProvider).selectedAccount);
 

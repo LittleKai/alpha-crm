@@ -29,6 +29,10 @@ class FriendByGroupState {
   final String? complianceError;
   final String? errorText;
 
+  // New properties integrated from scan members
+  final List<SavedScannedGroup> savedGroups;
+  final Set<String> friendIds;
+
   const FriendByGroupState({
     required this.isScanning,
     required this.isRunning,
@@ -45,6 +49,8 @@ class FriendByGroupState {
     this.sendInboxAfterAccepted = false,
     this.complianceError,
     this.errorText,
+    this.savedGroups = const [],
+    this.friendIds = const {},
   });
 
   FriendByGroupState copyWith({
@@ -63,6 +69,8 @@ class FriendByGroupState {
     bool? sendInboxAfterAccepted,
     String? complianceError,
     String? errorText,
+    List<SavedScannedGroup>? savedGroups,
+    Set<String>? friendIds,
   }) {
     return FriendByGroupState(
       isScanning: isScanning ?? this.isScanning,
@@ -81,6 +89,8 @@ class FriendByGroupState {
           sendInboxAfterAccepted ?? this.sendInboxAfterAccepted,
       complianceError: complianceError,
       errorText: errorText,
+      savedGroups: savedGroups ?? this.savedGroups,
+      friendIds: friendIds ?? this.friendIds,
     );
   }
 }
@@ -101,6 +111,8 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           selectedMemberIds: {},
           logs: [],
           groupLinkInput: '',
+          savedGroups: const [],
+          friendIds: {},
         ),
       ) {
     // Initial fetch of groups if connected
@@ -114,8 +126,62 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
 
   bool get _isConnected => _ref.read(zaloIntegrationProvider).isConnected;
 
+  void removeSavedGroup(String id) {
+    final newList = state.savedGroups.where((g) => g.id != id).toList();
+    if (state.selectedGroupId == id) {
+      state = state.copyWith(
+        savedGroups: newList,
+        selectedGroupId: null,
+        members: [],
+      );
+    } else {
+      state = state.copyWith(savedGroups: newList);
+    }
+  }
+
+  Future<void> loadFriends(String? accountId) async {
+    if (accountId == null || accountId.isEmpty || !_isConnected) {
+      state = state.copyWith(friendIds: {});
+      return;
+    }
+    try {
+      final api = _getApi();
+      final response = await api.fetchFriends(accountId: accountId);
+      if (response['success'] == true && response['friends'] != null) {
+        final List<dynamic> rawFriends = response['friends'];
+        final friendIds = rawFriends
+            .map((f) => f['userId']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        state = state.copyWith(friendIds: friendIds);
+        
+        // Update current members' friend status if any
+        _updateFriendStatus(friendIds);
+      }
+    } catch (_) {}
+  }
+
+  void _updateFriendStatus(Set<String> friendIds) {
+    if (state.members.isEmpty) return;
+    final updatedMembers = state.members.map((member) {
+      final isFriend = friendIds.contains(member.id);
+      return ScannedMember(
+        id: member.id,
+        name: member.name,
+        phone: member.phone,
+        role: member.role,
+        status: isFriend ? 'Đã kết bạn' : 'Chưa kết bạn',
+        avatarUrl: member.avatarUrl,
+      );
+    }).toList();
+    state = state.copyWith(members: updatedMembers);
+  }
+
   void setAccount(String? accountId) {
     state = state.copyWith(selectedAccountId: accountId);
+    if (accountId != null) {
+      loadFriends(accountId);
+    }
   }
 
   void setGroupLink(String val) {
@@ -181,13 +247,50 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
       selectedMemberIds: {},
     );
 
+    // Refresh friends list to have up-to-date state
+    await loadFriends(state.selectedAccountId);
+
     if (_isConnected) {
       try {
         final api = _getApi();
         final response = await api.fetchGroupLinkMembers(link: link.trim());
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
-          state = state.copyWith(members: members, isScanning: false);
+          
+          final groupName = response['groupName']?.toString() ?? 'Nhóm quét bằng link';
+          final totalMember = response['totalMember'] as int? ?? members.length;
+          final avatarUrl = sanitizeImageUrl(
+            response['avatar']?.toString() ??
+                response['groupAvatar']?.toString() ??
+                '',
+          );
+
+          String groupId = 'link_${DateTime.now().millisecondsSinceEpoch}';
+          final regex = RegExp(r'zalo\.me/g/([a-zA-Z0-9_-]+)');
+          final match = regex.firstMatch(link);
+          if (match != null && match.groupCount >= 1) {
+            groupId = match.group(1)!;
+          }
+
+          List<SavedScannedGroup> updatedSaved = List.from(state.savedGroups);
+          if (!updatedSaved.any((g) => g.id == groupId)) {
+            updatedSaved.insert(
+              0,
+              SavedScannedGroup(
+                id: groupId,
+                name: groupName,
+                memberCount: totalMember,
+                avatarUrl: avatarUrl,
+              ),
+            );
+          }
+
+          state = state.copyWith(
+            members: members,
+            isScanning: false,
+            selectedGroupId: groupId,
+            savedGroups: updatedSaved,
+          );
           return;
         }
       } catch (e) {
@@ -219,10 +322,17 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
       selectedMemberIds: {},
     );
 
+    // Refresh friends list to have up-to-date state
+    await loadFriends(state.selectedAccountId);
+
     if (_isConnected) {
       try {
         final api = _getApi();
-        final response = await api.fetchGroupMembers(groupId: groupId);
+        // Try fetching group members first, fall back to link members if not in group
+        var response = await api.fetchGroupMembers(groupId: groupId);
+        if (response['success'] != true) {
+          response = await api.fetchGroupLinkMembers(link: 'https://zalo.me/g/$groupId');
+        }
         if (response['success'] == true && response['members'] != null) {
           final members = _parseMembers(response['members'] as List<dynamic>);
           state = state.copyWith(members: members, isScanning: false);
@@ -241,7 +351,9 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
   }
 
   List<ScannedMember> _parseMembers(List<dynamic> rawMembers) {
+    final friendIds = state.friendIds;
     return rawMembers.map((m) {
+      final id = m['id']?.toString() ?? '';
       final role = m['role'] as String? ?? 'member';
       String roleLabel;
       switch (role) {
@@ -254,12 +366,13 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
         default:
           roleLabel = 'Thành viên';
       }
+      final isFriend = friendIds.contains(id);
       return ScannedMember(
-        id: m['id']?.toString() ?? '',
+        id: id,
         name: m['displayName']?.toString() ?? m['zaloName']?.toString() ?? '',
         phone: '',
         role: roleLabel,
-        status: 'Chưa kết bạn',
+        status: isFriend ? 'Đã kết bạn' : 'Chưa kết bạn',
         avatarUrl: sanitizeImageUrl(m['avatar']?.toString() ?? ''),
       );
     }).toList();
@@ -295,7 +408,13 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
     if (state.selectedAccountId == null) return;
     if (state.selectedMemberIds.isEmpty) return;
 
-    _membersToInvite = state.selectedMemberIds.toList();
+    _membersToInvite = state.selectedMemberIds.where((id) {
+      final member = state.members.firstWhere(
+        (m) => m.id == id,
+        orElse: () => const ScannedMember(id: '', name: '', phone: '', role: '', status: ''),
+      );
+      return member.id.isNotEmpty && member.status != 'Đã kết bạn';
+    }).toList();
 
     // Compliance Check
     final settings = _ref.read(settingsProvider).settings;

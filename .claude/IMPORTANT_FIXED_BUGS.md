@@ -355,3 +355,19 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Fix summary: Chặn ngay tại chokepoint `PersonalZcaChannel.sendTyping` (`if (readAccountSettings()[accountId]?.blockTyping === true) return false;`) để áp dụng cho mọi đường gọi (Live Chat + chatbot), thay vì chỉ vá riêng endpoint typing.
 - Rule: Khi thêm một cờ cấu hình hành vi gửi tới Zalo (kiểu `blockSeen`/`blockTyping`), phải nối dây cờ đó ở chokepoint của hành động tương ứng, không để cờ "định nghĩa nhưng không thực thi".
 - Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`.
+
+### 2026-06-25 - Live Chat history does not load when backend comes online after startup
+
+- Symptom: Opening the Live Chat tab displays the active/selected conversation metadata in the sidebar, but the messages panel remains completely empty and SSE real-time stream is not connected.
+- Root cause: `liveChatProvider`'s notifier initializes on startup. The initial `loadConversations` call fails because the local backend is offline. When the backend comes online, `_pollingTimer` in `LiveChatScreen` triggers a silent refresh (`loadConversations(silent: true)`). Since `silent` is true, the message loading block `loadMessages` and SSE event subscription `_subscribeToEvents` were skipped. As a result, the selected conversation would remain without any loaded messages.
+- Fix summary: Updated `loadConversations` to load messages and subscribe to the SSE stream if a conversation is selected but has empty messages, or if the selected conversation changes (even if it's a silent load). Added automatic reloading of accounts and conversations upon receiving the `bridge.connected` real-time event.
+- Rule: Always load messages and subscribe to SSE when a conversation is first resolved/selected (e.g., when the backend comes online), even if the refresh is silent. Ensure that when real-time connection succeeds (`bridge.connected`), both accounts and conversations are fully reloaded to refresh the UI state.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/providers/live_chat_provider.dart`.
+
+### 2026-06-25 - Live Chat Screen crashes on dispose/hot-restart with defunct element assertion
+
+- Symptom: When navigating away from the Live Chat screen or performing a hot restart, the application crashes with: `Failed assertion: line 5340 pos 12: '_lifecycleState != _ElementLifecycle.defunct': is not true.` inside `Element.markNeedsBuild`.
+- Root cause: In `live_chat_screen.dart`'s `dispose()`, we called `ref.read(liveChatProvider.notifier).setChatFocused(false)` to update the focus state synchronously. Since this happens during widget tree teardown, updating the provider's state notified other child elements that were also in the process of being disposed/unmounted, which in turn called `markNeedsBuild()` on defunct/defuncting elements. Additionally, `_scrollMessagesToBottom` did not guard its scroll controller actions with a `mounted` check, leading to potential post-disposal assertions.
+- Fix summary: Wrapped `setChatFocused(false)` inside `WidgetsBinding.instance.addPostFrameCallback` with a try-catch block to defer focus state updates until after the widget tree teardown completes. Added `if (!mounted) return;` at the beginning of `_scrollMessagesToBottom`'s post-frame callback.
+- Rule: Never modify Riverpod provider states synchronously inside a State's `dispose()` method if those providers have active UI listeners. Always defer updates to a post-frame callback (or microtask) and wrap them defensively. Always guard async/post-frame callbacks that access scroll controllers with `mounted` checks.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`.

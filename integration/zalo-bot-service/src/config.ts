@@ -14,7 +14,7 @@ const __dirname = dirname(__filename);
  */
 export const projectRoot = resolve(__dirname, '..');
 
-export type ZaloChannelMode = 'personal_zca' | 'official_oa' | 'mock';
+export type ZaloChannelMode = 'personal_zca' | 'official_oa';
 
 interface Config {
   port: number;
@@ -161,7 +161,7 @@ export const config: Config = {
   personalAccountLabel:
     process.env['ZALO_PERSONAL_ACCOUNT_LABEL'] || 'Personal Zalo 1',
   personalSelfListen:
-    process.env['ZALO_PERSONAL_SELF_LISTEN'] === 'true',
+    parseBool(process.env['ZALO_PERSONAL_SELF_LISTEN'], true),
   zaloOaId: process.env['ZALO_OA_ID'] || '',
   zaloOaSecret: process.env['ZALO_OA_SECRET'] || '',
   zaloOaAccessToken: process.env['ZALO_OA_ACCESS_TOKEN'] || '',

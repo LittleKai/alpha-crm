@@ -18,7 +18,6 @@ class AppRoutes {
   static const String friendsHistory = '/friends/history';
 
   // Groups group
-  static const String groupsScanMembers = '/groups/scan-members';
   static const String groupsJoin = '/groups/join';
   static const String groupsInvite = '/groups/invite';
   static const String groupsCreate = '/groups/create';

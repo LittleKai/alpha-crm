@@ -5,7 +5,7 @@ void main() {
   test('monthly CRM plan matches backend catalog', () {
     expect(crmMonthlyPlan.productId, 'crm_monthly');
     expect(crmMonthlyPlan.priceVnd, 500000);
-    expect(crmMonthlyPlan.priceCredits, 525);
+    expect(crmMonthlyPlan.priceCredits, 5250);
     expect(crmMonthlyPlan.includedAiLimit, 1000);
   });
 
@@ -16,14 +16,14 @@ void main() {
       'crm_ai_pack_1000',
     ]);
     expect(crmAiTopUpPacks.map((pack) => pack.aiRequests), [200, 1000, 2000]);
-    expect(crmAiTopUpPacks.map((pack) => pack.priceCredits), [50, 200, 350]);
+    expect(crmAiTopUpPacks.map((pack) => pack.priceCredits), [500, 2000, 3500]);
   });
 
   test('renewal details identify missing credits', () {
     final details = buildRenewalDetails(balanceCredits: 200);
 
     expect(details.canPayWithCredits, isFalse);
-    expect(details.missingCredits, 325);
+    expect(details.missingCredits, 5050);
     expect(details.rows, contains(('Hạn mức AI mới', '1000 yêu cầu AI')));
   });
 
@@ -38,7 +38,7 @@ void main() {
       },
       'order': {
         'amountVnd': 500000,
-        'credits': 525,
+        'credits': 5250,
         'transactionCode': 'CRM123456',
       },
     });

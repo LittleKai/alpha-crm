@@ -29,7 +29,7 @@ import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workf
 import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
 import { handleLocalSessionRoute } from './local-session/local-session-api.js';
-import { saveClientLog, getClientLogs } from './agent/client-log.js';
+import { saveClientLog, getClientLogs, deleteClientLogs } from './agent/client-log.js';
 import {
   sessionCoordinator,
   sessionEventHub,
@@ -1070,6 +1070,24 @@ const server = createServer(async (req, res) => {
       json(res, 200, { success: true, logs });
     } catch (err) {
       json(res, 500, { error: 'Failed to read logs' });
+    }
+    return;
+  }
+
+  // POST /api/logs/client/delete (Delete specific logs)
+  if (method === 'POST' && url === '/api/logs/client/delete') {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      const ids = payload.ids;
+      if (Array.isArray(ids)) {
+        deleteClientLogs(ids);
+        json(res, 200, { success: true });
+      } else {
+        json(res, 400, { error: 'Invalid ids array' });
+      }
+    } catch (err) {
+      json(res, 500, { error: 'Failed to delete logs' });
     }
     return;
   }

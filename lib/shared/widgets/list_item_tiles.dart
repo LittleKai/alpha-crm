@@ -234,7 +234,7 @@ class ScannedMemberCheckboxTile extends StatelessWidget {
           ],
         ),
         value: isChecked,
-        enabled: enabled && !isSelf,
+        enabled: enabled && !isSelf && member.status != 'Đã kết bạn',
         onChanged: (_) => onToggle(member.id),
         activeColor: AppColors.primary,
         controlAffinity: ListTileControlAffinity.leading,

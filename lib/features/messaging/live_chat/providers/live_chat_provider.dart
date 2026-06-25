@@ -367,7 +367,7 @@ class LiveChatState {
     this.replyingTo,
     this.messageSearchResults = const [],
     this.highlightedMessageId = '',
-    this.isChatFocused = true,
+    this.isChatFocused = false,
     this.unfocusedNewMessageCount = 0,
     this.accountAiAutoReply = const {},
   });
@@ -554,13 +554,19 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           );
       }
       final selected = _selectedAfterRefresh(conversations);
+      final hasSelected = selected.id.isNotEmpty;
+      final isNewOrEmpty = state.selectedConversation == null ||
+          state.selectedConversation!.id != selected.id ||
+          selected.messages.isEmpty;
+      final shouldLoadMessages = hasSelected && (loadSelectedMessages || isNewOrEmpty);
+
       state = state.copyWith(
         conversations: conversations,
         selectedConversation: selected.id.isEmpty ? null : selected,
         isLoading: false,
         isRefreshingConversations: false,
       );
-      if (loadSelectedMessages && conversations.isNotEmpty) {
+      if (shouldLoadMessages) {
         await loadMessages(selected.id);
         _subscribeToEvents(selected);
         await _loadDraft(selected);
@@ -1613,6 +1619,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   void _handleRealtimeEvent(LiveChatEvent event) {
     if (event.type == 'bridge.connected') {
       state = state.copyWith(realtimeConnected: true);
+      loadAccounts();
+      loadConversations(loadSelectedMessages: true);
       return;
     }
     if (event.type == 'conversation.chatbot_state') {

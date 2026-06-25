@@ -72,6 +72,8 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
     _startStatusTicker();
     Future.microtask(() {
       if (mounted) {
+        debugPrint('[LiveChatScreen] Tab active: Setting chat focused to true');
+        ref.read(liveChatProvider.notifier).setChatFocused(true);
         ref.read(zaloIntegrationProvider.notifier).checkConnection();
         final target = ref.read(liveChatDeepLinkProvider);
         if (target != null) {
@@ -127,6 +129,12 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
 
   @override
   void dispose() {
+    debugPrint('[LiveChatScreen] Tab inactive: Setting chat focused to false');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        ref.read(liveChatProvider.notifier).setChatFocused(false);
+      } catch (_) {}
+    });
     WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
     _statusTicker?.cancel();
@@ -326,6 +334,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
 
   void _scrollMessagesToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (!_messageScrollController.hasClients) return;
       final target = _messageScrollController.position.maxScrollExtent;
       if (animate) {
