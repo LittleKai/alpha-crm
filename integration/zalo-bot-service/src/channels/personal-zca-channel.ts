@@ -509,6 +509,34 @@ function hasRichPreviewKeys(value: unknown): boolean {
   return Boolean(data.href || data.url || data.thumb || data.thumbnail || data.fileUrl || data.fileName);
 }
 
+function isPollPayload(value: unknown): boolean {
+  if (!value) return false;
+  let parsed: any = null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    parsed = value;
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {}
+    }
+  }
+  if (parsed && typeof parsed === 'object') {
+    const paramsVal = parsed.params;
+    let paramsMap: any = null;
+    if (typeof paramsVal === 'string' && paramsVal.trim().startsWith('{')) {
+      try {
+        paramsMap = JSON.parse(paramsVal);
+      } catch {}
+    } else if (paramsVal && typeof paramsVal === 'object') {
+      paramsMap = paramsVal;
+    }
+    return Boolean(paramsMap && (paramsMap.pollId || paramsMap.question || paramsMap.dName));
+  }
+  return false;
+}
+
 function parseRecord(value: unknown): Record<string, unknown> | null {
   if (!value) return null;
   if (typeof value === 'object' && !Array.isArray(value)) {
@@ -752,6 +780,11 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
   const richContent = hasRichPreviewKeys(data.content) ||
     hasRichPreviewKeys(data.attach) ||
     hasRichPreviewKeys(data.attachments);
+  const isPollMsg = isPollPayload(data.content) ||
+    isPollPayload(data.attach) ||
+    isPollPayload(data.attachments) ||
+    isPollPayload(data.message);
+
   const messageType: ZaloInboundMessageEvent['messageType'] =
     rawType.includes('photo') || rawType.includes('image')
       ? 'image'
@@ -771,7 +804,7 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
                     ? 'contact_card'
                     : rawType.includes('reminder')
                       ? 'reminder'
-                      : rawType.includes('poll')
+                      : (rawType.includes('poll') || isPollMsg)
                         ? 'poll'
                         : rawType.includes('system') ||
                             rawType.includes('pin')
@@ -781,6 +814,52 @@ function normalizeInboundMessage(instance: ZaloAccountInstance, event: any): Zal
                       : 'text';
   const attachments = extractInboundAttachments(data, messageType);
   let content = extractInboundContent(data, messageType);
+
+  // Call detection and normalization
+  const isCall =
+    rawType.includes('call') ||
+    (typeof data.content === 'object' &&
+      data.content !== null &&
+      (data.content.action === 'recommened.misscall' ||
+        data.content.action === 'recommened.calltime' ||
+        data.content.call_id ||
+        data.content.callId ||
+        data.content.callType !== undefined));
+
+  if (isCall) {
+    const contentRaw = typeof data.content === 'object' && data.content !== null ? data.content : {};
+    const action = String(contentRaw.action || '');
+    if (action === 'recommened.misscall') {
+      content = '📵 Cuộc gọi nhỡ';
+    } else if (action === 'recommened.calltime') {
+      let params: any = {};
+      try {
+        const p = contentRaw.params;
+        params = typeof p === 'string' ? JSON.parse(p) : (p || {});
+      } catch {}
+      const secs = Number(params.duration || 0);
+      if (secs > 0) {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        content = `📞 Cuộc gọi (${m > 0 ? `${m}p ` : ''}${s}s)`;
+      } else {
+        content = '📞 Cuộc gọi';
+      }
+    } else {
+      const missed = contentRaw.missed === true || contentRaw.status === 2;
+      const secs = Number(contentRaw.duration || contentRaw.call_duration || 0);
+      if (missed) {
+        content = '📵 Cuộc gọi nhỡ';
+      } else if (secs > 0) {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        content = `📞 Cuộc gọi (${m > 0 ? `${m}p ` : ''}${s}s)`;
+      } else {
+        content = '📞 Cuộc gọi';
+      }
+    }
+  }
+
   if (attachments.length > 0 && messageType !== 'text' && messageType !== 'link') {
     content = `[${messageType}]`;
   }
@@ -1425,6 +1504,11 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
           `[PersonalZcaChannel - ${instance.label}] Message event from ${inbound.senderId} (${inbound.messageType}, ${inbound.content.length} chars)${inbound.groupName ? ` in group "${inbound.groupName}"` : ''}.`,
         );
         await emitInboundMessage(inbound);
+      });
+
+      // ── Handle Listener Errors to prevent crashes ──
+      listener.on("error", (err: any) => {
+        console.warn(`[PersonalZcaChannel - ${instance.label}] Realtime listener error:`, err?.message || err);
       });
 
       // ── Connection closed (e.g. Kicked from phone or Duplicate Login) ──

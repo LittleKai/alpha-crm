@@ -472,7 +472,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'CSV export preview',
+                      'Xem trước dữ liệu xuất CSV',
                       style: AppTextStyles.sectionTitle,
                     ),
                     const SizedBox(height: AppSpacing.s),
@@ -927,7 +927,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           height: 360,
           actions: [
             AppButton(
-              text: 'Import file',
+              text: 'Nhập từ tệp',
               icon: Icons.description_outlined,
               variant: AppButtonVariant.outline,
               onPressed: () => _showPlaceholder(

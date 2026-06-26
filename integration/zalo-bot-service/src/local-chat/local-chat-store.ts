@@ -116,6 +116,33 @@ export class LocalChatStore {
 
   /** Run idempotent schema migration */
   private _migrate(): void {
+    // Migrate message_reactions to support stacking (multiple reactions per user)
+    try {
+      const tableExists = this._db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='message_reactions'").get();
+      if (tableExists) {
+        const info = this._db.pragma('table_info(message_reactions)') as any[];
+        const hasId = info.some((col: any) => col.name === 'id');
+        if (!hasId) {
+          this._db.exec(`
+            ALTER TABLE message_reactions RENAME TO message_reactions_old;
+            CREATE TABLE message_reactions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              messageId TEXT NOT NULL,
+              userId TEXT NOT NULL,
+              reaction TEXT NOT NULL,
+              timestamp TEXT NOT NULL,
+              FOREIGN KEY (messageId) REFERENCES messages(id)
+            );
+            INSERT INTO message_reactions (messageId, userId, reaction, timestamp)
+            SELECT messageId, userId, reaction, timestamp FROM message_reactions_old;
+            DROP TABLE message_reactions_old;
+          `);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to migrate message_reactions:', e);
+    }
+
     this._db.exec(`
       CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
@@ -207,11 +234,11 @@ export class LocalChatStore {
       );
 
       CREATE TABLE IF NOT EXISTS message_reactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         messageId TEXT NOT NULL,
         userId TEXT NOT NULL,
         reaction TEXT NOT NULL,
         timestamp TEXT NOT NULL,
-        PRIMARY KEY (messageId, userId),
         FOREIGN KEY (messageId) REFERENCES messages(id)
       );
 
@@ -606,6 +633,15 @@ export class LocalChatStore {
       '',
     );
 
+    if (input.clientMessageId) {
+      const existing = this.db
+        .prepare('SELECT id FROM messages WHERE accountId = ? AND clientMessageId = ?')
+        .get(input.accountId, input.clientMessageId) as { id: string } | undefined;
+      if (existing) {
+        return existing.id;
+      }
+    }
+
     const id = randomUUID();
     const now = new Date().toISOString();
 
@@ -965,7 +1001,7 @@ export class LocalChatStore {
       )
       .get(input.accountId, input.providerMessageId) as { id: string } | undefined;
     if (!message) return false;
-    if (!input.reaction) {
+    if (!input.reaction || input.reaction === 'none') {
       this.db
         .prepare(
           'DELETE FROM message_reactions WHERE messageId = ? AND userId = ?',
@@ -976,9 +1012,7 @@ export class LocalChatStore {
     this.db
       .prepare(
         `INSERT INTO message_reactions (messageId, userId, reaction, timestamp)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(messageId, userId)
-         DO UPDATE SET reaction = excluded.reaction, timestamp = excluded.timestamp`,
+         VALUES (?, ?, ?, ?)`,
       )
       .run(message.id, input.userId, input.reaction, input.timestamp);
     return true;

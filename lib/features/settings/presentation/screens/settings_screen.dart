@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' show join;
 import '../../../../shared/local_db/local_db.dart';
+import '../../../../shared/utils/app_logger.dart';
 
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -106,6 +107,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         } catch (_) {}
       }
     }
+  }
+
+  Future<void> _openMediaCacheFolder() async {
+    String cachePath = '';
+    try {
+      final override = Platform.environment['ALPHA_CRM_DATA_DIR'];
+      if (override != null && override.trim().isNotEmpty) {
+        cachePath = join(override.trim(), 'local-chat-media');
+      } else if (Platform.isWindows) {
+        final localAppData = Platform.environment['LOCALAPPDATA'] ?? Platform.environment['APPDATA'];
+        if (localAppData != null) {
+          cachePath = join(localAppData, 'AlphaCRM', 'zalo-bot-service', 'local-chat-media');
+        }
+      } else {
+        // macOS/Linux
+        final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+        if (home != null) {
+          cachePath = join(home, '.alpha-crm', 'zalo-bot-service', 'local-chat-media');
+        }
+      }
+
+      if (cachePath.isNotEmpty) {
+        final dir = Directory(cachePath);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        if (Platform.isWindows) {
+          await Process.run('explorer.exe', [cachePath]);
+        } else {
+          final uri = Uri.file(cachePath);
+          await launchUrl(uri);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -280,13 +315,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     style: AppTextStyles.caption,
                   ),
                   const SizedBox(height: AppSpacing.m),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: AppButton(
-                      text: 'Lưu cài đặt media',
-                      icon: Icons.save_outlined,
-                      onPressed: notifier.saveSettings,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ...[
+                        AppButton(
+                          text: 'Mở thư mục cache',
+                          icon: Icons.folder_open_outlined,
+                          variant: AppButtonVariant.outline,
+                          onPressed: _openMediaCacheFolder,
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                      ],
+                      AppButton(
+                        text: 'Lưu cài đặt media',
+                        icon: Icons.save_outlined,
+                        onPressed: notifier.saveSettings,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -358,6 +404,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: AppSpacing.m),
               const _UpdateCard(),
             ],
+            const SizedBox(height: AppSpacing.m),
+            const _SystemErrorsCard(),
             const SizedBox(height: AppSpacing.m),
             _DangerZoneCard(
               onDeletePressed: () => _showDeleteDataDialog(context),
@@ -1549,7 +1597,7 @@ class _ZaloIntegrationCardState extends ConsumerState<_ZaloIntegrationCard> {
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
-              Text('Webhook path: ', style: AppTextStyles.label),
+              Text('Đường dẫn Webhook: ', style: AppTextStyles.label),
               Text(
                 widget.webhookPath,
                 style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
@@ -2089,11 +2137,11 @@ class _ChannelModeRow extends StatelessWidget {
             items: const [
               DropdownMenuItem(
                 value: ZaloChannelMode.personalZca,
-                child: Text('Personal Zalo'),
+                child: Text('Zalo Cá nhân'),
               ),
               DropdownMenuItem(
                 value: ZaloChannelMode.officialOa,
-                child: Text('Official OA'),
+                child: Text('Zalo OA Doanh nghiệp'),
               ),
             ],
             onChanged: onChanged,
@@ -2810,6 +2858,199 @@ class _AddAccountQrDialogState extends State<_AddAccountQrDialog> {
             ),
           ],
           const SizedBox(height: AppSpacing.m),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemErrorsCard extends StatefulWidget {
+  const _SystemErrorsCard();
+
+  @override
+  State<_SystemErrorsCard> createState() => _SystemErrorsCardState();
+}
+
+class _SystemErrorsCardState extends State<_SystemErrorsCard> {
+  bool _errorsOnly = true;
+  List<String> _logs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLogs();
+  }
+
+  void _loadLogs() {
+    setState(() {
+      final allLogs = AppLogger().recentLogs;
+      if (_errorsOnly) {
+        _logs = allLogs.where((line) {
+          final upper = line.toUpperCase();
+          return upper.contains('[WARN]') ||
+              upper.contains('[ERROR]') ||
+              upper.contains('[FATAL]') ||
+              upper.contains('LỖI') ||
+              upper.contains('FAIL') ||
+              upper.contains('ERROR') ||
+              upper.contains('EXCEPTION');
+        }).toList();
+      } else {
+        _logs = allLogs;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final consoleBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
+    final consoleText = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.bug_report_outlined,
+                color: Color(0xFFF59E0B),
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text(
+                'Lỗi hệ thống & Nhật ký',
+                style: AppTextStyles.sectionTitle,
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Theo dõi các lỗi và cảnh báo phát sinh từ ứng dụng CRM hoặc Zalo Bridge.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+              ),
+              const Spacer(),
+              // Toggle filter
+              Text(
+                'Chỉ lỗi',
+                style: AppTextStyles.caption,
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                height: 28,
+                child: Switch(
+                  value: _errorsOnly,
+                  activeThumbColor: AppColors.primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _errorsOnly = val;
+                      _loadLogs();
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Text(
+            'Nhật ký hoạt động và lỗi hệ thống giúp chẩn đoán sự cố khi gửi tin nhắn hoặc kết nối.',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          // Console display area
+          Container(
+            height: 220,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: consoleBg,
+              borderRadius: AppSpacing.borderRadiusS,
+              border: Border.all(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+              ),
+            ),
+            padding: const EdgeInsets.all(AppSpacing.s),
+            child: _logs.isEmpty
+                ? Center(
+                    child: Text(
+                      _errorsOnly
+                          ? 'Không có lỗi hoặc cảnh báo nào được ghi nhận.'
+                          : 'Nhật ký trống.',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _logs.length,
+                    reverse: true, // Show newest at the bottom/scrolled down
+                    itemBuilder: (context, index) {
+                      // Reverse order to show newest at bottom
+                      final line = _logs[_logs.length - 1 - index];
+                      
+                      Color textColor = consoleText;
+                      FontWeight weight = FontWeight.normal;
+                      
+                      final upper = line.toUpperCase();
+                      if (upper.contains('[ERROR]') || upper.contains('[FATAL]')) {
+                        textColor = const Color(0xFFEF4444); // red
+                        weight = FontWeight.w600;
+                      } else if (upper.contains('[WARN]')) {
+                        textColor = const Color(0xFFF59E0B); // orange
+                        weight = FontWeight.w600;
+                      } else if (upper.contains('[INFO]')) {
+                        textColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B); // muted gray
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2.0),
+                        child: Text(
+                          line,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: textColor,
+                            fontWeight: weight,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                text: 'Làm mới',
+                icon: Icons.refresh_rounded,
+                variant: AppButtonVariant.outline,
+                onPressed: _loadLogs,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              AppButton(
+                text: 'Sao chép nhật ký',
+                icon: Icons.copy_all_rounded,
+                variant: AppButtonVariant.outline,
+                onPressed: () {
+                  if (_logs.isEmpty) return;
+                  Clipboard.setData(ClipboardData(text: _logs.join('\n')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã sao chép nhật ký vào Clipboard.')),
+                  );
+                },
+              ),
+              const SizedBox(width: AppSpacing.s),
+              AppButton(
+                text: 'Xóa nhật ký',
+                icon: Icons.delete_outline_rounded,
+                variant: AppButtonVariant.outline,
+                onPressed: () {
+                  AppLogger().clearLogs();
+                  _loadLogs();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã xóa nhật ký.')),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );

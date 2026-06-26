@@ -874,24 +874,32 @@ class _HeaderSection extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Credits', style: AppTextStyles.caption),
-                Row(
-                  children: [
-                    Text(
-                      '$creditBalance',
-                      style: AppTextStyles.cardTitle.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w900,
+                Text('Số dư Credit', style: AppTextStyles.caption),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$creditBalance',
+                        style: AppTextStyles.cardTitle.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Text(
-                      '(${status == 'active' ? (isTrial ? 'Đang dùng thử' : 'Gói đang hoạt động') : (status == 'expired' ? 'Gói đã hết hạn' : 'Chưa có gói')})',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
+                      const SizedBox(width: AppSpacing.s),
+                      Flexible(
+                        child: Text(
+                          '(${status == 'active' ? (isTrial ? 'Đang dùng thử' : 'Gói đang hoạt động') : (status == 'expired' ? 'Gói đã hết hạn' : 'Chưa có gói')})',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -948,7 +956,7 @@ class _HeaderSection extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('Credits', style: AppTextStyles.caption),
+              Text('Số dư Credit', style: AppTextStyles.caption),
               Text(
                 '$creditBalance',
                 style: AppTextStyles.cardTitle.copyWith(

@@ -37,6 +37,27 @@ class AppLogger {
   /// Các dòng log gần nhất, một dòng mỗi mục (mới ở cuối).
   String get recentLogsText => _ring.join('\n');
 
+  /// Lấy danh sách các dòng log gần đây dưới dạng danh sách các chuỗi (mới ở cuối).
+  List<String> get recentLogs => List.unmodifiable(_ring);
+
+  /// Xóa toàn bộ nhật ký trong bộ nhớ và xóa/ghi đè file log hiện tại.
+  void clearLogs() {
+    _ring.clear();
+    final file = _logFile;
+    if (file != null) {
+      _writeQueue = _writeQueue.then((_) async {
+        try {
+          await file.writeAsString(
+            '=== LOG RESET @ ${DateTime.now().toIso8601String()} ===\n',
+            mode: FileMode.write,
+          );
+        } catch (e) {
+          debugPrint('Failed to clear log file: $e');
+        }
+      });
+    }
+  }
+
   /// Đường dẫn file log hiện hành (null nếu chưa tạo được).
   String? get logFilePath => _logFile?.path;
 

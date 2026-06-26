@@ -372,25 +372,21 @@ void main() {
     },
   );
 
-  test(
-    'silent refresh loads messages after initial offline startup',
-    () async {
-      final repository = _FakeLiveChatRepository()
-        ..failNextConversations = true;
-      final notifier = LiveChatNotifier(repository);
-      await Future<void>.delayed(Duration.zero);
+  test('silent refresh loads messages after initial offline startup', () async {
+    final repository = _FakeLiveChatRepository()..failNextConversations = true;
+    final notifier = LiveChatNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
 
-      expect(notifier.state.selectedConversation, isNull);
-      repository.resetCounters();
+    expect(notifier.state.selectedConversation, isNull);
+    repository.resetCounters();
 
-      await notifier.loadConversations(silent: true);
+    await notifier.loadConversations(silent: true);
 
-      expect(repository.getConversationsCalls, 1);
-      expect(repository.getMessagesCalls, 1);
-      expect(notifier.state.selectedConversation?.id, 'conv-1');
-      expect(notifier.state.selectedConversation?.messages, isNotEmpty);
-    },
-  );
+    expect(repository.getConversationsCalls, 1);
+    expect(repository.getMessagesCalls, 1);
+    expect(notifier.state.selectedConversation?.id, 'conv-1');
+    expect(notifier.state.selectedConversation?.messages, isNotEmpty);
+  });
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {

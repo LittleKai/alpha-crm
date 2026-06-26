@@ -58,6 +58,9 @@ export async function callCloudApi(
     return body.data;
   } catch (error: any) {
     console.error(`[cloud-api] Call to ${path} failed:`, error.message);
+    if (error.cause) {
+      console.error(`[cloud-api] Error cause detail:`, error.cause);
+    }
     throw error;
   }
 }

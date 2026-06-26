@@ -87,12 +87,12 @@ class SystemSettings {
     this.quietHoursStart = '21:00',
     this.quietHoursEnd = '08:00',
     this.allowTestModeOnlyForRiskyActions = true,
-    this.zaloBackendBaseUrl = 'http://127.0.0.1:8787',
+    this.zaloBackendBaseUrl = 'http://127.0.0.1:28080',
     this.zaloWebhookPath = '/api/zalo/webhook',
     this.appThemeMode = 'light',
     this.accountNicknames = const {},
     this.localFirstLiveChat = false,
-    this.localBridgeBaseUrl = 'http://127.0.0.1:8787',
+    this.localBridgeBaseUrl = 'http://127.0.0.1:28080',
     this.liveChatConversationCacheTtlSeconds = 30,
     this.liveChatMessageCacheTtlSeconds = 300,
     this.downloadFolder = '',
@@ -304,7 +304,7 @@ class SystemSettings {
       quietHoursEnd: json['quietHoursEnd'] ?? '08:00',
       allowTestModeOnlyForRiskyActions:
           json['allowTestModeOnlyForRiskyActions'] ?? true,
-      zaloBackendBaseUrl: json['zaloBackendBaseUrl'] ?? 'http://localhost:8787',
+      zaloBackendBaseUrl: json['zaloBackendBaseUrl'] ?? 'http://localhost:28080',
       zaloWebhookPath: json['zaloWebhookPath'] ?? '/api/zalo/webhook',
       appThemeMode:
           json['appThemeMode'] == 'dark' || json['appThemeMode'] == 'system'
@@ -319,7 +319,7 @@ class SystemSettings {
           : const {},
       localFirstLiveChat: json['localFirstLiveChat'] == true,
       localBridgeBaseUrl:
-          (json['localBridgeBaseUrl'] as String?) ?? 'http://127.0.0.1:8787',
+          (json['localBridgeBaseUrl'] as String?) ?? 'http://127.0.0.1:28080',
       liveChatConversationCacheTtlSeconds:
           json['liveChatConversationCacheTtlSeconds'] ?? 30,
       liveChatMessageCacheTtlSeconds:
@@ -365,12 +365,12 @@ class MockAccounts {
     quietHoursStart: '21:00',
     quietHoursEnd: '08:00',
     allowTestModeOnlyForRiskyActions: true,
-    zaloBackendBaseUrl: 'http://127.0.0.1:8787',
+    zaloBackendBaseUrl: 'http://127.0.0.1:28080',
     zaloWebhookPath: '/api/zalo/webhook',
     appThemeMode: 'light',
     accountNicknames: {},
     localFirstLiveChat: false,
-    localBridgeBaseUrl: 'http://127.0.0.1:8787',
+    localBridgeBaseUrl: 'http://127.0.0.1:28080',
     liveChatConversationCacheTtlSeconds: 30,
     liveChatMessageCacheTtlSeconds: 300,
     fontSizeMultiplier: 1.0,

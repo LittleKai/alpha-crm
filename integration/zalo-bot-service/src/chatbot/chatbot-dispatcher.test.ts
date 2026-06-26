@@ -116,10 +116,11 @@ test('successful reply sends once, persists chatbot metadata, publishes, process
     },
   }]);
   assert.ok(
-    first.calls.indexOf('send') < first.calls.indexOf('persist'),
-    'outbound persistence must happen only after a successful send',
+    first.calls.indexOf('persist') < first.calls.indexOf('send'),
+    'outbound persistence must happen before send',
   );
   assert.ok(first.calls.includes('publish:message.created'));
+  assert.ok(first.calls.includes('publish:message.updated'));
   assert.ok(first.calls.includes('processed:source-1'));
   assert.ok(first.calls.includes('processed:source-2'));
   assert.equal(first.audits[0]?.outcome, 'matched');
@@ -200,8 +201,15 @@ test('attachment send failure is non-fatal once text is delivered', async () => 
   });
 
   assert.equal(result.status, 'sent');
-  assert.equal(fixture.outbound.length, 1); // only the text persisted
+  assert.equal(fixture.outbound.length, 2); // both the text and the attachment persisted (one sent, one failed)
   assert.equal(fixture.outbound[0]?.messageType, 'text');
+  assert.equal(fixture.outbound[1]?.messageType, 'image');
+  assert.ok(fixture.calls.includes('publish:message.created'));
+  assert.ok(fixture.calls.includes('publish:message.failed'));
+  assert.ok(
+    fixture.calls.includes('status:local-out-1:failed:undefined:undefined'),
+    'should update attachment status to failed'
+  );
   assert.ok(fixture.calls.includes('processed:source-1'));
   assert.notEqual(
     fixture.calls.find((call) => call.startsWith('state:')),
@@ -287,10 +295,12 @@ test('send failure does not persist a successful outbound, enters handoff, audit
     error: 'Zalo unavailable',
   });
   assert.equal(sends, 1);
-  assert.equal(fixture.calls.includes('persist'), false);
-  assert.equal(
-    fixture.calls.some((call) => call.startsWith('publish:')),
-    false,
+  assert.ok(fixture.calls.includes('persist'), 'should persist as queued');
+  assert.ok(fixture.calls.includes('publish:message.created'), 'should publish message.created');
+  assert.ok(fixture.calls.includes('publish:message.failed'), 'should publish message.failed');
+  assert.ok(
+    fixture.calls.includes('status:local-out-1:failed:undefined:undefined'),
+    'should update status to failed'
   );
   assert.ok(fixture.calls.includes('state:handoff'));
   assert.ok(fixture.calls.includes('audit:failed'));

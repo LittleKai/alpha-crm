@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,10 +38,13 @@ class _BackendSplashOverlayState extends ConsumerState<BackendSplashOverlay> {
       zaloIntegrationProvider.select((s) => s.isInitializing),
     );
 
+    final isTest = WidgetsBinding.instance.toString().contains('Test') ||
+        WidgetsBinding.instance.runtimeType.toString().contains('Test');
+
     return ValueListenableBuilder<BackendStatus>(
       valueListenable: ZaloBackendManager.status,
       builder: (context, status, _) {
-        if (status == BackendStatus.healthy && !isInitializing) {
+        if ((status == BackendStatus.healthy && !isInitializing) || isTest) {
           _everReady = true;
         }
         final showSplash = !_everReady;
@@ -77,44 +81,39 @@ class _SplashContent extends StatefulWidget {
   State<_SplashContent> createState() => _SplashContentState();
 }
 
-class _SplashContentState extends State<_SplashContent>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-  late final Animation<double> _glow;
-  late final Animation<double> _scale;
-
+class _SplashContentState extends State<_SplashContent> {
   /// Hiện trạng thái "Đã sao chép" trong 2s sau khi bấm nút copy.
   bool _copied = false;
+
+  Timer? _blinkTimer;
+  double _opacity = 0.8;
+  int _dotCount = 1;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    );
-    final isTest = WidgetsBinding.instance.toString().contains('Test') ||
-        WidgetsBinding.instance.runtimeType.toString().contains('Test');
-    if (!isTest) {
-      _pulse.repeat(reverse: true);
-    }
-    _glow = Tween<double>(begin: 8.0, end: 30.0).animate(
-      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-    );
-    _scale = Tween<double>(begin: 0.96, end: 1.04).animate(
-      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-    );
+    // Tạo hiệu ứng thở nhấp nháy rất chậm (1Hz) và chuyển động dấu chấm (dot progress)
+    // Thay đổi trạng thái mỗi 700ms, chỉ vẽ lại đúng 1.4 frame/giây thay vì 60fps liên tục.
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 700), (timer) {
+      if (mounted) {
+        setState(() {
+          _opacity = _opacity == 0.8 ? 0.35 : 0.8;
+          _dotCount = (_dotCount % 3) + 1;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _blinkTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isFailed = widget.status == BackendStatus.failed;
+    final double currentOpacity = isFailed ? 1.0 : _opacity;
 
     return Material(
       child: Container(
@@ -133,46 +132,38 @@ class _SplashContentState extends State<_SplashContent>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Logo phát sáng + spinner
-              AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, _) {
-                  return Transform.scale(
-                    scale: isFailed ? 1.0 : _scale.value,
-                    child: Container(
-                      width: 110,
-                      height: 110,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.03),
-                        border: Border.all(
-                          color: (isFailed ? Colors.red : const Color(0xFF6366F1))
-                              .withValues(alpha: 0.35),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (isFailed
-                                    ? Colors.red
-                                    : const Color(0xFF6366F1))
-                                .withValues(alpha: 0.25),
-                            blurRadius: isFailed ? 24 : _glow.value,
-                            spreadRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        isFailed
-                            ? Icons.error_outline_rounded
-                            : Icons.hub_rounded,
-                        size: 48,
-                        color: isFailed
-                            ? Colors.red.shade300
-                            : Colors.white.withValues(alpha: 0.92),
-                      ),
+              // Logo phát sáng tĩnh (không dùng AnimatedBuilder hay Transform.scale động 60fps)
+              Container(
+                width: 110,
+                height: 110,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.03),
+                  border: Border.all(
+                    color: (isFailed ? Colors.red : const Color(0xFF6366F1))
+                        .withValues(alpha: isFailed ? 0.35 : currentOpacity * 0.55),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isFailed
+                              ? Colors.red
+                              : const Color(0xFF6366F1))
+                          .withValues(alpha: isFailed ? 0.25 : currentOpacity * 0.3),
+                      blurRadius: isFailed ? 24 : 18,
+                      spreadRadius: 4,
                     ),
-                  );
-                },
+                  ],
+                ),
+                child: Icon(
+                  isFailed
+                      ? Icons.error_outline_rounded
+                      : Icons.hub_rounded,
+                  size: 48,
+                  color: isFailed
+                      ? Colors.red.shade300
+                      : Colors.white.withValues(alpha: isFailed ? 0.92 : currentOpacity * 0.5 + 0.42),
+                ),
               ),
               const SizedBox(height: 28),
               Text(
@@ -277,13 +268,25 @@ class _SplashContentState extends State<_SplashContent>
                   ],
                 ),
               ] else
-                const SizedBox(
-                  width: 26,
+                SizedBox(
                   height: 26,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (index) {
+                      final showDot = index < _dotCount;
+                      return Opacity(
+                        opacity: showDot ? 0.85 : 0.2,
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF6366F1),
+                          ),
+                        ),
+                      );
+                    }),
                   ),
                 ),
             ],

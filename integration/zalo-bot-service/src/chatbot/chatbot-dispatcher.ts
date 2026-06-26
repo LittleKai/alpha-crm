@@ -83,9 +83,20 @@ export class ChatbotDispatcher {
 
   constructor(private readonly dependencies: ChatbotDispatcherDependencies) {
     this.now = dependencies.now ?? Date.now;
+    let lastMs = 0;
+    let counter = 0;
     this.createClientMessageId =
       dependencies.createClientMessageId
-      ?? (() => `chatbot-${randomUUID()}`);
+      ?? (() => {
+        const now = this.now();
+        if (now === lastMs) {
+          counter++;
+        } else {
+          lastMs = now;
+          counter = 0;
+        }
+        return String(now + counter);
+      });
   }
 
   async dispatch(input: ChatbotDispatchInput): Promise<ChatbotDispatchResult> {
@@ -135,6 +146,34 @@ export class ChatbotDispatcher {
     //    before — only sent when there is text, so a file-only reply is allowed.
     if (text.length > 0) {
       const clientMessageId = this.createClientMessageId();
+      const metadata = {
+        source: 'chatbot',
+        chatbotMode: decision.mode,
+        ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
+        sourceMessageIds: decision.sourceMessageIds,
+      };
+
+      const localMessageId = this.dependencies.insertOutboundMessage({
+        accountId: input.accountId,
+        threadId: input.threadId,
+        threadType: input.threadType,
+        content: decision.text,
+        messageType: 'text',
+        clientMessageId,
+        metadata,
+      });
+
+      this.dependencies.publish({
+        type: 'message.created',
+        accountId: input.accountId,
+        threadId: input.threadId,
+        data: {
+          messageId: localMessageId,
+          clientMessageId,
+          status: 'queued',
+        },
+      });
+
       let sendResult: ZaloSendMessageResult;
       try {
         sendResult = await this.dependencies.sendMessage({
@@ -147,54 +186,73 @@ export class ChatbotDispatcher {
           metadata: { source: 'chatbot' },
         });
       } catch (error) {
-        return this.handleSendFailure(input, error);
-      }
-      if (!sendResult.success) {
-        return this.handleSendFailure(
-          input,
-          new Error(sendResult.error || 'Zalo send failed'),
-        );
-      }
-
-      try {
-        const metadata = {
-          source: 'chatbot',
-          chatbotMode: decision.mode,
-          ...(decision.ruleId ? { ruleId: decision.ruleId } : {}),
-          sourceMessageIds: decision.sourceMessageIds,
-        };
-        const localMessageId = this.dependencies.insertOutboundMessage({
-          accountId: input.accountId,
-          threadId: input.threadId,
-          threadType: input.threadType,
-          content: decision.text,
-          messageType: 'text',
-          clientMessageId,
-          metadata,
-        });
-        const providerMessageId = sendResult.messageId || '';
         this.dependencies.updateMessageStatus(
           localMessageId,
-          'sent',
-          providerMessageId || undefined,
-          '',
-          sendResult.clientMessageId || clientMessageId,
+          'failed',
+          undefined,
+          error instanceof Error ? error.message : String(error),
         );
         this.dependencies.publish({
-          type: 'message.created',
+          type: 'message.failed',
           accountId: input.accountId,
           threadId: input.threadId,
           data: {
             messageId: localMessageId,
-            providerMessageId,
-            clientMessageId: sendResult.clientMessageId || clientMessageId,
+            clientMessageId,
+            error: error instanceof Error ? error.message : String(error),
+            status: 'failed',
           },
         });
-        lastLocalMessageId = localMessageId;
-        lastProviderMessageId = providerMessageId;
-      } catch (error) {
         return this.handleSendFailure(input, error);
       }
+
+      if (!sendResult.success) {
+        const errorText = sendResult.error || 'Zalo send failed';
+        this.dependencies.updateMessageStatus(
+          localMessageId,
+          'failed',
+          undefined,
+          errorText,
+        );
+        this.dependencies.publish({
+          type: 'message.failed',
+          accountId: input.accountId,
+          threadId: input.threadId,
+          data: {
+            messageId: localMessageId,
+            clientMessageId,
+            error: errorText,
+            status: 'failed',
+          },
+        });
+        return this.handleSendFailure(
+          input,
+          new Error(errorText),
+        );
+      }
+
+      const providerMessageId = sendResult.messageId || '';
+      const finalClientMessageId = sendResult.clientMessageId || clientMessageId;
+      this.dependencies.updateMessageStatus(
+        localMessageId,
+        'sent',
+        providerMessageId || undefined,
+        '',
+        finalClientMessageId,
+      );
+      this.dependencies.publish({
+        type: 'message.updated',
+        accountId: input.accountId,
+        threadId: input.threadId,
+        data: {
+          messageId: localMessageId,
+          providerMessageId,
+          clientMessageId: finalClientMessageId,
+          status: 'sent',
+        },
+      });
+      lastLocalMessageId = localMessageId;
+      lastProviderMessageId = providerMessageId;
     }
 
     // 2) Attachment parts. Supplementary — a per-file failure is logged and
@@ -259,9 +317,42 @@ export class ChatbotDispatcher {
       return null;
     }
 
+    const clientMessageId = this.createClientMessageId();
+    const messageType = mapAttachmentMessageType(attachment.type);
+
+    const localMessageId = this.dependencies.insertOutboundMessage({
+      accountId: input.accountId,
+      threadId: input.threadId,
+      threadType: input.threadType,
+      content: attachment.name || '',
+      messageType,
+      clientMessageId,
+      metadata: {
+        source: 'chatbot',
+        chatbotMode: decision.mode,
+        sourceMessageIds: decision.sourceMessageIds,
+      },
+      attachments: [
+        {
+          kind: attachment.type,
+          name: attachment.name,
+          localPath,
+        },
+      ],
+    });
+
+    this.dependencies.publish({
+      type: 'message.created',
+      accountId: input.accountId,
+      threadId: input.threadId,
+      data: {
+        messageId: localMessageId,
+        clientMessageId,
+        status: 'queued',
+      },
+    });
+
     try {
-      const clientMessageId = this.createClientMessageId();
-      const messageType = mapAttachmentMessageType(attachment.type);
       const sendResult = await this.dependencies.sendMessage({
         recipientId: input.threadId,
         accountId: input.accountId,
@@ -273,48 +364,50 @@ export class ChatbotDispatcher {
         clientMessageId,
         metadata: { source: 'chatbot' },
       });
+
       if (!sendResult.success) {
         console.error(
           `[ChatbotDispatcher] Attachment send failed (${attachment.name}): ${sendResult.error}`,
         );
+        const errorText = sendResult.error || 'Zalo send failed';
+        this.dependencies.updateMessageStatus(
+          localMessageId,
+          'failed',
+          undefined,
+          errorText,
+        );
+        this.dependencies.publish({
+          type: 'message.failed',
+          accountId: input.accountId,
+          threadId: input.threadId,
+          data: {
+            messageId: localMessageId,
+            clientMessageId,
+            error: errorText,
+            status: 'failed',
+          },
+        });
         return null;
       }
-      const localMessageId = this.dependencies.insertOutboundMessage({
-        accountId: input.accountId,
-        threadId: input.threadId,
-        threadType: input.threadType,
-        content: attachment.name || '',
-        messageType,
-        clientMessageId,
-        metadata: {
-          source: 'chatbot',
-          chatbotMode: decision.mode,
-          sourceMessageIds: decision.sourceMessageIds,
-        },
-        attachments: [
-          {
-            kind: attachment.type,
-            name: attachment.name,
-            localPath,
-          },
-        ],
-      });
+
       const providerMessageId = sendResult.messageId || '';
+      const finalClientMessageId = sendResult.clientMessageId || clientMessageId;
       this.dependencies.updateMessageStatus(
         localMessageId,
         'sent',
         providerMessageId || undefined,
         '',
-        sendResult.clientMessageId || clientMessageId,
+        finalClientMessageId,
       );
       this.dependencies.publish({
-        type: 'message.created',
+        type: 'message.updated',
         accountId: input.accountId,
         threadId: input.threadId,
         data: {
           messageId: localMessageId,
           providerMessageId,
-          clientMessageId: sendResult.clientMessageId || clientMessageId,
+          clientMessageId: finalClientMessageId,
+          status: 'sent',
         },
       });
       return { localMessageId, providerMessageId };
@@ -323,6 +416,24 @@ export class ChatbotDispatcher {
         `[ChatbotDispatcher] Attachment dispatch error (${attachment.name}):`,
         error,
       );
+      const errorText = error instanceof Error ? error.message : String(error);
+      this.dependencies.updateMessageStatus(
+        localMessageId,
+        'failed',
+        undefined,
+        errorText,
+      );
+      this.dependencies.publish({
+        type: 'message.failed',
+        accountId: input.accountId,
+        threadId: input.threadId,
+        data: {
+          messageId: localMessageId,
+          clientMessageId,
+          error: errorText,
+          status: 'failed',
+        },
+      });
       return null;
     }
   }

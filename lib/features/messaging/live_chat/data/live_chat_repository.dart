@@ -44,7 +44,8 @@ class LiveChatRepository {
     // id may not resolve in the bridge (empty cloudConversationId) and the
     // message panel renders blank. Use a short cache so toggles/new
     // conversations surface quickly.
-    if (_preferLocalZaloActions || localFirstEnabled) {
+    final useLocalInbox = _preferLocalZaloActions || localFirstEnabled;
+    if (useLocalInbox) {
       try {
         final bridgeData = await localApi.getLocalConversations(
           accountId: accountId,
@@ -63,12 +64,29 @@ class LiveChatRepository {
           );
           return {'success': true, 'data': rawList};
         }
-      } catch (_) {
-        // Bridge offline — fall through to the cloud inbox below.
+      } catch (e, stack) {
+        print('[LiveChatRepository] Error getting local conversations: $e');
+        print(stack);
       }
+
+      final cached = await cache.getAnyCachedConversations(cacheKey);
+      if (cached != null) {
+        return {
+          'success': true,
+          'data': cached,
+          'code': 'LOCAL_BRIDGE_OFFLINE',
+          'message': 'Bridge offline. Showing cached conversations.',
+        };
+      }
+      return {
+        'success': false,
+        'data': <Map<String, dynamic>>[],
+        'code': 'LOCAL_BRIDGE_OFFLINE',
+        'message': 'Bridge offline. Cannot load conversations.',
+      };
     }
 
-    // Cloud fallback (also used when local-first is disabled).
+    // Cloud fallback (used only when the local bridge is not the preferred inbox).
     final query = <String, String>{'limit': limit.toString()};
     if (accountId != null && accountId.isNotEmpty) {
       query['accountId'] = accountId;
@@ -99,7 +117,10 @@ class LiveChatRepository {
       }
       return response;
     } catch (e) {
-      await cache.getFreshConversations(cacheKey);
+      final cached = await cache.getAnyCachedConversations(cacheKey);
+      if (cached != null) {
+        return {'success': true, 'data': cached};
+      }
       rethrow;
     }
   }
@@ -114,7 +135,8 @@ class LiveChatRepository {
     String? before,
     String? after,
   }) async {
-    if (_preferLocalZaloActions || localFirstEnabled) {
+    final useLocalMessages = _preferLocalZaloActions || localFirstEnabled;
+    if (useLocalMessages) {
       try {
         final bridgeData = await localApi.getLocalMessages(
           conversationId,
@@ -139,26 +161,22 @@ class LiveChatRepository {
           await cache.saveMessages(conversationId, messages);
           return {...bridgeData, 'data': messages};
         }
-      } catch (e) {
-        if (!localFirstEnabled) {
-          // Fall through to the cloud API below when local storage is only an
-          // opportunistic desktop bridge.
-        } else {
-          // Fallback to cache if bridge is offline
-          final cached = await cache.getMessages(
-            conversationId,
-            limit: limit,
-            before: before,
-            after: after,
-          );
-          return {
-            'success': true,
-            'data': cached,
-            'code': 'LOCAL_BRIDGE_OFFLINE',
-            'message': 'Bridge offline. Showing cached messages.',
-          };
-        }
+      } catch (e, stack) {
+        print('[LiveChatRepository] Error getting local messages: $e');
+        print(stack);
       }
+      final cached = await cache.getMessages(
+        conversationId,
+        limit: limit,
+        before: before,
+        after: after,
+      );
+      return {
+        'success': true,
+        'data': cached,
+        'code': 'LOCAL_BRIDGE_OFFLINE',
+        'message': 'Bridge offline. Showing cached messages.',
+      };
     }
 
     final query = <String, String>{'limit': limit.toString()};
@@ -201,7 +219,6 @@ class LiveChatRepository {
       } catch (e) {
         // Fallback to cloud queue if bridge is down?
         // Spec: "If Flutter local-first sends directly to bridge, cloud command queue should still be available for mobile/offline fallback"
-        print('Local bridge error during sendMessage: $e');
         final errorString = e.toString().toLowerCase();
         if (errorString.contains('logged out') ||
             errorString.contains('unauthorized')) {
@@ -352,7 +369,7 @@ class LiveChatRepository {
     String messageId,
     String reaction,
   ) {
-    if (localFirstEnabled) {
+    if (_preferLocalZaloActions || localFirstEnabled) {
       return localApi.reactToMessage(messageId, reaction);
     }
     return CrmCloudApi.post(
@@ -423,7 +440,6 @@ class LiveChatRepository {
         return response;
       } catch (e) {
         // Fallback to cloud queue if bridge is down
-        print('Local bridge error during sendAttachment: $e');
         final errorString = e.toString().toLowerCase();
         if (errorString.contains('logged out') ||
             errorString.contains('unauthorized')) {

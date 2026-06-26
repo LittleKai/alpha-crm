@@ -243,14 +243,30 @@ class _GroupsList extends ConsumerWidget {
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.s),
       child: state.groups.isEmpty
-          ? AppEmptyState(
-              icon: Icons.groups_outlined,
-              title: 'Chưa có nhóm',
-              description:
-                  state.errorMessage ??
-                  'Bấm Đồng bộ để hệ thống tải danh sách nhóm Zalo.',
-              height: 360,
-            )
+          ? (state.isWorking
+              ? const AppEmptyState(
+                  icon: Icons.sync,
+                  title: 'Đang đồng bộ nhóm...',
+                  description:
+                      'Hệ thống đang kết nối và tải danh sách nhóm từ Zalo.\n'
+                      'Đối với tài khoản có nhiều nhóm (>100 nhóm), quá trình này có thể mất từ 15 - 30 giây.',
+                  height: 360,
+                  actions: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                )
+              : AppEmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'Chưa có nhóm',
+                  description: state.errorMessage ??
+                      'Bấm Đồng bộ để hệ thống tải danh sách nhóm Zalo.\n\n'
+                      '💡 Lưu ý: Đối với tài khoản có số lượng nhóm lớn (>100 nhóm), việc đồng bộ trong lần đầu tiên sau khi đăng nhập có thể mất từ 15 - 30 giây để hoàn tất dữ liệu.',
+                  height: 360,
+                ))
           : Column(
               children: [
                 const Padding(

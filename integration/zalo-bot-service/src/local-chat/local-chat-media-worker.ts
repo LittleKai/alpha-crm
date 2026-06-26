@@ -10,6 +10,33 @@ const MAX_MEDIA_BYTES = 500 * 1024 * 1024;
 const DEFAULT_CACHE_BYTES = 20 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_AGE_DAYS = 90;
 
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'audio/mpeg': '.mp3',
+  'audio/mp3': '.mp3',
+  'audio/wav': '.wav',
+  'audio/ogg': '.ogg',
+  'audio/m4a': '.m4a',
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/zip': '.zip',
+  'application/x-zip-compressed': '.zip',
+  'text/plain': '.txt',
+  'text/html': '.html',
+  'application/json': '.json',
+};
+
 export class LocalChatMediaWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -57,9 +84,9 @@ export class LocalChatMediaWorker {
     });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
-    const extension = this.safeExtension(attachment);
-    const target = resolve(this.mediaDirectory, `${attachment.id}${extension}`);
-    const temporary = `${target}.part`;
+    
+    let extension = this.safeExtension(attachment);
+    let temporary: string | null = null;
     try {
       const response = await fetch(attachment.url, {
         signal: controller.signal,
@@ -75,6 +102,42 @@ export class LocalChatMediaWorker {
       if (buffer.byteLength > MAX_MEDIA_BYTES) {
         throw new Error('Media exceeds the 500 MB local cache limit.');
       }
+
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      
+      // Fallback: If extension was not found from name, mimeType, or URL, map from content-type header
+      if (!extension) {
+        const typeOnly = contentType.split(';')[0].trim();
+        extension = MIME_TO_EXT[typeOnly] || '';
+        console.log(`[LocalChatMediaWorker] Extension fallback from Content-Type: "${contentType}" -> "${extension}"`);
+      }
+
+      // Determine content subfolder for auto-saving the cache file
+      const kind = (attachment.kind || '').toLowerCase();
+      const ext = extension.toLowerCase();
+      
+      const isMedia = kind === 'image' ||
+        kind === 'video' ||
+        kind === 'audio' ||
+        contentType.startsWith('image/') ||
+        contentType.startsWith('video/') ||
+        contentType.startsWith('audio/') ||
+        ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.ogg', '.m4a'].includes(ext);
+
+      const subfolder = isMedia ? 'Media' : 'Files';
+      const targetDir = resolve(this.mediaDirectory, subfolder);
+      await mkdir(targetDir, { recursive: true });
+
+      const target = resolve(targetDir, `${attachment.id}${extension}`);
+      temporary = `${target}.part`;
+
+      // Debug logs for verifying the downloaded cache file attributes
+      console.log(`[LocalChatMediaWorker] Auto-caching attachment id: ${attachment.id}`);
+      console.log(`  - Display Name: "${attachment.name}"`);
+      console.log(`  - Content-Type: "${contentType}"`);
+      console.log(`  - Inferred Extension: "${extension}"`);
+      console.log(`  - Target Path: "${target}"`);
+
       await writeFile(temporary, buffer);
       await rename(temporary, target);
       const checksum = createHash('sha256').update(buffer).digest('hex');
@@ -87,7 +150,9 @@ export class LocalChatMediaWorker {
       });
       this.publish(attachment, 'media.ready', { localPath: target, checksum });
     } catch (error) {
-      await unlink(temporary).catch(() => {});
+      if (temporary) {
+        await unlink(temporary).catch(() => {});
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.store.updateAttachmentDownload(attachment.id, {
         status: 'failed',
@@ -166,10 +231,57 @@ export class LocalChatMediaWorker {
   }
 
   private safeExtension(attachment: LocalAttachment): string {
+    console.log(`[LocalChatMediaWorker] safeExtension check for attachment:`, {
+      id: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      url: attachment.url,
+    });
     try {
-      const extension = extname(new URL(attachment.url).pathname);
-      return /^[.][a-zA-Z0-9]{1,8}$/.test(extension) ? extension : '';
-    } catch {
+      // 1. Try to extract from the attachment display name (e.g. "document.pdf")
+      if (attachment.name) {
+        const ext = extname(attachment.name);
+        if (/^[.][a-zA-Z0-9]{1,8}$/.test(ext)) {
+          console.log(`  - Found extension from name: "${ext}"`);
+          return ext;
+        }
+      }
+      
+      // 2. Try to extract from the attachment.mimeType
+      if (attachment.mimeType) {
+        const typeOnly = attachment.mimeType.split(';')[0].trim().toLowerCase();
+        const ext = MIME_TO_EXT[typeOnly];
+        if (ext) {
+          console.log(`  - Found extension from mimeType "${attachment.mimeType}": "${ext}"`);
+          return ext;
+        }
+      }
+
+      // 3. Parse URL to check query params (e.g. ?name=doc.pdf or ?file=doc.pdf)
+      if (attachment.url) {
+        const urlObj = new URL(attachment.url);
+        for (const paramName of ['name', 'filename', 'file', 'title']) {
+          const paramVal = urlObj.searchParams.get(paramName);
+          if (paramVal) {
+            const ext = extname(paramVal);
+            if (/^[.][a-zA-Z0-9]{1,8}$/.test(ext)) {
+              console.log(`  - Found extension from URL query param "${paramName}": "${ext}"`);
+              return ext;
+            }
+          }
+        }
+
+        // 4. Fall back to the URL pathname extension
+        const extension = extname(urlObj.pathname);
+        if (/^[.][a-zA-Z0-9]{1,8}$/.test(extension)) {
+          console.log(`  - Found extension from URL pathname: "${extension}"`);
+          return extension;
+        }
+      }
+      console.log(`  - No extension found`);
+      return '';
+    } catch (err) {
+      console.log(`  - Error in safeExtension:`, err);
       return '';
     }
   }

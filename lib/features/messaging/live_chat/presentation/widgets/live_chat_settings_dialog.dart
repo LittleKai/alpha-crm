@@ -75,6 +75,38 @@ class _LiveChatSettingsDialogState
     }
   }
 
+  Widget _buildSectionHeader({
+    required IconData icon,
+    required String title,
+    required Color iconColor,
+    required Color backgroundColor,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: iconColor,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        Text(
+          title,
+          style: AppTextStyles.bodyMedium.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final accounts = ref.watch(zaloIntegrationProvider).accounts;
@@ -98,13 +130,13 @@ class _LiveChatSettingsDialogState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Thông báo',
-              style: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            _buildSectionHeader(
+              icon: Icons.notifications_none_outlined,
+              title: 'Thông báo',
+              iconColor: AppColors.infoText,
+              backgroundColor: AppColors.infoSoft,
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.s),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
@@ -124,14 +156,20 @@ class _LiveChatSettingsDialogState
                 ),
               ),
             ),
-            const Divider(height: AppSpacing.l),
-            Text(
-              'Tự động trả lời bằng AI',
-              style: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Divider(
+              color: AppColors.borderSoft,
+              thickness: 1,
+              height: AppSpacing.xl,
             ),
-            const SizedBox(height: AppSpacing.xs),
+            _buildSectionHeader(
+              icon: Icons.smart_toy_outlined,
+              title: 'Tự động trả lời bằng AI',
+              iconColor: AppColors.isDarkMode
+                  ? const Color(0xFFA78BFA)
+                  : const Color(0xFF7C3AED),
+              backgroundColor: AppColors.purpleSoft,
+            ),
+            const SizedBox(height: AppSpacing.s),
             Text(
               'Khi bật, chatbot AI sẽ tự động trả lời tin nhắn đến (kể cả tin '
               'đầu tiên của hội thoại mới) cho tài khoản đó. Khi tắt, bạn tự trả '
@@ -171,14 +209,18 @@ class _LiveChatSettingsDialogState
                   onChanged: (v) => _toggle(account.id, v),
                 );
               }),
-            const Divider(height: AppSpacing.l),
-            Text(
-              'Tạm nghỉ khi người trực trả lời',
-              style: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Divider(
+              color: AppColors.borderSoft,
+              thickness: 1,
+              height: AppSpacing.xl,
             ),
-            const SizedBox(height: AppSpacing.xs),
+            _buildSectionHeader(
+              icon: Icons.timer_outlined,
+              title: 'Tạm nghỉ khi người trực trả lời',
+              iconColor: AppColors.warningText,
+              backgroundColor: AppColors.warningSoft,
+            ),
+            const SizedBox(height: AppSpacing.s),
             Text(
               'Khi bạn (hoặc bạn trả lời từ điện thoại) nhắn trong một hội thoại, '
               'AI tạm nghỉ ở hội thoại đó. Sau khoảng thời gian này mà không có '

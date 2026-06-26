@@ -237,7 +237,7 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
       return ['Chức năng nhắn tin', 'Gửi tin hàng loạt'];
     }
     if (route.startsWith('/messaging/live-chat')) {
-      return ['Chức năng nhắn tin', 'Live Chat CRM Inbox'];
+      return ['Chức năng nhắn tin', 'Hộp thư Live Chat CRM'];
     }
     if (route.startsWith('/messaging/chatbot')) {
       return ['Chức năng nhắn tin', 'Chatbot Tự Động'];

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/api/crm_cloud_api.dart';
@@ -429,10 +430,17 @@ class ManagedGroupsState {
 class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   final Ref _ref;
   final ManagedGroupsRepository _repository;
+  Timer? _pollingTimer;
 
   ManagedGroupsNotifier(this._ref, this._repository)
     : super(ManagedGroupsState.initial()) {
     refresh();
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> refresh() async {
@@ -477,6 +485,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   }
 
   Future<void> setSelectedAccountId(String accountId) async {
+    _pollingTimer?.cancel();
     state = state.copyWith(
       selectedAccountId: accountId,
       clearSelectedGroup: true,
@@ -485,6 +494,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
   }
 
   Future<void> syncGroups() async {
+    _pollingTimer?.cancel();
     state = state.copyWith(isWorking: true, errorMessage: null);
     final response = await _repository.syncGroups(
       accountId: state.selectedAccountId,
@@ -495,9 +505,19 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
           ? null
           : (response['message'] ?? 'Đồng bộ nhóm thất bại.').toString(),
     );
-    if (response['success'] == true) {
+    await loadGroups();
+
+    // Khởi động vòng lặp polling 5s/lần trong vòng 35s (7 lần) để tự động làm mới danh sách nhóm.
+    // Việc này giúp tài khoản lớn tải xong dữ liệu ngầm ở backend sẽ hiển thị ngay lên UI mà không cần bấm lại nút Đồng bộ.
+    int pollCount = 0;
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      pollCount++;
+      if (pollCount >= 7 || !mounted) {
+        timer.cancel();
+        return;
+      }
       await loadGroups();
-    }
+    });
   }
 
   Future<void> setManaged(ManagedZaloGroup group, bool isManaged) async {
@@ -745,7 +765,7 @@ class ManagedGroupsNotifier extends StateNotifier<ManagedGroupsState> {
     ManagedZaloGroup group,
     GroupSummaryConfig config,
   ) async {
-    final port = ZaloBackendManager.activePort ?? 8787;
+    final port = ZaloBackendManager.activePort ?? 28080;
     final bridge = LiveChatLocalBridgeApi(baseUrl: 'http://127.0.0.1:$port');
 
     // Scope → cursor + limit (shared across all sibling accounts).

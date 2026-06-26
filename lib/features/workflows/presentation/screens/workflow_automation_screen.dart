@@ -155,13 +155,13 @@ class _WorkflowAutomationScreenState
           const SizedBox(height: AppSpacing.s),
           _TextField(
             controller: _n8nWebhookController,
-            label: 'Event webhook URL',
+            label: 'Đường dẫn nhận sự kiện (Webhook URL)',
             hint: 'https://n8n.example.com/webhook/alpha-crm',
           ),
           const SizedBox(height: AppSpacing.s),
           _TextField(
             controller: _n8nCallbackController,
-            label: 'Cloud relay callback URL',
+            label: 'Đường dẫn Callback Cloud Relay',
             hint: 'https://alpha-studio-backend.fly.dev/api/crm/n8n/actions',
           ),
           const SizedBox(height: AppSpacing.m),
@@ -175,7 +175,7 @@ class _WorkflowAutomationScreenState
                   Icons.cable_outlined,
                   color: Color(0xFFFF6D5A),
                 ),
-                label: const Text('Test n8n'),
+                label: const Text('Kiểm tra kết nối n8n'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.textPrimary,
                   side: BorderSide(color: AppColors.border),
@@ -257,7 +257,7 @@ class _Header extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      'PRO AUTOMATION',
+                      'TỰ ĐỘNG HÓA PRO',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 9,
@@ -457,6 +457,7 @@ class _FilterBar extends StatelessWidget {
       const SizedBox(width: AppSpacing.s, height: AppSpacing.s),
       Expanded(
         child: DropdownButtonFormField<WorkflowTemplateCategory?>(
+          isExpanded: true,
           key: ValueKey(selectedCategory?.apiValue ?? 'all-categories'),
           initialValue: selectedCategory,
           decoration: const InputDecoration(
@@ -479,6 +480,7 @@ class _FilterBar extends StatelessWidget {
       const SizedBox(width: AppSpacing.s, height: AppSpacing.s),
       Expanded(
         child: DropdownButtonFormField<CrmChannel?>(
+          isExpanded: true,
           key: ValueKey(selectedChannel?.apiValue ?? 'all-channels'),
           initialValue: selectedChannel,
           decoration: const InputDecoration(

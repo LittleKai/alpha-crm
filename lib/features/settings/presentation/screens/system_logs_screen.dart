@@ -77,12 +77,12 @@ class _SystemLogsScreenState extends State<SystemLogsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Platform: ${log['platform'] ?? 'Unknown'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Nền tảng: ${log['platform'] ?? 'Không rõ'}', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('Time: ${log['timestamp']}'),
+            Text('Thời gian: ${log['timestamp']}'),
             const Divider(),
             if (log['error'] != null) ...[
-              const Text('Error:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Lỗi:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -93,7 +93,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen> {
               const SizedBox(height: 16),
             ],
             if (log['stackTrace'] != null) ...[
-              const Text('Stack Trace:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Dấu vết ngăn xếp (Stack Trace):', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -383,7 +383,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen> {
                             },
                             cells: [
                               DataCell(Text(_formatDate(log['timestamp']))),
-                              DataCell(Text(log['platform'] ?? 'Unknown')),
+                              DataCell(Text(log['platform'] ?? 'Không rõ')),
                               DataCell(
                                 Text(
                                   log['message'] ?? '',

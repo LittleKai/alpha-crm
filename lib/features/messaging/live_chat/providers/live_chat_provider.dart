@@ -10,6 +10,7 @@ import '../../../../shared/utils/desktop_notifier.dart';
 import '../../../../shared/utils/string_helper.dart';
 import '../../../../shared/local_db/local_db_maintenance.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../../../shared/utils/app_logger.dart';
 import '../data/live_chat_repository.dart';
 import '../data/live_chat_cache.dart';
 import '../data/live_chat_local_bridge_api.dart';
@@ -139,7 +140,12 @@ class ChatMessage {
       senderId: (json['senderId'] ?? '').toString(),
       senderName: (json['senderName'] ?? '').toString().toWellFormed(),
       senderAvatarUrl: json['senderAvatarUrl']?.toString(),
-      message: _stringFrom(json, const ['content', 'text', 'message', 'body']).toWellFormed(),
+      message: _stringFrom(json, const [
+        'content',
+        'text',
+        'message',
+        'body',
+      ]).toWellFormed(),
       direction: (json['direction'] ?? 'inbound').toString(),
       status: (json['status'] ?? '').toString(),
       // Pick the first NON-EMPTY timestamp. Inbound rows store sentAt as '' (an
@@ -154,7 +160,9 @@ class ChatMessage {
       isDeleted: json['isDeleted'] == true,
       zaloMsgId: (json['zaloMsgId'] ?? json['providerMessageId'])?.toString(),
       clientMessageId: json['clientMessageId']?.toString(),
-      errorText: (json['errorText'] ?? json['error'] ?? '').toString().toWellFormed(),
+      errorText: (json['errorText'] ?? json['error'] ?? '')
+          .toString()
+          .toWellFormed(),
       quote: _mapFromJsonField(json['quote'] ?? json['quoteJson']),
       reactions: _mapListFromJsonField(json['reactions']),
       receipts: _mapListFromJsonField(json['receipts']),
@@ -484,11 +492,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   final Map<String, int> _lastNotifiedUnread = <String, int>{};
   DateTime _lastTypingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  LiveChatNotifier(
-    this._repository, {
-    bool Function()? notificationsEnabled,
-  })  : _notificationsEnabled = notificationsEnabled ?? (() => false),
-        super(LiveChatState.initial()) {
+  LiveChatNotifier(this._repository, {bool Function()? notificationsEnabled})
+    : _notificationsEnabled = notificationsEnabled ?? (() => false),
+      super(LiveChatState.initial()) {
     loadAccounts();
     loadConversations(loadSelectedMessages: true);
   }
@@ -535,43 +541,53 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
 
     if (response['success'] == true && response['data'] is List) {
-      var conversations = (response['data'] as List)
-          .whereType<Map>()
-          .map((item) => Conversation.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-      conversations = await _filterManagedGroupConversations(conversations);
-      // Only on silent refreshes (poll/SSE) do we surface a desktop toast for
-      // newly arrived inbound messages — never on the first/manual full load.
-      if (silent) {
-        _notifyNewInboundMessages(conversations);
-      } else {
-        // Manual/account-switch load → reset the toast baseline so a later
-        // silent refresh only notifies for genuinely NEW unread.
-        _lastNotifiedUnread
-          ..clear()
-          ..addEntries(
-            conversations.map((c) => MapEntry(c.id, c.unreadCount)),
-          );
-      }
-      final selected = _selectedAfterRefresh(conversations);
-      final hasSelected = selected.id.isNotEmpty;
-      final isNewOrEmpty = state.selectedConversation == null ||
-          state.selectedConversation!.id != selected.id ||
-          selected.messages.isEmpty;
-      final shouldLoadMessages = hasSelected && (loadSelectedMessages || isNewOrEmpty);
+      try {
+        var conversations = (response['data'] as List)
+            .whereType<Map>()
+            .map((item) => Conversation.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        conversations = await _filterManagedGroupConversations(conversations);
+        // Only on silent refreshes (poll/SSE) do we surface a desktop toast for
+        // newly arrived inbound messages — never on the first/manual full load.
+        if (silent) {
+          _notifyNewInboundMessages(conversations);
+        } else {
+          // Manual/account-switch load → reset the toast baseline so a later
+          // silent refresh only notifies for genuinely NEW unread.
+          _lastNotifiedUnread
+            ..clear()
+            ..addEntries(conversations.map((c) => MapEntry(c.id, c.unreadCount)));
+        }
+        final selected = _selectedAfterRefresh(conversations);
+        final hasSelected = selected.id.isNotEmpty;
+        final isNewOrEmpty =
+            state.selectedConversation == null ||
+            state.selectedConversation!.id != selected.id ||
+            selected.messages.isEmpty;
+        final shouldLoadMessages =
+            hasSelected && (loadSelectedMessages || isNewOrEmpty);
 
-      state = state.copyWith(
-        conversations: conversations,
-        selectedConversation: selected.id.isEmpty ? null : selected,
-        isLoading: false,
-        isRefreshingConversations: false,
-      );
-      if (shouldLoadMessages) {
-        await loadMessages(selected.id);
-        _subscribeToEvents(selected);
-        await _loadDraft(selected);
+        state = state.copyWith(
+          conversations: conversations,
+          selectedConversation: selected.id.isEmpty ? null : selected,
+          isLoading: false,
+          isRefreshingConversations: false,
+        );
+        if (shouldLoadMessages) {
+          await loadMessages(selected.id);
+          _subscribeToEvents(selected);
+          await _loadDraft(selected);
+        }
+      } catch (e, stack) {
+        print('[LiveChatProvider] Error parsing conversations: $e');
+        print(stack);
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'Lỗi parse dữ liệu hội thoại: $e',
+        );
       }
     } else {
+      print('[LiveChatProvider] loadConversations failed. Response: $response');
       state = state.copyWith(
         isLoading: false,
         errorMessage: (response['message'] ?? 'Không thể tải hội thoại.')
@@ -894,13 +910,17 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       messageSource: messageSource,
     );
 
-    if (response['success'] != true || response['data'] is! List) return;
+    if (response['success'] != true || response['data'] is! List) {
+      return;
+    }
     final messages = (response['data'] as List)
         .whereType<Map>()
         .map((item) => ChatMessage.fromJson(Map<String, dynamic>.from(item)))
         .toList();
     final selected = state.selectedConversation;
-    if (selected == null || selected.id != conversationId) return;
+    if (selected == null || selected.id != conversationId) {
+      return;
+    }
     final mergedMessages = _mergeMessages(
       selected.messages,
       messages,
@@ -1051,25 +1071,34 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final normalized = url.trim();
     if (conversation == null || normalized.isEmpty) return;
     state = state.copyWith(isSending: true, errorMessage: null);
-    final response = await _repository.sendRichMessage(
-      conversation.id,
-      title.trim().isEmpty ? normalized : title.trim(),
-      clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
-      messageType: 'link',
-      link: {'url': normalized, 'href': normalized, 'title': title.trim()},
-    );
-    if (response['success'] == true) {
-      await loadMessages(conversation.id);
-      _markOperatorTakeover(conversation);
-      state = state.copyWith(isSending: false);
-    } else {
-      if (response['localMessageId'] != null) {
+    try {
+      final response = await _repository.sendRichMessage(
+        conversation.id,
+        title.trim().isEmpty ? normalized : title.trim(),
+        clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
+        messageType: 'link',
+        link: {'url': normalized, 'href': normalized, 'title': title.trim()},
+      );
+      if (response['success'] == true) {
         await loadMessages(conversation.id);
+        _markOperatorTakeover(conversation);
+        state = state.copyWith(isSending: false);
+      } else {
+        if (response['localMessageId'] != null) {
+          await loadMessages(conversation.id);
+        }
+        final errorMsg = (response['error'] ?? 'Gửi liên kết thất bại.').toString();
+        AppLogger().error('Gửi liên kết Live Chat thất bại: $errorMsg');
+        state = state.copyWith(
+          isSending: false,
+          errorMessage: errorMsg,
+        );
       }
+    } catch (error, stack) {
+      AppLogger().error('Ngoại lệ khi gửi liên kết Live Chat: $error', error, stack);
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['error'] ?? 'Gửi liên kết thất bại.')
-            .toString(),
+        errorMessage: 'Gửi liên kết thất bại: $error',
       );
     }
   }
@@ -1078,21 +1107,31 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null || sticker.isEmpty) return;
     state = state.copyWith(isSending: true, errorMessage: null);
-    final response = await _repository.sendRichMessage(
-      conversation.id,
-      '',
-      clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
-      messageType: 'sticker',
-      sticker: sticker,
-    );
-    if (response['success'] == true) {
-      await loadMessages(conversation.id);
-      _markOperatorTakeover(conversation);
-      state = state.copyWith(isSending: false);
-    } else {
+    try {
+      final response = await _repository.sendRichMessage(
+        conversation.id,
+        '',
+        clientMessageId: 'flutter_${DateTime.now().millisecondsSinceEpoch}',
+        messageType: 'sticker',
+        sticker: sticker,
+      );
+      if (response['success'] == true) {
+        await loadMessages(conversation.id);
+        _markOperatorTakeover(conversation);
+        state = state.copyWith(isSending: false);
+      } else {
+        final errorMsg = (response['error'] ?? 'Gửi sticker thất bại.').toString();
+        AppLogger().error('Gửi sticker Live Chat thất bại: $errorMsg');
+        state = state.copyWith(
+          isSending: false,
+          errorMessage: errorMsg,
+        );
+      }
+    } catch (error, stack) {
+      AppLogger().error('Ngoại lệ khi gửi sticker Live Chat: $error', error, stack);
       state = state.copyWith(
         isSending: false,
-        errorMessage: (response['error'] ?? 'Gửi sticker thất bại.').toString(),
+        errorMessage: 'Gửi sticker thất bại: $error',
       );
     }
   }
@@ -1104,6 +1143,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }) {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
+    AppLogger().error('Gửi tin nhắn Live Chat thất bại (ID: $clientMessageId): $error');
     _replaceSelected(
       conversation.copyWith(
         messages: conversation.messages
@@ -1340,10 +1380,12 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
     // Optimistic flip for instant feedback; turning ON also clears any pause.
-    _replaceSelected(conversation.copyWith(
-      chatbotEnabled: enabled,
-      chatbotPausedUntilSet: enabled ? null : conversation.chatbotPausedUntil,
-    ));
+    _replaceSelected(
+      conversation.copyWith(
+        chatbotEnabled: enabled,
+        chatbotPausedUntilSet: enabled ? null : conversation.chatbotPausedUntil,
+      ),
+    );
     try {
       final response = await _repository.updateChatbotState(
         ConversationTarget(
@@ -1368,10 +1410,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null || !conversation.chatbotPaused) return;
     // Optimistically brighten the icon; the backend clears `pausedUntil`.
-    _replaceSelected(conversation.copyWith(
-      chatbotEnabled: true,
-      chatbotPausedUntilSet: null,
-    ));
+    _replaceSelected(
+      conversation.copyWith(chatbotEnabled: true, chatbotPausedUntilSet: null),
+    );
     await _repository.updateChatbotState(
       ConversationTarget(
         id: conversation.id,
@@ -1390,9 +1431,11 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     // Keep the master switch ON; the backend's conversation.chatbot_state event
     // refines the exact pausedUntil moments later. Skip if the bot is already off.
     if (!current.chatbotEnabled) return;
-    _replaceSelected(current.copyWith(
-      chatbotPausedUntilSet: DateTime.now().add(const Duration(minutes: 10)),
-    ));
+    _replaceSelected(
+      current.copyWith(
+        chatbotPausedUntilSet: DateTime.now().add(const Duration(minutes: 10)),
+      ),
+    );
   }
 
   /// Per-account AI auto-reply settings (Live Chat settings dialog). Returns a
@@ -1417,15 +1460,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
 
   Future<bool> setAccountAiAutoReply(String accountId, bool enabled) async {
     try {
-      final response =
-          await _repository.setAccountAiAutoReply(accountId, enabled);
+      final response = await _repository.setAccountAiAutoReply(
+        accountId,
+        enabled,
+      );
       final ok = response['success'] == true;
       if (ok) {
         // Keep the header Bot toggle's gate in sync with the dialog change.
-        state = state.copyWith(accountAiAutoReply: {
-          ...state.accountAiAutoReply,
-          accountId: enabled,
-        });
+        state = state.copyWith(
+          accountAiAutoReply: {...state.accountAiAutoReply, accountId: enabled},
+        );
       }
       return ok;
     } catch (_) {
@@ -1447,8 +1491,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<int> setOperatorPauseCooldownMinutes(int minutes) async {
     final clamped = minutes.clamp(5, 120);
     try {
-      final response =
-          await _repository.setOperatorPauseCooldownMinutes(clamped);
+      final response = await _repository.setOperatorPauseCooldownMinutes(
+        clamped,
+      );
       final saved = response['data']?['operatorPauseCooldownMinutes'];
       return int.tryParse('${saved ?? ''}') ?? clamped;
     } catch (_) {
@@ -1464,28 +1509,33 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null || filePaths.isEmpty) return;
     state = state.copyWith(isSending: true, errorMessage: null);
-    final response = await _repository.sendAttachment(
-      conversation.id,
-      filePaths,
-      content: content,
-      messageType: messageType,
-    );
-    if (response['success'] == true) {
-      await loadMessages(conversation.id);
-      _markOperatorTakeover(conversation);
-      state = state.copyWith(isSending: false);
-    } else {
-      if (response['localMessageId'] != null) {
+    try {
+      final response = await _repository.sendAttachment(
+        conversation.id,
+        filePaths,
+        content: content,
+        messageType: messageType,
+      );
+      if (response['success'] == true) {
         await loadMessages(conversation.id);
+        _markOperatorTakeover(conversation);
+        state = state.copyWith(isSending: false);
+      } else {
+        if (response['localMessageId'] != null) {
+          await loadMessages(conversation.id);
+        }
+        final errorMsg = (response['error'] ?? response['message'] ?? 'Gửi file thất bại.').toString();
+        AppLogger().error('Gửi tệp tin Live Chat thất bại: $errorMsg');
+        state = state.copyWith(
+          isSending: false,
+          errorMessage: errorMsg,
+        );
       }
+    } catch (error, stack) {
+      AppLogger().error('Ngoại lệ khi gửi tệp tin Live Chat: $error', error, stack);
       state = state.copyWith(
         isSending: false,
-        // Bridge surfaces the real Zalo reason under 'error'; cloud uses 'message'.
-        // Prefer the concrete reason so the operator sees e.g. the Zalo error code.
-        errorMessage: (response['error'] ??
-                response['message'] ??
-                'Gửi file thất bại.')
-            .toString(),
+        errorMessage: 'Gửi tệp tin thất bại: $error',
       );
     }
   }
@@ -1504,17 +1554,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         state = state.copyWith(isSending: false);
         return true;
       } else {
+        final errorMsg = (response['message'] ?? response['error'] ?? 'Thu hồi tin nhắn thất bại.').toString();
+        AppLogger().error('Thu hồi tin nhắn thất bại: $errorMsg');
         state = state.copyWith(
           isSending: false,
-          errorMessage:
-              (response['message'] ??
-                      response['error'] ??
-                      'Thu hồi tin nhắn thất bại.')
-                  .toString(),
+          errorMessage: errorMsg,
         );
         return false;
       }
-    } catch (error) {
+    } catch (error, stack) {
+      AppLogger().error('Lỗi ngoại lệ khi thu hồi tin nhắn: $error', error, stack);
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Thu hồi tin nhắn thất bại: $error',
@@ -1556,7 +1605,6 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     }
   }
 
-
   @override
   void dispose() {
     _subscribedAccountId = null;
@@ -1585,14 +1633,16 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     _eventSubscription?.cancel();
     _subscribedAccountId = accountId;
     state = state.copyWith(realtimeConnected: false, typingUserIds: <String>{});
-    _eventSubscription = _repository.watchEvents(accountId: accountId).listen(
-      (event) {
-        _reconnectAttempts = 0; // healthy traffic resets the backoff
-        _handleRealtimeEvent(event);
-      },
-      onError: (_) => _scheduleReconnect(),
-      onDone: () => _scheduleReconnect(),
-    );
+    _eventSubscription = _repository
+        .watchEvents(accountId: accountId)
+        .listen(
+          (event) {
+            _reconnectAttempts = 0; // healthy traffic resets the backoff
+            _handleRealtimeEvent(event);
+          },
+          onError: (_) => _scheduleReconnect(),
+          onDone: () => _scheduleReconnect(),
+        );
   }
 
   // Self-healing SSE: reconnect with exponential backoff (1,2,4,…,30s) instead
@@ -1631,7 +1681,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     state = state.copyWith(realtimeConnected: true);
 
     final selected = state.selectedConversation;
-    final isForSelected = selected != null &&
+    final isForSelected =
+        selected != null &&
         (event.threadId.isEmpty || event.threadId == selected.threadId) &&
         (event.accountId.isEmpty ||
             selected.accountId.isEmpty ||
@@ -1688,10 +1739,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         ? event.data['effectiveEnabled'] == true
         : mode == 'enabled';
     final pausedUntil = _pausedUntilFrom(event.data['pausedUntil']);
-    Conversation apply(Conversation c) => c.copyWith(
-          chatbotEnabled: enabled,
-          chatbotPausedUntilSet: pausedUntil,
-        );
+    Conversation apply(Conversation c) =>
+        c.copyWith(chatbotEnabled: enabled, chatbotPausedUntilSet: pausedUntil);
     bool matches(Conversation c) =>
         c.threadId == event.threadId &&
         (event.accountId.isEmpty || c.accountId == event.accountId);
@@ -1739,7 +1788,9 @@ class LiveChatDeepLink {
   const LiveChatDeepLink({required this.accountId, required this.threadId});
 }
 
-final liveChatDeepLinkProvider = StateProvider<LiveChatDeepLink?>((ref) => null);
+final liveChatDeepLinkProvider = StateProvider<LiveChatDeepLink?>(
+  (ref) => null,
+);
 
 final _emptyConversation = Conversation(
   id: '',
@@ -1782,7 +1833,9 @@ String _stringFrom(Map<String, dynamic> json, List<String> keys) {
 Map<String, dynamic>? _mapFromJsonField(Object? value) {
   // Treat an empty object as "absent" so callers (e.g. the reply-quote box,
   // which renders whenever quote != null) don't fire on a `{}` placeholder.
-  if (value is Map) return value.isEmpty ? null : Map<String, dynamic>.from(value);
+  if (value is Map) {
+    return value.isEmpty ? null : Map<String, dynamic>.from(value);
+  }
   if (value is String && value.isNotEmpty) {
     try {
       final decoded = jsonDecode(value);

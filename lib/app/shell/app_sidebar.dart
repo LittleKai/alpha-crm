@@ -204,7 +204,9 @@ class AppSidebar extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
                     children: [
                       Text(
                         'PHẦN MỀM MARKETING',
@@ -215,7 +217,6 @@ class AppSidebar extends ConsumerWidget {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         decoration: BoxDecoration(
@@ -230,6 +231,7 @@ class AppSidebar extends ConsumerWidget {
                           ),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.auto_awesome, // Thay cho icon Beta

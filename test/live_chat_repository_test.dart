@@ -4,6 +4,8 @@ import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_repository
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test(
     'recallMessage surfaces local bridge failure in local-first mode',
     () async {
@@ -63,6 +65,41 @@ void main() {
       expect(localApi.recalledMessageId, 'provider-msg-1');
     },
   );
+
+  test(
+    'getMessages returns local bridge offline instead of falling back to cloud',
+    () async {
+      final repository = LiveChatRepository(
+        localFirstEnabled: false,
+        cache: _MemoryLiveChatCache(),
+        localApi: _FailingInboxLocalApi(),
+      );
+
+      final response = await repository.getMessages('conv-local-offline');
+
+      expect(response['success'], true);
+      expect(response['code'], 'LOCAL_BRIDGE_OFFLINE');
+      expect(response['data'], isEmpty);
+    },
+  );
+
+  test(
+    'getConversations returns local bridge offline instead of falling back to cloud',
+    () async {
+      final repository = LiveChatRepository(
+        localFirstEnabled: false,
+        cache: _MemoryLiveChatCache(),
+        localApi: _FailingInboxLocalApi(),
+      );
+
+      final response = await repository.getConversations(
+        accountId: 'acc-local-offline',
+      );
+
+      expect(response['success'], false);
+      expect(response['code'], 'LOCAL_BRIDGE_OFFLINE');
+    },
+  );
 }
 
 class _FailingRecallLocalApi extends LiveChatLocalBridgeApi {
@@ -72,6 +109,66 @@ class _FailingRecallLocalApi extends LiveChatLocalBridgeApi {
   Future<Map<String, dynamic>> recallLocalMessage(String messageId) {
     throw Exception('Cannot recall message: missing provider message ID.');
   }
+}
+
+class _FailingInboxLocalApi extends LiveChatLocalBridgeApi {
+  _FailingInboxLocalApi() : super(baseUrl: '');
+
+  @override
+  Future<Map<String, dynamic>> getLocalMessages(
+    String conversationId, {
+    int limit = 50,
+    String? before,
+    String? after,
+  }) {
+    throw Exception('local bridge offline');
+  }
+
+  @override
+  Future<Map<String, dynamic>> getLocalConversations({
+    String? accountId,
+    String? search,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    throw Exception('local bridge offline');
+  }
+}
+
+class _MemoryLiveChatCache extends LiveChatCache {
+  @override
+  Future<List<Map<String, dynamic>>?> getFreshConversations(String cacheKey) {
+    return Future.value(null);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>?> getAnyCachedConversations(String cacheKey) {
+    return Future.value(null);
+  }
+
+  @override
+  Future<void> saveConversations(
+    String cacheKey,
+    List<Map<String, dynamic>> conversations,
+    Duration expiry,
+  ) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> getMessages(
+    String conversationId, {
+    int limit = 50,
+    String? before,
+    String? after,
+  }) {
+    return Future.value(<Map<String, dynamic>>[]);
+  }
+
+  @override
+  Future<void> saveMessages(
+    String conversationId,
+    List<Map<String, dynamic>> messages, {
+    bool merge = true,
+  }) async {}
 }
 
 class _RecordingReactionLocalApi extends LiveChatLocalBridgeApi {

@@ -66,6 +66,26 @@ class LiveChatCache {
     return null;
   }
 
+  /// Returns cached conversations regardless of expiry (useful for offline fallback)
+  Future<List<Map<String, dynamic>>?> getAnyCachedConversations(
+    String cacheKey,
+  ) async {
+    final db = await LocalDb.instance;
+
+    final result = await db.query(
+      'cache_entries',
+      where: 'key = ?',
+      whereArgs: [cacheKey],
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      final value = result.first['value'] as String;
+      return List<Map<String, dynamic>>.from(jsonDecode(value));
+    }
+    return null;
+  }
+
   /// Saves full messages to the message cache
   Future<void> saveMessages(
     String conversationId,

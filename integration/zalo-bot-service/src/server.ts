@@ -30,6 +30,7 @@ import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
 import { handleLocalSessionRoute } from './local-session/local-session-api.js';
 import { saveClientLog, getClientLogs, deleteClientLogs } from './agent/client-log.js';
+import { logError } from './agent/logger.js';
 import {
   sessionCoordinator,
   sessionEventHub,
@@ -159,7 +160,13 @@ const server = createServer(async (req, res) => {
   }
 
   // Handle local-first Live Chat APIs
-  if (handleLocalRoute(method, url, req, res, json, readBody)) {
+  try {
+    if (handleLocalRoute(method, url, req, res, json, readBody)) {
+      return;
+    }
+  } catch (err: any) {
+    logError(`[server] Error handling local route ${method} ${url}:`, err);
+    json(res, 500, { success: false, error: err.message || 'Internal server error' });
     return;
   }
 

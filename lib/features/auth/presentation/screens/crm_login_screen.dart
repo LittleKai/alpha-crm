@@ -103,7 +103,7 @@ class _CrmLoginScreenState extends ConsumerState<CrmLoginScreen> {
                                   ),
                                 ),
                                 Text(
-                                  'Production Cloud Portal',
+                                  'Cổng đám mây chính thức',
                                   style: AppTextStyles.caption.copyWith(
                                     color: AppColors.textSecondary,
                                   ),

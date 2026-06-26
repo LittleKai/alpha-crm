@@ -17,7 +17,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In Windows, build-name is used as the major, minor, and patch parts
 # Note: The version bump and release flow is automated via:
 # alpha-studio/.claude/skills/CRM_AUTOMATED_RELEASE_SKILL.md
-version: 0.1.2+25
+version: 0.1.3+26
 
 environment:
   sdk: ^3.10.7

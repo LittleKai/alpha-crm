@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +23,7 @@ import '../../../../../shared/widgets/app_dialog.dart';
 import '../../../../../shared/widgets/app_card.dart';
 import '../../../../../shared/widgets/app_empty_state.dart';
 import '../../../../../shared/widgets/app_select_field.dart';
+import '../../../../../shared/widgets/app_search_field.dart';
 import '../../../../content/providers/templates_provider.dart';
 import '../../../../settings/providers/settings_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
@@ -554,15 +557,10 @@ class _ConversationList extends ConsumerWidget {
       padding: const EdgeInsets.all(AppSpacing.s),
       child: Column(
         children: [
-          TextField(
+          AppSearchField(
             controller: searchController,
-            decoration: const InputDecoration(
-              hintText: 'Tìm hội thoại...',
-              prefixIcon: Icon(Icons.search),
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            onSubmitted: notifier.setSearchQuery,
+            hintText: 'Tìm hội thoại...',
+            onChanged: notifier.setSearchQuery,
           ),
           const SizedBox(height: AppSpacing.s),
           Expanded(
@@ -1387,6 +1385,7 @@ class _MessageBubble extends ConsumerWidget {
   }
 
   Map<String, String>? _getFileInfo(ChatMessage msg) {
+    if (msg.contentType == 'link') return null;
     if (!msg.message.startsWith('{')) return null;
     try {
       final p = jsonDecode(msg.message);
@@ -1396,6 +1395,9 @@ class _MessageBubble extends ConsumerWidget {
           params = jsonDecode(params);
         }
         if (params is Map) {
+          final isLinkPreview = p['href'] != null && params['fileExt'] == null;
+          if (isLinkPreview) return null;
+
           if (params['fileExt'] != null || params['fType'] == 1) {
             final fileSizeStr = params['fileSize']?.toString() ?? '0';
             final bytes = int.tryParse(fileSizeStr) ?? 0;
@@ -1556,6 +1558,8 @@ class _MessageBubble extends ConsumerWidget {
     );
   }
 
+
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = conversation.messages;
@@ -1662,7 +1666,9 @@ class _MessageBubble extends ConsumerWidget {
     }
 
     final bubbleWidget = Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+      padding: EdgeInsets.only(
+        bottom: message.reactions.isNotEmpty ? AppSpacing.m : AppSpacing.s,
+      ),
       child: Row(
         mainAxisAlignment: isMine
             ? MainAxisAlignment.end
@@ -1691,136 +1697,123 @@ class _MessageBubble extends ConsumerWidget {
                     ),
                   ),
                 ],
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.m,
-                    vertical: AppSpacing.s,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusS),
-                    border: highlighted
-                        ? Border.all(color: AppColors.warning, width: 3)
-                        : null,
-                    boxShadow: highlighted
-                        ? [
-                            BoxShadow(
-                              color: AppColors.warning.withValues(alpha: 0.35),
-                              blurRadius: 12,
+                _HoverReactionsStack(
+                  message: message,
+                  conversation: conversation,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                      vertical: AppSpacing.s,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+                      border: highlighted
+                          ? Border.all(color: AppColors.warning, width: 3)
+                          : null,
+                      boxShadow: highlighted
+                          ? [
+                              BoxShadow(
+                                color: AppColors.warning.withValues(alpha: 0.35),
+                                blurRadius: 12,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (message.quote != null) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: AppSpacing.s),
+                            padding: const EdgeInsets.all(AppSpacing.s),
+                            decoration: BoxDecoration(
+                              color: textColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.radiusS,
+                              ),
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (message.quote != null) ...[
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: AppSpacing.s),
-                          padding: const EdgeInsets.all(AppSpacing.s),
-                          decoration: BoxDecoration(
-                            color: textColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusS,
+                            child: Text(
+                              (message.quote!['content'] ?? 'Tin nhắn đã trả lời')
+                                  .toString(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.caption.copyWith(
+                                color: textColor.withValues(alpha: 0.8),
+                              ),
                             ),
                           ),
-                          child: Text(
-                            (message.quote!['content'] ?? 'Tin nhắn đã trả lời')
-                                .toString(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.caption.copyWith(
-                              color: textColor.withValues(alpha: 0.8),
+                        ],
+                        _buildMessageContent(context, ref, textColor, groupMedia),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isMine) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: badgeBg,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      message.isFromBot
+                                          ? Icons.smart_toy
+                                          : Icons.support_agent,
+                                      size: 11,
+                                      color: badgeContentColor,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      message.isFromBot ? 'AI' : 'NV',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: badgeContentColor,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              DateFormat('dd/MM HH:mm').format(message.timestamp),
+                              style: AppTextStyles.caption.copyWith(
+                                color: textColor.withValues(alpha: 0.75),
+                              ),
                             ),
-                          ),
+                            if (isMine) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                message.status == 'seen'
+                                    ? Icons.done_all
+                                    : message.status == 'failed'
+                                    ? Icons.error_outline
+                                    : message.status == 'sending' ||
+                                          message.status == 'queued'
+                                    ? Icons.schedule
+                                    : Icons.done,
+                                size: 14,
+                                color: message.status == 'failed'
+                                    ? AppColors.errorText
+                                    : textColor.withValues(alpha: 0.75),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
-                      _buildMessageContent(context, ref, textColor, groupMedia),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isMine) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: badgeBg,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    message.isFromBot
-                                        ? Icons.smart_toy
-                                        : Icons.support_agent,
-                                    size: 11,
-                                    color: badgeContentColor,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    message.isFromBot ? 'AI' : 'NV',
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: badgeContentColor,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 10,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                          Text(
-                            DateFormat('dd/MM HH:mm').format(message.timestamp),
-                            style: AppTextStyles.caption.copyWith(
-                              color: textColor.withValues(alpha: 0.75),
-                            ),
-                          ),
-                          if (isMine) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              message.status == 'seen'
-                                  ? Icons.done_all
-                                  : message.status == 'failed'
-                                  ? Icons.error_outline
-                                  : message.status == 'sending' ||
-                                        message.status == 'queued'
-                                  ? Icons.schedule
-                                  : Icons.done,
-                              size: 14,
-                              color: message.status == 'failed'
-                                  ? AppColors.errorText
-                                  : textColor.withValues(alpha: 0.75),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (message.reactions.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Wrap(
-                      spacing: 4,
-                      children: message.reactions
-                          .map(
-                            (reaction) => Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text(
-                                (reaction['reaction'] ?? '').toString(),
-                              ),
-                            ),
-                          )
-                          .toList(),
                     ),
                   ),
+                ),
                 if (message.status == 'failed')
                   TextButton.icon(
                     onPressed: () => ref
@@ -1889,17 +1882,7 @@ class _MessageBubble extends ConsumerWidget {
             ],
           ),
         ),
-        if (!message.isDeleted && !message.isMine)
-          const PopupMenuItem<String>(
-            value: 'heart',
-            child: Row(
-              children: [
-                Icon(Icons.favorite_outline, size: 18),
-                SizedBox(width: 8),
-                Text('Thả tim'),
-              ],
-            ),
-          ),
+
         if (message.isMine && message.status != 'recalled')
           const PopupMenuItem<String>(
             value: 'recall',
@@ -1923,6 +1906,7 @@ class _MessageBubble extends ConsumerWidget {
         ),
       ],
     ).then((value) {
+      if (!context.mounted) return;
       if (value == 'copy') {
         String copyText = message.message;
         if (message.message.startsWith('{') && message.message.endsWith('}')) {
@@ -1951,37 +1935,85 @@ class _MessageBubble extends ConsumerWidget {
       } else if (value == 'heart') {
         ref.read(liveChatProvider.notifier).reactToMessage(message, 'heart');
       } else if (value == 'recall') {
-        ref
-            .read(liveChatProvider.notifier)
-            .recallMessage(message.providerActionId)
-            .then((success) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success ? 'Đã thu hồi tin nhắn.' : 'Thu hồi thất bại.',
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-              }
-            });
+        showDialog<bool>(
+          context: context,
+          builder: (confirmContext) => AppDialog(
+            title: 'Thu hồi tin nhắn',
+            icon: Icons.undo,
+            subtitle: 'Bạn có chắc chắn muốn thu hồi tin nhắn này không? Tin nhắn sẽ bị ẩn ở cả hai phía thiết bị.',
+            actions: [
+              AppDialogAction(
+                text: 'Hủy',
+                variant: AppButtonVariant.outline,
+                onPressed: () => Navigator.pop(confirmContext, false),
+              ),
+              AppDialogAction(
+                text: 'Thu hồi',
+                variant: AppButtonVariant.destructive,
+                onPressed: () => Navigator.pop(confirmContext, true),
+              ),
+            ],
+            child: const SizedBox.shrink(),
+          ),
+        ).then((confirmed) {
+          if (confirmed == true) {
+            ref
+                .read(liveChatProvider.notifier)
+                .recallMessage(message.providerActionId)
+                .then((success) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success ? 'Đã thu hồi tin nhắn.' : 'Thu hồi thất bại.',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                });
+          }
+        });
       } else if (value == 'delete') {
-        ref
-            .read(liveChatProvider.notifier)
-            .deleteMessage(message.id)
-            .then((success) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success ? 'Đã xóa tin nhắn.' : 'Xóa tin nhắn thất bại.',
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-              }
-            });
+        showDialog<bool>(
+          context: context,
+          builder: (confirmContext) => AppDialog(
+            title: 'Xóa tin nhắn',
+            icon: Icons.delete_outline,
+            subtitle: 'Bạn có chắc chắn muốn xóa tin nhắn này không? Hành động này chỉ xóa tin nhắn ở giao diện của bạn.',
+            actions: [
+              AppDialogAction(
+                text: 'Hủy',
+                variant: AppButtonVariant.outline,
+                onPressed: () => Navigator.pop(confirmContext, false),
+              ),
+              AppDialogAction(
+                text: 'Xóa',
+                variant: AppButtonVariant.destructive,
+                onPressed: () => Navigator.pop(confirmContext, true),
+              ),
+            ],
+            child: const SizedBox.shrink(),
+          ),
+        ).then((confirmed) {
+          if (confirmed == true) {
+            ref
+                .read(liveChatProvider.notifier)
+                .deleteMessage(message.id)
+                .then((success) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success ? 'Đã xóa tin nhắn.' : 'Xóa tin nhắn thất bại.',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                });
+          }
+        });
       }
     });
   }
@@ -2234,10 +2266,15 @@ class _MessageBubble extends ConsumerWidget {
                     }
                     if (pathToOpen.isNotEmpty) {
                       try {
-                        final parentPath = pathToOpen.substring(0, pathToOpen.lastIndexOf(RegExp(r'[/\\]')));
-                        final folderUri = Uri.parse('file:///$parentPath');
-                        if (await canLaunchUrl(folderUri)) {
-                          await launchUrl(folderUri);
+                        if (Platform.isWindows) {
+                          final winPath = pathToOpen.replaceAll('/', '\\');
+                          await Process.run('explorer.exe', ['/select,$winPath']);
+                        } else {
+                          final parentPath = pathToOpen.substring(0, pathToOpen.lastIndexOf(RegExp(r'[/\\]')));
+                          final folderUri = Uri.parse('file:///$parentPath');
+                          if (await canLaunchUrl(folderUri)) {
+                            await launchUrl(folderUri);
+                          }
                         }
                       } catch (_) {}
                     }
@@ -2350,10 +2387,15 @@ class _MessageBubble extends ConsumerWidget {
                         directory: ref.read(settingsProvider).settings.downloadFolder,
                       );
                       if (path.isNotEmpty) {
-                        final parentPath = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
-                        final folderUri = Uri.parse('file:///$parentPath');
-                        if (await canLaunchUrl(folderUri)) {
-                          await launchUrl(folderUri);
+                        if (Platform.isWindows) {
+                          final winPath = path.replaceAll('/', '\\');
+                          await Process.run('explorer.exe', ['/select,$winPath']);
+                        } else {
+                          final parentPath = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
+                          final folderUri = Uri.parse('file:///$parentPath');
+                          if (await canLaunchUrl(folderUri)) {
+                            await launchUrl(folderUri);
+                          }
                         }
                       }
                     } catch (_) {}
@@ -2516,8 +2558,74 @@ class _MessageBubble extends ConsumerWidget {
       );
     }
 
-    if (message.contentType == 'poll' || message.contentType == 'system') {
-      final isPoll = message.contentType == 'poll';
+    final trimmed = message.message.trim();
+    bool isPollJson = false;
+    Map<String, dynamic>? parsedPollData;
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map<String, dynamic>) {
+          final paramsVal = decoded['params'];
+          if (paramsVal != null) {
+            Map<String, dynamic>? paramsMap;
+            if (paramsVal is Map<String, dynamic>) {
+              paramsMap = paramsVal;
+            } else if (paramsVal is String && paramsVal.trim().startsWith('{')) {
+              final parsedParams = jsonDecode(paramsVal);
+              if (parsedParams is Map<String, dynamic>) {
+                paramsMap = parsedParams;
+              }
+            }
+            if (paramsMap != null && (paramsMap.containsKey('pollId') || paramsMap.containsKey('question') || paramsMap.containsKey('dName'))) {
+              isPollJson = true;
+              parsedPollData = decoded;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (message.contentType == 'poll' || message.contentType == 'system' || isPollJson) {
+      final isPoll = message.contentType == 'poll' || isPollJson;
+      String displayMessage = message.message;
+      
+      if (isPoll) {
+        try {
+          final decoded = parsedPollData ?? jsonDecode(message.message);
+          if (decoded is Map<String, dynamic>) {
+            final paramsVal = decoded['params'];
+            Map<String, dynamic>? params;
+            if (paramsVal is Map<String, dynamic>) {
+              params = paramsVal;
+            } else if (paramsVal is String && paramsVal.trim().startsWith('{')) {
+              final parsedParams = jsonDecode(paramsVal);
+              if (parsedParams is Map<String, dynamic>) {
+                params = parsedParams;
+              }
+            }
+            if (params != null) {
+              final dName = params['dName']?.toString() ?? '';
+              final question = params['question']?.toString() ?? '';
+              final msgMap = params['msg'];
+              String template = '';
+              if (msgMap is Map<String, dynamic>) {
+                template = msgMap['vi']?.toString() ?? '';
+              }
+              if (template.isNotEmpty) {
+                displayMessage = template
+                    .replaceAll('%1\$s', dName)
+                    .replaceAll('%2\$s', question);
+              } else if (dName.isNotEmpty || question.isNotEmpty) {
+                displayMessage = '$dName: $question';
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Strip any HTML tags that might be in the system/poll message
+      displayMessage = displayMessage.replaceAll(RegExp(r'<[^>]*>'), '');
+
       return Container(
         padding: const EdgeInsets.all(AppSpacing.s),
         decoration: BoxDecoration(
@@ -2536,8 +2644,8 @@ class _MessageBubble extends ConsumerWidget {
             const SizedBox(width: AppSpacing.s),
             Flexible(
               child: Text(
-                message.message,
-                style: AppTextStyles.body.copyWith(color: textColor),
+                displayMessage,
+                style: AppTextStyles.bodyMedium.copyWith(color: textColor),
               ),
             ),
           ],
@@ -2545,7 +2653,6 @@ class _MessageBubble extends ConsumerWidget {
       );
     }
 
-    final trimmed = message.message.trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         final data = jsonDecode(trimmed);
@@ -2648,7 +2755,13 @@ class _MessageBubble extends ConsumerWidget {
       return SelectableText(
         message.message,
         style: AppTextStyles.body.copyWith(color: textColor),
-        contextMenuBuilder: (context, editableTextState) {
+        contextMenuBuilder: (innerContext, editableTextState) {
+          final position = editableTextState.contextMenuAnchors.primaryAnchor;
+          Future.microtask(() {
+            if (context.mounted) {
+              _showRecallMenu(context, ref, position);
+            }
+          });
           return const SizedBox.shrink();
         },
       );
@@ -3774,6 +3887,450 @@ class _AiStatusIcon extends StatelessWidget {
         child: GestureDetector(
           onDoubleTap: onResumeNow,
           child: badge,
+        ),
+      ),
+    );
+  }
+}
+
+class GlossyHeart extends StatelessWidget {
+  final double size;
+  const GlossyHeart({super.key, this.size = 14});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _GlossyHeartPainter(),
+      ),
+    );
+  }
+}
+
+class _GlossyHeartPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = size.width;
+    final height = size.height;
+
+    final path = Path();
+    
+    // Start at top center cleft
+    path.moveTo(width * 0.5, height * 0.25);
+    
+    // Left lobe
+    path.cubicTo(
+      width * 0.15, height * 0.02,
+      width * -0.08, height * 0.38,
+      width * 0.15, height * 0.68,
+    );
+    
+    // Left side to bottom point
+    path.cubicTo(
+      width * 0.25, height * 0.78,
+      width * 0.4, height * 0.88,
+      width * 0.5, height * 0.98,
+    );
+    
+    // Right side from bottom point
+    path.cubicTo(
+      width * 0.6, height * 0.88,
+      width * 0.75, height * 0.78,
+      width * 0.85, height * 0.68,
+    );
+    
+    // Right lobe
+    path.cubicTo(
+      width * 1.08, height * 0.38,
+      width * 0.85, height * 0.02,
+      width * 0.5, height * 0.25,
+    );
+    
+    path.close();
+
+    // Premium shiny linear gradient: top-left to bottom-right
+    final paint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(width * 0.1, height * 0.1),
+        Offset(width * 0.9, height * 0.9),
+        [
+          const Color(0xFFFF5252), // Top-left: bright red/coral
+          const Color(0xFFFF1744), // Middle: rich red
+          const Color(0xFFC2185B), // Bottom-right: deep crimson/pinkish red
+        ],
+        [0.0, 0.5, 1.0],
+      )
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, paint);
+
+    // 3D glossy highlight on the top left
+    final highlightPath = Path();
+    highlightPath.moveTo(width * 0.22, height * 0.22);
+    highlightPath.cubicTo(
+      width * 0.15, height * 0.25,
+      width * 0.15, height * 0.45,
+      width * 0.32, height * 0.5,
+    );
+    highlightPath.cubicTo(
+      width * 0.28, height * 0.42,
+      width * 0.25, height * 0.30,
+      width * 0.22, height * 0.22,
+    );
+    
+    final highlightPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(width * 0.22, height * 0.22),
+        Offset(width * 0.32, height * 0.5),
+        [
+          Colors.white.withValues(alpha: 0.65),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+      )
+      ..style = PaintingStyle.fill;
+      
+    canvas.drawPath(highlightPath, highlightPaint);
+    
+    // Add a second tiny glossy dot on the top right lobe
+    final dotPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.25)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(width * 0.72, height * 0.32), width * 0.08, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _HoverReactionsStack extends ConsumerStatefulWidget {
+  final ChatMessage message;
+  final Conversation conversation;
+  final Widget child;
+
+  const _HoverReactionsStack({
+    required this.message,
+    required this.conversation,
+    required this.child,
+  });
+
+  @override
+  ConsumerState<_HoverReactionsStack> createState() => _HoverReactionsStackState();
+}
+
+class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
+  bool _isBubbleHovered = false;
+  bool _showEmojiBar = false;
+  bool _hoveringLikeButton = false;
+  bool _hoveringEmojiBar = false;
+
+  void _updateEmojiBarVisibility() {
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (mounted) {
+        setState(() {
+          _showEmojiBar = _hoveringLikeButton || _hoveringEmojiBar;
+        });
+      }
+    });
+  }
+
+  void _reactAndClose(String type) {
+    ref.read(liveChatProvider.notifier).reactToMessage(widget.message, type);
+    setState(() {
+      _showEmojiBar = false;
+      _hoveringEmojiBar = false;
+      _hoveringLikeButton = false;
+    });
+  }
+
+  String _getReactionEmoji(String reaction) {
+    switch (reaction.toLowerCase()) {
+      case 'heart':
+        return '❤️';
+      case 'like':
+        return '👍';
+      case 'haha':
+        return '😆';
+      case 'wow':
+        return '😮';
+      case 'sad':
+        return '😭';
+      case 'angry':
+        return '😡';
+      default:
+        return reaction;
+    }
+  }
+
+  Widget _buildReactionPill(List<Map<String, dynamic>> reactions) {
+    if (reactions.isEmpty) return const SizedBox.shrink();
+
+    final hasMyReaction = reactions.any((r) {
+      final userId = r['userId']?.toString();
+      return r['isMine'] == true || (userId != null && userId == widget.conversation.accountId);
+    });
+
+    final uniqueTypes = reactions
+        .map((r) => (r['reaction'] ?? '').toString().toLowerCase())
+        .where((type) => type.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final displayTypes = uniqueTypes.take(3).toList();
+
+    return InkWell(
+      onTap: () {
+        if (hasMyReaction) {
+          ref.read(liveChatProvider.notifier).reactToMessage(widget.message, 'none');
+        } else if (uniqueTypes.isNotEmpty) {
+          ref.read(liveChatProvider.notifier).reactToMessage(widget.message, uniqueTypes.first);
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.isDarkMode 
+                ? const Color(0xFF253247) 
+                : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...displayTypes.map((type) {
+              if (type == 'heart') {
+                return const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: GlossyHeart(size: 14),
+                );
+              }
+              final emoji = _getReactionEmoji(type);
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              );
+            }),
+            Text(
+              reactions.length.toString(),
+              style: AppTextStyles.caption.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickLikeButton() {
+    final bool hasMyLike = widget.message.reactions.any((r) => 
+        (r['reaction'] ?? '').toString().toLowerCase() == 'like' && 
+        (r['isMine'] == true || r['userId'] == widget.conversation.accountId)
+    );
+    
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() {
+          _hoveringLikeButton = true;
+          _showEmojiBar = true;
+        });
+      },
+      onExit: (_) {
+        setState(() {
+          _hoveringLikeButton = false;
+        });
+        _updateEmojiBarVisibility();
+      },
+      child: InkWell(
+        onTap: () {
+          ref.read(liveChatProvider.notifier).reactToMessage(
+            widget.message, 
+            hasMyLike ? 'none' : 'like'
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: AppColors.isDarkMode 
+                  ? const Color(0xFF253247) 
+                  : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            hasMyLike ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
+            size: 11,
+            color: hasMyLike ? AppColors.primary : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmojiReactionBar() {
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() {
+          _hoveringEmojiBar = true;
+        });
+      },
+      onExit: (_) {
+        setState(() {
+          _hoveringEmojiBar = false;
+        });
+        _updateEmojiBarVisibility();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppColors.isDarkMode 
+                ? const Color(0xFF253247) 
+                : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _EmojiHoverItem(
+              child: const Text('👍', style: TextStyle(fontSize: 20)),
+              onTap: () => _reactAndClose('like'),
+            ),
+            _EmojiHoverItem(
+              child: const GlossyHeart(size: 20),
+              onTap: () => _reactAndClose('heart'),
+            ),
+            _EmojiHoverItem(
+              child: const Text('😆', style: TextStyle(fontSize: 20)),
+              onTap: () => _reactAndClose('haha'),
+            ),
+            _EmojiHoverItem(
+              child: const Text('😮', style: TextStyle(fontSize: 20)),
+              onTap: () => _reactAndClose('wow'),
+            ),
+            _EmojiHoverItem(
+              child: const Text('😭', style: TextStyle(fontSize: 20)),
+              onTap: () => _reactAndClose('sad'),
+            ),
+            _EmojiHoverItem(
+              child: const Text('😡', style: TextStyle(fontSize: 20)),
+              onTap: () => _reactAndClose('angry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showLikeBtn = _isBubbleHovered || _showEmojiBar;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isBubbleHovered = true),
+      onExit: (_) => setState(() => _isBubbleHovered = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          widget.child,
+          if (widget.message.reactions.isNotEmpty || showLikeBtn)
+            Positioned(
+              bottom: -10,
+              right: 12,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.message.reactions.isNotEmpty)
+                    _buildReactionPill(widget.message.reactions),
+                  if (showLikeBtn) ...[
+                    if (widget.message.reactions.isNotEmpty)
+                      const SizedBox(width: 4),
+                    _buildQuickLikeButton(),
+                  ],
+                ],
+              ),
+            ),
+          if (_showEmojiBar)
+            Positioned(
+              bottom: 12,
+              right: 0,
+              child: _buildEmojiReactionBar(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmojiHoverItem extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _EmojiHoverItem({required this.child, required this.onTap});
+
+  @override
+  State<_EmojiHoverItem> createState() => _EmojiHoverItemState();
+}
+
+class _EmojiHoverItemState extends State<_EmojiHoverItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutBack,
+          transform: Matrix4.translationValues(_isHovered ? -2.0 : 0.0, _isHovered ? -4.0 : 0.0, 0.0)
+            * Matrix4.diagonal3Values(_isHovered ? 1.25 : 1.0, _isHovered ? 1.25 : 1.0, 1.0),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          child: widget.child,
         ),
       ),
     );
