@@ -1,4 +1,4 @@
-export type CrmChannel = 'zalo_personal' | 'zalo_oa' | 'facebook_page';
+export type CrmChannel = 'zalo_personal' | 'zalo_oa' | 'facebook_page' | 'email';
 
 export interface WorkflowTemplate {
   id: string;
@@ -65,7 +65,7 @@ export const workflowTemplates: WorkflowTemplate[] = [
     category: 'ai',
     tags: ['ai', 'phan loai', 'intent', 'zalo', 'facebook'],
     difficulty: 'medium',
-    supportedChannels: ['zalo_personal', 'facebook_page'],
+    supportedChannels: ['zalo_personal', 'facebook_page', 'email'],
     requiredConnections: ['Alpha CRM AI quota', 'Alpha CRM cloud relay'],
     n8nWorkflow: {
       nodes: [
@@ -97,7 +97,7 @@ export const workflowTemplates: WorkflowTemplate[] = [
     category: 'sales',
     tags: ['lead', 'crm', 'zalo', 'facebook'],
     difficulty: 'easy',
-    supportedChannels: ['zalo_personal', 'facebook_page'],
+    supportedChannels: ['zalo_personal', 'facebook_page', 'email'],
     requiredConnections: ['Alpha CRM cloud relay'],
     n8nWorkflow: {
       nodes: [
@@ -129,7 +129,7 @@ export const workflowTemplates: WorkflowTemplate[] = [
     category: 'management',
     tags: ['ngoai gio', 'auto reply', 'task'],
     difficulty: 'easy',
-    supportedChannels: ['zalo_personal', 'facebook_page'],
+    supportedChannels: ['zalo_personal', 'facebook_page', 'email'],
     requiredConnections: ['Alpha CRM cloud relay'],
     n8nWorkflow: {
       nodes: [
@@ -161,7 +161,7 @@ export const workflowTemplates: WorkflowTemplate[] = [
     category: 'notification',
     tags: ['alert', 'telegram', 'email', 'khan cap'],
     difficulty: 'medium',
-    supportedChannels: ['zalo_personal', 'facebook_page'],
+    supportedChannels: ['zalo_personal', 'facebook_page', 'email'],
     requiredConnections: ['Notification channel'],
     n8nWorkflow: {
       nodes: [

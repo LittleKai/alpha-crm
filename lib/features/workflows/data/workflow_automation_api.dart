@@ -46,6 +46,18 @@ class WorkflowAutomationApi {
     });
   }
 
+  Future<Map<String, dynamic>> saveEmailSettings({
+    required Map<String, dynamic> email,
+  }) async {
+    return _post('/api/integrations/n8n/settings', {'email': email});
+  }
+
+  Future<Map<String, dynamic>> saveFacebookSettings({
+    required Map<String, dynamic> facebook,
+  }) async {
+    return _post('/api/integrations/n8n/settings', {'facebook': facebook});
+  }
+
   Future<Map<String, dynamic>> testN8nConnection({
     required String baseUrl,
     required String apiKey,

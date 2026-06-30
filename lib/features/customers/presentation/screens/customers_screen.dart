@@ -201,13 +201,18 @@ class _CustomerIdentity extends StatelessWidget {
 
 class _ContactDetailPanel extends StatelessWidget {
   final Contact contact;
+  final List<CustomerAttributeDefinition> attributeDefinitions;
   final VoidCallback onClose;
   final VoidCallback onStartMessaging;
+  final void Function(String contactId, String key, String value)
+  onAttributeChanged;
 
   const _ContactDetailPanel({
     required this.contact,
+    required this.attributeDefinitions,
     required this.onClose,
     required this.onStartMessaging,
+    required this.onAttributeChanged,
   });
 
   @override
@@ -286,6 +291,48 @@ class _ContactDetailPanel extends StatelessWidget {
                   label: 'Ngày tạo',
                   value: DateFormat('dd/MM/yyyy').format(contact.createdAt),
                 ),
+                const SizedBox(height: AppSpacing.m),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.tune_outlined,
+                      color: AppColors.iconMuted,
+                      size: 17,
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Thuộc tính tùy biến',
+                        style: AppTextStyles.sectionTitle,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.s),
+                if (attributeDefinitions.isEmpty)
+                  Text('Chưa có trường tùy biến.', style: AppTextStyles.caption)
+                else
+                  ...attributeDefinitions.map(
+                    (definition) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                      child: TextFormField(
+                        key: ValueKey('${contact.id}-${definition.key}'),
+                        initialValue:
+                            contact.customAttributes[definition.key] ?? '',
+                        decoration: InputDecoration(
+                          labelText: definition.name,
+                          helperText: definition.type.label,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (value) => onAttributeChanged(
+                          contact.id,
+                          definition.key,
+                          value,
+                        ),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: AppSpacing.m),
                 Container(
                   width: double.infinity,
@@ -446,6 +493,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             const SizedBox(height: AppSpacing.l),
             _buildCustomersWorkspace(
               state,
+              notifier,
               filteredContacts,
               isEmpty,
               activeContact,
@@ -497,7 +545,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       final matchesSearch =
           query.isEmpty ||
           contact.name.toLowerCase().contains(query) ||
-          contact.phone.contains(query);
+          contact.phone.contains(query) ||
+          contact.customAttributes.values.any(
+            (value) => value.toLowerCase().contains(query),
+          );
       final matchesGroup =
           state.selectedGroup == 'Tất cả' ||
           contact.group == state.selectedGroup;
@@ -530,11 +581,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   Widget _buildHeader(bool isLoading, VoidCallback onRefresh) {
     return Row(
       children: [
-        Icon(
-          Icons.people_alt_outlined,
-          color: AppColors.primary,
-          size: 32,
-        ),
+        Icon(Icons.people_alt_outlined, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -802,6 +849,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         onPressed: () => _showSaveSegmentDialog(notifier),
       ),
       AppButton(
+        text: 'Thêm trường',
+        icon: Icons.tune_outlined,
+        variant: AppButtonVariant.outline,
+        onPressed: () => _showAddCustomAttributeDialog(notifier),
+      ),
+      AppButton(
         text: 'Thêm liên hệ',
         icon: Icons.add_rounded,
         onPressed: () => _showAddContactDialog(context, notifier),
@@ -840,6 +893,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   Widget _buildCustomersWorkspace(
     CustomersState state,
+    CustomersNotifier notifier,
     List<Contact> filteredContacts,
     bool isEmpty,
     Contact? activeContact,
@@ -854,8 +908,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             const SizedBox(height: AppSpacing.m),
             _ContactDetailPanel(
               contact: activeContact,
+              attributeDefinitions: state.customAttributeDefinitions,
               onClose: () => setState(() => _activeContactId = null),
               onStartMessaging: () => context.go(AppRoutes.messagingLiveChat),
+              onAttributeChanged: notifier.updateContactCustomAttribute,
             ),
           ],
         ],
@@ -871,8 +927,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               const SizedBox(height: AppSpacing.m),
               _ContactDetailPanel(
                 contact: activeContact,
+                attributeDefinitions: state.customAttributeDefinitions,
                 onClose: () => setState(() => _activeContactId = null),
                 onStartMessaging: () => context.go(AppRoutes.messagingLiveChat),
+                onAttributeChanged: notifier.updateContactCustomAttribute,
               ),
             ],
           );
@@ -889,8 +947,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               width: 340,
               child: _ContactDetailPanel(
                 contact: activeContact,
+                attributeDefinitions: state.customAttributeDefinitions,
                 onClose: () => setState(() => _activeContactId = null),
                 onStartMessaging: () => context.go(AppRoutes.messagingLiveChat),
+                onAttributeChanged: notifier.updateContactCustomAttribute,
               ),
             ),
           ],
@@ -1108,6 +1168,81 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       },
     );
     controller.dispose();
+  }
+
+  Future<void> _showAddCustomAttributeDialog(CustomersNotifier notifier) async {
+    final nameController = TextEditingController();
+    var selectedType = CustomerAttributeType.text;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AppDialog(
+              title: 'Thêm trường tùy biến',
+              subtitle:
+                  'Định nghĩa trường dữ liệu riêng để ghi nhận thông tin CRM không có trong schema mặc định.',
+              icon: Icons.tune_outlined,
+              width: 460,
+              actions: [
+                AppDialogAction(
+                  text: 'Hủy',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+                AppDialogAction(
+                  text: 'Thêm trường',
+                  icon: Icons.add_rounded,
+                  onPressed: () {
+                    notifier.addCustomAttributeDefinition(
+                      nameController.text,
+                      selectedType,
+                    );
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+              ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Tên trường',
+                      hintText: 'Ví dụ: Ngân sách, nhu cầu, ngày hẹn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  DropdownButtonFormField<CustomerAttributeType>(
+                    initialValue: selectedType,
+                    decoration: const InputDecoration(
+                      labelText: 'Kiểu dữ liệu',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: CustomerAttributeType.values
+                        .map(
+                          (type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(type.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => selectedType = value);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    nameController.dispose();
   }
 
   Future<void> _showAddContactDialog(

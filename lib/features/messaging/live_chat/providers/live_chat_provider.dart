@@ -185,7 +185,9 @@ class Conversation {
   final DateTime lastMessageTime;
   final int unreadCount;
   final String tag;
+  final List<String> labels;
   final String notes;
+  final Map<String, String> customAttributes;
   final bool chatbotEnabled;
   // When set and in the future, the bot is temporarily paused (a human replied).
   // chatbotEnabled stays true (master on) — this only drives the AI status icon.
@@ -204,7 +206,9 @@ class Conversation {
     required this.lastMessageTime,
     required this.unreadCount,
     required this.tag,
+    this.labels = const [],
     required this.notes,
+    this.customAttributes = const {},
     required this.chatbotEnabled,
     this.chatbotPausedUntil,
     required this.messages,
@@ -223,9 +227,14 @@ class Conversation {
       chatbotPausedUntil != null &&
       chatbotPausedUntil!.isAfter(DateTime.now());
 
+  List<String> get displayLabels =>
+      labels.isNotEmpty ? labels : (tag.isEmpty ? const [] : [tag]);
+
   Conversation copyWith({
     String? tag,
+    List<String>? labels,
     String? notes,
+    Map<String, String>? customAttributes,
     bool? chatbotEnabled,
     Object? chatbotPausedUntilSet = _unset,
     int? unreadCount,
@@ -235,6 +244,10 @@ class Conversation {
     CrmCustomer? crmCustomer,
     Object? crmCustomerSet = _unset,
   }) {
+    final nextTag = tag ?? this.tag;
+    final nextLabels =
+        labels ??
+        (tag == null ? this.labels : (nextTag.isEmpty ? [] : [nextTag]));
     return Conversation(
       id: id,
       accountId: accountId,
@@ -245,8 +258,10 @@ class Conversation {
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       unreadCount: unreadCount ?? this.unreadCount,
-      tag: tag ?? this.tag,
+      tag: nextTag,
+      labels: nextLabels,
       notes: notes ?? this.notes,
+      customAttributes: customAttributes ?? this.customAttributes,
       chatbotEnabled: chatbotEnabled ?? this.chatbotEnabled,
       chatbotPausedUntil: chatbotPausedUntilSet == _unset
           ? chatbotPausedUntil
@@ -262,6 +277,10 @@ class Conversation {
     final tags = json['tags'] is List
         ? List<Object?>.from(json['tags'] as List)
         : const [];
+    final labels = tags
+        .map((tag) => tag.toString().trim().toWellFormed())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
     final name = (json['displayName'] ?? json['threadId'] ?? 'Unknown')
         .toString();
     // Prefer the cloud conversation id as the stable identity so cloud-keyed
@@ -304,8 +323,10 @@ class Conversation {
       ).toWellFormed(),
       lastMessageTime: _dateFrom(json['lastMessageAt'] ?? json['updatedAt']),
       unreadCount: int.tryParse((json['unreadCount'] ?? 0).toString()) ?? 0,
-      tag: tags.isEmpty ? '' : tags.first.toString().toWellFormed(),
+      tag: labels.isEmpty ? '' : labels.first,
+      labels: labels,
       notes: (json['notes'] ?? '').toString().toWellFormed(),
+      customAttributes: _mapCustomAttributes(json),
       chatbotEnabled: json['chatbotEnabled'] != false,
       chatbotPausedUntil: _pausedUntilFrom(json['chatbotPausedUntil']),
       messages: const [],
@@ -314,11 +335,36 @@ class Conversation {
   }
 }
 
+Map<String, String> _mapCustomAttributes(Map<String, dynamic> json) {
+  final raw =
+      json['customFields'] ?? json['customAttributes'] ?? json['attributes'];
+  if (raw is! Map) return const {};
+  return raw.map((key, value) {
+    return MapEntry(key.toString(), value?.toString() ?? '');
+  });
+}
+
 DateTime? _pausedUntilFrom(dynamic value) {
   if (value == null) return null;
   final ms = int.tryParse(value.toString());
   if (ms == null || ms <= 0) return null;
   return DateTime.fromMillisecondsSinceEpoch(ms);
+}
+
+class ConversationSavedFilter {
+  final String id;
+  final String name;
+  final String label;
+  final bool unreadOnly;
+  final bool labeledOnly;
+
+  const ConversationSavedFilter({
+    required this.id,
+    required this.name,
+    this.label = '',
+    this.unreadOnly = false,
+    this.labeledOnly = false,
+  });
 }
 
 class LiveChatState {
@@ -345,6 +391,11 @@ class LiveChatState {
   final String highlightedMessageId;
   final bool isChatFocused;
   final int unfocusedNewMessageCount;
+  final String selectedLabelFilter;
+  final bool unreadOnlyFilter;
+  final bool labeledOnlyFilter;
+  final String selectedSavedFilterId;
+  final List<ConversationSavedFilter> savedFilters;
   // Per-account AI auto-reply switch (Live Chat settings dialog). Accounts
   // absent default to ON. When OFF, the per-conversation Bot toggle is forced
   // off and non-interactive.
@@ -352,6 +403,30 @@ class LiveChatState {
 
   bool isAccountAiAutoReplyEnabled(String accountId) =>
       accountAiAutoReply[accountId] ?? true;
+
+  List<String> get availableLabels {
+    final labels = <String>{};
+    for (final conversation in conversations) {
+      labels.addAll(conversation.displayLabels);
+    }
+    return labels.toList()..sort();
+  }
+
+  bool get hasActiveConversationFilters =>
+      selectedLabelFilter.isNotEmpty || unreadOnlyFilter || labeledOnlyFilter;
+
+  List<Conversation> get filteredConversations {
+    return conversations.where((conversation) {
+      final labels = conversation.displayLabels;
+      if (selectedLabelFilter.isNotEmpty &&
+          !labels.contains(selectedLabelFilter)) {
+        return false;
+      }
+      if (unreadOnlyFilter && conversation.unreadCount <= 0) return false;
+      if (labeledOnlyFilter && labels.isEmpty) return false;
+      return true;
+    }).toList();
+  }
 
   const LiveChatState({
     this.selectedAccount,
@@ -377,6 +452,11 @@ class LiveChatState {
     this.highlightedMessageId = '',
     this.isChatFocused = false,
     this.unfocusedNewMessageCount = 0,
+    this.selectedLabelFilter = '',
+    this.unreadOnlyFilter = false,
+    this.labeledOnlyFilter = false,
+    this.selectedSavedFilterId = '',
+    this.savedFilters = const [],
     this.accountAiAutoReply = const {},
   });
 
@@ -404,6 +484,11 @@ class LiveChatState {
       messageSearchResults: [],
       isChatFocused: true,
       unfocusedNewMessageCount: 0,
+      selectedLabelFilter: '',
+      unreadOnlyFilter: false,
+      labeledOnlyFilter: false,
+      selectedSavedFilterId: '',
+      savedFilters: [],
     );
   }
 
@@ -431,6 +516,11 @@ class LiveChatState {
     String? highlightedMessageId,
     bool? isChatFocused,
     int? unfocusedNewMessageCount,
+    String? selectedLabelFilter,
+    bool? unreadOnlyFilter,
+    bool? labeledOnlyFilter,
+    String? selectedSavedFilterId,
+    List<ConversationSavedFilter>? savedFilters,
     Map<String, bool>? accountAiAutoReply,
   }) {
     return LiveChatState(
@@ -467,6 +557,12 @@ class LiveChatState {
       isChatFocused: isChatFocused ?? this.isChatFocused,
       unfocusedNewMessageCount:
           unfocusedNewMessageCount ?? this.unfocusedNewMessageCount,
+      selectedLabelFilter: selectedLabelFilter ?? this.selectedLabelFilter,
+      unreadOnlyFilter: unreadOnlyFilter ?? this.unreadOnlyFilter,
+      labeledOnlyFilter: labeledOnlyFilter ?? this.labeledOnlyFilter,
+      selectedSavedFilterId:
+          selectedSavedFilterId ?? this.selectedSavedFilterId,
+      savedFilters: savedFilters ?? this.savedFilters,
       accountAiAutoReply: accountAiAutoReply ?? this.accountAiAutoReply,
     );
   }
@@ -544,7 +640,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       try {
         var conversations = (response['data'] as List)
             .whereType<Map>()
-            .map((item) => Conversation.fromJson(Map<String, dynamic>.from(item)))
+            .map(
+              (item) => Conversation.fromJson(Map<String, dynamic>.from(item)),
+            )
             .toList();
         conversations = await _filterManagedGroupConversations(conversations);
         // Only on silent refreshes (poll/SSE) do we surface a desktop toast for
@@ -556,7 +654,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           // silent refresh only notifies for genuinely NEW unread.
           _lastNotifiedUnread
             ..clear()
-            ..addEntries(conversations.map((c) => MapEntry(c.id, c.unreadCount)));
+            ..addEntries(
+              conversations.map((c) => MapEntry(c.id, c.unreadCount)),
+            );
         }
         final selected = _selectedAfterRefresh(conversations);
         final hasSelected = selected.id.isNotEmpty;
@@ -579,15 +679,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           await _loadDraft(selected);
         }
       } catch (e, stack) {
-        print('[LiveChatProvider] Error parsing conversations: $e');
-        print(stack);
+        AppLogger().error(
+          '[LiveChatProvider] Error parsing conversations: $e',
+          e,
+          stack,
+        );
         state = state.copyWith(
           isLoading: false,
           errorMessage: 'Lỗi parse dữ liệu hội thoại: $e',
         );
       }
     } else {
-      print('[LiveChatProvider] loadConversations failed. Response: $response');
+      AppLogger().error(
+        '[LiveChatProvider] loadConversations failed. Response: $response',
+      );
       state = state.copyWith(
         isLoading: false,
         errorMessage: (response['message'] ?? 'Không thể tải hội thoại.')
@@ -684,6 +789,72 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> setSearchQuery(String query) async {
     state = state.copyWith(searchQuery: query);
     await loadConversations(loadSelectedMessages: true);
+  }
+
+  void setLabelFilter(String label) {
+    state = state.copyWith(
+      selectedLabelFilter: label,
+      selectedSavedFilterId: '',
+    );
+  }
+
+  void setUnreadOnlyFilter(bool enabled) {
+    state = state.copyWith(
+      unreadOnlyFilter: enabled,
+      selectedSavedFilterId: '',
+    );
+  }
+
+  void setLabeledOnlyFilter(bool enabled) {
+    state = state.copyWith(
+      labeledOnlyFilter: enabled,
+      selectedSavedFilterId: '',
+    );
+  }
+
+  void clearConversationFilters() {
+    state = state.copyWith(
+      selectedLabelFilter: '',
+      unreadOnlyFilter: false,
+      labeledOnlyFilter: false,
+      selectedSavedFilterId: '',
+    );
+  }
+
+  void saveCurrentFilter(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || !state.hasActiveConversationFilters) return;
+    final filter = ConversationSavedFilter(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: trimmed,
+      label: state.selectedLabelFilter,
+      unreadOnly: state.unreadOnlyFilter,
+      labeledOnly: state.labeledOnlyFilter,
+    );
+    state = state.copyWith(
+      savedFilters: [filter, ...state.savedFilters],
+      selectedSavedFilterId: filter.id,
+    );
+  }
+
+  void applySavedFilter(ConversationSavedFilter filter) {
+    state = state.copyWith(
+      selectedLabelFilter: filter.label,
+      unreadOnlyFilter: filter.unreadOnly,
+      labeledOnlyFilter: filter.labeledOnly,
+      selectedSavedFilterId: filter.id,
+    );
+  }
+
+  void deleteSavedFilter(String id) {
+    state = state.copyWith(
+      savedFilters: state.savedFilters
+          .where((filter) => filter.id != id)
+          .toList(),
+      selectedSavedFilterId: state.selectedSavedFilterId == id
+          ? ''
+          : state.selectedSavedFilterId,
+    );
   }
 
   Future<void> selectConversation(Conversation conversation) async {
@@ -802,14 +973,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     required String status,
     required String notes,
     required List<String> tags,
+    Map<String, String>? customFields,
   }) async {
     final conversation = state.selectedConversation;
     if (conversation == null) return false;
+    final normalizedTags = _normalizeTags(tags);
 
     state = state.copyWith(isSending: true);
     try {
       final existingCustomer = conversation.crmCustomer;
       Map<String, dynamic> response;
+      final resolvedCustomFields =
+          customFields ??
+          existingCustomer?.customFields ??
+          conversation.customAttributes;
 
       final customerData = CrmCustomer(
         id: existingCustomer?.id ?? '',
@@ -822,13 +999,13 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         status: status.isEmpty ? 'lead' : status,
         zaloUserId: conversation.threadId,
         zaloThreadId: conversation.threadId,
-        tags: tags,
+        tags: normalizedTags,
         source: source.isEmpty ? 'Zalo Live Chat' : source,
         lifecycleStage: existingCustomer?.lifecycleStage ?? 'lead',
         consentStatus: existingCustomer?.consentStatus ?? 'granted',
         consentEvidence:
             existingCustomer?.consentEvidence ?? 'Updated from Live Chat CRM',
-        customFields: existingCustomer?.customFields ?? const {},
+        customFields: resolvedCustomFields,
         createdAt: existingCustomer?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -850,16 +1027,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           Map<String, dynamic>.from(response['data']),
         );
 
-        final updatedTag = tags.isNotEmpty ? tags.first : '';
+        final updatedTag = normalizedTags.isNotEmpty
+            ? normalizedTags.first
+            : '';
         await _repository.updateConversation(conversation.id, {
-          'tags': tags,
+          'tags': normalizedTags,
           'notes': notes,
         });
 
         final updated = conversation.copyWith(
           crmCustomer: savedCustomer,
           tag: updatedTag,
+          labels: normalizedTags,
           notes: notes,
+          customAttributes: savedCustomer.customFields,
         );
 
         state = state.copyWith(
@@ -1087,15 +1268,17 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         if (response['localMessageId'] != null) {
           await loadMessages(conversation.id);
         }
-        final errorMsg = (response['error'] ?? 'Gửi liên kết thất bại.').toString();
+        final errorMsg = (response['error'] ?? 'Gửi liên kết thất bại.')
+            .toString();
         AppLogger().error('Gửi liên kết Live Chat thất bại: $errorMsg');
-        state = state.copyWith(
-          isSending: false,
-          errorMessage: errorMsg,
-        );
+        state = state.copyWith(isSending: false, errorMessage: errorMsg);
       }
     } catch (error, stack) {
-      AppLogger().error('Ngoại lệ khi gửi liên kết Live Chat: $error', error, stack);
+      AppLogger().error(
+        'Ngoại lệ khi gửi liên kết Live Chat: $error',
+        error,
+        stack,
+      );
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Gửi liên kết thất bại: $error',
@@ -1120,15 +1303,17 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         _markOperatorTakeover(conversation);
         state = state.copyWith(isSending: false);
       } else {
-        final errorMsg = (response['error'] ?? 'Gửi sticker thất bại.').toString();
+        final errorMsg = (response['error'] ?? 'Gửi sticker thất bại.')
+            .toString();
         AppLogger().error('Gửi sticker Live Chat thất bại: $errorMsg');
-        state = state.copyWith(
-          isSending: false,
-          errorMessage: errorMsg,
-        );
+        state = state.copyWith(isSending: false, errorMessage: errorMsg);
       }
     } catch (error, stack) {
-      AppLogger().error('Ngoại lệ khi gửi sticker Live Chat: $error', error, stack);
+      AppLogger().error(
+        'Ngoại lệ khi gửi sticker Live Chat: $error',
+        error,
+        stack,
+      );
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Gửi sticker thất bại: $error',
@@ -1143,7 +1328,9 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }) {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
-    AppLogger().error('Gửi tin nhắn Live Chat thất bại (ID: $clientMessageId): $error');
+    AppLogger().error(
+      'Gửi tin nhắn Live Chat thất bại (ID: $clientMessageId): $error',
+    );
     _replaceSelected(
       conversation.copyWith(
         messages: conversation.messages
@@ -1367,12 +1554,17 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> updateTag(String tag) async {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
-    final tags = tag.trim().isEmpty ? <String>[] : [tag.trim()];
+    final tags = _parseTagInput(tag);
     final response = await _repository.updateConversation(conversation.id, {
       'tags': tags,
     });
     if (response['success'] == true) {
-      _replaceSelected(conversation.copyWith(tag: tag.trim()));
+      _replaceSelected(
+        conversation.copyWith(
+          tag: tags.isEmpty ? '' : tags.first,
+          labels: tags,
+        ),
+      );
     }
   }
 
@@ -1524,15 +1716,18 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         if (response['localMessageId'] != null) {
           await loadMessages(conversation.id);
         }
-        final errorMsg = (response['error'] ?? response['message'] ?? 'Gửi file thất bại.').toString();
+        final errorMsg =
+            (response['error'] ?? response['message'] ?? 'Gửi file thất bại.')
+                .toString();
         AppLogger().error('Gửi tệp tin Live Chat thất bại: $errorMsg');
-        state = state.copyWith(
-          isSending: false,
-          errorMessage: errorMsg,
-        );
+        state = state.copyWith(isSending: false, errorMessage: errorMsg);
       }
     } catch (error, stack) {
-      AppLogger().error('Ngoại lệ khi gửi tệp tin Live Chat: $error', error, stack);
+      AppLogger().error(
+        'Ngoại lệ khi gửi tệp tin Live Chat: $error',
+        error,
+        stack,
+      );
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Gửi tệp tin thất bại: $error',
@@ -1554,16 +1749,21 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         state = state.copyWith(isSending: false);
         return true;
       } else {
-        final errorMsg = (response['message'] ?? response['error'] ?? 'Thu hồi tin nhắn thất bại.').toString();
+        final errorMsg =
+            (response['message'] ??
+                    response['error'] ??
+                    'Thu hồi tin nhắn thất bại.')
+                .toString();
         AppLogger().error('Thu hồi tin nhắn thất bại: $errorMsg');
-        state = state.copyWith(
-          isSending: false,
-          errorMessage: errorMsg,
-        );
+        state = state.copyWith(isSending: false, errorMessage: errorMsg);
         return false;
       }
     } catch (error, stack) {
-      AppLogger().error('Lỗi ngoại lệ khi thu hồi tin nhắn: $error', error, stack);
+      AppLogger().error(
+        'Lỗi ngoại lệ khi thu hồi tin nhắn: $error',
+        error,
+        stack,
+      );
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Thu hồi tin nhắn thất bại: $error',
@@ -1792,6 +1992,25 @@ final liveChatDeepLinkProvider = StateProvider<LiveChatDeepLink?>(
   (ref) => null,
 );
 
+List<String> _parseTagInput(String input) {
+  return _normalizeTags(
+    input
+        .split(',')
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList(),
+  );
+}
+
+List<String> _normalizeTags(List<String> tags) {
+  final normalized = <String>{};
+  for (final tag in tags) {
+    final clean = tag.trim().toWellFormed();
+    if (clean.isNotEmpty) normalized.add(clean);
+  }
+  return normalized.toList();
+}
+
 final _emptyConversation = Conversation(
   id: '',
   accountId: '',
@@ -1803,6 +2022,7 @@ final _emptyConversation = Conversation(
   lastMessageTime: DateTime.fromMillisecondsSinceEpoch(0),
   unreadCount: 0,
   tag: '',
+  labels: const [],
   notes: '',
   chatbotEnabled: true,
   messages: const [],

@@ -5,7 +5,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/utils/responsive_breakpoints.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../data/workflow_models.dart';
 import '../../providers/workflow_automation_provider.dart';
 
@@ -24,7 +26,30 @@ class _WorkflowAutomationScreenState
   final _n8nApiKeyController = TextEditingController();
   final _n8nWebhookController = TextEditingController();
   final _n8nCallbackController = TextEditingController();
+  final _emailFromNameController = TextEditingController();
+  final _emailFromAddressController = TextEditingController();
+  final _emailSmtpHostController = TextEditingController();
+  final _emailSmtpPortController = TextEditingController(text: '587');
+  final _emailSmtpUsernameController = TextEditingController();
+  final _emailSmtpPasswordController = TextEditingController();
+  final _emailImapHostController = TextEditingController();
+  final _emailImapPortController = TextEditingController(text: '993');
+  final _emailImapUsernameController = TextEditingController();
+  final _emailImapPasswordController = TextEditingController();
+  final _facebookPageNameController = TextEditingController();
+  final _facebookPageIdController = TextEditingController();
+  final _facebookAppIdController = TextEditingController();
+  final _facebookWebhookController = TextEditingController();
+  final _facebookVerifyTokenController = TextEditingController();
+  final _facebookPageTokenController = TextEditingController();
   bool _n8nEnabled = false;
+  bool _emailEnabled = false;
+  bool _emailInboundEnabled = false;
+  bool _emailSmtpSecure = false;
+  bool _emailImapSecure = true;
+  String _emailMode = 'transactional';
+  bool _facebookEnabled = false;
+  bool _facebookEnforce24hWindow = true;
   bool _didHydrateControllers = false;
 
   @override
@@ -42,6 +67,22 @@ class _WorkflowAutomationScreenState
     _n8nApiKeyController.dispose();
     _n8nWebhookController.dispose();
     _n8nCallbackController.dispose();
+    _emailFromNameController.dispose();
+    _emailFromAddressController.dispose();
+    _emailSmtpHostController.dispose();
+    _emailSmtpPortController.dispose();
+    _emailSmtpUsernameController.dispose();
+    _emailSmtpPasswordController.dispose();
+    _emailImapHostController.dispose();
+    _emailImapPortController.dispose();
+    _emailImapUsernameController.dispose();
+    _emailImapPasswordController.dispose();
+    _facebookPageNameController.dispose();
+    _facebookPageIdController.dispose();
+    _facebookAppIdController.dispose();
+    _facebookWebhookController.dispose();
+    _facebookVerifyTokenController.dispose();
+    _facebookPageTokenController.dispose();
     super.dispose();
   }
 
@@ -49,7 +90,7 @@ class _WorkflowAutomationScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(workflowAutomationProvider);
     final notifier = ref.read(workflowAutomationProvider.notifier);
-    _hydrateControllers(state.n8n);
+    _hydrateControllers(state.n8n, state.email, state.facebook);
 
     final isMobile = ResponsiveBreakpoints.isMobile(context);
 
@@ -84,17 +125,32 @@ class _WorkflowAutomationScreenState
                     children: [
                       _buildN8nSettingsCard(notifier),
                       const SizedBox(height: AppSpacing.m),
-                      const _FacebookCloudCard(),
+                      _buildEmailSettingsCard(notifier),
+                      const SizedBox(height: AppSpacing.m),
+                      _buildFacebookSettingsCard(notifier),
                     ],
                   )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                : Column(
                     children: [
-                      Expanded(child: _buildN8nSettingsCard(notifier)),
-                      const SizedBox(width: AppSpacing.m),
-                      const SizedBox(width: 360, child: _FacebookCloudCard()),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildN8nSettingsCard(notifier)),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(child: _buildEmailSettingsCard(notifier)),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      _buildFacebookSettingsCard(notifier),
                     ],
                   ),
+            const SizedBox(height: AppSpacing.l),
+            _AutomationRulesCard(
+              rules: state.automationRules,
+              onAddRule: () => _showAddAutomationRuleDialog(notifier),
+              onToggleRule: notifier.toggleAutomationRule,
+              onDeleteRule: notifier.deleteAutomationRule,
+            ),
             const SizedBox(height: AppSpacing.l),
             _FilterBar(
               searchController: _searchController,
@@ -198,12 +254,338 @@ class _WorkflowAutomationScreenState
     );
   }
 
-  void _hydrateControllers(N8nSettingsState settings) {
+  Widget _buildEmailSettingsCard(WorkflowAutomationNotifier notifier) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.alternate_email_rounded, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Email IMAP/SMTP',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
+              Switch(
+                value: _emailEnabled,
+                activeThumbColor: AppColors.primary,
+                onChanged: (value) => setState(() => _emailEnabled = value),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          DropdownButtonFormField<String>(
+            initialValue: _emailMode,
+            decoration: const InputDecoration(
+              labelText: 'Chế độ',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'transactional',
+                child: Text('E2 - Chỉ gửi thông báo'),
+              ),
+              DropdownMenuItem(
+                value: 'inbox',
+                child: Text('E1 - Email thành hội thoại'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _emailMode = value;
+                _emailInboundEnabled = value == 'inbox';
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Row(
+            children: [
+              Expanded(
+                child: _TextField(
+                  controller: _emailFromNameController,
+                  label: 'Tên người gửi',
+                  hint: 'Alpha CRM',
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: _TextField(
+                  controller: _emailFromAddressController,
+                  label: 'Email gửi',
+                  hint: 'care@example.com',
+                  keyboardType: TextInputType.emailAddress,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: _TextField(
+                  controller: _emailSmtpHostController,
+                  label: 'SMTP host',
+                  hint: 'smtp.example.com',
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: _TextField(
+                  controller: _emailSmtpPortController,
+                  label: 'Port',
+                  hint: '587',
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s),
+          _TextField(
+            controller: _emailSmtpUsernameController,
+            label: 'SMTP username',
+            hint: 'care@example.com',
+          ),
+          const SizedBox(height: AppSpacing.s),
+          _TextField(
+            controller: _emailSmtpPasswordController,
+            label: 'SMTP password / OAuth token',
+            hint: 'App password hoặc OAuth2 token',
+            obscureText: true,
+          ),
+          const SizedBox(height: AppSpacing.s),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: _emailSmtpSecure,
+            onChanged: (value) =>
+                setState(() => _emailSmtpSecure = value == true),
+            title: const Text('SMTP dùng SSL/TLS trực tiếp'),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: _emailInboundEnabled,
+            onChanged: (value) => setState(() {
+              _emailInboundEnabled = value == true;
+              _emailMode = _emailInboundEnabled ? 'inbox' : 'transactional';
+            }),
+            title: const Text('Bật nhận IMAP để đưa email vào Live Chat'),
+          ),
+          if (_emailInboundEnabled) ...[
+            const SizedBox(height: AppSpacing.s),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _TextField(
+                    controller: _emailImapHostController,
+                    label: 'IMAP host',
+                    hint: 'imap.example.com',
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: _TextField(
+                    controller: _emailImapPortController,
+                    label: 'Port',
+                    hint: '993',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s),
+            _TextField(
+              controller: _emailImapUsernameController,
+              label: 'IMAP username',
+              hint: 'care@example.com',
+            ),
+            const SizedBox(height: AppSpacing.s),
+            _TextField(
+              controller: _emailImapPasswordController,
+              label: 'IMAP password / OAuth token',
+              hint: 'App password hoặc OAuth2 token',
+              obscureText: true,
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _emailImapSecure,
+              onChanged: (value) =>
+                  setState(() => _emailImapSecure = value == true),
+              title: const Text('IMAP dùng SSL/TLS'),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.m),
+          ElevatedButton.icon(
+            onPressed: () => notifier.saveEmailSettings(_readEmailSettings()),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Lưu cấu hình Email'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFacebookSettingsCard(WorkflowAutomationNotifier notifier) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.facebook_outlined,
+                color: Color(0xFF1877F2),
+                size: 24,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Facebook Page Messenger',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
+              Switch(
+                value: _facebookEnabled,
+                activeThumbColor: const Color(0xFF1877F2),
+                onChanged: (value) => setState(() => _facebookEnabled = value),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useColumns = constraints.maxWidth >= 820;
+              final left = Column(
+                children: [
+                  _TextField(
+                    controller: _facebookPageNameController,
+                    label: 'Tên Page',
+                    hint: 'Alpha CRM',
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  _TextField(
+                    controller: _facebookPageIdController,
+                    label: 'Page ID',
+                    hint: '1234567890',
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  _TextField(
+                    controller: _facebookAppIdController,
+                    label: 'Facebook App ID',
+                    hint: 'Meta App ID',
+                  ),
+                ],
+              );
+              final right = Column(
+                children: [
+                  _TextField(
+                    controller: _facebookWebhookController,
+                    label: 'Webhook callback URL',
+                    hint: 'https://public-domain.example/webhooks/facebook',
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  _TextField(
+                    controller: _facebookVerifyTokenController,
+                    label: 'Verify token',
+                    hint: 'Meta webhook verify token',
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  _TextField(
+                    controller: _facebookPageTokenController,
+                    label: 'Page access token',
+                    hint: 'EAAB...',
+                    obscureText: true,
+                  ),
+                ],
+              );
+              if (!useColumns) {
+                return Column(
+                  children: [
+                    left,
+                    const SizedBox(height: AppSpacing.s),
+                    right,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: left),
+                  const SizedBox(width: AppSpacing.m),
+                  Expanded(child: right),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.s),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: _facebookEnforce24hWindow,
+            onChanged: (value) =>
+                setState(() => _facebookEnforce24hWindow = value != false),
+            title: const Text('Áp dụng cửa sổ phản hồi Messenger 24h'),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          const _CapabilityRow(
+            icon: Icons.verified_user_outlined,
+            label:
+                'Chỉ dùng Messenger Platform API chính thức, không dùng cookie cá nhân',
+            iconColor: Color(0xFF10B981),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          const _CapabilityRow(
+            icon: Icons.lock_outline,
+            label:
+                'Token và verify token được lưu ở backend local, không lưu trong Flutter',
+            iconColor: Color(0xFF6366F1),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          ElevatedButton.icon(
+            onPressed: () =>
+                notifier.saveFacebookSettings(_readFacebookSettings()),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Lưu cấu hình Facebook Page'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1877F2),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _hydrateControllers(
+    N8nSettingsState settings,
+    EmailSettingsState email,
+    FacebookSettingsState facebook,
+  ) {
     if (_didHydrateControllers) return;
     if (settings.baseUrl.isEmpty &&
         settings.apiKey.isEmpty &&
         settings.eventWebhookUrl.isEmpty &&
-        settings.callbackUrl.isEmpty) {
+        settings.callbackUrl.isEmpty &&
+        email.fromAddress.isEmpty &&
+        email.smtpHost.isEmpty &&
+        email.imapHost.isEmpty &&
+        facebook.pageId.isEmpty &&
+        facebook.pageAccessToken.isEmpty) {
       return;
     }
     _didHydrateControllers = true;
@@ -212,6 +594,29 @@ class _WorkflowAutomationScreenState
     _n8nApiKeyController.text = settings.apiKey;
     _n8nWebhookController.text = settings.eventWebhookUrl;
     _n8nCallbackController.text = settings.callbackUrl;
+    _emailEnabled = email.enabled;
+    _emailMode = email.mode;
+    _emailInboundEnabled = email.inboundEnabled;
+    _emailSmtpSecure = email.smtpSecure;
+    _emailImapSecure = email.imapSecure;
+    _emailFromNameController.text = email.fromName;
+    _emailFromAddressController.text = email.fromAddress;
+    _emailSmtpHostController.text = email.smtpHost;
+    _emailSmtpPortController.text = email.smtpPort.toString();
+    _emailSmtpUsernameController.text = email.smtpUsername;
+    _emailSmtpPasswordController.text = email.smtpPassword;
+    _emailImapHostController.text = email.imapHost;
+    _emailImapPortController.text = email.imapPort.toString();
+    _emailImapUsernameController.text = email.imapUsername;
+    _emailImapPasswordController.text = email.imapPassword;
+    _facebookEnabled = facebook.enabled;
+    _facebookEnforce24hWindow = facebook.enforce24hWindow;
+    _facebookPageNameController.text = facebook.pageName;
+    _facebookPageIdController.text = facebook.pageId;
+    _facebookAppIdController.text = facebook.appId;
+    _facebookWebhookController.text = facebook.webhookCallbackUrl;
+    _facebookVerifyTokenController.text = facebook.verifyToken;
+    _facebookPageTokenController.text = facebook.pageAccessToken;
   }
 
   N8nSettingsState _readN8nSettings() {
@@ -222,6 +627,139 @@ class _WorkflowAutomationScreenState
       eventWebhookUrl: _n8nWebhookController.text.trim(),
       callbackUrl: _n8nCallbackController.text.trim(),
     );
+  }
+
+  EmailSettingsState _readEmailSettings() {
+    return EmailSettingsState(
+      enabled: _emailEnabled,
+      mode: _emailMode,
+      fromName: _emailFromNameController.text.trim(),
+      fromAddress: _emailFromAddressController.text.trim(),
+      smtpHost: _emailSmtpHostController.text.trim(),
+      smtpPort: int.tryParse(_emailSmtpPortController.text.trim()) ?? 587,
+      smtpSecure: _emailSmtpSecure,
+      smtpUsername: _emailSmtpUsernameController.text.trim(),
+      smtpPassword: _emailSmtpPasswordController.text.trim(),
+      inboundEnabled: _emailInboundEnabled,
+      imapHost: _emailImapHostController.text.trim(),
+      imapPort: int.tryParse(_emailImapPortController.text.trim()) ?? 993,
+      imapSecure: _emailImapSecure,
+      imapUsername: _emailImapUsernameController.text.trim(),
+      imapPassword: _emailImapPasswordController.text.trim(),
+    );
+  }
+
+  FacebookSettingsState _readFacebookSettings() {
+    return FacebookSettingsState(
+      enabled: _facebookEnabled,
+      pageName: _facebookPageNameController.text.trim(),
+      pageId: _facebookPageIdController.text.trim(),
+      appId: _facebookAppIdController.text.trim(),
+      webhookCallbackUrl: _facebookWebhookController.text.trim(),
+      verifyToken: _facebookVerifyTokenController.text.trim(),
+      pageAccessToken: _facebookPageTokenController.text.trim(),
+      enforce24hWindow: _facebookEnforce24hWindow,
+    );
+  }
+
+  Future<void> _showAddAutomationRuleDialog(
+    WorkflowAutomationNotifier notifier,
+  ) async {
+    final nameController = TextEditingController();
+    final eventController = TextEditingController(text: 'Tin nhắn mới');
+    final fieldController = TextEditingController(text: 'Nội dung tin nhắn');
+    final operatorController = TextEditingController(text: 'chứa');
+    final valueController = TextEditingController();
+    final actionsController = TextEditingController(
+      text: 'Gắn nhãn: khách nóng\nTạo ghi chú chăm sóc',
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AppDialog(
+          title: 'Thêm automation rule',
+          subtitle:
+              'Tạo rule event, điều kiện và hành động theo mô hình Chatwoot.',
+          icon: Icons.rule_folder_outlined,
+          width: 560,
+          actions: [
+            AppDialogAction(
+              text: 'Hủy',
+              variant: AppButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            AppDialogAction(
+              text: 'Thêm rule',
+              icon: Icons.add_rounded,
+              onPressed: () {
+                notifier.addAutomationRule(
+                  name: nameController.text,
+                  event: eventController.text,
+                  conditionField: fieldController.text,
+                  conditionOperator: operatorController.text,
+                  conditionValue: valueController.text,
+                  actions: actionsController.text.split('\n'),
+                );
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _TextField(
+                controller: nameController,
+                label: 'Tên rule',
+                hint: 'Ví dụ: Khách hỏi báo giá',
+              ),
+              const SizedBox(height: AppSpacing.s),
+              _TextField(
+                controller: eventController,
+                label: 'Event',
+                hint: 'Tin nhắn mới',
+              ),
+              const SizedBox(height: AppSpacing.s),
+              _TextField(
+                controller: fieldController,
+                label: 'Trường điều kiện',
+                hint: 'Nội dung tin nhắn, Ngân sách...',
+              ),
+              const SizedBox(height: AppSpacing.s),
+              _TextField(
+                controller: operatorController,
+                label: 'Toán tử',
+                hint: 'chứa, bằng, lớn hơn...',
+              ),
+              const SizedBox(height: AppSpacing.s),
+              _TextField(
+                controller: valueController,
+                label: 'Giá trị',
+                hint: 'báo giá',
+              ),
+              const SizedBox(height: AppSpacing.s),
+              TextField(
+                controller: actionsController,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Hành động (mỗi dòng một hành động)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    nameController.dispose();
+    eventController.dispose();
+    fieldController.dispose();
+    operatorController.dispose();
+    valueController.dispose();
+    actionsController.dispose();
   }
 }
 
@@ -289,6 +827,192 @@ class _Header extends StatelessWidget {
   }
 }
 
+class _AutomationRulesCard extends StatelessWidget {
+  final List<AutomationRule> rules;
+  final VoidCallback onAddRule;
+  final void Function(String ruleId, bool enabled) onToggleRule;
+  final ValueChanged<String> onDeleteRule;
+
+  const _AutomationRulesCard({
+    required this.rules,
+    required this.onAddRule,
+    required this.onToggleRule,
+    required this.onDeleteRule,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.rule_folder_outlined, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Automation Rules', style: AppTextStyles.sectionTitle),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Event -> điều kiện -> hành động cho inbox và CRM.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AppButton(
+                text: 'Thêm rule',
+                icon: Icons.add_rounded,
+                onPressed: onAddRule,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          if (rules.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.m),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: AppSpacing.borderRadiusM,
+                border: Border.all(color: AppColors.borderSoft),
+              ),
+              child: Text(
+                'Chưa có rule nào. Tạo rule đầu tiên để tự động gắn nhãn, ghi chú hoặc thông báo nội bộ.',
+                style: AppTextStyles.body,
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final useGrid = constraints.maxWidth >= 900;
+                final children = rules
+                    .map(
+                      (rule) => _AutomationRuleTile(
+                        rule: rule,
+                        onToggle: (enabled) => onToggleRule(rule.id, enabled),
+                        onDelete: () => onDeleteRule(rule.id),
+                      ),
+                    )
+                    .toList();
+                if (!useGrid) {
+                  return Column(
+                    children: [
+                      for (final child in children) ...[
+                        child,
+                        if (child != children.last)
+                          const SizedBox(height: AppSpacing.s),
+                      ],
+                    ],
+                  );
+                }
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: AppSpacing.m,
+                  mainAxisSpacing: AppSpacing.m,
+                  childAspectRatio: 2.7,
+                  children: children,
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AutomationRuleTile extends StatelessWidget {
+  final AutomationRule rule;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onDelete;
+
+  const _AutomationRuleTile({
+    required this.rule,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: rule.enabled ? AppColors.primarySoft : AppColors.surfaceMuted,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(
+          color: rule.enabled ? AppColors.primaryBorder : AppColors.borderSoft,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rule.name,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Switch(value: rule.enabled, onChanged: onToggle),
+              IconButton(
+                tooltip: 'Xóa rule',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: AppColors.error,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '${rule.event} | ${rule.conditionField} ${rule.conditionOperator} "${rule.conditionValue}"',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: rule.actions
+                .map(
+                  (action) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: AppSpacing.borderRadiusPill,
+                      border: Border.all(color: AppColors.borderSoft),
+                    ),
+                    child: Text(action, style: AppTextStyles.caption),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ignore: unused_element
 class _FacebookCloudCard extends StatelessWidget {
   const _FacebookCloudCard();
 
@@ -397,12 +1121,14 @@ class _TextField extends StatelessWidget {
   final String label;
   final String hint;
   final bool obscureText;
+  final TextInputType? keyboardType;
 
   const _TextField({
     required this.controller,
     required this.label,
     required this.hint,
     this.obscureText = false,
+    this.keyboardType,
   });
 
   @override
@@ -410,6 +1136,7 @@ class _TextField extends StatelessWidget {
     return TextField(
       controller: controller,
       obscureText: obscureText,
+      keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

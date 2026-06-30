@@ -28,7 +28,7 @@ lib/
   app/                        App shell, routing, theme, responsive scaffold
   features/                   Feature-first CRM screens and providers
     security/                  Local app lock provider, overlay, and password hashing helpers
-    workflows/                 n8n workflow template catalog, automation screen, channel capability matrix, and local backend API client
+    workflows/                 n8n workflow template catalog, automation screen, Email/Facebook integration settings, channel capability matrix, and local backend API client
   mock/                       Mock domain models and sample/default data (includes ZaloChannelMode enum)
   shared/                     Reusable widgets and responsive utilities
 test/                         Flutter widget tests
@@ -93,7 +93,7 @@ docs/
 | `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
 | `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
-| `lib/features/workflows/` | Workflow automation feature | Provides `/workflows`, n8n settings UI, template catalog/filtering, channel capability matrix, and install calls to local backend. |
+| `lib/features/workflows/` | Workflow automation feature | Provides `/workflows`, n8n settings UI, Email IMAP/SMTP and Facebook Page Messenger official-API configuration cards, template catalog/filtering, channel capability matrix, and install calls to local backend. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
 | `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Compose/send bulk campaigns (phone/group/friends/tags). Shared `launchCampaign()` in `providers/bulk_messaging_provider.dart` (template→campaign→start) used by both immediate send and scheduling. Client-side scheduling (Path B): `providers/scheduled_campaigns_provider.dart` holds a queue of `data/scheduled_campaign.dart` snapshots, each with its own Timer; persisted via `data/scheduled_campaigns_dao.dart` to the `scheduled_campaigns` SQLite table (re-armed at app launch in `main.dart`; past-due → `missed`). Managed via the "Quản lý chiến dịch (n)" button + dialog; a red (n) badge also shows on the sidebar "Gửi tin nhắn hàng loạt" item (`/messaging/bulk`) via `_NavCountBadge`. Requires app open at fire time (same limit as the local agent). |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
@@ -116,7 +116,7 @@ docs/
 | `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
 | `integration/zalo-bot-service/` | Node.js backend | HTTP server with ZaloChannel adapter pattern: PersonalZca (zca-js), OfficialOa, Mock. The automated Windows release stages its compiled `dist/`, `node_modules`, `.env.example`, and bundled Node runtime into the ZIP while excluding `.env` and `.data` secrets. |
-| `integration/zalo-bot-service/src/integrations/` | n8n/proxy helpers | Stores masked n8n settings, builds n8n workflow payloads, dispatches inbound events to n8n webhooks, and creates/test proxy agents. |
+| `integration/zalo-bot-service/src/integrations/` | n8n/proxy/helpers and omnichannel integration settings | Stores encrypted-at-rest n8n, Email IMAP/SMTP, and Facebook Page Messenger settings with masked secret responses; builds n8n workflow payloads, dispatches inbound events to n8n webhooks, and creates/test proxy agents. |
 | `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
 | `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
 | `docs/specs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
@@ -124,6 +124,7 @@ docs/
 | `docs/specs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
 | `docs/specs/implementation-plan.md` | Reference integration plan | Documents the phased implementation plan, impacted files, risks, and verification checklist. |
 | `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |
+| `test/workflow_automation_provider_test.dart` | Workflow automation regression test | Verifies Email/Facebook settings serialization, mock API payloads, automation rule state transitions, and omnichannel template filtering. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 | `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |

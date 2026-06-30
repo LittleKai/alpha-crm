@@ -245,6 +245,8 @@ const server = createServer(async (req, res) => {
       const incomingN8n = payload.n8n || {};
       const incomingApiKey = typeof incomingN8n.apiKey === 'string' ? incomingN8n.apiKey.trim() : '';
       const apiKey = incomingApiKey.includes('*') ? current.n8n.apiKey : incomingApiKey;
+      const incomingEmail = payload.email || {};
+      const incomingFacebook = payload.facebook || {};
       const saved = writeIntegrationSettings({
         ...current,
         n8n: {
@@ -252,9 +254,20 @@ const server = createServer(async (req, res) => {
           ...incomingN8n,
           apiKey,
         },
+        email: {
+          ...current.email,
+          ...incomingEmail,
+          smtpPassword: preserveMaskedSecret(incomingEmail.smtpPassword, current.email.smtpPassword),
+          imapPassword: preserveMaskedSecret(incomingEmail.imapPassword, current.email.imapPassword),
+        },
         facebook: {
           ...current.facebook,
-          ...(payload.facebook || {}),
+          ...incomingFacebook,
+          verifyToken: preserveMaskedSecret(incomingFacebook.verifyToken, current.facebook.verifyToken || ''),
+          pageAccessToken: preserveMaskedSecret(
+            incomingFacebook.pageAccessToken,
+            current.facebook.pageAccessToken || '',
+          ),
         },
       });
       json(res, 200, { success: true, settings: maskIntegrationSettings(saved) });
@@ -1102,6 +1115,12 @@ const server = createServer(async (req, res) => {
   // 404 for everything else
   json(res, 404, { error: 'Not found' });
 });
+
+function preserveMaskedSecret(value: unknown, current: string): string {
+  if (typeof value !== 'string') return current;
+  const trimmed = value.trim();
+  return trimmed.includes('*') ? current : trimmed;
+}
 
 function listenOnPort(port: number): void {
   server.listen(port, config.localBindHost, async () => {

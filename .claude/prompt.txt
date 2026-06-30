@@ -1,1 +1,1 @@
-Tôi muốn bạn hãy dựa vào file D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\docs\feature-research-chatwoot-tooljet.md để tích hợp các tính năng đáng giá vào dự án này. Sau khi tích hợp xong tính năng nào hãy đánh dấu vào trong file này. Để tiết kiệm token, hãy phân phối bớt task cho codex và gemini.
+$flutter-dev Bạn hãy áp dụng tính năng tư tiên số 1 và 2 trong  D:\Dev\NodeJS\alpha-studio\tools\alpha-crm\docs\feature-research-chatwoot-tooljet.md vào dự án này

@@ -44,7 +44,11 @@ const List<WorkflowTemplate> workflowTemplateCatalog = [
     tags: ['ai', 'phan loai', 'intent', 'zalo', 'facebook'],
     iconName: 'psychology',
     difficulty: WorkflowDifficulty.medium,
-    supportedChannels: [CrmChannel.zaloPersonal, CrmChannel.facebookPage],
+    supportedChannels: [
+      CrmChannel.zaloPersonal,
+      CrmChannel.facebookPage,
+      CrmChannel.email,
+    ],
     requiredConnections: ['Alpha CRM AI quota', 'Alpha CRM cloud relay'],
     n8nWorkflow: {
       'nodes': [
@@ -78,7 +82,11 @@ const List<WorkflowTemplate> workflowTemplateCatalog = [
     tags: ['lead', 'crm', 'zalo', 'facebook'],
     iconName: 'person_add',
     difficulty: WorkflowDifficulty.easy,
-    supportedChannels: [CrmChannel.zaloPersonal, CrmChannel.facebookPage],
+    supportedChannels: [
+      CrmChannel.zaloPersonal,
+      CrmChannel.facebookPage,
+      CrmChannel.email,
+    ],
     requiredConnections: ['Alpha CRM cloud relay'],
     n8nWorkflow: {
       'nodes': [
@@ -112,7 +120,11 @@ const List<WorkflowTemplate> workflowTemplateCatalog = [
     tags: ['ngoai gio', 'auto reply', 'task'],
     iconName: 'schedule',
     difficulty: WorkflowDifficulty.easy,
-    supportedChannels: [CrmChannel.zaloPersonal, CrmChannel.facebookPage],
+    supportedChannels: [
+      CrmChannel.zaloPersonal,
+      CrmChannel.facebookPage,
+      CrmChannel.email,
+    ],
     requiredConnections: ['Alpha CRM cloud relay'],
     n8nWorkflow: {
       'nodes': [
@@ -146,7 +158,11 @@ const List<WorkflowTemplate> workflowTemplateCatalog = [
     tags: ['alert', 'telegram', 'email', 'khẩn cấp'],
     iconName: 'notifications',
     difficulty: WorkflowDifficulty.medium,
-    supportedChannels: [CrmChannel.zaloPersonal, CrmChannel.facebookPage],
+    supportedChannels: [
+      CrmChannel.zaloPersonal,
+      CrmChannel.facebookPage,
+      CrmChannel.email,
+    ],
     requiredConnections: ['Notification channel'],
     n8nWorkflow: {
       'nodes': [

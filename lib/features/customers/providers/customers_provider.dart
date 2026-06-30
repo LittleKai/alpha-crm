@@ -28,7 +28,17 @@ extension ContactJson on Contact {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
           : DateTime.now(),
+      customAttributes: _mapCustomAttributes(json),
     );
+  }
+
+  static Map<String, String> _mapCustomAttributes(Map<String, dynamic> json) {
+    final raw =
+        json['customFields'] ?? json['customAttributes'] ?? json['attributes'];
+    if (raw is! Map) return const {};
+    return raw.map((key, value) {
+      return MapEntry(key.toString(), value?.toString() ?? '');
+    });
   }
 
   static String _mapStatusToVietnamese(String dbStatus) {
@@ -46,8 +56,33 @@ extension ContactJson on Contact {
   }
 }
 
+enum CustomerAttributeType {
+  text('Văn bản'),
+  number('Số'),
+  list('Danh sách'),
+  date('Ngày'),
+  checkbox('Có/không');
+
+  final String label;
+
+  const CustomerAttributeType(this.label);
+}
+
+class CustomerAttributeDefinition {
+  final String key;
+  final String name;
+  final CustomerAttributeType type;
+
+  const CustomerAttributeDefinition({
+    required this.key,
+    required this.name,
+    required this.type,
+  });
+}
+
 class CustomersState {
   final List<Contact> contacts;
+  final List<CustomerAttributeDefinition> customAttributeDefinitions;
   final Set<String> selectedIds;
   final String searchQuery;
   final String selectedGroup; // 'Tất cả' or specific group
@@ -61,6 +96,7 @@ class CustomersState {
 
   const CustomersState({
     required this.contacts,
+    required this.customAttributeDefinitions,
     required this.selectedIds,
     required this.searchQuery,
     required this.selectedGroup,
@@ -76,6 +112,23 @@ class CustomersState {
   factory CustomersState.initial() {
     return const CustomersState(
       contacts: [],
+      customAttributeDefinitions: [
+        CustomerAttributeDefinition(
+          key: 'budget',
+          name: 'Ngân sách',
+          type: CustomerAttributeType.text,
+        ),
+        CustomerAttributeDefinition(
+          key: 'lifecycle',
+          name: 'Giai đoạn chăm sóc',
+          type: CustomerAttributeType.list,
+        ),
+        CustomerAttributeDefinition(
+          key: 'priority',
+          name: 'Độ ưu tiên',
+          type: CustomerAttributeType.list,
+        ),
+      ],
       selectedIds: {},
       searchQuery: '',
       selectedGroup: 'Tất cả',
@@ -91,6 +144,7 @@ class CustomersState {
 
   CustomersState copyWith({
     List<Contact>? contacts,
+    List<CustomerAttributeDefinition>? customAttributeDefinitions,
     Set<String>? selectedIds,
     String? searchQuery,
     String? selectedGroup,
@@ -104,6 +158,8 @@ class CustomersState {
   }) {
     return CustomersState(
       contacts: contacts ?? this.contacts,
+      customAttributeDefinitions:
+          customAttributeDefinitions ?? this.customAttributeDefinitions,
       selectedIds: selectedIds ?? this.selectedIds,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedGroup: selectedGroup ?? this.selectedGroup,
@@ -268,6 +324,71 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
     loadContacts();
   }
 
+  void addCustomAttributeDefinition(String name, CustomerAttributeType type) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) return;
+    final baseKey = trimmedName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final keyPrefix = baseKey.isEmpty
+        ? 'field_${DateTime.now().millisecondsSinceEpoch}'
+        : baseKey;
+    var key = keyPrefix;
+    var suffix = 2;
+    final existingKeys = state.customAttributeDefinitions
+        .map((definition) => definition.key)
+        .toSet();
+    while (existingKeys.contains(key)) {
+      key = '${keyPrefix}_$suffix';
+      suffix++;
+    }
+
+    state = state.copyWith(
+      customAttributeDefinitions: [
+        ...state.customAttributeDefinitions,
+        CustomerAttributeDefinition(key: key, name: trimmedName, type: type),
+      ],
+    );
+  }
+
+  void updateContactCustomAttribute(
+    String contactId,
+    String key,
+    String value,
+  ) {
+    final trimmedValue = value.trim();
+    state = state.copyWith(
+      contacts: [
+        for (final contact in state.contacts)
+          if (contact.id == contactId)
+            contact.copyWith(
+              customAttributes: _updatedCustomAttributes(
+                contact.customAttributes,
+                key,
+                trimmedValue,
+              ),
+            )
+          else
+            contact,
+      ],
+    );
+  }
+
+  Map<String, String> _updatedCustomAttributes(
+    Map<String, String> attributes,
+    String key,
+    String value,
+  ) {
+    final next = Map<String, String>.from(attributes);
+    if (value.isEmpty) {
+      next.remove(key);
+    } else {
+      next[key] = value;
+    }
+    return next;
+  }
+
   void toggleContactSelection(String id) {
     final newSelected = Set<String>.from(state.selectedIds);
     if (newSelected.contains(id)) {
@@ -325,7 +446,7 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
       lifecycleStage: 'lead',
       consentStatus: 'granted',
       consentEvidence: 'User added from CRM client',
-      customFields: const {},
+      customFields: contact.customAttributes,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -371,6 +492,7 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
             'source': 'Import File',
             'consentStatus': 'granted',
             'consentEvidence': 'Imported from CRM client',
+            'customFields': contact.customAttributes,
           },
         )
         .toList();

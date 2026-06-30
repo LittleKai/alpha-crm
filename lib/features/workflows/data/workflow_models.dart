@@ -1,7 +1,8 @@
 enum CrmChannel {
   zaloPersonal('zalo_personal', 'Zalo cá nhân'),
   zaloOa('zalo_oa', 'Zalo OA'),
-  facebookPage('facebook_page', 'Trang Facebook');
+  facebookPage('facebook_page', 'Trang Facebook'),
+  email('email', 'Email');
 
   final String apiValue;
   final String label;

@@ -166,7 +166,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
         _lastMessageCount = selected.messages.length;
         _justSwitchedConversation = true;
         _scrollMessagesToBottom(animate: false);
-        _tagController.text = selected.tag;
+        _tagController.text = selected.displayLabels.join(', ');
         _notesController.text = selected.notes;
         _messageController.text = state.draftText;
         final cust = selected.crmCustomer;
@@ -370,11 +370,7 @@ class _Header extends ConsumerWidget {
 
     return Row(
       children: [
-        Icon(
-          Icons.chat_bubble_outline,
-          color: AppColors.primary,
-          size: 32,
-        ),
+        Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 32),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
@@ -552,6 +548,7 @@ class _ConversationList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final zaloState = ref.watch(zaloIntegrationProvider);
+    final conversations = state.filteredConversations;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.s),
@@ -563,34 +560,39 @@ class _ConversationList extends ConsumerWidget {
             onChanged: notifier.setSearchQuery,
           ),
           const SizedBox(height: AppSpacing.s),
+          _buildFilterBar(context),
+          const SizedBox(height: AppSpacing.s),
           Expanded(
-            child: state.conversations.isEmpty
+            child: conversations.isEmpty
                 ? AppEmptyState(
                     icon: Icons.forum_outlined,
-                    title: 'Chưa có hội thoại',
-                    description:
-                        state.errorMessage ??
-                        'Tin nhắn mới sẽ hiển thị tại đây.',
+                    title: state.hasActiveConversationFilters
+                        ? 'Không có hội thoại phù hợp'
+                        : 'Chưa có hội thoại',
+                    description: state.hasActiveConversationFilters
+                        ? 'Thử bỏ lọc hoặc chọn một nhãn khác.'
+                        : state.errorMessage ??
+                              'Tin nhắn mới sẽ hiển thị tại đây.',
                     height: 220,
                   )
                 : ListView.separated(
-                    itemCount: state.conversations.length,
+                    itemCount: conversations.length,
                     separatorBuilder: (context, index) =>
                         const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final conversation = state.conversations[index];
+                      final conversation = conversations[index];
                       final selected =
                           conversation.id == state.selectedConversation?.id;
 
-      final matchingAccount = zaloState.accounts.firstWhere(
-        (a) => a.id == conversation.accountId,
-        orElse: () => ZaloConnectedAccount(
-          id: conversation.accountId,
-          label: conversation.accountId,
-          connected: false,
-          listenerRunning: false,
-        ),
-      );
+                      final matchingAccount = zaloState.accounts.firstWhere(
+                        (a) => a.id == conversation.accountId,
+                        orElse: () => ZaloConnectedAccount(
+                          id: conversation.accountId,
+                          label: conversation.accountId,
+                          connected: false,
+                          listenerRunning: false,
+                        ),
+                      );
                       final accountLabel = matchingAccount.label.replaceAll(
                         RegExp(r'\s*\([^)]*\)$'),
                         '',
@@ -639,35 +641,33 @@ class _ConversationList extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodyMedium.copyWith(
                                   color: selected
-                                      ? (AppColors.isDarkMode ? Colors.white : AppColors.primary)
+                                      ? (AppColors.isDarkMode
+                                            ? Colors.white
+                                            : AppColors.primary)
                                       : AppColors.textPrimary,
                                 ),
                               ),
                             ),
-                            if (conversation.tag.isNotEmpty) ...[
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primarySoft,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: AppColors.primaryBorder,
+                            ...conversation.displayLabels
+                                .take(2)
+                                .map(
+                                  (label) => Padding(
+                                    padding: const EdgeInsets.only(left: 4),
+                                    child: _ConversationLabelChip(label: label),
                                   ),
                                 ),
+                            if (conversation.displayLabels.length > 2)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
                                 child: Text(
-                                  conversation.tag,
+                                  '+${conversation.displayLabels.length - 2}',
                                   style: AppTextStyles.caption.copyWith(
-                                    color: AppColors.primary,
+                                    color: AppColors.textMuted,
                                     fontSize: 10,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
-                            ],
                           ],
                         ),
                         subtitle: Column(
@@ -679,7 +679,9 @@ class _ConversationList extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.caption.copyWith(
                                 color: selected
-                                    ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : AppColors.primary)
+                                    ? (AppColors.isDarkMode
+                                          ? const Color(0xFF93C5FD)
+                                          : AppColors.primary)
                                     : AppColors.textMuted,
                               ),
                             ),
@@ -704,7 +706,9 @@ class _ConversationList extends ConsumerWidget {
                                     'Chat qua: $accountLabel',
                                     style: AppTextStyles.caption.copyWith(
                                       color: selected
-                                          ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : AppColors.primary)
+                                          ? (AppColors.isDarkMode
+                                                ? const Color(0xFF93C5FD)
+                                                : AppColors.primary)
                                           : AppColors.textSecondary,
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w500,
@@ -750,6 +754,191 @@ class _ConversationList extends ConsumerWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(BuildContext context) {
+    final labels = state.availableLabels;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _ConversationFilterChip(
+            label: 'Tất cả',
+            selected: !state.hasActiveConversationFilters,
+            onSelected: (_) => notifier.clearConversationFilters(),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          _ConversationFilterChip(
+            label: 'Chưa đọc',
+            selected: state.unreadOnlyFilter,
+            onSelected: notifier.setUnreadOnlyFilter,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          _ConversationFilterChip(
+            label: 'Có nhãn',
+            selected: state.labeledOnlyFilter,
+            onSelected: notifier.setLabeledOnlyFilter,
+          ),
+          for (final label in labels.take(8)) ...[
+            const SizedBox(width: AppSpacing.xs),
+            _ConversationFilterChip(
+              label: label,
+              selected: state.selectedLabelFilter == label,
+              onSelected: (selected) {
+                notifier.setLabelFilter(selected ? label : '');
+              },
+            ),
+          ],
+          const SizedBox(width: AppSpacing.xs),
+          PopupMenuButton<String>(
+            tooltip: 'Bộ lọc đã lưu',
+            onSelected: (value) {
+              if (value == '__save__') {
+                _showSaveFilterDialog(context);
+                return;
+              }
+              final matches = state.savedFilters.where(
+                (filter) => filter.id == value,
+              );
+              if (matches.isNotEmpty) {
+                notifier.applySavedFilter(matches.first);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: '__save__',
+                enabled: state.hasActiveConversationFilters,
+                child: const Text('Lưu bộ lọc hiện tại'),
+              ),
+              if (state.savedFilters.isNotEmpty) const PopupMenuDivider(),
+              ...state.savedFilters.map(
+                (filter) => PopupMenuItem(
+                  value: filter.id,
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(filter.name)),
+                      if (state.selectedSavedFilterId == filter.id)
+                        Icon(Icons.check, size: 16, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            child: Chip(
+              avatar: Icon(
+                Icons.bookmark_border,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
+              label: Text(
+                state.savedFilters.isEmpty
+                    ? 'Lưu lọc'
+                    : 'Đã lưu (${state.savedFilters.length})',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              backgroundColor: AppColors.surface,
+              side: BorderSide(color: AppColors.border),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSaveFilterDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Lưu bộ lọc',
+        icon: Icons.bookmark_add_outlined,
+        width: 420,
+        actions: [
+          AppDialogAction(
+            text: 'Hủy',
+            variant: AppButtonVariant.outline,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          AppDialogAction(
+            text: 'Lưu',
+            icon: Icons.save_outlined,
+            onPressed: () {
+              notifier.saveCurrentFilter(nameController.text);
+              Navigator.of(dialogContext).pop();
+            },
+          ),
+        ],
+        child: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Tên bộ lọc',
+            hintText: 'Ví dụ: Khách nóng chưa đọc',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+    ).whenComplete(nameController.dispose);
+  }
+}
+
+class _ConversationFilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  const _ConversationFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: onSelected,
+      visualDensity: VisualDensity.compact,
+      labelStyle: AppTextStyles.caption.copyWith(
+        color: selected ? AppColors.primary : AppColors.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
+      selectedColor: AppColors.primarySoft,
+      backgroundColor: AppColors.surface,
+      side: BorderSide(
+        color: selected ? AppColors.primaryBorder : AppColors.border,
+      ),
+    );
+  }
+}
+
+class _ConversationLabelChip extends StatelessWidget {
+  final String label;
+
+  const _ConversationLabelChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.primaryBorder),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(
+          color: AppColors.primary,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -812,11 +1001,18 @@ class _ConversationPanel extends ConsumerWidget {
       RegExp(r'\s*\([^)]*\)$'),
       '',
     );
-    final bool isAccountConnected = matchingAccount.connected && matchingAccount.status != 'disconnected_expired';
+    final responseVariables = _cannedResponseVariables(
+      conversation,
+      accountLabel,
+    );
+    final bool isAccountConnected =
+        matchingAccount.connected &&
+        matchingAccount.status != 'disconnected_expired';
     // When the account's AI auto-reply is turned off in the settings dialog, the
     // per-conversation Bot toggle is forced off and cannot be enabled.
-    final bool accountAiOn =
-        state.isAccountAiAutoReplyEnabled(conversation.accountId);
+    final bool accountAiOn = state.isAccountAiAutoReplyEnabled(
+      conversation.accountId,
+    );
     final bool botToggleOn = conversation.chatbotEnabled && accountAiOn;
 
     return AppCard(
@@ -857,8 +1053,7 @@ class _ConversationPanel extends ConsumerWidget {
                       _AiStatusIcon(
                         paused: conversation.chatbotPaused,
                         pausedUntil: conversation.chatbotPausedUntil,
-                        onResumeNow: () =>
-                            notifier.resumeChatbotNow(),
+                        onResumeNow: () => notifier.resumeChatbotNow(),
                       ),
                       const SizedBox(width: AppSpacing.m),
                     ],
@@ -1043,21 +1238,32 @@ class _ConversationPanel extends ConsumerWidget {
             ),
           if (!isAccountConnected)
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.s,
+              ),
               padding: const EdgeInsets.all(AppSpacing.s),
               decoration: BoxDecoration(
                 color: AppColors.warningSoft,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: AppColors.warningText, size: 20),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.warningText,
+                    size: 20,
+                  ),
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
                     child: Text(
                       'Tài khoản Zalo đã mất kết nối. Không thể nhắn tin hay gửi file.',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.warningText),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.warningText,
+                      ),
                     ),
                   ),
                 ],
@@ -1071,16 +1277,35 @@ class _ConversationPanel extends ConsumerWidget {
                 IconButton(
                   icon: Icon(Icons.attach_file, color: AppColors.textSecondary),
                   tooltip: 'Đính kèm file/ảnh/video',
-                  onPressed: state.isSending || state.isBridgeOffline || !isAccountConnected
+                  onPressed:
+                      state.isSending ||
+                          state.isBridgeOffline ||
+                          !isAccountConnected
                       ? null
                       : () => _pickAndSendFile(notifier),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.quickreply_outlined,
+                    color: AppColors.textSecondary,
+                  ),
+                  tooltip: 'Mẫu trả lời',
+                  onPressed: state.isBridgeOffline || !isAccountConnected
+                      ? null
+                      : () => _showCannedResponsePicker(
+                          context,
+                          ref,
+                          templates,
+                          conversation,
+                          accountLabel,
+                        ),
                 ),
                 Expanded(
                   child: CallbackShortcuts(
                     bindings: <ShortcutActivator, VoidCallback>{
                       const SingleActivator(LogicalKeyboardKey.enter): () {
                         if (isAccountConnected && !state.isBridgeOffline) {
-                          _send(quickTemplates);
+                          _send(quickTemplates, responseVariables);
                         }
                       },
                     },
@@ -1093,8 +1318,8 @@ class _ConversationPanel extends ConsumerWidget {
                         hintText: !isAccountConnected
                             ? 'Không thể gửi tin do mất kết nối'
                             : state.isBridgeOffline
-                                ? 'Không thể gửi tin khi Bridge offline'
-                                : 'Nhập tin nhắn hoặc /1, /hello...',
+                            ? 'Không thể gửi tin khi Bridge offline'
+                            : 'Nhập tin nhắn hoặc /1, /hello...',
                         border: const OutlineInputBorder(),
                       ),
                       onChanged: (value) {
@@ -1103,7 +1328,7 @@ class _ConversationPanel extends ConsumerWidget {
                       },
                       onSubmitted: (_) {
                         if (isAccountConnected && !state.isBridgeOffline) {
-                          _send(quickTemplates);
+                          _send(quickTemplates, responseVariables);
                         }
                       },
                     ),
@@ -1113,9 +1338,12 @@ class _ConversationPanel extends ConsumerWidget {
                 AppButton(
                   text: 'Gửi',
                   icon: Icons.send_rounded,
-                  onPressed: state.isSending || state.isBridgeOffline || !isAccountConnected
+                  onPressed:
+                      state.isSending ||
+                          state.isBridgeOffline ||
+                          !isAccountConnected
                       ? null
-                      : () => _send(quickTemplates),
+                      : () => _send(quickTemplates, responseVariables),
                 ),
               ],
             ),
@@ -1130,7 +1358,11 @@ class _ConversationPanel extends ConsumerWidget {
               ),
               child: _QuickReplyStrip(
                 templates: quickTemplates,
-                onPick: (content) {
+                onPick: (template) {
+                  final content = renderCannedResponse(
+                    template.content,
+                    responseVariables,
+                  );
                   messageController.text = content;
                   messageController.selection = TextSelection.fromPosition(
                     TextPosition(offset: content.length),
@@ -1143,10 +1375,228 @@ class _ConversationPanel extends ConsumerWidget {
     );
   }
 
-  void _send(List<MessageTemplate> quickTemplates) {
+  void _showCannedResponsePicker(
+    BuildContext context,
+    WidgetRef ref,
+    List<MessageTemplate> templates,
+    Conversation conversation,
+    String accountLabel,
+  ) {
+    final searchController = TextEditingController();
+    var query = '';
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filtered = templates.where((template) {
+              final haystack =
+                  '${template.title} ${template.content} ${template.shortcut}'
+                      .toLowerCase();
+              return haystack.contains(query.toLowerCase());
+            }).toList();
+            return AppDialog(
+              title: 'Mẫu trả lời',
+              subtitle:
+                  'Tìm mẫu, chèn biến theo khách hiện tại hoặc lưu draft.',
+              icon: Icons.quickreply_outlined,
+              width: 640,
+              actions: [
+                AppDialogAction(
+                  text: 'Lưu draft',
+                  icon: Icons.save_outlined,
+                  variant: AppButtonVariant.outline,
+                  onPressed: messageController.text.trim().isEmpty
+                      ? null
+                      : () {
+                          final draft = messageController.text.trim();
+                          Navigator.of(dialogContext).pop();
+                          _showSaveCannedResponseDialog(context, ref, draft);
+                        },
+                ),
+                AppDialogAction(
+                  text: 'Đóng',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+              ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: searchController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Tìm theo tiêu đề, nội dung hoặc shortcode',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      setDialogState(() => query = value);
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  SizedBox(
+                    height: 360,
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text('Không tìm thấy mẫu phù hợp'),
+                          )
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final template = filtered[index];
+                              final content = renderCannedResponse(
+                                template.content,
+                                _cannedResponseVariables(
+                                  conversation,
+                                  accountLabel,
+                                ),
+                              );
+                              final shortcut = template.shortcut.isEmpty
+                                  ? 'Không có shortcode'
+                                  : template.shortcut;
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        template.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (template.isQuick)
+                                      _ConversationLabelChip(label: shortcut),
+                                  ],
+                                ),
+                                subtitle: Text(
+                                  content,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () {
+                                  messageController.text = content;
+                                  messageController.selection =
+                                      TextSelection.fromPosition(
+                                        TextPosition(offset: content.length),
+                                      );
+                                  notifier.updateDraft(content);
+                                  Navigator.of(dialogContext).pop();
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(searchController.dispose);
+  }
+
+  void _showSaveCannedResponseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String draft,
+  ) {
+    final titleController = TextEditingController();
+    final shortcutController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Lưu mẫu trả lời',
+        subtitle:
+            'Mẫu mới sẽ xuất hiện trong thư viện và dùng được bằng shortcode.',
+        icon: Icons.save_outlined,
+        width: 460,
+        actions: [
+          AppDialogAction(
+            text: 'Hủy',
+            variant: AppButtonVariant.outline,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          AppDialogAction(
+            text: 'Lưu',
+            icon: Icons.save_outlined,
+            onPressed: () async {
+              final title = titleController.text.trim();
+              final rawShortcut = shortcutController.text.trim();
+              final shortcut = rawShortcut.isEmpty
+                  ? ''
+                  : (rawShortcut.startsWith('/')
+                        ? rawShortcut
+                        : '/$rawShortcut');
+              if (title.isEmpty) return;
+              await ref
+                  .read(templatesProvider.notifier)
+                  .addTemplate(
+                    MessageTemplate(
+                      id: '',
+                      title: title,
+                      content: draft,
+                      variables: _extractCannedVariables(draft),
+                      createdAt: DateTime.now(),
+                      shortcut: shortcut,
+                      isQuick: true,
+                    ),
+                  );
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+          ),
+        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Tên mẫu',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            TextField(
+              controller: shortcutController,
+              decoration: const InputDecoration(
+                labelText: 'Shortcode',
+                hintText: '/gia hoặc /hello',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text(
+              draft,
+              style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      titleController.dispose();
+      shortcutController.dispose();
+    });
+  }
+
+  void _send(
+    List<MessageTemplate> quickTemplates,
+    Map<String, String> responseVariables,
+  ) {
     final text = messageController.text.trim();
     if (text.isEmpty) return;
-    final resolved = resolveQuickReplyShortcut(text, quickTemplates);
+    final resolved = resolveQuickReplyShortcut(
+      text,
+      quickTemplates,
+      variables: responseVariables,
+    );
     messageController.clear();
     notifier.updateDraft('');
     notifier.sendMessage(resolved ?? text);
@@ -1210,9 +1660,7 @@ class _ConversationPanel extends ConsumerWidget {
                     prefixIcon: Icon(Icons.search),
                     hintText: 'Nhập nội dung cần tìm',
                   ),
-                  onChanged: ref
-                      .read(liveChatProvider.notifier)
-                      .searchMessages,
+                  onChanged: ref.read(liveChatProvider.notifier).searchMessages,
                 ),
                 const SizedBox(height: AppSpacing.s),
                 Align(
@@ -1232,8 +1680,7 @@ class _ConversationPanel extends ConsumerWidget {
                       : ListView.separated(
                           padding: EdgeInsets.zero,
                           itemCount: results.length,
-                          separatorBuilder: (_, _) =>
-                              const Divider(height: 1),
+                          separatorBuilder: (_, _) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final message = results[index];
                             return ListTile(
@@ -1264,12 +1711,8 @@ class _ConversationPanel extends ConsumerWidget {
                                       .maxScrollExtent;
                                   final count = selected!.messages.length;
                                   await messageScrollController.animateTo(
-                                    count <= 1
-                                        ? 0
-                                        : max * index / (count - 1),
-                                    duration: const Duration(
-                                      milliseconds: 300,
-                                    ),
+                                    count <= 1 ? 0 : max * index / (count - 1),
+                                    duration: const Duration(milliseconds: 300),
                                     curve: Curves.easeOut,
                                   );
                                 }
@@ -1288,12 +1731,41 @@ class _ConversationPanel extends ConsumerWidget {
       ),
     );
   }
+}
 
+Map<String, String> _cannedResponseVariables(
+  Conversation conversation,
+  String accountLabel,
+) {
+  final now = DateTime.now();
+  final customer = conversation.crmCustomer;
+  final name = customer?.name.trim().isNotEmpty == true
+      ? customer!.name.trim()
+      : conversation.customerName;
+  return {
+    'contact.name': name,
+    'conversation.name': conversation.customerName,
+    'account.label': accountLabel,
+    'date.today': DateFormat('dd/MM/yyyy').format(now),
+    'ho_ten': name,
+    'ten_khach': name,
+    'ngay_hom_nay': DateFormat('dd/MM/yyyy').format(now),
+  };
+}
+
+List<String> _extractCannedVariables(String content) {
+  final variables = <String>{};
+  final regex = RegExp(r'\{\{\s*([\w.]+)\s*\}\}|\{([\w_]+)\}');
+  for (final match in regex.allMatches(content)) {
+    final name = match.group(1) ?? match.group(2);
+    if (name != null && name.isNotEmpty) variables.add(name);
+  }
+  return variables.toList();
 }
 
 class _QuickReplyStrip extends StatelessWidget {
   final List<MessageTemplate> templates;
-  final ValueChanged<String> onPick;
+  final ValueChanged<MessageTemplate> onPick;
 
   const _QuickReplyStrip({required this.templates, required this.onPick});
 
@@ -1323,7 +1795,7 @@ class _QuickReplyStrip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppSpacing.radiusS),
               ),
             ),
-            onPressed: () => onPick(template.content),
+            onPressed: () => onPick(template),
             child: Text(
               '$label ${template.title}',
               style: AppTextStyles.caption.copyWith(
@@ -1558,16 +2030,14 @@ class _MessageBubble extends ConsumerWidget {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = conversation.messages;
     final messageIndex = messages.indexWhere((m) => m.id == message.id);
-    
+
     List<LiveChatAttachmentView> groupMedia = [];
     bool isGrouped = false;
-    
+
     if (messageIndex != -1 && !message.isDeleted) {
       final currentMedia = resolveLiveChatMediaAttachments(message);
       if (currentMedia.isNotEmpty) {
@@ -1576,11 +2046,12 @@ class _MessageBubble extends ConsumerWidget {
           if (!prevMsg.isDeleted &&
               resolveLiveChatMediaAttachments(prevMsg).isNotEmpty &&
               prevMsg.senderId == message.senderId &&
-              message.timestamp.difference(prevMsg.timestamp).inSeconds.abs() <= 15) {
+              message.timestamp.difference(prevMsg.timestamp).inSeconds.abs() <=
+                  15) {
             isGrouped = true;
           }
         }
-        
+
         if (!isGrouped) {
           groupMedia.addAll(currentMedia);
           int j = messageIndex + 1;
@@ -1590,7 +2061,11 @@ class _MessageBubble extends ConsumerWidget {
               final nextMedia = resolveLiveChatMediaAttachments(nextMsg);
               if (nextMedia.isNotEmpty &&
                   nextMsg.senderId == message.senderId &&
-                  nextMsg.timestamp.difference(messages[j - 1].timestamp).inSeconds.abs() <= 15) {
+                  nextMsg.timestamp
+                          .difference(messages[j - 1].timestamp)
+                          .inSeconds
+                          .abs() <=
+                      15) {
                 groupMedia.addAll(nextMedia);
                 j++;
               } else {
@@ -1603,17 +2078,21 @@ class _MessageBubble extends ConsumerWidget {
         }
       }
     }
-    
+
     if (isGrouped) {
       return const SizedBox.shrink();
     }
 
     final isMine = message.isMine;
     final color = isMine
-        ? (AppColors.isDarkMode ? const Color(0xFF93C5FD) : const Color(0xFFEFF6FF))
+        ? (AppColors.isDarkMode
+              ? const Color(0xFF93C5FD)
+              : const Color(0xFFEFF6FF))
         : AppColors.surfaceMuted;
     final textColor = isMine
-        ? (AppColors.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFF1E40AF))
+        ? (AppColors.isDarkMode
+              ? const Color(0xFF0F172A)
+              : const Color(0xFF1E40AF))
         : AppColors.textPrimary;
 
     final bool isBot = message.isFromBot;
@@ -1649,12 +2128,12 @@ class _MessageBubble extends ConsumerWidget {
       final zaloState = ref.watch(zaloIntegrationProvider);
       final matching = zaloState.accounts.firstWhere(
         (a) => a.id == conversation.accountId,
-          orElse: () => ZaloConnectedAccount(
-            id: conversation.accountId,
-            label: '',
-            connected: false,
-            listenerRunning: false,
-          ),
+        orElse: () => ZaloConnectedAccount(
+          id: conversation.accountId,
+          label: '',
+          connected: false,
+          listenerRunning: false,
+        ),
       );
       final avatarUrl = matching.avatarUrl;
       final label = matching.label.replaceAll(RegExp(r'\s*\([^)]*\)$'), '');
@@ -1714,7 +2193,9 @@ class _MessageBubble extends ConsumerWidget {
                       boxShadow: highlighted
                           ? [
                               BoxShadow(
-                                color: AppColors.warning.withValues(alpha: 0.35),
+                                color: AppColors.warning.withValues(
+                                  alpha: 0.35,
+                                ),
                                 blurRadius: 12,
                               ),
                             ]
@@ -1735,7 +2216,8 @@ class _MessageBubble extends ConsumerWidget {
                               ),
                             ),
                             child: Text(
-                              (message.quote!['content'] ?? 'Tin nhắn đã trả lời')
+                              (message.quote!['content'] ??
+                                      'Tin nhắn đã trả lời')
                                   .toString(),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -1745,7 +2227,12 @@ class _MessageBubble extends ConsumerWidget {
                             ),
                           ),
                         ],
-                        _buildMessageContent(context, ref, textColor, groupMedia),
+                        _buildMessageContent(
+                          context,
+                          ref,
+                          textColor,
+                          groupMedia,
+                        ),
                         const SizedBox(height: 4),
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1786,7 +2273,9 @@ class _MessageBubble extends ConsumerWidget {
                               const SizedBox(width: 6),
                             ],
                             Text(
-                              DateFormat('dd/MM HH:mm').format(message.timestamp),
+                              DateFormat(
+                                'dd/MM HH:mm',
+                              ).format(message.timestamp),
                               style: AppTextStyles.caption.copyWith(
                                 color: textColor.withValues(alpha: 0.75),
                               ),
@@ -1913,7 +2402,8 @@ class _MessageBubble extends ConsumerWidget {
           try {
             final data = jsonDecode(message.message);
             if (data is Map) {
-              copyText = data['title']?.toString() ??
+              copyText =
+                  data['title']?.toString() ??
                   data['description']?.toString() ??
                   data['href']?.toString() ??
                   message.message;
@@ -1940,7 +2430,8 @@ class _MessageBubble extends ConsumerWidget {
           builder: (confirmContext) => AppDialog(
             title: 'Thu hồi tin nhắn',
             icon: Icons.undo,
-            subtitle: 'Bạn có chắc chắn muốn thu hồi tin nhắn này không? Tin nhắn sẽ bị ẩn ở cả hai phía thiết bị.',
+            subtitle:
+                'Bạn có chắc chắn muốn thu hồi tin nhắn này không? Tin nhắn sẽ bị ẩn ở cả hai phía thiết bị.',
             actions: [
               AppDialogAction(
                 text: 'Hủy',
@@ -1965,7 +2456,9 @@ class _MessageBubble extends ConsumerWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          success ? 'Đã thu hồi tin nhắn.' : 'Thu hồi thất bại.',
+                          success
+                              ? 'Đã thu hồi tin nhắn.'
+                              : 'Thu hồi thất bại.',
                         ),
                         backgroundColor: success ? Colors.green : Colors.red,
                       ),
@@ -1980,7 +2473,8 @@ class _MessageBubble extends ConsumerWidget {
           builder: (confirmContext) => AppDialog(
             title: 'Xóa tin nhắn',
             icon: Icons.delete_outline,
-            subtitle: 'Bạn có chắc chắn muốn xóa tin nhắn này không? Hành động này chỉ xóa tin nhắn ở giao diện của bạn.',
+            subtitle:
+                'Bạn có chắc chắn muốn xóa tin nhắn này không? Hành động này chỉ xóa tin nhắn ở giao diện của bạn.',
             actions: [
               AppDialogAction(
                 text: 'Hủy',
@@ -1997,21 +2491,20 @@ class _MessageBubble extends ConsumerWidget {
           ),
         ).then((confirmed) {
           if (confirmed == true) {
-            ref
-                .read(liveChatProvider.notifier)
-                .deleteMessage(message.id)
-                .then((success) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          success ? 'Đã xóa tin nhắn.' : 'Xóa tin nhắn thất bại.',
-                        ),
-                        backgroundColor: success ? Colors.green : Colors.red,
-                      ),
-                    );
-                  }
-                });
+            ref.read(liveChatProvider.notifier).deleteMessage(message.id).then((
+              success,
+            ) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success ? 'Đã xóa tin nhắn.' : 'Xóa tin nhắn thất bại.',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            });
           }
         });
       }
@@ -2219,7 +2712,10 @@ class _MessageBubble extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
+              const Icon(
+                Icons.insert_drive_file_outlined,
+                color: AppColors.info,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -2257,20 +2753,31 @@ class _MessageBubble extends ConsumerWidget {
                           ? '${file.url}/download'
                           : file.url;
                       try {
-                        pathToOpen = await const LiveChatDownloadService().download(
-                          url: url,
-                          fileName: file.displayName,
-                          directory: ref.read(settingsProvider).settings.downloadFolder,
-                        );
-                      } catch (_) { return; }
+                        pathToOpen = await const LiveChatDownloadService()
+                            .download(
+                              url: url,
+                              fileName: file.displayName,
+                              directory: ref
+                                  .read(settingsProvider)
+                                  .settings
+                                  .downloadFolder,
+                            );
+                      } catch (_) {
+                        return;
+                      }
                     }
                     if (pathToOpen.isNotEmpty) {
                       try {
                         if (Platform.isWindows) {
                           final winPath = pathToOpen.replaceAll('/', '\\');
-                          await Process.run('explorer.exe', ['/select,$winPath']);
+                          await Process.run('explorer.exe', [
+                            '/select,$winPath',
+                          ]);
                         } else {
-                          final parentPath = pathToOpen.substring(0, pathToOpen.lastIndexOf(RegExp(r'[/\\]')));
+                          final parentPath = pathToOpen.substring(
+                            0,
+                            pathToOpen.lastIndexOf(RegExp(r'[/\\]')),
+                          );
                           final folderUri = Uri.parse('file:///$parentPath');
                           if (await canLaunchUrl(folderUri)) {
                             await launchUrl(folderUri);
@@ -2290,14 +2797,15 @@ class _MessageBubble extends ConsumerWidget {
                       final url = file.url.contains('/local/media/')
                           ? '${file.url}/download'
                           : file.url;
-                      final path = await const LiveChatDownloadService().download(
-                        url: url,
-                        fileName: file.displayName,
-                        directory: ref
-                            .read(settingsProvider)
-                            .settings
-                            .downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: url,
+                            fileName: file.displayName,
+                            directory: ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Đã tải tệp: $path')),
@@ -2349,7 +2857,10 @@ class _MessageBubble extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.insert_drive_file_outlined, color: AppColors.info),
+              const Icon(
+                Icons.insert_drive_file_outlined,
+                color: AppColors.info,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -2381,17 +2892,26 @@ class _MessageBubble extends ConsumerWidget {
                   color: textColor,
                   onPressed: () async {
                     try {
-                      final path = await const LiveChatDownloadService().download(
-                        url: fileInfo['href']!,
-                        fileName: fileInfo['name'] ?? 'file',
-                        directory: ref.read(settingsProvider).settings.downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: fileInfo['href']!,
+                            fileName: fileInfo['name'] ?? 'file',
+                            directory: ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (path.isNotEmpty) {
                         if (Platform.isWindows) {
                           final winPath = path.replaceAll('/', '\\');
-                          await Process.run('explorer.exe', ['/select,$winPath']);
+                          await Process.run('explorer.exe', [
+                            '/select,$winPath',
+                          ]);
                         } else {
-                          final parentPath = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
+                          final parentPath = path.substring(
+                            0,
+                            path.lastIndexOf(RegExp(r'[/\\]')),
+                          );
                           final folderUri = Uri.parse('file:///$parentPath');
                           if (await canLaunchUrl(folderUri)) {
                             await launchUrl(folderUri);
@@ -2407,11 +2927,15 @@ class _MessageBubble extends ConsumerWidget {
                   tooltip: 'Tải xuống',
                   onPressed: () async {
                     try {
-                      final path = await const LiveChatDownloadService().download(
-                        url: fileInfo['href']!,
-                        fileName: fileInfo['name'] ?? 'file',
-                        directory: ref.read(settingsProvider).settings.downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: fileInfo['href']!,
+                            fileName: fileInfo['name'] ?? 'file',
+                            directory: ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Đã tải tệp: $path')),
@@ -2570,13 +3094,17 @@ class _MessageBubble extends ConsumerWidget {
             Map<String, dynamic>? paramsMap;
             if (paramsVal is Map<String, dynamic>) {
               paramsMap = paramsVal;
-            } else if (paramsVal is String && paramsVal.trim().startsWith('{')) {
+            } else if (paramsVal is String &&
+                paramsVal.trim().startsWith('{')) {
               final parsedParams = jsonDecode(paramsVal);
               if (parsedParams is Map<String, dynamic>) {
                 paramsMap = parsedParams;
               }
             }
-            if (paramsMap != null && (paramsMap.containsKey('pollId') || paramsMap.containsKey('question') || paramsMap.containsKey('dName'))) {
+            if (paramsMap != null &&
+                (paramsMap.containsKey('pollId') ||
+                    paramsMap.containsKey('question') ||
+                    paramsMap.containsKey('dName'))) {
               isPollJson = true;
               parsedPollData = decoded;
             }
@@ -2585,10 +3113,12 @@ class _MessageBubble extends ConsumerWidget {
       } catch (_) {}
     }
 
-    if (message.contentType == 'poll' || message.contentType == 'system' || isPollJson) {
+    if (message.contentType == 'poll' ||
+        message.contentType == 'system' ||
+        isPollJson) {
       final isPoll = message.contentType == 'poll' || isPollJson;
       String displayMessage = message.message;
-      
+
       if (isPoll) {
         try {
           final decoded = parsedPollData ?? jsonDecode(message.message);
@@ -2597,7 +3127,8 @@ class _MessageBubble extends ConsumerWidget {
             Map<String, dynamic>? params;
             if (paramsVal is Map<String, dynamic>) {
               params = paramsVal;
-            } else if (paramsVal is String && paramsVal.trim().startsWith('{')) {
+            } else if (paramsVal is String &&
+                paramsVal.trim().startsWith('{')) {
               final parsedParams = jsonDecode(paramsVal);
               if (parsedParams is Map<String, dynamic>) {
                 params = parsedParams;
@@ -2752,19 +3283,19 @@ class _MessageBubble extends ConsumerWidget {
       }
     }
 
-      return SelectableText(
-        message.message,
-        style: AppTextStyles.body.copyWith(color: textColor),
-        contextMenuBuilder: (innerContext, editableTextState) {
-          final position = editableTextState.contextMenuAnchors.primaryAnchor;
-          Future.microtask(() {
-            if (context.mounted) {
-              _showRecallMenu(context, ref, position);
-            }
-          });
-          return const SizedBox.shrink();
-        },
-      );
+    return SelectableText(
+      message.message,
+      style: AppTextStyles.body.copyWith(color: textColor),
+      contextMenuBuilder: (innerContext, editableTextState) {
+        final position = editableTextState.contextMenuAnchors.primaryAnchor;
+        Future.microtask(() {
+          if (context.mounted) {
+            _showRecallMenu(context, ref, position);
+          }
+        });
+        return const SizedBox.shrink();
+      },
+    );
   }
 
   Widget _buildImageGrid(
@@ -2850,14 +3381,9 @@ class _MessageBubble extends ConsumerWidget {
 
     return Container(
       width: 300,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: rows,
-      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
     );
   }
 
@@ -2871,7 +3397,8 @@ class _MessageBubble extends ConsumerWidget {
     required int total,
     required List<LiveChatAttachmentView> allImages,
   }) {
-    final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+    final useLocal =
+        image.hasLocalPath && liveChatLocalFileExists(image.localPath);
     final errorWidget = Container(
       width: width,
       height: height,
@@ -2897,7 +3424,11 @@ class _MessageBubble extends ConsumerWidget {
                   : null,
             ),
             child: const Center(
-              child: Icon(Icons.play_circle_fill, color: Colors.white, size: 36),
+              child: Icon(
+                Icons.play_circle_fill,
+                color: Colors.white,
+                size: 36,
+              ),
             ),
           )
         : useLocal
@@ -2943,7 +3474,8 @@ class _MessageBubble extends ConsumerWidget {
     final showOverlay = index == 5 && total > 6;
 
     return InkWell(
-      onTap: () => _showImageGalleryPreviewDialog(context, ref, allImages, index),
+      onTap: () =>
+          _showImageGalleryPreviewDialog(context, ref, allImages, index),
       child: Stack(
         children: [
           imageWidget,
@@ -2982,14 +3514,15 @@ class _MessageBubble extends ConsumerWidget {
                         ? '${image.url}/download'
                         : image.url;
                     try {
-                      final path = await const LiveChatDownloadService().download(
-                        url: url,
-                        fileName: image.displayName,
-                        directory: ref
-                            .read(settingsProvider)
-                            .settings
-                            .downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: url,
+                            fileName: image.displayName,
+                            directory: ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Đã tải ảnh: $path')),
@@ -3019,14 +3552,12 @@ class _MessageBubble extends ConsumerWidget {
   ) {
     if (image.kind == LiveChatAttachmentKind.video) {
       return Container(
-        constraints: const BoxConstraints(
-          maxWidth: 300,
-          maxHeight: 300,
-        ),
+        constraints: const BoxConstraints(maxWidth: 300, maxHeight: 300),
         child: Stack(
           children: [
             InkWell(
-              onTap: () => _showImageGalleryPreviewDialog(context, ref, [image], 0),
+              onTap: () =>
+                  _showImageGalleryPreviewDialog(context, ref, [image], 0),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
@@ -3042,7 +3573,11 @@ class _MessageBubble extends ConsumerWidget {
                         : null,
                   ),
                   child: const Center(
-                    child: Icon(Icons.play_circle_fill, color: Colors.white, size: 52),
+                    child: Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.white,
+                      size: 52,
+                    ),
                   ),
                 ),
               ),
@@ -3059,14 +3594,15 @@ class _MessageBubble extends ConsumerWidget {
                         ? '${image.url}/download'
                         : image.url;
                     try {
-                      final path = await const LiveChatDownloadService().download(
-                        url: url,
-                        fileName: image.displayName,
-                        directory: ref
-                            .read(settingsProvider)
-                            .settings
-                            .downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: url,
+                            fileName: image.displayName,
+                            directory: ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Đã tải video: $path')),
@@ -3087,7 +3623,8 @@ class _MessageBubble extends ConsumerWidget {
       );
     }
 
-    final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+    final useLocal =
+        image.hasLocalPath && liveChatLocalFileExists(image.localPath);
     final errorWidget = Container(
       padding: const EdgeInsets.all(AppSpacing.s),
       color: Colors.black12,
@@ -3102,14 +3639,12 @@ class _MessageBubble extends ConsumerWidget {
     );
 
     return Container(
-      constraints: const BoxConstraints(
-        maxWidth: 300,
-        maxHeight: 300,
-      ),
+      constraints: const BoxConstraints(maxWidth: 300, maxHeight: 300),
       child: Stack(
         children: [
           InkWell(
-            onTap: () => _showImageGalleryPreviewDialog(context, ref, [image], 0),
+            onTap: () =>
+                _showImageGalleryPreviewDialog(context, ref, [image], 0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: useLocal
@@ -3341,6 +3876,30 @@ class _ContactInfoPanel extends ConsumerStatefulWidget {
 
 class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
   bool _isSaving = false;
+  late Map<String, String> _customFields;
+
+  @override
+  void initState() {
+    super.initState();
+    _customFields = _initialCustomFields(widget.conversation);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ContactInfoPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversation.id != widget.conversation.id) {
+      _customFields = _initialCustomFields(widget.conversation);
+    }
+  }
+
+  Map<String, String> _initialCustomFields(Conversation conversation) {
+    final customerFields = conversation.crmCustomer?.customFields ?? const {};
+    return Map<String, String>.from(
+      customerFields.isNotEmpty
+          ? customerFields
+          : conversation.customAttributes,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3464,7 +4023,7 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
                 TextField(
                   controller: widget.tagController,
                   decoration: const InputDecoration(
-                    labelText: 'Nhãn (Tag)',
+                    labelText: 'Nhãn (phân tách bằng dấu phẩy)',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -3478,6 +4037,21 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
                     isDense: true,
                   ),
                   maxLines: 3,
+                ),
+                const SizedBox(height: AppSpacing.m),
+                _CustomFieldsEditor(
+                  fields: _customFields,
+                  onChanged: (key, value) {
+                    setState(() {
+                      final trimmed = value.trim();
+                      if (trimmed.isEmpty) {
+                        _customFields.remove(key);
+                      } else {
+                        _customFields[key] = trimmed;
+                      }
+                    });
+                  },
+                  onAddField: _addCustomField,
                 ),
                 const SizedBox(height: AppSpacing.l),
                 ElevatedButton(
@@ -3520,7 +4094,11 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
 
     setState(() => _isSaving = true);
     final tagText = widget.tagController.text.trim();
-    final tagsList = tagText.isNotEmpty ? [tagText] : <String>[];
+    final tagsList = tagText
+        .split(',')
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
 
     final success = await widget.notifier.saveCrmCustomer(
       name: name,
@@ -3530,6 +4108,7 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
       status: widget.statusController.text.trim(),
       notes: widget.notesController.text.trim(),
       tags: tagsList,
+      customFields: Map<String, String>.from(_customFields),
     );
 
     if (mounted) {
@@ -3543,6 +4122,110 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
         ),
       );
     }
+  }
+
+  void _addCustomField() {
+    const baseKey = 'custom_field';
+    var key = baseKey;
+    var suffix = 2;
+    while (_customFields.containsKey(key)) {
+      key = '${baseKey}_$suffix';
+      suffix++;
+    }
+    setState(() => _customFields[key] = '');
+  }
+}
+
+class _CustomFieldsEditor extends StatelessWidget {
+  final Map<String, String> fields;
+  final void Function(String key, String value) onChanged;
+  final VoidCallback onAddField;
+
+  const _CustomFieldsEditor({
+    required this.fields,
+    required this.onChanged,
+    required this.onAddField,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = fields.entries.toList();
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppSpacing.borderRadiusM,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune_outlined, color: AppColors.primary, size: 18),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Thuộc tính tùy biến',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Thêm trường',
+                onPressed: onAddField,
+                icon: const Icon(Icons.add_rounded, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s),
+          if (entries.isEmpty)
+            Text(
+              'Chưa có thuộc tính riêng cho khách hàng này.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            )
+          else
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                child: TextFormField(
+                  key: ValueKey('custom-field-${entry.key}'),
+                  initialValue: entry.value,
+                  decoration: InputDecoration(
+                    labelText: _labelForCustomField(entry.key),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => onChanged(entry.key, value),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _labelForCustomField(String key) {
+  switch (key) {
+    case 'budget':
+      return 'Ngân sách';
+    case 'lifecycle':
+      return 'Giai đoạn chăm sóc';
+    case 'priority':
+      return 'Độ ưu tiên';
+    case 'need':
+      return 'Nhu cầu';
+    default:
+      return key
+          .replaceAll('_', ' ')
+          .split(' ')
+          .where((part) => part.isNotEmpty)
+          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+          .join(' ');
   }
 }
 
@@ -3621,7 +4304,9 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
                   localPath: image.localPath,
                 );
               }
-              final useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath);
+              final useLocal =
+                  image.hasLocalPath &&
+                  liveChatLocalFileExists(image.localPath);
 
               return GestureDetector(
                 onTap: () => Navigator.of(context).pop(),
@@ -3641,7 +4326,9 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
                             imageUrl: image.url,
                             fit: BoxFit.contain,
                             placeholder: (context, url) => const Center(
-                              child: CircularProgressIndicator(color: Colors.white),
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                              ),
                             ),
                             errorWidget: (context, url, error) => const Text(
                               'Không thể xem ảnh lớn',
@@ -3682,8 +4369,14 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
               children: [
                 // Download button for current media
                 IconButton(
-                  icon: const Icon(Icons.download, color: Colors.white, size: 26),
-                  tooltip: widget.images[_currentIndex].kind == LiveChatAttachmentKind.video
+                  icon: const Icon(
+                    Icons.download,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  tooltip:
+                      widget.images[_currentIndex].kind ==
+                          LiveChatAttachmentKind.video
                       ? 'Tải video hiện tại'
                       : 'Tải ảnh hiện tại',
                   onPressed: () async {
@@ -3695,23 +4388,30 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
                         : image.url;
                     if (!image.hasRemoteUrl) return;
                     try {
-                      final path = await const LiveChatDownloadService().download(
-                        url: url,
-                        fileName: image.displayName,
-                        directory: widget.ref
-                            .read(settingsProvider)
-                            .settings
-                            .downloadFolder,
-                      );
+                      final path = await const LiveChatDownloadService()
+                          .download(
+                            url: url,
+                            fileName: image.displayName,
+                            directory: widget.ref
+                                .read(settingsProvider)
+                                .settings
+                                .downloadFolder,
+                          );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Đã tải $mediaTypeLabel: $path')),
+                          SnackBar(
+                            content: Text('Đã tải $mediaTypeLabel: $path'),
+                          ),
                         );
                       }
                     } catch (error) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Tải $mediaTypeLabel thất bại: $error')),
+                          SnackBar(
+                            content: Text(
+                              'Tải $mediaTypeLabel thất bại: $error',
+                            ),
+                          ),
                         );
                       }
                     }
@@ -3730,7 +4430,11 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
             Positioned(
               left: 16,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white60, size: 36),
+                icon: const Icon(
+                  Icons.arrow_back_ios,
+                  color: Colors.white60,
+                  size: 36,
+                ),
                 style: IconButton.styleFrom(backgroundColor: Colors.black38),
                 onPressed: () {
                   _pageController.previousPage(
@@ -3744,7 +4448,11 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
             Positioned(
               right: 16,
               child: IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 36),
+                icon: const Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.white60,
+                  size: 36,
+                ),
                 style: IconButton.styleFrom(backgroundColor: Colors.black38),
                 onPressed: () {
                   _pageController.nextPage(
@@ -3763,7 +4471,7 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
 class _GalleryVideoItem extends StatefulWidget {
   final String url;
   final String localPath;
-  
+
   const _GalleryVideoItem({required this.url, this.localPath = ''});
 
   @override
@@ -3796,7 +4504,10 @@ class _GalleryVideoItemState extends State<_GalleryVideoItem> {
   Future<void> _initializePlayer() async {
     try {
       final source = widget.url.isNotEmpty ? widget.url : widget.localPath;
-      await _player.open(Media(source), play: true); // Auto play in fullscreen preview is great!
+      await _player.open(
+        Media(source),
+        play: true,
+      ); // Auto play in fullscreen preview is great!
     } catch (error) {
       _playbackError = 'Không thể phát video: $error';
     } finally {
@@ -3814,7 +4525,9 @@ class _GalleryVideoItemState extends State<_GalleryVideoItem> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
     }
     if (_playbackError != null) {
       return Center(
@@ -3880,14 +4593,12 @@ class _AiStatusIcon extends StatelessWidget {
         ? ' Tự bật lại lúc ${_formatResumeTime(pausedUntil!)}.'
         : '';
     return Tooltip(
-      message: 'AI tạm nghỉ vì bạn vừa trả lời.$resume\n'
+      message:
+          'AI tạm nghỉ vì bạn vừa trả lời.$resume\n'
           'Nhấp đúp để bật lại ngay.',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onDoubleTap: onResumeNow,
-          child: badge,
-        ),
+        child: GestureDetector(onDoubleTap: onResumeNow, child: badge),
       ),
     );
   }
@@ -3902,9 +4613,7 @@ class GlossyHeart extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _GlossyHeartPainter(),
-      ),
+      child: CustomPaint(painter: _GlossyHeartPainter()),
     );
   }
 }
@@ -3916,38 +4625,50 @@ class _GlossyHeartPainter extends CustomPainter {
     final height = size.height;
 
     final path = Path();
-    
+
     // Start at top center cleft
     path.moveTo(width * 0.5, height * 0.25);
-    
+
     // Left lobe
     path.cubicTo(
-      width * 0.15, height * 0.02,
-      width * -0.08, height * 0.38,
-      width * 0.15, height * 0.68,
+      width * 0.15,
+      height * 0.02,
+      width * -0.08,
+      height * 0.38,
+      width * 0.15,
+      height * 0.68,
     );
-    
+
     // Left side to bottom point
     path.cubicTo(
-      width * 0.25, height * 0.78,
-      width * 0.4, height * 0.88,
-      width * 0.5, height * 0.98,
+      width * 0.25,
+      height * 0.78,
+      width * 0.4,
+      height * 0.88,
+      width * 0.5,
+      height * 0.98,
     );
-    
+
     // Right side from bottom point
     path.cubicTo(
-      width * 0.6, height * 0.88,
-      width * 0.75, height * 0.78,
-      width * 0.85, height * 0.68,
+      width * 0.6,
+      height * 0.88,
+      width * 0.75,
+      height * 0.78,
+      width * 0.85,
+      height * 0.68,
     );
-    
+
     // Right lobe
     path.cubicTo(
-      width * 1.08, height * 0.38,
-      width * 0.85, height * 0.02,
-      width * 0.5, height * 0.25,
+      width * 1.08,
+      height * 0.38,
+      width * 0.85,
+      height * 0.02,
+      width * 0.5,
+      height * 0.25,
     );
-    
+
     path.close();
 
     // Premium shiny linear gradient: top-left to bottom-right
@@ -3970,16 +4691,22 @@ class _GlossyHeartPainter extends CustomPainter {
     final highlightPath = Path();
     highlightPath.moveTo(width * 0.22, height * 0.22);
     highlightPath.cubicTo(
-      width * 0.15, height * 0.25,
-      width * 0.15, height * 0.45,
-      width * 0.32, height * 0.5,
+      width * 0.15,
+      height * 0.25,
+      width * 0.15,
+      height * 0.45,
+      width * 0.32,
+      height * 0.5,
     );
     highlightPath.cubicTo(
-      width * 0.28, height * 0.42,
-      width * 0.25, height * 0.30,
-      width * 0.22, height * 0.22,
+      width * 0.28,
+      height * 0.42,
+      width * 0.25,
+      height * 0.30,
+      width * 0.22,
+      height * 0.22,
     );
-    
+
     final highlightPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(width * 0.22, height * 0.22),
@@ -3990,14 +4717,18 @@ class _GlossyHeartPainter extends CustomPainter {
         ],
       )
       ..style = PaintingStyle.fill;
-      
+
     canvas.drawPath(highlightPath, highlightPaint);
-    
+
     // Add a second tiny glossy dot on the top right lobe
     final dotPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.25)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(width * 0.72, height * 0.32), width * 0.08, dotPaint);
+    canvas.drawCircle(
+      Offset(width * 0.72, height * 0.32),
+      width * 0.08,
+      dotPaint,
+    );
   }
 
   @override
@@ -4016,7 +4747,8 @@ class _HoverReactionsStack extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_HoverReactionsStack> createState() => _HoverReactionsStackState();
+  ConsumerState<_HoverReactionsStack> createState() =>
+      _HoverReactionsStackState();
 }
 
 class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
@@ -4068,7 +4800,8 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
 
     final hasMyReaction = reactions.any((r) {
       final userId = r['userId']?.toString();
-      return r['isMine'] == true || (userId != null && userId == widget.conversation.accountId);
+      return r['isMine'] == true ||
+          (userId != null && userId == widget.conversation.accountId);
     });
 
     final uniqueTypes = reactions
@@ -4082,9 +4815,13 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
     return InkWell(
       onTap: () {
         if (hasMyReaction) {
-          ref.read(liveChatProvider.notifier).reactToMessage(widget.message, 'none');
+          ref
+              .read(liveChatProvider.notifier)
+              .reactToMessage(widget.message, 'none');
         } else if (uniqueTypes.isNotEmpty) {
-          ref.read(liveChatProvider.notifier).reactToMessage(widget.message, uniqueTypes.first);
+          ref
+              .read(liveChatProvider.notifier)
+              .reactToMessage(widget.message, uniqueTypes.first);
         }
       },
       borderRadius: BorderRadius.circular(12),
@@ -4094,8 +4831,8 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppColors.isDarkMode 
-                ? const Color(0xFF253247) 
+            color: AppColors.isDarkMode
+                ? const Color(0xFF253247)
                 : const Color(0xFFE2E8F0),
             width: 1,
           ),
@@ -4120,10 +4857,7 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
               final emoji = _getReactionEmoji(type);
               return Padding(
                 padding: const EdgeInsets.only(right: 4),
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 12)),
               );
             }),
             Text(
@@ -4141,11 +4875,12 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
   }
 
   Widget _buildQuickLikeButton() {
-    final bool hasMyLike = widget.message.reactions.any((r) => 
-        (r['reaction'] ?? '').toString().toLowerCase() == 'like' && 
-        (r['isMine'] == true || r['userId'] == widget.conversation.accountId)
+    final bool hasMyLike = widget.message.reactions.any(
+      (r) =>
+          (r['reaction'] ?? '').toString().toLowerCase() == 'like' &&
+          (r['isMine'] == true || r['userId'] == widget.conversation.accountId),
     );
-    
+
     return MouseRegion(
       onEnter: (_) {
         setState(() {
@@ -4161,10 +4896,9 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
       },
       child: InkWell(
         onTap: () {
-          ref.read(liveChatProvider.notifier).reactToMessage(
-            widget.message, 
-            hasMyLike ? 'none' : 'like'
-          );
+          ref
+              .read(liveChatProvider.notifier)
+              .reactToMessage(widget.message, hasMyLike ? 'none' : 'like');
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -4174,8 +4908,8 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
             color: AppColors.surface,
             shape: BoxShape.circle,
             border: Border.all(
-              color: AppColors.isDarkMode 
-                  ? const Color(0xFF253247) 
+              color: AppColors.isDarkMode
+                  ? const Color(0xFF253247)
                   : const Color(0xFFE2E8F0),
               width: 1,
             ),
@@ -4217,8 +4951,8 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: AppColors.isDarkMode 
-                ? const Color(0xFF253247) 
+            color: AppColors.isDarkMode
+                ? const Color(0xFF253247)
                 : const Color(0xFFE2E8F0),
             width: 1,
           ),
@@ -4292,11 +5026,7 @@ class _HoverReactionsStackState extends ConsumerState<_HoverReactionsStack> {
               ),
             ),
           if (_showEmojiBar)
-            Positioned(
-              bottom: 12,
-              right: 0,
-              child: _buildEmojiReactionBar(),
-            ),
+            Positioned(bottom: 12, right: 0, child: _buildEmojiReactionBar()),
         ],
       ),
     );
@@ -4327,8 +5057,17 @@ class _EmojiHoverItemState extends State<_EmojiHoverItem> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutBack,
-          transform: Matrix4.translationValues(_isHovered ? -2.0 : 0.0, _isHovered ? -4.0 : 0.0, 0.0)
-            * Matrix4.diagonal3Values(_isHovered ? 1.25 : 1.0, _isHovered ? 1.25 : 1.0, 1.0),
+          transform:
+              Matrix4.translationValues(
+                _isHovered ? -2.0 : 0.0,
+                _isHovered ? -4.0 : 0.0,
+                0.0,
+              ) *
+              Matrix4.diagonal3Values(
+                _isHovered ? 1.25 : 1.0,
+                _isHovered ? 1.25 : 1.0,
+                1.0,
+              ),
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           child: widget.child,
         ),
@@ -4336,5 +5075,3 @@ class _EmojiHoverItemState extends State<_EmojiHoverItem> {
     );
   }
 }
-
-

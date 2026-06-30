@@ -53,4 +53,14 @@ const Map<CrmChannel, ChannelCapability> channelCapabilities = {
     supportsTypingIndicator: true,
     supportsSeenControl: true,
   ),
+  CrmChannel.email: ChannelCapability(
+    channel: CrmChannel.email,
+    supportsTextMessage: true,
+    supportsMediaMessage: true,
+    supportsOfficialWebhook: false,
+    supportsFriendAutomation: false,
+    supportsGroupAutomation: false,
+    supportsTypingIndicator: false,
+    supportsSeenControl: false,
+  ),
 };

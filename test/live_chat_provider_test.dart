@@ -66,6 +66,89 @@ void main() {
     expect(unsynced.id, 'local-uuid-2');
   });
 
+  test('Conversation.fromJson keeps multiple labels from tags', () {
+    final conversation = Conversation.fromJson({
+      'id': 'local-uuid-labels',
+      'accountId': 'acc-1',
+      'threadId': 'thread-labels',
+      'displayName': 'Le Vuong',
+      'tags': ['khach nong', 'da chot'],
+    });
+
+    expect(conversation.tag, 'khach nong');
+    expect(conversation.displayLabels, ['khach nong', 'da chot']);
+  });
+
+  test(
+    'Conversation.fromJson maps custom attributes from supported aliases',
+    () {
+      final fromCustomFields = Conversation.fromJson({
+        'id': 'conv-fields',
+        'accountId': 'acc-1',
+        'threadId': 'thread-fields',
+        'displayName': 'Le Vuong',
+        'customFields': {'budget': 100, 'source': null},
+      });
+      final fromAttributes = Conversation.fromJson({
+        'id': 'conv-attrs',
+        'accountId': 'acc-1',
+        'threadId': 'thread-attrs',
+        'displayName': 'Le Vuong',
+        'attributes': {'stage': 'qualified'},
+      });
+
+      expect(fromCustomFields.customAttributes, {
+        'budget': '100',
+        'source': '',
+      });
+      expect(fromAttributes.customAttributes, {'stage': 'qualified'});
+    },
+  );
+
+  test('LiveChatState filters conversations by label and unread state', () {
+    final hot = _conversation(
+      id: 'hot',
+      unreadCount: 2,
+      labels: const ['khach nong'],
+    );
+    final closed = _conversation(id: 'closed', labels: const ['da chot']);
+    final unlabelled = _conversation(id: 'plain');
+    final state = LiveChatState.initial().copyWith(
+      conversations: [hot, closed, unlabelled],
+      selectedLabelFilter: 'khach nong',
+      unreadOnlyFilter: true,
+    );
+
+    expect(state.availableLabels, ['da chot', 'khach nong']);
+    expect(state.filteredConversations, [hot]);
+  });
+
+  test('LiveChatNotifier saves and reapplies conversation filters', () async {
+    final notifier = LiveChatNotifier(_FakeLiveChatRepository());
+    await Future<void>.delayed(Duration.zero);
+
+    notifier.saveCurrentFilter('No filters');
+    expect(notifier.state.savedFilters, isEmpty);
+
+    notifier.setLabelFilter('khach nong');
+    notifier.setUnreadOnlyFilter(true);
+    notifier.saveCurrentFilter(' Hot unread ');
+
+    final filter = notifier.state.savedFilters.single;
+    expect(filter.name, 'Hot unread');
+    expect(filter.label, 'khach nong');
+    expect(filter.unreadOnly, isTrue);
+    expect(notifier.state.selectedSavedFilterId, filter.id);
+
+    notifier.clearConversationFilters();
+    expect(notifier.state.hasActiveConversationFilters, isFalse);
+
+    notifier.applySavedFilter(filter);
+    expect(notifier.state.selectedLabelFilter, 'khach nong');
+    expect(notifier.state.unreadOnlyFilter, isTrue);
+    expect(notifier.state.selectedSavedFilterId, filter.id);
+  });
+
   test('ChatMessage.fromJson treats an empty quote object as no quote', () {
     final noQuote = ChatMessage.fromJson({
       '_id': 'msg-q1',
@@ -387,6 +470,29 @@ void main() {
     expect(notifier.state.selectedConversation?.id, 'conv-1');
     expect(notifier.state.selectedConversation?.messages, isNotEmpty);
   });
+}
+
+Conversation _conversation({
+  required String id,
+  int unreadCount = 0,
+  List<String> labels = const [],
+}) {
+  return Conversation(
+    id: id,
+    accountId: 'acc-1',
+    threadId: 'thread-$id',
+    threadType: 'user',
+    customerName: 'Customer $id',
+    customerAvatar: '',
+    lastMessage: 'Xin chao',
+    lastMessageTime: DateTime(2026),
+    unreadCount: unreadCount,
+    tag: labels.isEmpty ? '' : labels.first,
+    labels: labels,
+    notes: '',
+    chatbotEnabled: true,
+    messages: const [],
+  );
 }
 
 class _FakeLiveChatRepository extends LiveChatRepository {

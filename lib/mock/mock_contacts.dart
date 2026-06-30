@@ -7,6 +7,7 @@ class Contact {
   final String source;
   final String status; // 'Chưa gửi', 'Đã gửi', 'Thất bại', 'Thành công'
   final DateTime createdAt;
+  final Map<String, String> customAttributes;
 
   const Contact({
     required this.id,
@@ -17,6 +18,7 @@ class Contact {
     required this.source,
     required this.status,
     required this.createdAt,
+    this.customAttributes = const {},
   });
 
   Contact copyWith({
@@ -28,6 +30,7 @@ class Contact {
     String? source,
     String? status,
     DateTime? createdAt,
+    Map<String, String>? customAttributes,
   }) {
     return Contact(
       id: id ?? this.id,
@@ -38,6 +41,7 @@ class Contact {
       source: source ?? this.source,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      customAttributes: customAttributes ?? this.customAttributes,
     );
   }
 }
@@ -53,6 +57,11 @@ class MockContacts {
       source: 'Import File',
       status: 'Thành công',
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      customAttributes: const {
+        'budget': '80-120 triệu',
+        'lifecycle': 'Đã tư vấn',
+        'priority': 'Cao',
+      },
     ),
     Contact(
       id: '2',
@@ -63,6 +72,11 @@ class MockContacts {
       source: 'Quét nhóm',
       status: 'Đã gửi',
       createdAt: DateTime.now().subtract(const Duration(days: 2)),
+      customAttributes: const {
+        'budget': 'Dưới 50 triệu',
+        'lifecycle': 'Mới quan tâm',
+        'priority': 'Trung bình',
+      },
     ),
     Contact(
       id: '3',
@@ -73,6 +87,11 @@ class MockContacts {
       source: 'Import File',
       status: 'Thất bại',
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      customAttributes: const {
+        'budget': 'Chưa rõ',
+        'lifecycle': 'Cần gọi lại',
+        'priority': 'Thấp',
+      },
     ),
     Contact(
       id: '4',
