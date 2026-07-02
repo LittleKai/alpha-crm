@@ -62,6 +62,8 @@ docs/
     zalo-message-processing-gap-vs-deplao.md     Zalo Live Chat handling parity audit against Deplao
     sqlite-encryption-at-rest-proposal.md        Proposal for encrypting the message SQLite DBs (SQLCipher vs field-level)
     n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
+    mobile-web-completion-plan.md                High-level plan for Mobile & Web realtime/pairing/offline completion
+    mobile-web-completion-tasklist.md            Detailed gap analysis + task breakdown (BE/AG/FE) for the Mobile & Web completion plan
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
     zca-js-api-catalog.md                        API catalog for the zca-js library
