@@ -1,7 +1,7 @@
 # Tasklist Chi Tiết — Hoàn Thiện Đa Nền Tảng Mobile & Web (Realtime SSE, Pairing QR, Offline Fallback)
 
 > Tài liệu triển khai chi tiết cho kế hoạch `mobile-web-completion-plan.md`.
-> Trạng thái: **CHƯA VIẾT CODE** — đây là kết quả phân tích codebase + phân rã task.
+> Trạng thái: Sprint 1 (BE-1..BE-5), Sprint 2 (AG-1..AG-3, + BE-6 as a dependency), Sprint 3 (FE-1..FE-6) đã triển khai. Còn lại Sprint 4 (BE-7, AG-4, QA-1, QA-2, DOC-1).
 > Ngày phân tích: 2026-07-02.
 
 ---

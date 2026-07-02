@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_dialog.dart';
+import '../../../messaging/live_chat/providers/live_chat_provider.dart';
 import '../../providers/crm_device_provider.dart';
 
 class DevicePairingScreen extends ConsumerStatefulWidget {
@@ -37,10 +42,25 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
     if (success && mounted) {
       _codeController.clear();
+      final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+      if (isClient) {
+        // Newly paired mobile/web client: refresh the Zalo account list so
+        // Live Chat has something to show immediately (FE-6).
+        unawaited(ref.read(liveChatProvider.notifier).loadAccounts());
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Ghép đôi thiết bị thành công!'),
           backgroundColor: AppColors.successText,
+          action: isClient
+              ? SnackBarAction(
+                  label: 'Mở Live Chat',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    if (mounted) context.go(AppRoutes.messagingLiveChat);
+                  },
+                )
+              : null,
         ),
       );
     }

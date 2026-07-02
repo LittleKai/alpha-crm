@@ -1,20 +1,42 @@
 import '../../../../../shared/api/crm_cloud_api.dart';
+import '../../../../../shared/api/crm_sse_client.dart';
 import 'live_chat_cache.dart';
+import 'live_chat_cloud_event_mapper.dart';
 import 'live_chat_local_bridge_api.dart';
 import 'live_chat_event.dart';
+import 'live_chat_transport.dart';
+
+/// Stub response returned by desktop-bridge-only methods when running in
+/// [LiveChatTransportMode.cloudRemote] (no local bridge to call). Callers
+/// treat `success: false` as "not available on this platform" and either
+/// no-op or hide the affected UI.
+const Map<String, dynamic> _kNotSupportedRemote = {
+  'success': false,
+  'code': 'NOT_SUPPORTED_REMOTE',
+  'message': 'Thao tác này chỉ khả dụng trên máy tính Desktop có bridge cục bộ.',
+};
 
 class LiveChatRepository {
   final bool localFirstEnabled;
   final LiveChatCache cache;
   final LiveChatLocalBridgeApi localApi;
+  final LiveChatTransportMode mode;
+  final CrmSseClient? sseClient;
 
   LiveChatRepository({
     required this.localFirstEnabled,
     required this.cache,
     required this.localApi,
+    this.mode = LiveChatTransportMode.localBridge,
+    this.sseClient,
   });
 
-  bool get _preferLocalZaloActions => true;
+  bool get _preferLocalZaloActions => mode == LiveChatTransportMode.localBridge;
+
+  /// Whether Zalo actions route to the cloud backend directly (web/mobile —
+  /// no bridge process). Used by the provider to branch send-flow
+  /// post-processing (optimistic status tracking vs. bridge reload).
+  bool get isCloudRemote => mode == LiveChatTransportMode.cloudRemote;
 
   Future<Map<String, dynamic>> getAccounts() {
     return CrmCloudApi.get('/crm/groups/accounts');
@@ -342,15 +364,22 @@ class LiveChatRepository {
   }
 
   Stream<LiveChatEvent> watchEvents({String? accountId, String? threadId}) {
+    if (mode == LiveChatTransportMode.cloudRemote) {
+      final client = sseClient;
+      if (client == null) return const Stream.empty();
+      return mapCloudSseEvents(client.events, accountId: accountId);
+    }
     if (!localFirstEnabled) return const Stream.empty();
     return localApi.watchEvents(accountId: accountId, threadId: threadId);
   }
 
   Future<Map<String, dynamic>> retryMessage(String messageId) {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.retryMessage(messageId);
   }
 
   Future<Map<String, dynamic>> getAccountChatSettings() {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.getAccountChatSettings();
   }
 
@@ -358,6 +387,7 @@ class LiveChatRepository {
     String accountId,
     bool enabled,
   ) {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.setAccountAiAutoReply(
       accountId: accountId,
       enabled: enabled,
@@ -365,10 +395,12 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> getAppSettings() {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.getAppSettings();
   }
 
   Future<Map<String, dynamic>> setOperatorPauseCooldownMinutes(int minutes) {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.setOperatorPauseCooldownMinutes(minutes);
   }
 
@@ -386,6 +418,7 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> sendTyping(ConversationTarget target) {
+    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
     return localApi.sendTyping(
       accountId: target.accountId,
       threadId: target.threadId,
@@ -409,6 +442,9 @@ class LiveChatRepository {
     String? accountId,
     String? threadId,
   }) {
+    if (!_preferLocalZaloActions) {
+      return Future.value({..._kNotSupportedRemote, 'data': const []});
+    }
     return localApi.searchMessages(
       query,
       accountId: accountId,
@@ -417,6 +453,9 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> messagesAround(String messageId) {
+    if (!_preferLocalZaloActions) {
+      return Future.value({..._kNotSupportedRemote, 'data': const []});
+    }
     return localApi.messagesAround(messageId);
   }
 

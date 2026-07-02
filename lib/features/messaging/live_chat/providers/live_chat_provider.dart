@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/api/crm_cloud_api.dart';
+import '../../../../shared/api/crm_sse_provider.dart';
 import '../../../../shared/models/crm_customer.dart';
 import '../../../../shared/utils/image_helper.dart';
 import '../../../../shared/utils/desktop_notifier.dart';
@@ -15,11 +16,17 @@ import '../data/live_chat_repository.dart';
 import '../data/live_chat_cache.dart';
 import '../data/live_chat_local_bridge_api.dart';
 import '../data/live_chat_event.dart';
+import '../data/live_chat_transport.dart';
 
 const Object _unset = Object();
 
+final liveChatTransportModeProvider = Provider<LiveChatTransportMode>((ref) {
+  return resolveLiveChatTransportMode();
+});
+
 final liveChatRepositoryProvider = Provider<LiveChatRepository>((ref) {
   final settings = ref.watch(settingsProvider).settings;
+  final mode = ref.watch(liveChatTransportModeProvider);
   // Opportunistic cache eviction
   LocalDbMaintenance.runCleanup();
 
@@ -27,6 +34,10 @@ final liveChatRepositoryProvider = Provider<LiveChatRepository>((ref) {
     localFirstEnabled: settings.localFirstLiveChat,
     cache: LiveChatCache(),
     localApi: LiveChatLocalBridgeApi(baseUrl: settings.localBridgeBaseUrl),
+    mode: mode,
+    sseClient: mode == LiveChatTransportMode.cloudRemote
+        ? ref.watch(crmSseClientProvider)
+        : null,
   );
 });
 
@@ -717,6 +728,10 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   // single message never re-notifies on repeated silent refreshes.
   final Map<String, int> _lastNotifiedUnread = <String, int>{};
   DateTime _lastTypingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+  // Cloud-remote mode only: cloudMessageId -> 15s watchdog started right
+  // after an optimistic send resolves, cleared by a matching `message.status`
+  // SSE event (see `_trackCloudSendStatus`/`_applyCloudMessageStatusEvent`).
+  final Map<String, Timer> _pendingCloudSendTimers = <String, Timer>{};
 
   LiveChatNotifier(this._repository, {bool Function()? notificationsEnabled})
     : _notificationsEnabled = notificationsEnabled ?? (() => false),
@@ -1431,7 +1446,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         quote: optimistic.quote,
       );
       if (response['success'] == true) {
-        await loadMessages(conversation.id);
+        if (_repository.isCloudRemote) {
+          // No bridge round-trip to reload from — keep the optimistic bubble
+          // and track its cloud id so `message.status` SSE events (or the
+          // 15s timeout) can resolve it in place instead of reloading (a
+          // reload would duplicate the bubble: the cloud message has no
+          // clientMessageId, so it wouldn't merge-key against the optimistic
+          // one — see `_messageKey`).
+          final cloudMessageId = _extractCloudMessageId(response);
+          if (cloudMessageId.isNotEmpty) {
+            _trackCloudSendStatus(clientMessageId, cloudMessageId);
+          }
+        } else {
+          await loadMessages(conversation.id);
+        }
         _markOperatorTakeover(conversation);
         state = state.copyWith(
           isSending: false,
@@ -1449,6 +1477,88 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       );
     } catch (error) {
       _setOptimisticFailed(clientMessageId, error.toString());
+    }
+  }
+
+  String _extractCloudMessageId(Map<String, dynamic> response) {
+    final data = response['data'];
+    if (data is Map) {
+      final message = data['message'];
+      if (message is Map) {
+        return (message['_id'] ?? message['id'] ?? '').toString();
+      }
+    }
+    return '';
+  }
+
+  /// Renumbers the optimistic bubble to the cloud message id and starts a
+  /// 15s watchdog; `_applyCloudMessageStatusEvent`/`_timeoutCloudMessage`
+  /// resolve it to sent/failed. See FE-5 in the mobile-web tasklist.
+  void _trackCloudSendStatus(String clientMessageId, String cloudMessageId) {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    final updatedMessages = conversation.messages
+        .map(
+          (message) => message.clientMessageId == clientMessageId
+              ? message.copyWith(id: cloudMessageId)
+              : message,
+        )
+        .toList();
+    _replaceSelected(conversation.copyWith(messages: updatedMessages));
+
+    _pendingCloudSendTimers.remove(cloudMessageId)?.cancel();
+    _pendingCloudSendTimers[cloudMessageId] = Timer(
+      const Duration(seconds: 15),
+      () {
+        _pendingCloudSendTimers.remove(cloudMessageId);
+        _timeoutCloudMessage(cloudMessageId);
+      },
+    );
+  }
+
+  void _timeoutCloudMessage(String cloudMessageId) {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    var matched = false;
+    final updatedMessages = conversation.messages.map((message) {
+      if (message.id == cloudMessageId &&
+          (message.status == 'sending' || message.status == 'queued')) {
+        matched = true;
+        return message.copyWith(
+          status: 'failed',
+          errorText: 'Không có phản hồi từ máy chủ Desktop.',
+        );
+      }
+      return message;
+    }).toList();
+    if (matched) {
+      _replaceSelected(conversation.copyWith(messages: updatedMessages));
+    }
+  }
+
+  /// Applies a `message.status` SSE event (queued/sent/failed) to the
+  /// matching bubble, cancelling its 15s timeout watchdog.
+  void _applyCloudMessageStatusEvent(LiveChatEvent event) {
+    final messageId = (event.data['messageId'] ?? '').toString();
+    final status = (event.data['status'] ?? '').toString();
+    if (messageId.isEmpty || status.isEmpty) return;
+    _pendingCloudSendTimers.remove(messageId)?.cancel();
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    var matched = false;
+    final errorMessage = (event.data['errorMessage'] ?? '').toString();
+    final updatedMessages = conversation.messages.map((message) {
+      if (message.id == messageId) {
+        matched = true;
+        return message.copyWith(
+          status: status,
+          errorText: status == 'failed' ? errorMessage : '',
+        );
+      }
+      return message;
+    }).toList();
+    if (matched) {
+      _replaceSelected(conversation.copyWith(messages: updatedMessages));
     }
   }
 
@@ -1557,6 +1667,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   Future<void> retryMessage(ChatMessage message) async {
     final conversation = state.selectedConversation;
     if (conversation == null || message.id.isEmpty) return;
+    if (_repository.isCloudRemote) {
+      // Cloud has no retry-by-id endpoint (see FE-5 in the mobile-web
+      // tasklist) — drop the failed bubble and resend the same content as a
+      // brand new message.
+      _replaceSelected(
+        conversation.copyWith(
+          messages: conversation.messages
+              .where((item) => item.id != message.id)
+              .toList(),
+        ),
+      );
+      await sendMessage(message.message);
+      return;
+    }
     _replaceSelected(
       conversation.copyWith(
         messages: conversation.messages
@@ -2082,6 +2206,10 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     _eventSubscription?.cancel();
     _eventRefreshDebounce?.cancel();
     _draftDebounce?.cancel();
+    for (final timer in _pendingCloudSendTimers.values) {
+      timer.cancel();
+    }
+    _pendingCloudSendTimers.clear();
     super.dispose();
   }
 
@@ -2144,6 +2272,11 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     }
     if (event.type == 'conversation.chatbot_state') {
       _applyChatbotStateEvent(event);
+      state = state.copyWith(realtimeConnected: true);
+      return;
+    }
+    if (event.type == 'message.status') {
+      _applyCloudMessageStatusEvent(event);
       state = state.copyWith(realtimeConnected: true);
       return;
     }

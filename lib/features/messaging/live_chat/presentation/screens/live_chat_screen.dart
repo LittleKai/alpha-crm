@@ -28,6 +28,8 @@ import '../../../../content/providers/templates_provider.dart';
 import '../../../../settings/providers/settings_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../data/live_chat_download_service.dart';
+import '../../data/live_chat_transport.dart';
+import '../../providers/agent_status_provider.dart';
 import '../../providers/live_chat_provider.dart';
 import '../../utils/live_chat_attachment_view.dart';
 import '../../utils/live_chat_local_image_stub.dart'
@@ -1235,9 +1237,32 @@ class _ConversationPanel extends ConsumerWidget {
       conversation,
       accountLabel,
     );
-    final bool isAccountConnected =
-        matchingAccount.connected &&
-        matchingAccount.status != 'disconnected_expired';
+    final transportMode = ref.watch(liveChatTransportModeProvider);
+    // On web/mobile there is no local bridge, so `zaloIntegrationProvider`
+    // (which queries the local bridge process) never has real account state —
+    // the composer would be permanently disabled for the wrong reason. Gate
+    // on the Desktop Agent's reported health instead (FE-4).
+    final bool isAccountConnected;
+    String? remoteBlockedReason;
+    if (transportMode == LiveChatTransportMode.cloudRemote) {
+      final agentStatus = ref.watch(agentStatusProvider);
+      final agentOffline = agentStatus.hasSnapshot && !agentStatus.anyDeviceOnline;
+      final zaloIssue = agentStatus.anyOnlineDeviceHasZaloIssue;
+      isAccountConnected = !agentOffline && !zaloIssue;
+      if (zaloIssue) {
+        remoteBlockedReason =
+            'Phiên đăng nhập Zalo trên máy tính chủ đã hết hạn. Vui lòng quét lại QR trên Desktop.';
+      } else if (agentOffline) {
+        remoteBlockedReason =
+            'Không kết nối được với máy tính chủ (Desktop Agent). Tin nhắn có thể bị trễ.';
+      } else if (!agentStatus.sseConnected) {
+        remoteBlockedReason = 'Đang kết nối lại...';
+      }
+    } else {
+      isAccountConnected =
+          matchingAccount.connected &&
+          matchingAccount.status != 'disconnected_expired';
+    }
     // When the account's AI auto-reply is turned off in the settings dialog, the
     // per-conversation Bot toggle is forced off and cannot be enabled.
     final bool accountAiOn = state.isAccountAiAutoReplyEnabled(
@@ -1507,9 +1532,47 @@ class _ConversationPanel extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
                     child: Text(
-                      'Tài khoản Zalo đã mất kết nối. Không thể nhắn tin hay gửi file.',
+                      remoteBlockedReason ??
+                          'Tài khoản Zalo đã mất kết nối. Không thể nhắn tin hay gửi file.',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.warningText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (transportMode == LiveChatTransportMode.cloudRemote &&
+              remoteBlockedReason != null)
+            // Soft state: SSE reconnecting but the agent may still be
+            // online — composer stays open, this is informational only.
+            Container(
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.s,
+              ),
+              padding: const EdgeInsets.all(AppSpacing.s),
+              decoration: BoxDecoration(
+                color: AppColors.infoSoft,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.info,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text(
+                      remoteBlockedReason,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.info,
                       ),
                     ),
                   ),
@@ -1563,7 +1626,8 @@ class _ConversationPanel extends ConsumerWidget {
                       enabled: !state.isBridgeOffline && isAccountConnected,
                       decoration: InputDecoration(
                         hintText: !isAccountConnected
-                            ? 'Không thể gửi tin do mất kết nối'
+                            ? (remoteBlockedReason ??
+                                  'Không thể gửi tin do mất kết nối')
                             : state.isBridgeOffline
                             ? 'Không thể gửi tin khi Bridge offline'
                             : 'Nhập tin nhắn hoặc /1, /hello...',
