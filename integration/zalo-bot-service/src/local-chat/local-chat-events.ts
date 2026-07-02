@@ -59,6 +59,10 @@ export class LocalChatEventBus {
     return () => this.listeners.delete(listener);
   }
 
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
+
   replayAfter(
     eventId: string,
     filter: LocalChatEventFilter = {},

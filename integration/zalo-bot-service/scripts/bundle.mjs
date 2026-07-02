@@ -4,6 +4,7 @@
 // package alongside the bundle.
 import { build } from 'esbuild';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,6 +12,11 @@ const serviceRoot = path.resolve(__dirname, '..');
 
 // Native addon — cannot be embedded in a JS bundle; resolved from node_modules at runtime.
 const external = ['better-sqlite3'];
+
+// The packaged release ships only dist/server.cjs (no package.json alongside
+// it), so the agent's appVersion/agentVersion heartbeat fields can't read it
+// at runtime. Inline it as a build-time constant instead.
+const pkg = JSON.parse(readFileSync(path.join(serviceRoot, 'package.json'), 'utf8'));
 
 await build({
   entryPoints: [path.join(serviceRoot, 'dist', 'server.js')],
@@ -32,6 +38,7 @@ await build({
   },
   define: {
     'import.meta.url': 'import_meta_url',
+    'process.env.CRM_AGENT_VERSION': JSON.stringify(pkg.version),
   },
   logLevel: 'info',
   legalComments: 'none',

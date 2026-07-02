@@ -4,6 +4,8 @@ import {
   CloudApiError,
   isDeviceRevokedError,
   reportInboundMessageMetadata,
+  sendHeartbeat,
+  fetchNextCommand,
 } from './cloud-api.js';
 
 test('isDeviceRevokedError accepts only explicit cloud revocation', () => {
@@ -63,4 +65,64 @@ test('reportInboundMessageMetadata sends the local-first metadata contract', asy
     localFirst: true,
   });
   assert.equal(Object.hasOwn(requestBody ?? {}, 'content'), false);
+});
+
+test('sendHeartbeat sends the enriched AG-1 payload shape', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, unknown> | null = null;
+  let headers: Record<string, unknown> | null = null;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    headers = init?.headers as Record<string, unknown>;
+    return new Response(JSON.stringify({ success: true, data: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await sendHeartbeat('device-1', 'secret-1', {
+      status: 'online',
+      appVersion: '1.2.3',
+      agentVersion: '1.2.3',
+      zaloAccounts: [{ accountId: 'acct-1', displayName: 'Sales', status: 'online' }],
+      queueDepth: 2,
+      clientConnections: 1,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requestBody, {
+    status: 'online',
+    appVersion: '1.2.3',
+    agentVersion: '1.2.3',
+    zaloAccounts: [{ accountId: 'acct-1', displayName: 'Sales', status: 'online' }],
+    queueDepth: 2,
+    clientConnections: 1,
+  });
+  assert.equal((headers as any)?.['x-agent-device-id'], 'device-1');
+  assert.equal((headers as any)?.['x-agent-secret'], 'secret-1');
+});
+
+test('fetchNextCommand sends waitMs when long-polling and omits it otherwise', async () => {
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    requestBodies.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({ success: true, data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await fetchNextCommand('device-1', 'secret-1', 25000);
+    await fetchNextCommand('device-1', 'secret-1');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requestBodies[0], { waitMs: 25000 });
+  assert.deepEqual(requestBodies[1], {});
 });

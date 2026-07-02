@@ -11,6 +11,7 @@ import type {
   ChatbotAuditPayload,
   ChatbotConversationState,
 } from './chatbot-types.js';
+import { reportOutboundMessageEvent } from '../agent/outbound-reporter.js';
 
 export interface ChatbotDispatchInput {
   accountId: string;
@@ -251,6 +252,17 @@ export class ChatbotDispatcher {
           status: 'sent',
         },
       });
+      reportOutboundMessageEvent({
+        accountId: input.accountId,
+        threadId: input.threadId,
+        threadType: input.threadType,
+        senderId: input.accountId,
+        content: decision.text,
+        messageType: 'text',
+        providerMessageId,
+        clientMessageId: finalClientMessageId,
+        timestamp: new Date().toISOString(),
+      });
       lastLocalMessageId = localMessageId;
       lastProviderMessageId = providerMessageId;
     }
@@ -409,6 +421,18 @@ export class ChatbotDispatcher {
           clientMessageId: finalClientMessageId,
           status: 'sent',
         },
+      });
+      reportOutboundMessageEvent({
+        accountId: input.accountId,
+        threadId: input.threadId,
+        threadType: input.threadType,
+        senderId: input.accountId,
+        content: attachment.name || '',
+        messageType,
+        attachments: [{ kind: attachment.type, name: attachment.name }],
+        providerMessageId,
+        clientMessageId: finalClientMessageId,
+        timestamp: new Date().toISOString(),
       });
       return { localMessageId, providerMessageId };
     } catch (error) {

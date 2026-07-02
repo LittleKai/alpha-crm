@@ -16,6 +16,7 @@ import {
 } from '../zalo.js';
 import type { ZaloSendMessageRequest } from '../channels/types.js';
 import { localChatEvents, type LocalChatEvent } from './local-chat-events.js';
+import { reportOutboundMessageEvent } from '../agent/outbound-reporter.js';
 import type { LocalMessage } from './local-chat-types.js';
 import {
   getChatbotConfigSync,
@@ -1436,6 +1437,18 @@ async function handleLocalSend(
           status: 'sent',
         },
       });
+      reportOutboundMessageEvent({
+        accountId,
+        threadId: recipientId,
+        threadType,
+        senderId: accountId,
+        content: content.trim(),
+        messageType: payload.messageType || 'text',
+        attachments: payload.attachments,
+        providerMessageId: result.messageId,
+        clientMessageId: result.clientMessageId || clientMessageId,
+        timestamp: new Date().toISOString(),
+      });
       applyOperatorTakeover(accountId, recipientId, payload.origin);
       json(res, 200, {
         success: true,
@@ -1608,6 +1621,18 @@ async function handleLocalSendAttachment(
           providerMessageId: result.messageId,
           status: 'sent',
         },
+      });
+      reportOutboundMessageEvent({
+        accountId,
+        threadId: recipientId,
+        threadType,
+        senderId: accountId,
+        content: content.trim(),
+        messageType,
+        attachments: attachmentInputs,
+        providerMessageId: result.messageId,
+        clientMessageId: result.clientMessageId || clientMessageId,
+        timestamp: new Date().toISOString(),
       });
       applyOperatorTakeover(accountId, recipientId, payload.origin);
       json(res, 200, {

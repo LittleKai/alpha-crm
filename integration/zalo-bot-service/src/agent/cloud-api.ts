@@ -42,10 +42,14 @@ export function isDeviceRevokedError(error: unknown): boolean {
 export async function callCloudApi(
   path: string,
   options: RequestInit,
+  timeoutMs?: number,
 ): Promise<any> {
   const url = `${config.crmCloudApiUrl}${path}`;
   try {
-    const response = await fetch(url, options);
+    const response = await fetch(url, {
+      ...options,
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : options.signal,
+    });
     const body: any = await response.json().catch(() => null);
     if (!response.ok || !body?.success) {
       throw new CloudApiError(
@@ -133,6 +137,12 @@ export async function disableDevice(userJwt: string, deviceId: string): Promise<
   });
 }
 
+export interface HeartbeatZaloAccount {
+  accountId: string;
+  displayName: string;
+  status: 'online' | 'expired' | 'logged_out';
+}
+
 export async function sendHeartbeat(
   deviceId: string,
   agentSecret: string,
@@ -141,6 +151,9 @@ export async function sendHeartbeat(
     appVersion?: string;
     agentVersion?: string;
     lastError?: string;
+    zaloAccounts?: HeartbeatZaloAccount[];
+    queueDepth?: number;
+    clientConnections?: number;
   },
 ): Promise<any> {
   return callCloudApi('/crm/agent/heartbeat', {
@@ -154,18 +167,27 @@ export async function sendHeartbeat(
   });
 }
 
+// waitMs > 0 makes this a long-poll: the backend holds the request open (up
+// to ~25s) until a command is queued for this device. The fetch timeout is
+// set a bit above waitMs so a slow-but-honoring backend isn't aborted early.
 export async function fetchNextCommand(
   deviceId: string,
   agentSecret: string,
+  waitMs = 0,
 ): Promise<CommandResponse | null> {
-  return callCloudApi('/crm/agent/commands/next', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-agent-device-id': deviceId,
-      'x-agent-secret': agentSecret,
+  return callCloudApi(
+    '/crm/agent/commands/next',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-agent-device-id': deviceId,
+        'x-agent-secret': agentSecret,
+      },
+      body: JSON.stringify(waitMs > 0 ? { waitMs } : {}),
     },
-  });
+    waitMs > 0 ? 30000 : undefined,
+  );
 }
 
 export async function reportCommandResult(
@@ -251,6 +273,49 @@ export async function reportInboundMessageMetadata(
       lastMessagePreview: preview,
       lastMessageAt: event.timestamp || new Date().toISOString(),
       unreadCountDelta: 1,
+      messageType: event.messageType || 'text',
+      bridgeDeviceId: deviceId,
+      providerMessageId: event.providerMessageId || '',
+      localFirst: true,
+    }),
+  });
+}
+
+// AG-3 / BE-6: outbound messages (operator send or chatbot auto-reply) hit
+// the SAME cloud endpoint as inbound — the backend tells inbound and
+// outbound apart by comparing event.senderId to the Zalo account's own ID
+// (see upsertConversationFromInbound in crm.js), so this is a plain alias
+// for 1:1 threads where full content is reported.
+export const reportOutboundMessage = reportInboundMessage;
+
+// Managed-group outbound: same privacy stance as inbound group messages (no
+// content leaves the device), but unreadCountDelta is 0 — the operator's own
+// message should never bump the conversation's unread counter.
+export async function reportOutboundMessageMetadata(
+  deviceId: string,
+  agentSecret: string,
+  event: any,
+): Promise<any> {
+  const preview = typeof event.content === 'string'
+    ? event.content.slice(0, 100)
+    : '';
+  return callCloudApi('/crm/agent/events/message', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify({
+      accountId: event.accountId,
+      threadId: event.threadId,
+      threadType: event.threadType,
+      senderId: event.senderId || '',
+      displayName: event.displayName || '',
+      avatarUrl: event.avatarUrl || '',
+      lastMessagePreview: preview,
+      lastMessageAt: event.timestamp || new Date().toISOString(),
+      unreadCountDelta: 0,
       messageType: event.messageType || 'text',
       bridgeDeviceId: deviceId,
       providerMessageId: event.providerMessageId || '',

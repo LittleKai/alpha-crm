@@ -31,6 +31,12 @@ export function resetCampaignCancellation(): void {
   cancelAllCampaigns = false;
 }
 
+// Number of campaigns currently running a bulk send on this agent — the
+// closest thing to an internal outbound "queue depth" this bridge has.
+export function getRunningCampaignCount(): number {
+  return runningCampaigns.size;
+}
+
 export interface Command {
   _id: string;
   type: string;

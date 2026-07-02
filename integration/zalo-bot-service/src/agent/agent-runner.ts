@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { AgentCredentials } from './agent-identity.js';
 import {
   fetchManagedGroups,
@@ -7,9 +8,10 @@ import {
   reportInboundMessage,
   reportInboundMessageMetadata,
   sendHeartbeat,
+  type HeartbeatZaloAccount,
 } from './cloud-api.js';
-import { executeCommand } from './command-executor.js';
-import { getZaloStatus } from '../zalo.js';
+import { executeCommand, getRunningCampaignCount } from './command-executor.js';
+import { getZaloStatus, getAccounts } from '../zalo.js';
 import { config } from '../config.js';
 import {
   setInboundMessageBatchHandler,
@@ -21,6 +23,23 @@ import { getLocalChatStore } from '../local-chat/index.js';
 import { localChatEvents } from '../local-chat/local-chat-events.js';
 import { handleChatbotInbound, pauseChatbotForOperatorReply } from '../chatbot/index.js';
 
+// The packaged release ships only dist/server.cjs (no package.json next to
+// it), so this can't just `require('../../package.json')` at runtime in that
+// context. scripts/bundle.mjs inlines CRM_AGENT_VERSION via esbuild `define`
+// for the bundled build; unbundled dev/tsc runs fall back to reading the
+// real package.json off disk, which is present in a full repo checkout.
+function resolveAppVersion(): string {
+  const injected = process.env.CRM_AGENT_VERSION;
+  if (injected) return injected;
+  try {
+    const require = createRequire(import.meta.url);
+    return (require('../../package.json') as { version: string }).version;
+  } catch {
+    return '0.0.0';
+  }
+}
+const PACKAGE_VERSION = resolveAppVersion();
+
 type RevocationHandler = (reason: string) => void | Promise<void>;
 
 let running = false;
@@ -30,6 +49,14 @@ let revocationHandler: RevocationHandler | null = null;
 let pollErrorCount = 0;
 const BASE_POLL_DELAY_MS = 5000;
 const MAX_POLL_DELAY_MS = 60000;
+// How long the backend is asked to hold /agent/commands/next open when
+// nothing is queued yet (long-poll), and how we detect an older backend
+// that doesn't support waitMs and replies immediately instead of holding.
+const LONG_POLL_WAIT_MS = 25000;
+const LONG_POLL_FALLBACK_THRESHOLD_MS = 1000;
+const LONG_POLL_FALLBACK_DELAY_MS = 3000;
+// Already finer than the 15s target (BE-4 marks a device offline after 60s
+// without a heartbeat), so no change needed here.
 const HEARTBEAT_INTERVAL_MS = 10000;
 let currentPollDelayMs = BASE_POLL_DELAY_MS;
 let managedGroupCache: { expiresAt: number; keys: Set<string> } = {
@@ -396,6 +423,24 @@ async function handleInboundMessageEvent(
   }
 }
 
+function mapZaloAccountsForHeartbeat(): HeartbeatZaloAccount[] {
+  try {
+    return getAccounts()
+      .map((account: any) => ({
+        accountId: String(account?.id ?? ''),
+        displayName: String(account?.label ?? ''),
+        status: (account?.status === 'disconnected_expired' ? 'expired' : 'online') as HeartbeatZaloAccount['status'],
+      }))
+      .filter((account) => account.accountId);
+  } catch (error) {
+    console.warn(
+      '[agent-runner] Failed to read Zalo accounts for heartbeat:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return [];
+  }
+}
+
 async function runHeartbeat(credentials: AgentCredentials): Promise<void> {
   if (!running) {
     return;
@@ -404,8 +449,11 @@ async function runHeartbeat(credentials: AgentCredentials): Promise<void> {
     const zaloStatus = getZaloStatus();
     await sendHeartbeat(credentials.deviceId, credentials.agentSecret, {
       status: zaloStatus.connected ? 'online' : 'offline',
-      appVersion: '0.2.0',
-      agentVersion: '0.2.0',
+      appVersion: PACKAGE_VERSION,
+      agentVersion: PACKAGE_VERSION,
+      zaloAccounts: mapZaloAccountsForHeartbeat(),
+      queueDepth: getRunningCampaignCount(),
+      clientConnections: localChatEvents.listenerCount,
     });
   } catch (error: any) {
     if (await handleCloudFailure(error)) {
@@ -432,13 +480,23 @@ async function runPollStep(credentials: AgentCredentials): Promise<void> {
     return;
   }
   try {
+    const startedAt = Date.now();
     const command = await fetchNextCommand(
       credentials.deviceId,
       credentials.agentSecret,
+      LONG_POLL_WAIT_MS,
     );
+    const elapsedMs = Date.now() - startedAt;
     pollErrorCount = 0;
-    currentPollDelayMs = BASE_POLL_DELAY_MS;
     if (!command || !running) {
+      // No command was queued. A long-poll that actually held the request
+      // open returns close to LONG_POLL_WAIT_MS later, so poll again right
+      // away. A response that came back almost instantly means the backend
+      // doesn't honor waitMs (older version) — fall back to a light poll
+      // rhythm instead of hammering it.
+      currentPollDelayMs = elapsedMs < LONG_POLL_FALLBACK_THRESHOLD_MS
+        ? LONG_POLL_FALLBACK_DELAY_MS
+        : 0;
       return;
     }
 
