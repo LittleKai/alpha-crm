@@ -73,6 +73,16 @@ class WorkflowAutomationApi {
     return _post('/api/integrations/n8n/templates/install', request.toJson());
   }
 
+  Future<Map<String, dynamic>> fetchAutomationRules() async {
+    return _get('/local/automation/rules');
+  }
+
+  Future<Map<String, dynamic>> saveAutomationRules(
+    List<Map<String, dynamic>> rules,
+  ) async {
+    return _put('/local/automation/rules', {'rules': rules});
+  }
+
   Future<Map<String, dynamic>> testProxy(String proxy) async {
     return _post('/api/proxy/test', {'proxy': proxy});
   }
@@ -95,6 +105,24 @@ class WorkflowAutomationApi {
     try {
       final response = await _client
           .post(
+            Uri.parse('$baseUrl$path'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+      return _processResponse(response);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> _put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final response = await _client
+          .put(
             Uri.parse('$baseUrl$path'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/settings/providers/settings_provider.dart';
@@ -209,6 +211,42 @@ class AutomationRule {
       createdAt: createdAt,
     );
   }
+
+  factory AutomationRule.fromJson(Map<dynamic, dynamic> json) {
+    final rawActions = json['actions'];
+    return AutomationRule(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      event: json['event']?.toString() ?? 'Tin nhắn mới',
+      conditionField: json['conditionField']?.toString() ?? 'Nội dung tin nhắn',
+      conditionOperator: json['conditionOperator']?.toString() ?? 'chứa',
+      conditionValue: json['conditionValue']?.toString() ?? '',
+      actions: rawActions is List
+          ? rawActions
+                .map((item) => item.toString().trim())
+                .where((item) => item.isNotEmpty)
+                .toList()
+          : const [],
+      enabled: json['enabled'] != false,
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'event': event,
+      'conditionField': conditionField,
+      'conditionOperator': conditionOperator,
+      'conditionValue': conditionValue,
+      'actions': actions,
+      'enabled': enabled,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+    };
+  }
 }
 
 final _defaultAutomationRules = [
@@ -313,7 +351,9 @@ class WorkflowAutomationNotifier
   WorkflowAutomationApi? _api;
 
   WorkflowAutomationNotifier(this._ref)
-    : super(WorkflowAutomationState(automationRules: _defaultAutomationRules));
+    : super(WorkflowAutomationState(automationRules: _defaultAutomationRules)) {
+    unawaited(loadAutomationRules());
+  }
 
   WorkflowAutomationApi _getApi() {
     final baseUrl = _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
@@ -356,6 +396,33 @@ class WorkflowAutomationNotifier
             result['error']?.toString() ?? 'Không tải được cấu hình n8n.',
       );
     }
+  }
+
+  Future<void> loadAutomationRules() async {
+    final result = await _getApi().fetchAutomationRules();
+    if (!mounted) return;
+    if (result['success'] != true || result['data'] is! List) {
+      await _syncAutomationRules();
+      return;
+    }
+    final rules = (result['data'] as List)
+        .whereType<Map>()
+        .map(AutomationRule.fromJson)
+        .where((rule) => rule.id.isNotEmpty && rule.name.isNotEmpty)
+        .toList();
+    if (rules.isEmpty) {
+      await _syncAutomationRules();
+      return;
+    }
+    state = state.copyWith(automationRules: rules);
+  }
+
+  Future<void> _syncAutomationRules() async {
+    if (!mounted) return;
+    final api = _getApi();
+    await api.saveAutomationRules(
+      state.automationRules.map((rule) => rule.toJson()).toList(),
+    );
   }
 
   void setSearchQuery(String value) {
@@ -409,6 +476,7 @@ class WorkflowAutomationNotifier
       statusText: 'Đã thêm rule automation.',
       errorText: null,
     );
+    unawaited(_syncAutomationRules());
   }
 
   void toggleAutomationRule(String ruleId, bool enabled) {
@@ -422,6 +490,7 @@ class WorkflowAutomationNotifier
           : 'Đã tắt rule automation.',
       errorText: null,
     );
+    unawaited(_syncAutomationRules());
   }
 
   void deleteAutomationRule(String ruleId) {
@@ -432,6 +501,7 @@ class WorkflowAutomationNotifier
       statusText: 'Đã xóa rule automation.',
       errorText: null,
     );
+    unawaited(_syncAutomationRules());
   }
 
   Future<void> saveN8nSettings(N8nSettingsState settings) async {

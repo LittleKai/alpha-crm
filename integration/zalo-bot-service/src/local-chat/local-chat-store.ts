@@ -9,6 +9,7 @@ import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
 import type {
   LocalConversation,
+  LocalConversationTimelineItem,
   LocalMessage,
   LocalAttachment,
   InboundMessageInput,
@@ -19,6 +20,27 @@ import type {
   MessageReaction,
   MessageReceipt,
 } from './local-chat-types.js';
+
+type ConversationMetadataInput = {
+  tags?: unknown;
+  notes?: unknown;
+  customAttributes?: unknown;
+  archived?: unknown;
+  assignedTo?: unknown;
+  followUpAt?: unknown;
+};
+
+type LocalAutomationRule = {
+  id: string;
+  name: string;
+  event: string;
+  conditionField: string;
+  conditionOperator: string;
+  conditionValue: string;
+  actions: string[];
+  enabled: boolean;
+  createdAt: string;
+};
 
 function parsePreviewRecord(value: unknown): Record<string, unknown> | null {
   if (!value) return null;
@@ -96,6 +118,58 @@ function buildMessagePreview(input: {
   return cleanPreviewText(input.content);
 }
 
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === 'string' && value.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function parseJsonStringList(value: unknown): string[] {
+  let raw: unknown = [];
+  if (Array.isArray(value)) {
+    raw = value;
+  } else if (typeof value === 'string' && value.trim().startsWith('[')) {
+    try {
+      raw = JSON.parse(value);
+    } catch {
+      raw = [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => String(item || '').trim())
+    .filter((item) => item.length > 0);
+}
+
+function parseStringMap(value: unknown): Record<string, string> {
+  const parsed = parseJsonObject(value);
+  const result: Record<string, string> = {};
+  for (const [key, item] of Object.entries(parsed)) {
+    const cleanKey = key.trim();
+    if (!cleanKey) continue;
+    result[cleanKey] = item == null ? '' : String(item);
+  }
+  return result;
+}
+
+function dateKey(value: string | undefined): string {
+  const parsed = value ? new Date(value) : new Date();
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+}
+
 export class LocalChatStore {
   private _db: Database.Database;
 
@@ -154,6 +228,12 @@ export class LocalChatStore {
         lastMessagePreview TEXT NOT NULL DEFAULT '',
         lastMessageAt TEXT NOT NULL DEFAULT '',
         unreadCount INTEGER NOT NULL DEFAULT 0,
+        tagsJson TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '',
+        customAttributesJson TEXT NOT NULL DEFAULT '{}',
+        archived INTEGER NOT NULL DEFAULT 0,
+        assignedTo TEXT NOT NULL DEFAULT '',
+        followUpAt TEXT NOT NULL DEFAULT '',
         managedGroup INTEGER NOT NULL DEFAULT 0,
         cloudConversationId TEXT NOT NULL DEFAULT '',
         createdAt TEXT NOT NULL,
@@ -250,6 +330,41 @@ export class LocalChatStore {
         PRIMARY KEY (accountId, threadId)
       );
 
+      CREATE TABLE IF NOT EXISTS conversation_timeline (
+        id TEXT PRIMARY KEY,
+        conversationId TEXT NOT NULL,
+        eventType TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        metadataJson TEXT NOT NULL DEFAULT '{}',
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (conversationId) REFERENCES conversations(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_conv_timeline_conv_time
+        ON conversation_timeline(conversationId, createdAt DESC);
+
+      CREATE TABLE IF NOT EXISTS conversation_metrics_daily (
+        date TEXT NOT NULL,
+        accountId TEXT NOT NULL DEFAULT '',
+        inboundMessages INTEGER NOT NULL DEFAULT 0,
+        outboundMessages INTEGER NOT NULL DEFAULT 0,
+        newConversations INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (date, accountId)
+      );
+
+      CREATE TABLE IF NOT EXISTS automation_rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        event TEXT NOT NULL DEFAULT '',
+        conditionField TEXT NOT NULL DEFAULT '',
+        conditionOperator TEXT NOT NULL DEFAULT '',
+        conditionValue TEXT NOT NULL DEFAULT '',
+        actionsJson TEXT NOT NULL DEFAULT '[]',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS history_state (
         accountId TEXT NOT NULL,
         threadId TEXT NOT NULL,
@@ -342,6 +457,12 @@ export class LocalChatStore {
       ['messages', "stylesJson TEXT NOT NULL DEFAULT '[]'"],
       ['messages', "metadataJson TEXT NOT NULL DEFAULT '{}'"],
       ['messages', "recalledContent TEXT NOT NULL DEFAULT ''"],
+      ['conversations', "tagsJson TEXT NOT NULL DEFAULT '[]'"],
+      ['conversations', "notes TEXT NOT NULL DEFAULT ''"],
+      ['conversations', "customAttributesJson TEXT NOT NULL DEFAULT '{}'"],
+      ['conversations', "archived INTEGER NOT NULL DEFAULT 0"],
+      ['conversations', "assignedTo TEXT NOT NULL DEFAULT ''"],
+      ['conversations', "followUpAt TEXT NOT NULL DEFAULT ''"],
       ['attachments', "status TEXT NOT NULL DEFAULT 'ready'"],
       ['attachments', "checksum TEXT NOT NULL DEFAULT ''"],
       ['attachments', "errorText TEXT NOT NULL DEFAULT ''"],
@@ -393,6 +514,7 @@ export class LocalChatStore {
     threadType: 'user' | 'group',
     displayName: string,
     avatarUrl: string,
+    createdAt?: string,
   ): string {
     const existing = this.db
       .prepare('SELECT id FROM conversations WHERE accountId = ? AND threadId = ?')
@@ -422,16 +544,19 @@ export class LocalChatStore {
     }
 
     const id = randomUUID();
-    const now = new Date().toISOString();
+    const now = createdAt || new Date().toISOString();
     this.db
       .prepare(
         `INSERT INTO conversations
          (id, accountId, threadId, threadType, displayName, avatarUrl,
-          lastMessagePreview, lastMessageAt, unreadCount, managedGroup,
+          lastMessagePreview, lastMessageAt, unreadCount, tagsJson, notes,
+          customAttributesJson, archived, assignedTo, followUpAt, managedGroup,
           cloudConversationId, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, '', ?, 0, 0, '', ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, '', ?, 0, '[]', '', '{}', 0, '', '', 0, '', ?, ?)`,
       )
       .run(id, accountId, threadId, threadType, displayName || '', avatarUrl || '', now, now, now);
+    this._incrementConversationMetric(dateKey(now), accountId, 'newConversations');
+    this._addTimelineEvent(id, 'created', 'Conversation created', {}, now);
     return id;
   }
 
@@ -460,6 +585,13 @@ export class LocalChatStore {
       lastMessagePreview: row.lastMessagePreview,
       lastMessageAt: row.lastMessageAt,
       unreadCount: row.unreadCount,
+      tags: parseJsonStringList(row.tagsJson),
+      notes: row.notes || '',
+      customAttributes: parseStringMap(row.customAttributesJson),
+      archived: row.archived === 1,
+      assignedTo: row.assignedTo || '',
+      followUpAt: row.followUpAt || '',
+      timeline: this._getConversationTimeline(row.id),
       managedGroup: row.managedGroup === 1,
       cloudConversationId: row.cloudConversationId,
       createdAt: row.createdAt,
@@ -526,6 +658,7 @@ export class LocalChatStore {
       input.threadType,
       displayName,
       conversationAvatar,
+      input.timestamp || new Date().toISOString(),
     );
 
     const id = randomUUID();
@@ -583,9 +716,17 @@ export class LocalChatStore {
         messageType: input.messageType || 'text',
         content: preview,
       }), input.timestamp || now, direction === 'inbound' ? 1 : 0, now, conversationId);
+    this._incrementConversationMetric(
+      dateKey(input.timestamp || now),
+      input.accountId,
+      direction === 'inbound' ? 'inboundMessages' : 'outboundMessages',
+    );
 
     this.enqueueSyncAction('sync_message', { messageId: id });
     this.enqueueSyncAction('sync_conversation', { conversationId });
+    if (direction === 'inbound') {
+      this._applyAutomationRules(conversationId, input);
+    }
     this.db
       .prepare(
         `UPDATE history_state SET
@@ -690,6 +831,11 @@ export class LocalChatStore {
         messageType: input.messageType || 'text',
         content: preview,
       }), now, now, conversationId);
+    this._incrementConversationMetric(
+      dateKey(now),
+      input.accountId,
+      'outboundMessages',
+    );
 
     this.enqueueSyncAction('sync_message', { messageId: id });
     this.enqueueSyncAction('sync_conversation', { conversationId });
@@ -1265,9 +1411,16 @@ export class LocalChatStore {
     }
 
     if (options.search) {
-      whereClause += ' AND (displayName LIKE ? OR threadId LIKE ?)';
+      whereClause +=
+        ' AND (displayName LIKE ? OR threadId LIKE ? OR tagsJson LIKE ? OR notes LIKE ? OR customAttributesJson LIKE ?)';
       const searchPattern = `%${options.search}%`;
-      params.push(searchPattern, searchPattern);
+      params.push(
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+      );
     }
 
     const totalRow = this.db
@@ -1310,6 +1463,96 @@ export class LocalChatStore {
     };
   }
 
+  updateConversationMetadata(
+    conversationId: string,
+    input: ConversationMetadataInput,
+  ): LocalConversation | undefined {
+    const existing = this._resolveConversationRow(conversationId);
+    if (!existing) return undefined;
+
+    const currentTags = parseJsonStringList(existing.tagsJson);
+    const currentAttributes = parseStringMap(existing.customAttributesJson);
+    const nextTags = input.tags === undefined
+      ? currentTags
+      : parseJsonStringList(input.tags);
+    const nextNotes = input.notes === undefined
+      ? (existing.notes || '')
+      : String(input.notes || '').trim();
+    const nextAttributes = input.customAttributes === undefined
+      ? currentAttributes
+      : parseStringMap(input.customAttributes);
+    const nextArchived = input.archived === undefined
+      ? existing.archived === 1
+      : input.archived === true;
+    const nextAssignedTo = input.assignedTo === undefined
+      ? (existing.assignedTo || '')
+      : String(input.assignedTo || '').trim();
+    const nextFollowUpAt = input.followUpAt === undefined
+      ? (existing.followUpAt || '')
+      : String(input.followUpAt || '').trim();
+    const now = new Date().toISOString();
+
+    this.db
+      .prepare(
+        `UPDATE conversations
+         SET tagsJson = ?, notes = ?, customAttributesJson = ?,
+             archived = ?, assignedTo = ?, followUpAt = ?, updatedAt = ?
+         WHERE id = ?`,
+      )
+      .run(
+        JSON.stringify(nextTags),
+        nextNotes,
+        JSON.stringify(nextAttributes),
+        nextArchived ? 1 : 0,
+        nextAssignedTo,
+        nextFollowUpAt,
+        now,
+        existing.id,
+      );
+
+    if (JSON.stringify(nextTags) !== JSON.stringify(currentTags)) {
+      this._addTimelineEvent(
+        existing.id,
+        'labels.updated',
+        `Labels updated: ${nextTags.join(', ') || 'none'}`,
+        { tags: nextTags },
+        now,
+      );
+    }
+    if (nextNotes !== (existing.notes || '')) {
+      this._addTimelineEvent(existing.id, 'notes.updated', 'Notes updated', {}, now);
+    }
+    if (JSON.stringify(nextAttributes) !== JSON.stringify(currentAttributes)) {
+      this._addTimelineEvent(
+        existing.id,
+        'custom_attributes.updated',
+        'Custom attributes updated',
+        { customAttributes: nextAttributes },
+        now,
+      );
+    }
+    if (
+      nextArchived !== (existing.archived === 1) ||
+      nextAssignedTo !== (existing.assignedTo || '') ||
+      nextFollowUpAt !== (existing.followUpAt || '')
+    ) {
+      this._addTimelineEvent(
+        existing.id,
+        'workflow.updated',
+        'Workflow state updated',
+        {
+          archived: nextArchived,
+          assignedTo: nextAssignedTo,
+          followUpAt: nextFollowUpAt,
+        },
+        now,
+      );
+    }
+
+    this.enqueueSyncAction('sync_conversation', { conversationId: existing.id });
+    return this.getConversation(existing.id);
+  }
+
   /**
    * Mark a conversation as read (reset unreadCount to 0).
    */
@@ -1324,6 +1567,82 @@ export class LocalChatStore {
       this.enqueueSyncAction('sync_conversation', { conversationId });
     }
     return result.changes > 0;
+  }
+
+  getConversationRollup(options: {
+    from?: string;
+    to?: string;
+    accountId?: string;
+  } = {}): Array<Record<string, unknown>> {
+    let where = '1=1';
+    const params: unknown[] = [];
+    if (options.from) {
+      where += ' AND date >= ?';
+      params.push(options.from);
+    }
+    if (options.to) {
+      where += ' AND date <= ?';
+      params.push(options.to);
+    }
+    if (options.accountId) {
+      where += ' AND accountId = ?';
+      params.push(options.accountId);
+    }
+    return this.db
+      .prepare(
+        `SELECT date, accountId, inboundMessages, outboundMessages,
+                newConversations
+         FROM conversation_metrics_daily
+         WHERE ${where}
+         ORDER BY date ASC`,
+      )
+      .all(...params) as Array<Record<string, unknown>>;
+  }
+
+  listAutomationRules(): LocalAutomationRule[] {
+    const rows = this.db
+      .prepare('SELECT * FROM automation_rules ORDER BY createdAt DESC')
+      .all() as any[];
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      event: row.event,
+      conditionField: row.conditionField,
+      conditionOperator: row.conditionOperator,
+      conditionValue: row.conditionValue,
+      actions: parseJsonStringList(row.actionsJson),
+      enabled: row.enabled === 1,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  replaceAutomationRules(rules: LocalAutomationRule[]): LocalAutomationRule[] {
+    const now = new Date().toISOString();
+    const tx = this.db.transaction((items: LocalAutomationRule[]) => {
+      this.db.prepare('DELETE FROM automation_rules').run();
+      const insert = this.db.prepare(
+        `INSERT INTO automation_rules
+         (id, name, event, conditionField, conditionOperator, conditionValue,
+          actionsJson, enabled, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const rule of items) {
+        insert.run(
+          rule.id,
+          rule.name,
+          rule.event,
+          rule.conditionField,
+          rule.conditionOperator,
+          rule.conditionValue,
+          JSON.stringify(rule.actions || []),
+          rule.enabled ? 1 : 0,
+          rule.createdAt || now,
+          now,
+        );
+      }
+    });
+    tx(rules);
+    return this.listAutomationRules();
   }
 
   // ---------------------------------------------------------------------------
@@ -1471,6 +1790,130 @@ export class LocalChatStore {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  private _resolveConversationRow(conversationId: string): any | undefined {
+    const direct = this.db
+      .prepare('SELECT * FROM conversations WHERE id = ?')
+      .get(conversationId) as any | undefined;
+    if (direct) return direct;
+    return this.db
+      .prepare('SELECT * FROM conversations WHERE cloudConversationId = ?')
+      .get(conversationId) as any | undefined;
+  }
+
+  private _addTimelineEvent(
+    conversationId: string,
+    eventType: string,
+    summary: string,
+    metadata: Record<string, unknown>,
+    createdAt = new Date().toISOString(),
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO conversation_timeline
+         (id, conversationId, eventType, summary, metadataJson, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(),
+        conversationId,
+        eventType,
+        summary,
+        JSON.stringify(metadata),
+        createdAt,
+      );
+  }
+
+  private _getConversationTimeline(
+    conversationId: string,
+  ): LocalConversationTimelineItem[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM conversation_timeline
+         WHERE conversationId = ?
+         ORDER BY createdAt DESC
+         LIMIT 12`,
+      )
+      .all(conversationId) as any[];
+    return rows.map((row) => ({
+      id: row.id,
+      eventType: row.eventType,
+      summary: row.summary,
+      metadata: parseJsonObject(row.metadataJson),
+      createdAt: row.createdAt,
+    }));
+  }
+
+  private _incrementConversationMetric(
+    date: string,
+    accountId: string,
+    column: 'inboundMessages' | 'outboundMessages' | 'newConversations',
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO conversation_metrics_daily
+         (date, accountId, inboundMessages, outboundMessages, newConversations)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(date, accountId) DO UPDATE SET
+           inboundMessages = inboundMessages + excluded.inboundMessages,
+           outboundMessages = outboundMessages + excluded.outboundMessages,
+           newConversations = newConversations + excluded.newConversations`,
+      )
+      .run(
+        date,
+        accountId || '',
+        column === 'inboundMessages' ? 1 : 0,
+        column === 'outboundMessages' ? 1 : 0,
+        column === 'newConversations' ? 1 : 0,
+      );
+  }
+
+  private _applyAutomationRules(
+    conversationId: string,
+    input: InboundMessageInput,
+  ): void {
+    const rules = this.listAutomationRules().filter((rule) => rule.enabled);
+    if (rules.length === 0) return;
+    const text = `${input.content || ''}`.toLowerCase();
+    const matchedLabels = new Set<string>();
+    const notes: string[] = [];
+    for (const rule of rules) {
+      const event = rule.event.toLowerCase();
+      if (event && !event.includes('tin') && !event.includes('message')) {
+        continue;
+      }
+      const expected = rule.conditionValue.toLowerCase().trim();
+      const operator = rule.conditionOperator.toLowerCase();
+      const matches = operator.includes('bằng') || operator.includes('equal')
+        ? text === expected
+        : expected.length === 0 || text.includes(expected);
+      if (!matches) continue;
+
+      for (const action of rule.actions) {
+        const normalized = action.trim();
+        const lower = normalized.toLowerCase();
+        if (lower.includes('gắn nhãn:') || lower.includes('add label:')) {
+          const label = normalized.split(':').slice(1).join(':').trim();
+          if (label) matchedLabels.add(label);
+        } else if (lower.includes('ghi chú') || lower.includes('note')) {
+          notes.push(`[Automation] ${rule.name}`);
+        }
+      }
+    }
+    if (matchedLabels.size === 0 && notes.length === 0) return;
+
+    const conv = this.getConversation(conversationId);
+    if (!conv) return;
+    const tags = [...new Set([...conv.tags, ...matchedLabels])];
+    const nextNotes = notes.length === 0
+      ? conv.notes
+      : [conv.notes, ...notes].filter(Boolean).join('\n');
+    this.updateConversationMetadata(conversationId, {
+      tags,
+      notes: nextNotes,
+      customAttributes: conv.customAttributes,
+    });
+  }
 
   private _insertAttachments(
     messageId: string,

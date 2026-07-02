@@ -192,6 +192,10 @@ class Conversation {
   // When set and in the future, the bot is temporarily paused (a human replied).
   // chatbotEnabled stays true (master on) — this only drives the AI status icon.
   final DateTime? chatbotPausedUntil;
+  final DateTime? followUpAt;
+  final bool archived;
+  final String assignedTo;
+  final List<ConversationTimelineItem> timeline;
   final List<ChatMessage> messages;
   final CrmCustomer? crmCustomer;
 
@@ -211,6 +215,10 @@ class Conversation {
     this.customAttributes = const {},
     required this.chatbotEnabled,
     this.chatbotPausedUntil,
+    this.followUpAt,
+    this.archived = false,
+    this.assignedTo = '',
+    this.timeline = const [],
     required this.messages,
     this.crmCustomer,
   });
@@ -237,6 +245,10 @@ class Conversation {
     Map<String, String>? customAttributes,
     bool? chatbotEnabled,
     Object? chatbotPausedUntilSet = _unset,
+    Object? followUpAtSet = _unset,
+    bool? archived,
+    String? assignedTo,
+    List<ConversationTimelineItem>? timeline,
     int? unreadCount,
     List<ChatMessage>? messages,
     String? lastMessage,
@@ -266,6 +278,12 @@ class Conversation {
       chatbotPausedUntil: chatbotPausedUntilSet == _unset
           ? chatbotPausedUntil
           : (chatbotPausedUntilSet as DateTime?),
+      followUpAt: followUpAtSet == _unset
+          ? followUpAt
+          : (followUpAtSet as DateTime?),
+      archived: archived ?? this.archived,
+      assignedTo: assignedTo ?? this.assignedTo,
+      timeline: timeline ?? this.timeline,
       messages: messages ?? this.messages,
       crmCustomer: crmCustomerSet == _unset
           ? (crmCustomer ?? this.crmCustomer)
@@ -329,6 +347,25 @@ class Conversation {
       customAttributes: _mapCustomAttributes(json),
       chatbotEnabled: json['chatbotEnabled'] != false,
       chatbotPausedUntil: _pausedUntilFrom(json['chatbotPausedUntil']),
+      followUpAt: _dateFromNullable(
+        json['followUpAt'] ??
+            json['snoozedUntil'] ??
+            json['followUpUntil'] ??
+            json['remindAt'],
+      ),
+      archived:
+          json['archived'] == true ||
+          json['isArchived'] == true ||
+          json['status']?.toString() == 'archived',
+      assignedTo: (json['assignedTo'] ?? json['assigneeId'] ?? '')
+          .toString()
+          .toWellFormed(),
+      timeline: json['timeline'] is List
+          ? (json['timeline'] as List)
+                .whereType<Map>()
+                .map(ConversationTimelineItem.fromJson)
+                .toList()
+          : const [],
       messages: const [],
       crmCustomer: null,
     );
@@ -351,12 +388,47 @@ DateTime? _pausedUntilFrom(dynamic value) {
   return DateTime.fromMillisecondsSinceEpoch(ms);
 }
 
+DateTime? _dateFromNullable(dynamic value) {
+  if (value == null) return null;
+  final raw = value.toString();
+  if (raw.isEmpty) return null;
+  final ms = int.tryParse(raw);
+  if (ms != null && ms > 0) return DateTime.fromMillisecondsSinceEpoch(ms);
+  return DateTime.tryParse(raw);
+}
+
+enum InboxStatusFilter { all, unread, followUp, archived, assigned }
+
+class ConversationTimelineItem {
+  final String id;
+  final String eventType;
+  final String summary;
+  final DateTime createdAt;
+
+  const ConversationTimelineItem({
+    required this.id,
+    required this.eventType,
+    required this.summary,
+    required this.createdAt,
+  });
+
+  factory ConversationTimelineItem.fromJson(Map<dynamic, dynamic> json) {
+    return ConversationTimelineItem(
+      id: json['id']?.toString() ?? '',
+      eventType: json['eventType']?.toString() ?? '',
+      summary: json['summary']?.toString() ?? '',
+      createdAt: _dateFrom(json['createdAt']),
+    );
+  }
+}
+
 class ConversationSavedFilter {
   final String id;
   final String name;
   final String label;
   final bool unreadOnly;
   final bool labeledOnly;
+  final InboxStatusFilter inboxStatus;
 
   const ConversationSavedFilter({
     required this.id,
@@ -364,7 +436,34 @@ class ConversationSavedFilter {
     this.label = '',
     this.unreadOnly = false,
     this.labeledOnly = false,
+    this.inboxStatus = InboxStatusFilter.all,
   });
+
+  factory ConversationSavedFilter.fromJson(Map<dynamic, dynamic> json) {
+    final statusName = json['inboxStatus']?.toString() ?? 'all';
+    return ConversationSavedFilter(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      unreadOnly: json['unreadOnly'] == true,
+      labeledOnly: json['labeledOnly'] == true,
+      inboxStatus: InboxStatusFilter.values.firstWhere(
+        (item) => item.name == statusName,
+        orElse: () => InboxStatusFilter.all,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'label': label,
+      'unreadOnly': unreadOnly,
+      'labeledOnly': labeledOnly,
+      'inboxStatus': inboxStatus.name,
+    };
+  }
 }
 
 class LiveChatState {
@@ -394,6 +493,7 @@ class LiveChatState {
   final String selectedLabelFilter;
   final bool unreadOnlyFilter;
   final bool labeledOnlyFilter;
+  final InboxStatusFilter inboxStatusFilter;
   final String selectedSavedFilterId;
   final List<ConversationSavedFilter> savedFilters;
   // Per-account AI auto-reply switch (Live Chat settings dialog). Accounts
@@ -413,7 +513,10 @@ class LiveChatState {
   }
 
   bool get hasActiveConversationFilters =>
-      selectedLabelFilter.isNotEmpty || unreadOnlyFilter || labeledOnlyFilter;
+      selectedLabelFilter.isNotEmpty ||
+      unreadOnlyFilter ||
+      labeledOnlyFilter ||
+      inboxStatusFilter != InboxStatusFilter.all;
 
   List<Conversation> get filteredConversations {
     return conversations.where((conversation) {
@@ -424,6 +527,29 @@ class LiveChatState {
       }
       if (unreadOnlyFilter && conversation.unreadCount <= 0) return false;
       if (labeledOnlyFilter && labels.isEmpty) return false;
+      switch (inboxStatusFilter) {
+        case InboxStatusFilter.all:
+          if (conversation.archived) return false;
+          break;
+        case InboxStatusFilter.unread:
+          if (conversation.unreadCount <= 0 || conversation.archived) {
+            return false;
+          }
+          break;
+        case InboxStatusFilter.followUp:
+          if (conversation.followUpAt == null || conversation.archived) {
+            return false;
+          }
+          break;
+        case InboxStatusFilter.archived:
+          if (!conversation.archived) return false;
+          break;
+        case InboxStatusFilter.assigned:
+          if (conversation.assignedTo.isEmpty || conversation.archived) {
+            return false;
+          }
+          break;
+      }
       return true;
     }).toList();
   }
@@ -455,6 +581,7 @@ class LiveChatState {
     this.selectedLabelFilter = '',
     this.unreadOnlyFilter = false,
     this.labeledOnlyFilter = false,
+    this.inboxStatusFilter = InboxStatusFilter.all,
     this.selectedSavedFilterId = '',
     this.savedFilters = const [],
     this.accountAiAutoReply = const {},
@@ -487,6 +614,7 @@ class LiveChatState {
       selectedLabelFilter: '',
       unreadOnlyFilter: false,
       labeledOnlyFilter: false,
+      inboxStatusFilter: InboxStatusFilter.all,
       selectedSavedFilterId: '',
       savedFilters: [],
     );
@@ -519,6 +647,7 @@ class LiveChatState {
     String? selectedLabelFilter,
     bool? unreadOnlyFilter,
     bool? labeledOnlyFilter,
+    InboxStatusFilter? inboxStatusFilter,
     String? selectedSavedFilterId,
     List<ConversationSavedFilter>? savedFilters,
     Map<String, bool>? accountAiAutoReply,
@@ -560,6 +689,7 @@ class LiveChatState {
       selectedLabelFilter: selectedLabelFilter ?? this.selectedLabelFilter,
       unreadOnlyFilter: unreadOnlyFilter ?? this.unreadOnlyFilter,
       labeledOnlyFilter: labeledOnlyFilter ?? this.labeledOnlyFilter,
+      inboxStatusFilter: inboxStatusFilter ?? this.inboxStatusFilter,
       selectedSavedFilterId:
           selectedSavedFilterId ?? this.selectedSavedFilterId,
       savedFilters: savedFilters ?? this.savedFilters,
@@ -591,8 +721,29 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   LiveChatNotifier(this._repository, {bool Function()? notificationsEnabled})
     : _notificationsEnabled = notificationsEnabled ?? (() => false),
       super(LiveChatState.initial()) {
+    unawaited(_loadSavedFilters());
     loadAccounts();
     loadConversations(loadSelectedMessages: true);
+  }
+
+  Future<void> _loadSavedFilters() async {
+    try {
+      final filters = (await _repository.cache.getSavedFilters())
+          .map(ConversationSavedFilter.fromJson)
+          .where((filter) => filter.id.isNotEmpty && filter.name.isNotEmpty)
+          .toList();
+      if (filters.isNotEmpty) {
+        state = state.copyWith(savedFilters: filters);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _persistSavedFilters() async {
+    try {
+      await _repository.cache.saveSavedFilters(
+        state.savedFilters.map((filter) => filter.toJson()).toList(),
+      );
+    } catch (_) {}
   }
 
   Future<void> loadAccounts() async {
@@ -645,6 +796,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
             )
             .toList();
         conversations = await _filterManagedGroupConversations(conversations);
+        conversations = _mergeWorkflowState(conversations);
         // Only on silent refreshes (poll/SSE) do we surface a desktop toast for
         // newly arrived inbound messages — never on the first/manual full load.
         if (silent) {
@@ -718,6 +870,24 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       return current;
     }
     return conversations.isEmpty ? _emptyConversation : conversations.first;
+  }
+
+  List<Conversation> _mergeWorkflowState(List<Conversation> conversations) {
+    final existingById = <String, Conversation>{
+      for (final conversation in state.conversations)
+        conversation.id: conversation,
+    };
+    final selected = state.selectedConversation;
+    if (selected != null) existingById[selected.id] = selected;
+    return conversations.map((conversation) {
+      final existing = existingById[conversation.id];
+      if (existing == null) return conversation;
+      return conversation.copyWith(
+        followUpAtSet: existing.followUpAt,
+        archived: existing.archived,
+        assignedTo: existing.assignedTo,
+      );
+    }).toList();
   }
 
   Future<List<Conversation>> _filterManagedGroupConversations(
@@ -812,11 +982,20 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
   }
 
+  void setInboxStatusFilter(InboxStatusFilter filter) {
+    state = state.copyWith(
+      inboxStatusFilter: filter,
+      unreadOnlyFilter: filter == InboxStatusFilter.unread,
+      selectedSavedFilterId: '',
+    );
+  }
+
   void clearConversationFilters() {
     state = state.copyWith(
       selectedLabelFilter: '',
       unreadOnlyFilter: false,
       labeledOnlyFilter: false,
+      inboxStatusFilter: InboxStatusFilter.all,
       selectedSavedFilterId: '',
     );
   }
@@ -830,11 +1009,13 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       label: state.selectedLabelFilter,
       unreadOnly: state.unreadOnlyFilter,
       labeledOnly: state.labeledOnlyFilter,
+      inboxStatus: state.inboxStatusFilter,
     );
     state = state.copyWith(
       savedFilters: [filter, ...state.savedFilters],
       selectedSavedFilterId: filter.id,
     );
+    unawaited(_persistSavedFilters());
   }
 
   void applySavedFilter(ConversationSavedFilter filter) {
@@ -842,6 +1023,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       selectedLabelFilter: filter.label,
       unreadOnlyFilter: filter.unreadOnly,
       labeledOnlyFilter: filter.labeledOnly,
+      inboxStatusFilter: filter.inboxStatus,
       selectedSavedFilterId: filter.id,
     );
   }
@@ -855,6 +1037,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           ? ''
           : state.selectedSavedFilterId,
     );
+    unawaited(_persistSavedFilters());
   }
 
   Future<void> selectConversation(Conversation conversation) async {
@@ -978,15 +1161,15 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     final conversation = state.selectedConversation;
     if (conversation == null) return false;
     final normalizedTags = _normalizeTags(tags);
+    final existingCustomer = conversation.crmCustomer;
+    final resolvedCustomFields =
+        customFields ??
+        existingCustomer?.customFields ??
+        conversation.customAttributes;
 
     state = state.copyWith(isSending: true);
     try {
-      final existingCustomer = conversation.crmCustomer;
       Map<String, dynamic> response;
-      final resolvedCustomFields =
-          customFields ??
-          existingCustomer?.customFields ??
-          conversation.customAttributes;
 
       final customerData = CrmCustomer(
         id: existingCustomer?.id ?? '',
@@ -1033,6 +1216,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         await _repository.updateConversation(conversation.id, {
           'tags': normalizedTags,
           'notes': notes,
+          'customAttributes': savedCustomer.customFields,
         });
 
         final updated = conversation.copyWith(
@@ -1052,6 +1236,27 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         );
         return true;
       }
+    } catch (_) {}
+    try {
+      await _repository.updateConversation(conversation.id, {
+        'tags': normalizedTags,
+        'notes': notes,
+        'customAttributes': resolvedCustomFields,
+      });
+      final updated = conversation.copyWith(
+        tag: normalizedTags.isEmpty ? '' : normalizedTags.first,
+        labels: normalizedTags,
+        notes: notes,
+        customAttributes: resolvedCustomFields,
+      );
+      state = state.copyWith(
+        selectedConversation: updated,
+        conversations: state.conversations
+            .map((c) => c.id == conversation.id ? updated : c)
+            .toList(),
+        isSending: false,
+      );
+      return true;
     } catch (_) {}
     state = state.copyWith(isSending: false);
     return false;
@@ -1596,6 +1801,70 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     }
   }
 
+  Future<void> pauseChatbotForSelected() async {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    await setChatbotForConversation(conversation, false);
+  }
+
+  Future<void> setChatbotForConversation(
+    Conversation conversation,
+    bool enabled,
+  ) async {
+    _replaceConversation(
+      conversation.copyWith(
+        chatbotEnabled: enabled,
+        chatbotPausedUntilSet: enabled ? null : conversation.chatbotPausedUntil,
+      ),
+    );
+    try {
+      final response = await _repository.updateChatbotState(
+        ConversationTarget(
+          id: conversation.id,
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          threadType: conversation.threadType,
+        ),
+        enabled: enabled,
+      );
+      if (response['success'] != true) {
+        _replaceConversation(conversation);
+      }
+    } catch (_) {
+      _replaceConversation(conversation);
+    }
+  }
+
+  void setFollowUp(Conversation conversation, DateTime? followUpAt) {
+    _replaceConversation(
+      conversation.copyWith(followUpAtSet: followUpAt, archived: false),
+    );
+  }
+
+  void setSelectedFollowUp(DateTime? followUpAt) {
+    final conversation = state.selectedConversation;
+    if (conversation == null) return;
+    setFollowUp(conversation, followUpAt);
+  }
+
+  void toggleArchived(Conversation conversation) {
+    _replaceConversation(
+      conversation.copyWith(
+        archived: !conversation.archived,
+        followUpAtSet: conversation.archived ? conversation.followUpAt : null,
+      ),
+    );
+  }
+
+  void toggleAssignedToMe(Conversation conversation) {
+    _replaceConversation(
+      conversation.copyWith(
+        assignedTo: conversation.assignedTo.isEmpty ? 'me' : '',
+        archived: false,
+      ),
+    );
+  }
+
   /// Resume the bot immediately for the open conversation, clearing any pending
   /// operator-pause cooldown (the dimmed AI icon's double-click action).
   Future<void> resumeChatbotNow() async {
@@ -1957,8 +2226,19 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
   }
 
   void _replaceSelected(Conversation updated) {
+    _replaceConversation(updated, updateSelected: true);
+  }
+
+  void _replaceConversation(
+    Conversation updated, {
+    bool updateSelected = false,
+  }) {
+    final shouldUpdateSelected =
+        updateSelected || state.selectedConversation?.id == updated.id;
     state = state.copyWith(
-      selectedConversation: updated,
+      selectedConversation: shouldUpdateSelected
+          ? updated
+          : state.selectedConversation,
       conversations: state.conversations
           .map(
             (conversation) =>

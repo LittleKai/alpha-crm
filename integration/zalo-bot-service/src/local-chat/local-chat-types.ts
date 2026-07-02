@@ -19,10 +19,25 @@ export interface LocalConversation {
   lastMessagePreview: string;
   lastMessageAt: string;
   unreadCount: number;
+  tags: string[];
+  notes: string;
+  customAttributes: Record<string, string>;
+  archived: boolean;
+  assignedTo: string;
+  followUpAt: string;
+  timeline: LocalConversationTimelineItem[];
   managedGroup: boolean;
   cloudConversationId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LocalConversationTimelineItem {
+  id: string;
+  eventType: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface LocalMessage {

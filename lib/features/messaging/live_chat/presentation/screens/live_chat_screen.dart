@@ -721,32 +721,63 @@ class _ConversationList extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _formatRelativeTime(conversation.lastMessageTime),
-                              style: AppTextStyles.caption,
-                            ),
-                            if (conversation.unreadCount > 0)
-                              Container(
-                                margin: const EdgeInsets.only(top: 4),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.error,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  conversation.unreadCount.toString(),
-                                  style: AppTextStyles.caption.copyWith(
-                                    color: Colors.white,
-                                  ),
+                        trailing: SizedBox(
+                          width: 88,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      _formatRelativeTime(
+                                        conversation.lastMessageTime,
+                                      ),
+                                      style: AppTextStyles.caption,
+                                    ),
+                                    if (conversation.followUpAt != null)
+                                      Icon(
+                                        Icons.schedule,
+                                        size: 14,
+                                        color: AppColors.warningText,
+                                      ),
+                                    if (conversation.assignedTo.isNotEmpty)
+                                      Icon(
+                                        Icons.person_pin_circle_outlined,
+                                        size: 14,
+                                        color: AppColors.primary,
+                                      ),
+                                    if (conversation.unreadCount > 0)
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.error,
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          conversation.unreadCount.toString(),
+                                          style: AppTextStyles.caption.copyWith(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                          ],
+                              _ConversationActionMenu(
+                                conversation: conversation,
+                                notifier: notifier,
+                              ),
+                            ],
+                          ),
                         ),
                         onTap: () => notifier.selectConversation(conversation),
                       );
@@ -772,8 +803,34 @@ class _ConversationList extends ConsumerWidget {
           const SizedBox(width: AppSpacing.xs),
           _ConversationFilterChip(
             label: 'Chưa đọc',
-            selected: state.unreadOnlyFilter,
-            onSelected: notifier.setUnreadOnlyFilter,
+            selected: state.inboxStatusFilter == InboxStatusFilter.unread,
+            onSelected: (selected) => notifier.setInboxStatusFilter(
+              selected ? InboxStatusFilter.unread : InboxStatusFilter.all,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          _ConversationFilterChip(
+            label: 'Theo dõi sau',
+            selected: state.inboxStatusFilter == InboxStatusFilter.followUp,
+            onSelected: (selected) => notifier.setInboxStatusFilter(
+              selected ? InboxStatusFilter.followUp : InboxStatusFilter.all,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          _ConversationFilterChip(
+            label: 'Đã lưu trữ',
+            selected: state.inboxStatusFilter == InboxStatusFilter.archived,
+            onSelected: (selected) => notifier.setInboxStatusFilter(
+              selected ? InboxStatusFilter.archived : InboxStatusFilter.all,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          _ConversationFilterChip(
+            label: 'Đã gán',
+            selected: state.inboxStatusFilter == InboxStatusFilter.assigned,
+            onSelected: (selected) => notifier.setInboxStatusFilter(
+              selected ? InboxStatusFilter.assigned : InboxStatusFilter.all,
+            ),
           ),
           const SizedBox(width: AppSpacing.xs),
           _ConversationFilterChip(
@@ -944,6 +1001,179 @@ class _ConversationLabelChip extends StatelessWidget {
   }
 }
 
+class _ConversationActionMenu extends StatelessWidget {
+  final Conversation conversation;
+  final LiveChatNotifier notifier;
+
+  const _ConversationActionMenu({
+    required this.conversation,
+    required this.notifier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Thao tác hội thoại',
+      icon: const Icon(Icons.more_vert, size: 18),
+      onSelected: (value) async {
+        switch (value) {
+          case 'pause_bot':
+            await notifier.setChatbotForConversation(conversation, false);
+            break;
+          case 'resume_bot':
+            await notifier.setChatbotForConversation(conversation, true);
+            break;
+          case 'follow_1h':
+            notifier.setFollowUp(
+              conversation,
+              DateTime.now().add(const Duration(hours: 1)),
+            );
+            break;
+          case 'follow_tomorrow':
+            final now = DateTime.now();
+            notifier.setFollowUp(
+              conversation,
+              DateTime(now.year, now.month, now.day + 1, 9),
+            );
+            break;
+          case 'clear_follow':
+            notifier.setFollowUp(conversation, null);
+            break;
+          case 'archive':
+            notifier.toggleArchived(conversation);
+            break;
+          case 'assign':
+            notifier.toggleAssignedToMe(conversation);
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: conversation.chatbotEnabled ? 'pause_bot' : 'resume_bot',
+          child: Row(
+            children: [
+              Icon(
+                conversation.chatbotEnabled
+                    ? Icons.smart_toy_outlined
+                    : Icons.play_circle_outline,
+                size: 18,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text(
+                conversation.chatbotEnabled ? 'Tạm dừng bot' : 'Bật lại bot',
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'follow_1h',
+          child: Row(
+            children: [
+              Icon(Icons.schedule, size: 18),
+              SizedBox(width: AppSpacing.s),
+              Text('Theo dõi sau 1 giờ'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'follow_tomorrow',
+          child: Row(
+            children: [
+              Icon(Icons.today_outlined, size: 18),
+              SizedBox(width: AppSpacing.s),
+              Text('Theo dõi sáng mai'),
+            ],
+          ),
+        ),
+        if (conversation.followUpAt != null)
+          const PopupMenuItem(
+            value: 'clear_follow',
+            child: Row(
+              children: [
+                Icon(Icons.event_busy_outlined, size: 18),
+                SizedBox(width: AppSpacing.s),
+                Text('Bỏ theo dõi sau'),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'assign',
+          child: Row(
+            children: [
+              Icon(
+                conversation.assignedTo.isEmpty
+                    ? Icons.person_add_alt_1_outlined
+                    : Icons.person_remove_outlined,
+                size: 18,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text(conversation.assignedTo.isEmpty ? 'Gán cho tôi' : 'Bỏ gán'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'archive',
+          child: Row(
+            children: [
+              Icon(
+                conversation.archived
+                    ? Icons.unarchive_outlined
+                    : Icons.archive_outlined,
+                size: 18,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Text(conversation.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConversationNoticeBanner extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+  final Color textColor;
+
+  const _ConversationNoticeBanner({
+    required this.icon,
+    required this.text,
+    required this.color,
+    required this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.m,
+        vertical: AppSpacing.s,
+      ),
+      color: color,
+      width: double.infinity,
+      child: Row(
+        children: [
+          Icon(icon, color: textColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.caption.copyWith(
+                color: textColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConversationPanel extends ConsumerWidget {
   final LiveChatState state;
   final LiveChatNotifier notifier;
@@ -1084,6 +1314,23 @@ class _ConversationPanel extends ConsumerWidget {
             ),
           ),
           const Divider(height: 1),
+          if (!botToggleOn || conversation.chatbotPaused)
+            _ConversationNoticeBanner(
+              icon: Icons.smart_toy_outlined,
+              text: !botToggleOn
+                  ? 'Bot đang tạm dừng cho hội thoại này.'
+                  : 'Bot tạm dừng đến ${DateFormat('HH:mm dd/MM').format(conversation.chatbotPausedUntil!)}.',
+              color: AppColors.warningSoft,
+              textColor: AppColors.warningText,
+            ),
+          if (conversation.followUpAt != null)
+            _ConversationNoticeBanner(
+              icon: Icons.schedule,
+              text:
+                  'Theo dõi sau: ${DateFormat('HH:mm dd/MM/yyyy').format(conversation.followUpAt!)}',
+              color: AppColors.primarySoft,
+              textColor: AppColors.primary,
+            ),
           if (conversation.notes.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(
@@ -1478,6 +1725,47 @@ class _ConversationPanel extends ConsumerWidget {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                trailing: SizedBox(
+                                  width: 88,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Sửa mẫu',
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
+                                        ),
+                                        onPressed: () {
+                                          _showEditCannedResponseDialog(
+                                            context,
+                                            ref,
+                                            template,
+                                          );
+                                        },
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Xóa mẫu',
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
+                                        onPressed: template.id.isEmpty
+                                            ? null
+                                            : () {
+                                                ref
+                                                    .read(
+                                                      templatesProvider
+                                                          .notifier,
+                                                    )
+                                                    .deleteTemplate(
+                                                      template.id,
+                                                    );
+                                              },
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 onTap: () {
                                   messageController.text = content;
                                   messageController.selection =
@@ -1583,6 +1871,99 @@ class _ConversationPanel extends ConsumerWidget {
     ).whenComplete(() {
       titleController.dispose();
       shortcutController.dispose();
+    });
+  }
+
+  void _showEditCannedResponseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    MessageTemplate template,
+  ) {
+    final titleController = TextEditingController(text: template.title);
+    final shortcutController = TextEditingController(text: template.shortcut);
+    final contentController = TextEditingController(text: template.content);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppDialog(
+        title: 'Sửa mẫu trả lời',
+        subtitle: 'Cập nhật nội dung và shortcode dùng trong Live Chat.',
+        icon: Icons.edit_outlined,
+        width: 520,
+        actions: [
+          AppDialogAction(
+            text: 'Hủy',
+            variant: AppButtonVariant.outline,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          AppDialogAction(
+            text: 'Lưu',
+            icon: Icons.save_outlined,
+            onPressed: template.id.isEmpty
+                ? null
+                : () async {
+                    final title = titleController.text.trim();
+                    final content = contentController.text.trim();
+                    final rawShortcut = shortcutController.text.trim();
+                    final shortcut = rawShortcut.isEmpty
+                        ? ''
+                        : (rawShortcut.startsWith('/')
+                              ? rawShortcut
+                              : '/$rawShortcut');
+                    if (title.isEmpty || content.isEmpty) return;
+                    await ref
+                        .read(templatesProvider.notifier)
+                        .updateTemplate(
+                          template.copyWith(
+                            title: title,
+                            content: content,
+                            variables: _extractCannedVariables(content),
+                            shortcut: shortcut,
+                            isQuick: true,
+                          ),
+                        );
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+          ),
+        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Tên mẫu',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            TextField(
+              controller: shortcutController,
+              decoration: const InputDecoration(
+                labelText: 'Shortcode',
+                hintText: '/gia hoặc /hello',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            TextField(
+              controller: contentController,
+              minLines: 4,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                labelText: 'Nội dung',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      titleController.dispose();
+      shortcutController.dispose();
+      contentController.dispose();
     });
   }
 
@@ -4053,6 +4434,10 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
                   },
                   onAddField: _addCustomField,
                 ),
+                if (widget.conversation.timeline.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.m),
+                  _buildTimeline(),
+                ],
                 const SizedBox(height: AppSpacing.l),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -4080,6 +4465,55 @@ class _ContactInfoPanelState extends ConsumerState<_ContactInfoPanel> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTimeline() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Timeline', style: AppTextStyles.label),
+        const SizedBox(height: AppSpacing.s),
+        ...widget.conversation.timeline
+            .take(6)
+            .map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 16,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.summary,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            _formatRelativeTime(item.createdAt),
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ],
     );
   }
 

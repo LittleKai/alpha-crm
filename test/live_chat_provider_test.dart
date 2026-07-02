@@ -123,6 +123,40 @@ void main() {
     expect(state.filteredConversations, [hot]);
   });
 
+  test('LiveChatState filters conversations by inbox workflow status', () {
+    final active = _conversation(id: 'active');
+    final unread = _conversation(id: 'unread', unreadCount: 2);
+    final followUp = _conversation(
+      id: 'follow-up',
+      followUpAt: DateTime(2026, 7, 2, 9),
+    );
+    final archived = _conversation(id: 'archived', archived: true);
+    final assigned = _conversation(id: 'assigned', assignedTo: 'me');
+    final state = LiveChatState.initial().copyWith(
+      conversations: [active, unread, followUp, archived, assigned],
+    );
+
+    expect(state.filteredConversations, [active, unread, followUp, assigned]);
+    expect(
+      state
+          .copyWith(inboxStatusFilter: InboxStatusFilter.followUp)
+          .filteredConversations,
+      [followUp],
+    );
+    expect(
+      state
+          .copyWith(inboxStatusFilter: InboxStatusFilter.archived)
+          .filteredConversations,
+      [archived],
+    );
+    expect(
+      state
+          .copyWith(inboxStatusFilter: InboxStatusFilter.assigned)
+          .filteredConversations,
+      [assigned],
+    );
+  });
+
   test('LiveChatNotifier saves and reapplies conversation filters', () async {
     final notifier = LiveChatNotifier(_FakeLiveChatRepository());
     await Future<void>.delayed(Duration.zero);
@@ -476,6 +510,9 @@ Conversation _conversation({
   required String id,
   int unreadCount = 0,
   List<String> labels = const [],
+  DateTime? followUpAt,
+  bool archived = false,
+  String assignedTo = '',
 }) {
   return Conversation(
     id: id,
@@ -491,6 +528,9 @@ Conversation _conversation({
     labels: labels,
     notes: '',
     chatbotEnabled: true,
+    followUpAt: followUpAt,
+    archived: archived,
+    assignedTo: assignedTo,
     messages: const [],
   );
 }

@@ -129,6 +129,97 @@ describe('LocalChatStore', () => {
     assert.equal(store.isAccountAiAutoReplyEnabled('accX'), true);
   });
 
+  it('updates conversation CRM metadata and records timeline entries', () => {
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-meta',
+      threadType: 'user',
+      senderId: 'sender1',
+      senderName: 'Customer',
+      content: 'Can bao gia',
+      messageType: 'text',
+      providerMessageId: 'pmsg_meta',
+      timestamp: '2024-06-01T12:00:00Z',
+    });
+    const conv = store.getConversationByThread('acc1', 'thread-meta');
+    assert.ok(conv);
+
+    const updated = store.updateConversationMetadata(conv!.id, {
+      tags: ['hot', 'vip'],
+      notes: 'Internal note',
+      customAttributes: { budget: '100m' },
+    });
+
+    assert.ok(updated);
+    assert.deepEqual(updated!.tags, ['hot', 'vip']);
+    assert.equal(updated!.notes, 'Internal note');
+    assert.deepEqual(updated!.customAttributes, { budget: '100m' });
+    assert.ok(updated!.timeline.some((item) => item.eventType === 'labels.updated'));
+  });
+
+  it('automation rules run on inbound messages and update conversation metadata', () => {
+    store.replaceAutomationRules([
+      {
+        id: 'rule-price',
+        name: 'Price request',
+        event: 'Tin nhắn mới',
+        conditionField: 'Nội dung tin nhắn',
+        conditionOperator: 'chứa',
+        conditionValue: 'price',
+        actions: ['Add label: hot', 'Create note'],
+        enabled: true,
+        createdAt: '2024-06-01T00:00:00Z',
+      },
+    ]);
+
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-rule',
+      threadType: 'user',
+      senderId: 'sender1',
+      senderName: 'Customer',
+      content: 'Need price list',
+      messageType: 'text',
+      providerMessageId: 'pmsg_rule',
+      timestamp: '2024-06-01T12:00:00Z',
+    });
+
+    const conv = store.getConversationByThread('acc1', 'thread-rule');
+    assert.ok(conv);
+    assert.deepEqual(conv!.tags, ['hot']);
+    assert.match(conv!.notes, /Automation/);
+  });
+
+  it('maintains daily conversation rollup without scanning messages', () => {
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-rollup',
+      threadType: 'user',
+      senderId: 'sender1',
+      senderName: 'Customer',
+      content: 'Hello',
+      messageType: 'text',
+      providerMessageId: 'pmsg_rollup_in',
+      timestamp: '2024-06-01T12:00:00Z',
+    });
+    store.insertOutboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-rollup',
+      threadType: 'user',
+      content: 'Hi',
+    });
+
+    const rows = store.getConversationRollup({
+      from: '2024-06-01',
+      to: '2024-06-01',
+      accountId: 'acc1',
+    });
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].inboundMessages, 1);
+    assert.equal(rows[0].newConversations, 1);
+  });
+
   // -------------------------------------------------------------------------
   // Duplicate provider message does not duplicate rows
   // -------------------------------------------------------------------------

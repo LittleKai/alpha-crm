@@ -415,10 +415,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final taskStats = state.overview?['taskStats'] ?? const {};
     final groupStats = state.analytics['groups'] ?? const {};
     final chatbotStats = state.analytics['chatbot'];
+    final conversationRollup = state.analytics['conversationRollup'];
     final chatbotTotal = chatbotStats is List
         ? chatbotStats.fold<int>(
             0,
             (sum, item) => sum + ((item['count'] ?? 0) as num).toInt(),
+          )
+        : 0;
+    final inboxMessages = conversationRollup is List
+        ? conversationRollup.fold<int>(
+            0,
+            (sum, item) =>
+                sum +
+                _safeInt(item is Map ? item['inboundMessages'] : 0) +
+                _safeInt(item is Map ? item['outboundMessages'] : 0),
+          )
+        : 0;
+    final newConversations = conversationRollup is List
+        ? conversationRollup.fold<int>(
+            0,
+            (sum, item) =>
+                sum + _safeInt(item is Map ? item['newConversations'] : 0),
           )
         : 0;
     final metrics = [
@@ -439,6 +456,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         value: chatbotTotal.toString(),
         icon: Icons.smart_toy_outlined,
         color: AppColors.primary,
+      ),
+      _OperationMetric(
+        label: 'Tin inbox',
+        value: inboxMessages.toString(),
+        icon: Icons.forum_outlined,
+        color: AppColors.info,
+      ),
+      _OperationMetric(
+        label: 'Hội thoại mới',
+        value: newConversations.toString(),
+        icon: Icons.mark_unread_chat_alt_outlined,
+        color: AppColors.success,
       ),
       _OperationMetric(
         label: 'Nhóm quản lý',

@@ -231,6 +231,35 @@ class LiveChatLocalBridgeApi {
     return _post('/local/conversations/$conversationId/mark-read', const {});
   }
 
+  Future<Map<String, dynamic>> updateConversation(
+    String conversationId,
+    Map<String, dynamic> data,
+  ) {
+    return _put(
+      '/local/conversations/${Uri.encodeComponent(conversationId)}',
+      data,
+    );
+  }
+
+  Future<Map<String, dynamic>> getConversationRollup({
+    required DateTime from,
+    required DateTime to,
+    String? accountId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/local/reporting/conversation-rollup')
+        .replace(
+          queryParameters: {
+            'from': from.toUtc().toIso8601String().substring(0, 10),
+            'to': to.toUtc().toIso8601String().substring(0, 10),
+            if (accountId != null && accountId.isNotEmpty)
+              'accountId': accountId,
+          },
+        );
+    return _decodeResponse(
+      await http.get(uri).timeout(const Duration(seconds: 5)),
+    );
+  }
+
   Future<Map<String, dynamic>> updateChatbotState({
     required String accountId,
     required String threadId,

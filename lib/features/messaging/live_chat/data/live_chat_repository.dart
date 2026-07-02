@@ -294,7 +294,14 @@ class LiveChatRepository {
   Future<Map<String, dynamic>> updateConversation(
     String conversationId,
     Map<String, dynamic> data,
-  ) {
+  ) async {
+    if (_preferLocalZaloActions || localFirstEnabled) {
+      try {
+        return await localApi.updateConversation(conversationId, data);
+      } catch (_) {
+        if (localFirstEnabled) rethrow;
+      }
+    }
     return CrmCloudApi.put('/crm/conversations/$conversationId', data);
   }
 

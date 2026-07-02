@@ -130,6 +130,46 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
     }
   }
 
+  Future<void> updateTemplate(MessageTemplate template) async {
+    if (template.id.isEmpty) return;
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    final crmTemplate = CrmTemplate(
+      id: template.id,
+      userId: '',
+      name: template.title,
+      subject: '',
+      body: template.content,
+      type: 'zalo',
+      variables: template.variables,
+      category: 'general',
+      shortcut: template.shortcut,
+      isQuick: template.isQuick,
+      status: 'active',
+      language: 'vi',
+      usageCount: 0,
+      createdAt: template.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    final response = await _repository.updateTemplate(template.id, crmTemplate);
+    if (response['success'] == true && response['data'] != null) {
+      final updatedCrmTpl = CrmTemplate.fromJson(response['data']);
+      final updatedTpl = MessageTemplateJson.fromCrmTemplate(updatedCrmTpl);
+      state = state.copyWith(
+        templates: state.templates
+            .map((item) => item.id == template.id ? updatedTpl : item)
+            .toList(),
+        isLoading: false,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: response['message'] ?? 'Cập nhật mẫu tin thất bại.',
+      );
+    }
+  }
+
   Future<void> deleteTemplate(String id) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     final response = await _repository.deleteTemplate(id);

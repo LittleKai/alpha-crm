@@ -6,6 +6,8 @@
 > - **Chatwoot** (`.CRM-ref/chatwoot`) — nền tảng customer engagement / omnichannel support (Ruby on Rails). Bản này có cả phần `enterprise/` (Captain AI, SLA, Voice, Companies, SAML/SCIM).
 > - **ToolJet** (`.CRM-ref/ToolJet`) — low-code internal tool builder (NestJS + React). ~45 data-source plugins, workflows, RBAC, audit logs, white-labelling.
 
+> **Trạng thái (2026-07-01):** Top 4 mục ưu tiên trong `docs/specs/chatbotx-feature-analysis.md` ("Danh sách ưu tiên áp dụng đối với Live Chat") đã được áp dụng: nâng cấp popover câu trả lời soạn sẵn, bộ lọc trạng thái inbox, cờ tạm dừng bot theo hội thoại, trạng thái theo dõi sau/snooze. Xem **mục 8** ở cuối tài liệu này để biết danh sách tổng hợp (đã khử trùng lặp với ChatbotX) những gì còn lại đáng làm tiếp theo.
+
 ---
 
 ## 0. Cách chấm điểm
@@ -232,3 +234,47 @@ Flutter compose reply ──▶ backend ──▶ SMTP (nodemailer) ──▶ kh
 3. **Tái dùng SQLite live-chat + LiveChatLocalBridgeApi** làm lớp hội thoại chung cho mọi kênh (Zalo/Email/Facebook) thay vì dựng store riêng từng kênh.
 4. **Học kiến trúc rollup của Chatwoot** cho Reporting để không quét lại toàn bộ tin nhắn mỗi lần render dashboard.
 5. **Channel adapter pattern**: trừu tượng hóa "gửi/nhận tin" để thêm kênh mới (Email, FB) chỉ là một adapter, không sửa lõi inbox.
+
+---
+
+## 8. Tổng hợp hợp nhất ChatbotX + Chatwoot/ToolJet (cập nhật 2026-07-01)
+
+Sau khi Top 4 mục ưu tiên Live Chat (từ `docs/specs/chatbotx-feature-analysis.md`) đã được áp dụng, bảng dưới đây gộp **phần còn lại** của cả hai báo cáo (ChatbotX + Chatwoot/ToolJet), khử trùng lặp, xếp theo giá trị thực tế.
+
+### 8.1 Bảng tổng hợp còn lại
+
+| # | Tính năng | Nguồn | Điểm | Trùng/khác gì với báo cáo ChatbotX trước |
+|---|---|---|:-:|---|
+| 1 | **Custom Attributes** (trường tùy biến contact + conversation, hiển thị panel bên phải) | Chatwoot | **8.8** | Rộng hơn "typed custom fields" (4/10) trong báo cáo ChatbotX — đồng thời lấp đầy luôn "Contact sidebar panel" (mục còn lại #6 của ChatbotX, 6/10). Gộp 2 thành 1 task. |
+| 2 | **Labels/Tags + Saved Filters** (nhãn màu cho cả contact/conversation, lọc & lưu bộ lọc thành preset) | Chatwoot | **8.8** | Rộng hơn "Tag-based inbox filtering" (mục còn lại #7 của ChatbotX, 6/10) — Chatwoot cho lưu combo bộ lọc, không chỉ lọc tức thời. |
+| 3 | **Contact/Conversation Notes + Timeline** | Chatwoot | **8.4** | = "Internal notes" (mục còn lại #5 của ChatbotX, 7/10) nhưng có thêm dòng thời gian sự kiện (đổi nhãn, được giao, đổi trạng thái). |
+| 4 | **Automation Rules** (event → điều kiện → hành động, gắn vào listener `zca-js`, không phải visual builder) | Chatwoot | **8.2** | Mới, không trùng flow-builder của ChatbotX (đã loại vì phá nguyên tắc Simplicity First) — bản nhẹ, chỉ là rule engine trong app. |
+| 5 | **Macros** (chuỗi hành động 1 chạm, kích hoạt thủ công) | Chatwoot | **8.0** | Mới — bổ sung tự nhiên cho Automation Rules (khác biệt: thủ công vs tự động). |
+| 6 | **Reporting & Metrics Rollup** (kiến trúc bảng rollup, không quét lại toàn bộ tin mỗi lần render) | Chatwoot | **7.8** | Nâng cấp cách làm của "Dashboard analytics" (6/10, ChatbotX) — lấy kiến trúc rollup thay vì chỉ liệt kê chart. |
+| 7 | **Audit Logs** (ai/làm gì/khi nào/IP cho hành động rủi ro cao) | ToolJet | **7.3** | Hoàn toàn mới, không có trong báo cáo ChatbotX — hợp vì alpha-crm có nhiều thao tác rủi ro (bulk send, kết bạn SĐT, quét nhóm). |
+| 8 | Hệ thống biến cá nhân hóa `{{variable}}` cho bulk messaging | ChatbotX | 8/10 | Không có tương đương trong Chatwoot/ToolJet — giữ nguyên. |
+| 9 | Bộ lọc contact tạm thời để target broadcast (tag/field/ngày) | ChatbotX | 7/10 | Không trùng — giữ nguyên. |
+| 10 | Growth Link/QR "bắt đầu chat nhanh" + đếm click | ChatbotX | 7/10 | Không có tương đương trong Chatwoot/ToolJet — giữ nguyên. |
+| 11 | Gửi broadcast rate-limit + dedup + retry theo batch | ChatbotX | 7/10 | Không trùng, nên làm cùng lúc với Automation Rules vì cả hai đều cần đi qua compliance guard. |
+| 12 | Email channel (E2 thông báo trước → E1 hai chiều sau) | Chatwoot/ToolJet | 7.0→7.5 | Kênh mới, lộ trình riêng (Giai đoạn 3), không phải ưu tiên inbox. |
+| 13 | Facebook Messenger (API chính thức) | Chatwoot | 7.3 | Kênh mới, lộ trình riêng. |
+| 14 | Teams + Auto-assignment (round-robin) | Chatwoot | 7.0 | = "Gán hội thoại thủ công" (5/10, ChatbotX) + tự động round-robin — chỉ đáng làm khi multi-operator. |
+| 15 | Agent Bot framework (điều phối bot↔người chuẩn hơn) | Chatwoot | 7.2 | Bot-pause đã áp dụng giải quyết phần lõi; đây là khung điều phối nâng cao hơn, chưa cấp thiết. |
+| 16 | RBAC/Group permissions, Captain AI Copilot, SLA, CSAT | ToolJet/Chatwoot EE | 6.5–7.0 | Giai đoạn nâng cao, cần nền Teams/Reporting trước. |
+
+### 8.2 Top 6 đáng tích hợp nhất tiếp theo (không lặp với 4 mục đã làm)
+
+1. **Custom Attributes + panel contact bên phải** (8.8) — gộp 2 ý tưởng thành 1 task, giá trị CRM cao nhất, biến "danh bạ Zalo" thành CRM thật.
+2. **Labels/Tags + Saved Filters** nâng cấp (8.8) — tận dụng tag đã có, thêm lọc/lưu preset.
+3. **Contact/Conversation Notes + Timeline** (8.4) — chi phí thấp, giá trị chăm sóc khách cao.
+4. **Automation Rules nhẹ** (8.2) — "bộ não" liên kết mọi thứ, gắn thẳng vào listener `zca-js` đã có, phải đi qua compliance guard hiện có, **không** xây visual builder.
+5. **Macros** (8.0) — bổ sung rẻ, đi kèm tự nhiên sau khi có Automation Rules.
+6. **Audit Logs** (7.3) — rất rẻ (1 bảng SQLite), giá trị minh bạch/tuân thủ cao cho các hành động rủi ro của alpha-crm.
+
+*(Biến cá nhân hóa, growth-link QR, rate-limit broadcast vẫn đáng giá nhưng xếp sau vì phục vụ bulk-messaging/growth chứ không phải lõi live-chat inbox.)*
+
+### 8.3 Điểm đặc biệt nhất của mỗi dự án
+
+- **ChatbotX** — Hệ thống **AI Agent gắn trong flow automation**: chọn provider theo từng bước (OpenAI/Claude/Gemini/DeepSeek/OpenRouter), có RAG knowledge base (pgvector), ghi kết quả thẳng vào custom field, nhớ ngữ cảnh hội thoại. Mức độ tinh vi hiếm thấy ở một dự án mã nguồn mở — kết hợp automation + AI + cá nhân hóa thành một hệ thống liền mạch.
+- **Chatwoot** — **Mô hình hội thoại thống nhất (channel-agnostic) + Automation Rules làm "bộ não"**: mọi kênh (chat/email/Facebook/Instagram) đều quy về cùng một khái niệm "conversation", dùng chung canned response/label/automation/reporting. Đây là lý do Chatwoot trở thành nền tảng hỗ trợ khách hàng mã nguồn mở trưởng thành nhất — kiến trúc "1 inbox, N kênh, cùng bộ công cụ" là điều alpha-crm nên học nhất, không chỉ từng tính năng lẻ.
+- **ToolJet** — **Audit Log + RBAC chi tiết (CASL ability) làm nền quản trị**: khác hẳn 2 dự án kia, ToolJet không mạnh về chat mà mạnh về governance — ghi vết mọi thao tác người dùng và phân quyền chi tiết theo nhóm/vai trò. Đây là điểm alpha-crm thiếu nhất trong 3 dự án, quan trọng hơn bình thường vì alpha-crm thực hiện nhiều hành động rủi ro cao (gửi hàng loạt, kết bạn, quét nhóm) cần minh bạch/truy vết.

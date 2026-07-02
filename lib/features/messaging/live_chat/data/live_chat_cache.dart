@@ -3,6 +3,40 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../../shared/local_db/local_db.dart';
 
 class LiveChatCache {
+  static const String _savedFiltersKey = 'live_chat_saved_filters';
+
+  Future<void> saveSavedFilters(List<Map<String, dynamic>> filters) async {
+    final db = await LocalDb.instance;
+    await db.insert('cache_entries', {
+      'key': _savedFiltersKey,
+      'value': jsonEncode(filters),
+      'expiresAt': DateTime.now()
+          .add(const Duration(days: 3650))
+          .millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getSavedFilters() async {
+    final db = await LocalDb.instance;
+    final rows = await db.query(
+      'cache_entries',
+      where: 'key = ?',
+      whereArgs: [_savedFiltersKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(rows.first['value'] as String);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
   /// Save a list of conversations to the generic cache and specific conversations table
   Future<void> saveConversations(
     String cacheKey,

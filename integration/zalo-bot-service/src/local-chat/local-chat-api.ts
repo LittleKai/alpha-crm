@@ -102,6 +102,20 @@ export function handleLocalRoute(
     return true;
   }
 
+  if (method === 'GET' && /^\/local\/reporting\/conversation-rollup(\?.*)?$/.test(url)) {
+    handleLocalConversationRollup(url, req, res, json);
+    return true;
+  }
+
+  if (method === 'GET' && url === '/local/automation/rules') {
+    handleLocalAutomationRules(req, res, json);
+    return true;
+  }
+  if (method === 'PUT' && url === '/local/automation/rules') {
+    void handlePutLocalAutomationRules(req, res, json, readBody);
+    return true;
+  }
+
   // GET /local/accounts/chat-settings  → map of accountId → { aiAutoReply }
   if (method === 'GET' && url === '/local/accounts/chat-settings') {
     handleGetAccountChatSettings(req, res, json);
@@ -197,6 +211,18 @@ export function handleLocalRoute(
   if (method === 'POST' && markReadMatch) {
     const conversationId = decodeURIComponent(markReadMatch[1]);
     handleLocalMarkRead(conversationId, req, res, json);
+    return true;
+  }
+
+  const updateConversationMatch = url.match(/^\/local\/conversations\/([^/?]+)$/);
+  if (method === 'PUT' && updateConversationMatch) {
+    void handleLocalUpdateConversation(
+      decodeURIComponent(updateConversationMatch[1]),
+      req,
+      res,
+      json,
+      readBody,
+    );
     return true;
   }
 
@@ -951,6 +977,148 @@ function handleLocalConversationList(
     success: true,
     data: enriched,
     total: result.total,
+  }, req);
+}
+
+// ---------------------------------------------------------------------------
+// PUT /local/conversations/:id
+// ---------------------------------------------------------------------------
+async function handleLocalUpdateConversation(
+  conversationId: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    json(res, 400, { success: false, error: 'Invalid JSON body.' }, req);
+    return;
+  }
+
+  const updated = store.updateConversationMetadata(conversationId, {
+    tags: payload.tags,
+    notes: payload.notes,
+    customAttributes:
+      payload.customAttributes ?? payload.customFields ?? payload.attributes,
+    archived: payload.archived ?? payload.isArchived,
+    assignedTo: payload.assignedTo ?? payload.assigneeId,
+    followUpAt: payload.followUpAt ?? payload.snoozedUntil,
+  });
+  if (!updated) {
+    json(res, 404, { success: false, error: 'Conversation not found.' }, req);
+    return;
+  }
+
+  localChatEvents.publish({
+    type: 'conversation.updated',
+    accountId: updated.accountId,
+    threadId: updated.threadId,
+    data: { conversationId: updated.id },
+  });
+  json(res, 200, { success: true, data: updated }, req);
+}
+
+// ---------------------------------------------------------------------------
+// GET /local/reporting/conversation-rollup?from=&to=&accountId=
+// ---------------------------------------------------------------------------
+function handleLocalConversationRollup(
+  url: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+
+  const queryString = url.split('?')[1] || '';
+  const params = new URLSearchParams(queryString);
+  const data = store.getConversationRollup({
+    from: params.get('from') || undefined,
+    to: params.get('to') || undefined,
+    accountId: params.get('accountId') || undefined,
+  });
+  json(res, 200, { success: true, data }, req);
+}
+
+// ---------------------------------------------------------------------------
+// GET/PUT /local/automation/rules
+// ---------------------------------------------------------------------------
+function handleLocalAutomationRules(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+  json(res, 200, { success: true, data: store.listAutomationRules() }, req);
+}
+
+async function handlePutLocalAutomationRules(
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+  readBody: ReadBodyFn,
+): Promise<void> {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+  let payload: any;
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { success: false, error: 'Invalid JSON body.' }, req);
+    return;
+  }
+  const rawRules = Array.isArray(payload.rules) ? payload.rules : [];
+  const rules = rawRules.map((rule: any) => ({
+    id: String(rule.id || randomUUID()),
+    name: String(rule.name || '').trim(),
+    event: String(rule.event || 'Tin nhắn mới').trim(),
+    conditionField: String(rule.conditionField || 'Nội dung tin nhắn').trim(),
+    conditionOperator: String(rule.conditionOperator || 'chứa').trim(),
+    conditionValue: String(rule.conditionValue || '').trim(),
+    actions: Array.isArray(rule.actions)
+      ? rule.actions.map((item: unknown) => String(item).trim()).filter(Boolean)
+      : [],
+    enabled: rule.enabled !== false,
+    createdAt: String(rule.createdAt || new Date().toISOString()),
+  })).filter((rule: any) => rule.name.length > 0);
+  json(res, 200, {
+    success: true,
+    data: store.replaceAutomationRules(rules),
   }, req);
 }
 

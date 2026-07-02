@@ -4,8 +4,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../../shared/local_db/local_db.dart';
+import '../../settings/providers/settings_provider.dart';
 import '../../messaging/chatbot/data/chatbot_local_bridge_api.dart';
 import '../../messaging/chatbot/providers/chatbot_provider.dart';
+import '../../messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import '../data/dashboard_repository.dart';
 import '../utils/dashboard_chart_data.dart';
 
@@ -68,10 +70,14 @@ class DashboardState {
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
   final ChatbotLocalBridgeApi _chatbotBridge;
+  final LiveChatLocalBridgeApi _liveChatBridge;
 
   DashboardNotifier(Ref ref)
     : _repository = ref.read(dashboardRepositoryProvider),
       _chatbotBridge = ref.read(chatbotLocalBridgeApiProvider),
+      _liveChatBridge = LiveChatLocalBridgeApi(
+        baseUrl: ref.read(settingsProvider).settings.localBridgeBaseUrl,
+      ),
       super(DashboardState.initial()) {
     _initDashboard();
   }
@@ -199,6 +205,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           : const <dynamic>[];
       final chatbotStats = await _loadChatbotStats(rangeParam);
       final friendStats = await _buildFriendDailyStats(rangeParam);
+      final conversationRollup = await _loadConversationRollup(rangeParam);
       final analyticsResponses = await Future.wait([
         _repository.getFunnelAnalytics(),
         _repository.getCampaignAnalytics(),
@@ -215,6 +222,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             'campaigns': analyticsResponses[1]['data'] ?? const [],
             'chatbot': analyticsResponses[2]['data'] ?? const [],
             'groups': analyticsResponses[3]['data'] ?? const {},
+            'conversationRollup': conversationRollup,
           },
           performanceData: mergeFriendStatsIntoPerformanceData(
             mergeChatbotStatsIntoPerformanceData(
@@ -279,7 +287,9 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
     final byDate = <String, List<int>>{}; // key -> [success, failure]
     for (final record in records) {
-      final date = _parseFriendTimestamp((record['timestamp'] ?? '').toString());
+      final date = _parseFriendTimestamp(
+        (record['timestamp'] ?? '').toString(),
+      );
       if (date == null) continue;
       final dayOnly = DateTime(date.year, date.month, date.day);
       if (dayOnly.isBefore(startDate)) continue;
@@ -324,6 +334,27 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final to = DateTime.now();
     final from = to.subtract(Duration(days: days - 1));
     return _chatbotBridge.getChatbotStats(from: from, to: to);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadConversationRollup(
+    String rangeParam,
+  ) async {
+    final days = rangeParam == '7d' ? 7 : 30;
+    final to = DateTime.now();
+    final from = to.subtract(Duration(days: days - 1));
+    try {
+      final response = await _liveChatBridge.getConversationRollup(
+        from: from,
+        to: to,
+      );
+      if (response['success'] == true && response['data'] is List) {
+        return (response['data'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
   }
 
   void setTimeRange(String range) {
