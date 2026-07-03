@@ -151,6 +151,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
+### 2026-07-03 - Self-echo Zalo messages double-reported to cloud and bumped unread; explicit `unreadCountDelta: 0` swallowed by `|| 1`
+
+- Symptom: on mobile/web (cloud SSE mode), every message the operator sent from Desktop/chatbot flipped the conversation to "unread" and risked duplicate CrmMessage rows; inbound customer bubbles never appeared in local-first mode.
+- Root cause: (1) zca-js runs with `selfListen: true`, so every outbound send comes back as a listener echo into `handleInboundMessageEvent`, which re-reported it to the cloud (`reportInboundMessageMetadata`) with a **hard-coded `unreadCountDelta: 1`** — even though `outbound-reporter` had already reported the same message at send time (dedupe only by `providerMessageId`, racy). (2) The backend's metadata branch used `$inc: { unreadCount: Number(event.unreadCountDelta) || 1 }`, so an explicit `0` was silently turned back into `+1`. (3) In local-first mode ALL inbound (even 1:1) was metadata-only, so the cloud never stored/published inbound content.
+- Fix summary: agent skips the cloud report for echoes/duplicates (`reconciledId || existingProviderMessage`); 1:1 threads now report FULL content in local-first mode (option (b)) while managed groups stay metadata-only; `reportInboundMessageMetadata` computes `unreadCountDelta` (0 when `senderId === accountId`); backend uses `Number.isFinite(...)` so an explicit 0 delta survives.
+- Rule: there is exactly ONE cloud report per message — at send time via `outbound-reporter` for CRM/chatbot sends, or via the listener path for everything else. When adding a new send path, either hook `reportOutboundMessageEvent` at send time (and ensure the echo reconciles via `clientMessageId`) or let the echo report it — never both. Never write `Number(x) || fallback` when `0` is a meaningful value.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/agent/agent-runner.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/agent/cloud-api.ts`, `alpha-studio-backend/server/routes/crm.js` (`upsertConversationFromInbound`).
+
 ### 2026-06-22 - Dialog "Đóng" button popped the GoRouter page (whole-app crash) via captured outer context
 
 - Symptom: Opening the group AI-summary history dialog ("Lịch sử tóm tắt") then tapping "Đóng" crashed the app: `currentConfiguration.isNotEmpty: You have popped the last page off of the stack` followed by `!_debugLocked` during Navigator dispose.

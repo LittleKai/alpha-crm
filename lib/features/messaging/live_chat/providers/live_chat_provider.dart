@@ -2300,6 +2300,11 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
           );
         }
         _scheduleListRefresh();
+      } else if (event.type == 'friend.updated') {
+        // Cloud `conversation.updated` (mapped to friend.updated) is the only
+        // realtime signal for metadata-only threads (e.g. managed groups) —
+        // without this, previews/unread for non-selected threads never update.
+        _scheduleListRefresh();
       }
       return;
     }

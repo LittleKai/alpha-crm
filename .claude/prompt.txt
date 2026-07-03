@@ -1,12 +1,10 @@
-  Đọc tasklist tại `tools/alpha-crm/docs/specs/mobile-web-completion-tasklist.md`
-  (gap analysis đã làm xong, không cần phân tích lại).
+  Đọc tasklist tại `tools/alpha-crm/docs/specs/mobile-web-completion-tasklist.md` (gap analysis đã làm xong, không cần phân tích lại).  Triển khai Sprint 3 
 
-  Triển khai theo đúng thứ tự Sprint ở mục 3, bắt đầu từ Sprint 1 (BE-1 → BE-4, BE-5 song song):
   xây CrmEventHub, endpoint SSE /api/crm/events/subscribe, broadcast sự kiện, nâng cấp heartbeat
   + offline detector, và long-poll /agent/commands/next trong `alpha-studio-backend`.
 
   Yêu cầu:
-  
+
   - Tuân thủ DoD ghi trong từng task; giữ backward-compatible với agent/client cũ.
   - KHÔNG đổi hành vi Live Chat desktop (local bridge) — xem cảnh báo rủi ro FE-1 và QA-2.
   - Với AG-3/BE-6: giữ chính sách privacy nhóm managed metadata-only như inbound hiện tại.

@@ -251,7 +251,7 @@ Sprint 4:                           BE-7, AG-4, QA-1, QA-2, DOC-1
 
 ## 4. KNOWN LIMITATIONS (chấp nhận ở v1)
 
-1. **Lịch sử tin trên mobile/web giới hạn phạm vi cloud-sync** (tin từ lúc agent bắt đầu report; nhóm managed chỉ metadata) — lịch sử đầy đủ vẫn ở Desktop.
+1. **Lịch sử tin trên mobile/web giới hạn phạm vi cloud-sync** (tin từ lúc agent bắt đầu report). *Quyết định sau review (phương án b):* hội thoại **1:1 sync FULL nội dung** lên cloud kể cả ở chế độ local-first — mobile/web thấy bubble tin khách thật; **nhóm managed vẫn metadata-only** (chỉ preview) để nội dung nhóm không rời máy Desktop. Echo của tin gửi từ CRM/chatbot không report lại (đã report tại thời điểm gửi bởi `outbound-reporter`).
 2. **Trạng thái "Đã xem/Đã nhận"** chưa làm (cần pipeline delivered/seen từ zca-js).
 3. **"Đang nhập…" (typing) từ Zalo → mobile** chưa làm (chỉ có chiều gửi typing từ desktop local).
 4. **Scale ngang backend**: CrmEventHub in-memory, cần Redis pub/sub khi backend >1 instance.
