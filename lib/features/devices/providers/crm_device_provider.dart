@@ -314,7 +314,9 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
 
   void _startPairingStatusPolling() {
     _pairingPollTimer?.cancel();
-    _pairingPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    // 2s (not 3s): the pairing screen's <2s acceptance target (AG-4) is a
+    // worst-case bound, so the poll interval itself has to stay under it.
+    _pairingPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (!mounted || state.isPaired) {
         _pairingPollTimer?.cancel();
         return;

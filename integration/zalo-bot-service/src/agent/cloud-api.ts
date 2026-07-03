@@ -272,7 +272,9 @@ export async function reportInboundMessageMetadata(
       avatarUrl: event.avatarUrl || '',
       lastMessagePreview: preview,
       lastMessageAt: event.timestamp || new Date().toISOString(),
-      unreadCountDelta: 1,
+      // A self-sent message (operator's own phone/desktop) must never bump the
+      // conversation's unread counter on remote clients.
+      unreadCountDelta: event.senderId && event.senderId === event.accountId ? 0 : 1,
       messageType: event.messageType || 'text',
       bridgeDeviceId: deviceId,
       providerMessageId: event.providerMessageId || '',

@@ -301,6 +301,11 @@ async function handleInboundMessageEvent(
       // Store every thread locally (including unmanaged groups) so the inbox
       // populates naturally. Chatbot, cloud report and n8n stay gated to
       // managed groups below.
+      // True when this event is an echo of a CRM/chatbot send (reconciled) or a
+      // duplicate delivery — those were already reported to the cloud at send
+      // time by outbound-reporter, so re-reporting would race the cloud's
+      // providerMessageId dedupe and could double the message.
+      let alreadyReportedAtSendTime = false;
       try {
         const existingProviderMessage = event.providerMessageId
           ? localStore.db
@@ -319,6 +324,7 @@ async function handleInboundMessageEvent(
                 status: 'sent',
               })
             : undefined;
+        alreadyReportedAtSendTime = Boolean(reconciledId || existingProviderMessage);
         const localMessageId =
           reconciledId ||
           localStore.upsertInboundMessage({
@@ -394,8 +400,21 @@ async function handleInboundMessageEvent(
         return;
       }
 
-      if (isManaged) {
-        await reportInboundMessageMetadata(
+      if (alreadyReportedAtSendTime) {
+        // Echo/duplicate of an already-reported send — skip the cloud report.
+      } else if (event.threadType === 'group') {
+        if (isManaged) {
+          await reportInboundMessageMetadata(
+            credentials.deviceId,
+            credentials.agentSecret,
+            event,
+          );
+        }
+      } else {
+        // 1:1 threads sync full content even in local-first mode so remote
+        // (mobile/web) clients render real message bubbles. Group content
+        // stays on this device — managed groups only ever send metadata.
+        await reportInboundMessage(
           credentials.deviceId,
           credentials.agentSecret,
           event,

@@ -1,6 +1,6 @@
 # Project Summary
 
-*Latest Session: Implemented Sprint 3 (FE-1..FE-6) of `docs/specs/mobile-web-completion-tasklist.md` — Live Chat now works on web/Android via a new cloud-remote transport, replacing the previously hardcoded local-bridge-only path. See `live_chat_transport.dart`, `crm_sse_client.dart`, `live_chat_cloud_event_mapper.dart`, `agent_status_provider.dart`.*
+*Latest Session: Implemented Sprint 4 (BE-7, AG-4, QA-1, QA-2, DOC-1) of `docs/specs/mobile-web-completion-tasklist.md`, closing out the mobile-web-completion effort. Tightened the pairing poll interval to 2s (`crm_device_provider.dart`), added `crmMessageSendLimiter` on the backend, and wrote `docs/specs/mobile-web-completion-qa-checklist.md` for the E2E matrix (QA-1 needs a live desktop+phone rig this environment doesn't have, so it's a manual checklist, not an automated pass). Sprint 3 (FE-1..FE-6) landed Live Chat on web/Android via a cloud-remote transport — see `live_chat_transport.dart`, `crm_sse_client.dart`, `live_chat_cloud_event_mapper.dart`, `agent_status_provider.dart`.*
 
 ## 1. Project Overview
 
