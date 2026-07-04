@@ -214,10 +214,13 @@ class LiveChatLocalBridgeApi {
         throw Exception('Bridge SSE error: ${response.statusCode}');
       }
       final decoder = LiveChatSseDecoder();
-      await for (final line
-          in response.stream
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())) {
+      // Backend gửi ": heartbeat" mỗi 20s — quá 60s không có dữ liệu nghĩa là
+      // socket đã chết im lặng; ném lỗi để notifier reconnect.
+      final lines = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(seconds: 60));
+      await for (final line in lines) {
         for (final event in decoder.addLine(line)) {
           yield event;
         }

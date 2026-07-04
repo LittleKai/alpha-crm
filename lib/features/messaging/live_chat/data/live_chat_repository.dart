@@ -369,7 +369,9 @@ class LiveChatRepository {
       if (client == null) return const Stream.empty();
       return mapCloudSseEvents(client.events, accountId: accountId);
     }
-    if (!localFirstEnabled) return const Stream.empty();
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return const Stream.empty();
+    }
     return localApi.watchEvents(accountId: accountId, threadId: threadId);
   }
 

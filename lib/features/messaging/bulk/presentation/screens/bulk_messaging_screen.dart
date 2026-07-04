@@ -721,6 +721,51 @@ class _TargetPanel extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.m, AppSpacing.m, AppSpacing.m, 0),
+            child: Row(
+              children: [
+                Icon(
+                  selectedTab == 0
+                      ? Icons.phone
+                      : selectedTab == 1
+                          ? Icons.groups_2
+                          : selectedTab == 2
+                              ? Icons.group
+                              : Icons.badge,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSpacing.s),
+                Text(
+                  selectedTab == 0
+                      ? 'Gửi chiến dịch theo danh sách SĐT'
+                      : selectedTab == 1
+                          ? 'Gửi chiến dịch vào nhóm Zalo'
+                          : selectedTab == 2
+                              ? 'Gửi chiến dịch cho bạn bè Zalo'
+                              : 'Gửi chiến dịch theo Nhãn phân loại',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Tooltip(
+                  message: selectedTab == 0
+                      ? 'Nhập trực tiếp hoặc tải lên tệp danh sách số điện thoại muốn gửi tin nhắn hàng loạt. Hệ thống sẽ tự tìm kiếm tài khoản Zalo liên kết để gửi.'
+                      : selectedTab == 1
+                          ? 'Chọn gửi tin nhắn vào khung chat chung của các nhóm Zalo, hoặc tự động gửi tin nhắn riêng cho từng thành viên trong nhóm.'
+                          : selectedTab == 2
+                              ? 'Chọn trực tiếp từ danh sách bạn bè hiện tại trên tài khoản Zalo của bạn để gửi tin nhắn.'
+                              : 'Chọn nhãn phân loại khách hàng để lọc và gửi tin nhắn đồng loạt cho các khách hàng có gắn nhãn đó trong danh bạ CRM.',
+                  child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          Divider(height: 1, color: AppColors.borderSoft),
+          Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
               children: [
@@ -1021,6 +1066,23 @@ class _GroupTargetPanel extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Text(
+                      'Chế độ gửi tin vào nhóm',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Tooltip(
+                      message: 'Gửi tin vào nhóm: Tin nhắn sẽ được gửi trực tiếp vào khung chat chung của nhóm.\n\nGửi cho thành viên: Hệ thống sẽ tự động quét danh sách thành viên trong nhóm và gửi tin nhắn riêng (1-1) cho từng người (chế độ này có rủi ro cao nếu gửi quá nhanh hoặc quá nhiều người lạ).',
+                      child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.s),
                 SegmentedButton<GroupSendMode>(
                   segments: const [
                     ButtonSegment(
@@ -1729,6 +1791,7 @@ class _ConfigPanel extends StatelessWidget {
             Divider(height: 1, color: AppColors.borderSoft),
             _Section(
               title: '1. CẤU HÌNH CHUNG',
+              tooltip: 'Thiết lập tên chiến dịch và khoảng thời gian chờ (delay) ngẫu nhiên giữa các tin nhắn để giảm thiểu rủi ro bị khóa tài khoản Zalo.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1793,6 +1856,7 @@ class _ConfigPanel extends StatelessWidget {
             const SizedBox(height: AppSpacing.m),
             _Section(
               title: '2. CẤU HÌNH NỘI DUNG',
+              tooltip: 'Soạn thảo nội dung tin nhắn và đính kèm hình ảnh/tệp tin. Bạn nên sử dụng Spintax hoặc các biến cá nhân hóa để tránh trùng lặp nội dung tin nhắn.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2408,8 +2472,13 @@ class _ScheduledCampaignTile extends StatelessWidget {
 class _Section extends StatelessWidget {
   final String title;
   final Widget child;
+  final String? tooltip;
 
-  const _Section({required this.title, required this.child});
+  const _Section({
+    required this.title,
+    required this.child,
+    this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2429,7 +2498,25 @@ class _Section extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Expanded(child: Text(title, style: AppTextStyles.cardTitle)),
+                Text(
+                  title,
+                  style: AppTextStyles.cardTitle.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (tooltip != null) ...[
+                  const SizedBox(width: AppSpacing.xs),
+                  Tooltip(
+                    message: tooltip!,
+                    child: Icon(
+                      Icons.help_outline,
+                      size: 16,
+                      color: AppColors.iconMuted,
+                    ),
+                  ),
+                ],
+                const Spacer(),
                 Icon(
                   Icons.keyboard_arrow_down,
                   color: AppColors.textSecondary,

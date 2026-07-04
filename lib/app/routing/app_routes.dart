@@ -31,6 +31,10 @@ class AppRoutes {
   static const String subscription = '/subscription';
   static const String devices = '/devices';
 
+  // Integrations (channel settings)
+  static const String integrationsEmail = '/integrations/email';
+  static const String integrationsFacebook = '/integrations/facebook';
+
   // Settings
   static const String settings = '/settings';
   static const String systemLogs = '/settings/system-logs';

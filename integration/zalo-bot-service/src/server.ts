@@ -1199,3 +1199,11 @@ process.on('SIGTERM', () => {
 process.on('unhandledRejection', (reason) => {
   console.error('[server] Unhandled promise rejection (kept alive):', reason);
 });
+
+// Safety net: a synchronous uncaught exception (e.g. thrown inside a zca-js
+// listener callback or a timer) must not kill the listeners of every other
+// account. Log and keep running; the Flutter supervisor restarts the process
+// if it truly dies.
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught exception (kept alive):', err);
+});

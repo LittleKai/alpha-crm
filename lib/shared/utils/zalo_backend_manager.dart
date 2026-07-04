@@ -55,12 +55,15 @@ class ZaloBackendManager {
   static const Duration _watchdogInterval = Duration(seconds: 5);
 
   /// Số nhịp health-check lỗi liên tiếp trước khi coi backend là chết.
-  static const int _failureThreshold = 2;
+  static const int _failureThreshold = 3;
 
   /// Số lần khởi động lại tối đa trong [_circuitWindow] trước khi mở circuit.
   static const int _maxRestartsPerWindow = 5;
   static const Duration _circuitWindow = Duration(minutes: 2);
   static const Duration _maxBackoff = Duration(seconds: 30);
+
+  /// Circuit mở → tự thử lại sau cooldown này (retryManually() vẫn dùng được).
+  static const Duration _circuitCooldown = Duration(minutes: 5);
 
   // --- Trạng thái supervisor ---
   /// Trạng thái backend cho UI lắng nghe (không cần Riverpod).
@@ -71,9 +74,13 @@ class ZaloBackendManager {
   static int _consecutiveFailures = 0;
   static int _restartCount = 0;
   static DateTime? _windowStart;
+  static DateTime? _circuitOpenedAt;
 
   /// Đang trong một chu trình (re)start — chặn watchdog kích hoạt chồng chéo.
   static bool _ensuring = false;
+
+  /// Một nhịp watchdog đang chạy — probe có thể kéo dài bằng cả chu kỳ.
+  static bool _ticking = false;
 
   /// True khi app chủ động dừng backend (đóng app / cập nhật) — chặn auto-restart.
   static bool _manualStop = false;
@@ -327,7 +334,11 @@ class ZaloBackendManager {
 
     // Liveness: nếu tiến trình backend thoát sớm thì dừng chờ ngay.
     _backendExited = false;
-    _backendProcess?.exitCode.then((code) {
+    final watchedProcess = _backendProcess;
+    watchedProcess?.exitCode.then((code) {
+      // Listener của tiến trình cũ (đã bị kill trong một chu kỳ restart) không
+      // được phép phá trạng thái của lần khởi động mới.
+      if (!identical(watchedProcess, _backendProcess)) return;
       _backendExited = true;
       _isRunning = false;
       _lastStartupError = 'Tiến trình backend đã thoát sớm với mã $code.';
@@ -422,6 +433,7 @@ class ZaloBackendManager {
     _consecutiveFailures = 0;
     _restartCount = 0;
     _windowStart = null;
+    _circuitOpenedAt = null;
     _setStatus(BackendStatus.starting);
     await _ensureRunning();
     _startWatchdog();
@@ -436,6 +448,7 @@ class ZaloBackendManager {
     _consecutiveFailures = 0;
     _restartCount = 0;
     _windowStart = null;
+    _circuitOpenedAt = null;
     _setStatus(BackendStatus.starting);
     await _ensureRunning();
     _startWatchdog();
@@ -450,31 +463,55 @@ class ZaloBackendManager {
   /// Một nhịp watchdog: kiểm tra /health, chịu đựng một lần lỡ, lỗi liên tiếp
   /// quá ngưỡng thì kích hoạt khởi động lại.
   static Future<void> _tick() async {
-    if (_manualStop || _ensuring) return;
-    // Circuit đang mở → ngưng auto-restart, chờ retryManually().
-    if (status.value == BackendStatus.failed) return;
-
-    final port = _activePort ?? _defaultPort;
-    final healthy = await _probeHealth(port);
-    if (healthy) {
-      _consecutiveFailures = 0;
-      _isRunning = true;
-      // Ổn định đủ lâu → reset circuit breaker.
-      if (_windowStart != null &&
-          DateTime.now().difference(_windowStart!) > _circuitWindow) {
-        _windowStart = null;
+    if (_ticking) return;
+    _ticking = true;
+    try {
+      if (_manualStop || _ensuring) return;
+      // Circuit đang mở → chờ hết cooldown rồi tự thử lại một chu kỳ mới;
+      // retryManually() vẫn cho phép thử lại ngay lập tức.
+      if (status.value == BackendStatus.failed) {
+        final openedAt = _circuitOpenedAt;
+        if (openedAt == null ||
+            DateTime.now().difference(openedAt) < _circuitCooldown) {
+          return;
+        }
+        AppLogger().info(
+          'ZaloBackendManager: circuit cooldown '
+          '${_circuitCooldown.inMinutes} phút đã hết — tự thử khởi động lại.',
+        );
+        _circuitOpenedAt = null;
+        _consecutiveFailures = 0;
         _restartCount = 0;
+        _windowStart = null;
+        _setStatus(BackendStatus.restarting);
+        await _ensureRunning();
+        return;
       }
-      _setStatus(BackendStatus.healthy);
-      return;
-    }
 
-    _consecutiveFailures++;
-    if (_consecutiveFailures < _failureThreshold) {
-      _setStatus(BackendStatus.degraded);
-      return; // chịu đựng một lần lỡ tạm thời
+      final port = _activePort ?? _defaultPort;
+      final healthy = await _probeHealth(port);
+      if (healthy) {
+        _consecutiveFailures = 0;
+        _isRunning = true;
+        // Ổn định đủ lâu → reset circuit breaker.
+        if (_windowStart != null &&
+            DateTime.now().difference(_windowStart!) > _circuitWindow) {
+          _windowStart = null;
+          _restartCount = 0;
+        }
+        _setStatus(BackendStatus.healthy);
+        return;
+      }
+
+      _consecutiveFailures++;
+      if (_consecutiveFailures < _failureThreshold) {
+        _setStatus(BackendStatus.degraded);
+        return; // chịu đựng một lần lỡ tạm thời
+      }
+      await _ensureRunning();
+    } finally {
+      _ticking = false;
     }
-    await _ensureRunning();
   }
 
   /// Bảo đảm backend đang chạy & khỏe. Tự kill bản hỏng, áp dụng exponential
@@ -503,6 +540,7 @@ class ZaloBackendManager {
             'Backend khởi động lại thất bại $_restartCount lần liên tiếp '
             '(circuit breaker mở). Vui lòng thử lại thủ công.';
         AppLogger().error('ZaloBackendManager: $_lastStartupError');
+        _circuitOpenedAt = DateTime.now();
         _setStatus(BackendStatus.failed);
         return;
       }
@@ -591,7 +629,7 @@ class ZaloBackendManager {
     try {
       final response = await client
           .get(Uri.parse('http://127.0.0.1:$port/health'))
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return body is Map ? body : null;

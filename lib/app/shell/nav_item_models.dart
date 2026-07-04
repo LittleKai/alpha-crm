@@ -56,10 +56,28 @@ final List<NavGroup> navigationGroups = [
         color: Colors.green,
       ),
       NavItem(
-        title: 'Tự động hóa',
+        title: 'Workflow n8n',
         icon: Icons.account_tree_outlined,
         routePath: '/workflows',
         color: Colors.purpleAccent,
+      ),
+    ],
+  ),
+  const NavGroup(
+    groupName: 'TÍCH HỢP KÊNH',
+    isCollapsible: true,
+    items: [
+      NavItem(
+        title: 'Email IMAP/SMTP',
+        icon: Icons.alternate_email_rounded,
+        routePath: '/integrations/email',
+        color: Colors.blueAccent,
+      ),
+      NavItem(
+        title: 'Facebook Messenger',
+        icon: Icons.facebook_outlined,
+        routePath: '/integrations/facebook',
+        color: Color(0xFF1877F2),
       ),
     ],
   ),

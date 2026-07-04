@@ -1,6 +1,54 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-06-23 +07:00
+**Last Updated:** 2026-07-04 +07:00
+
+---
+
+## Lỗi ParentDataWidget gây crash app khi mở tab Nhật ký / Lỗi hệ thống
+
+**Triệu chứng:** Mở tab "Nhật ký hoạt động" hoặc "Lỗi hệ thống" trong cài đặt gây crash ứng dụng Flutter ngay lập tức với thông báo lỗi: `⛔ Flutter Framework Error: Incorrect use of ParentDataWidget. The offending Expanded is currently placed inside a Wrap widget.`
+
+**Nguyên nhân:** Cả `live_logs_tab.dart` và `reported_errors_tab.dart` đều sử dụng widget `Spacer` (bản chất chứa `Expanded` bên trong) trực tiếp bên trong widget `Wrap`. `Expanded` chỉ có thể đặt bên trong một widget `Flex` (như `Row`, `Column`) để nhận `FlexParentData`, trong khi `Wrap` cung cấp `WrapParentData`.
+
+**Cách sửa:** Loại bỏ `Spacer` ra khỏi `Wrap`. Thay vào đó, thiết lập `alignment: WrapAlignment.spaceBetween` trên `Wrap` và gom nhóm các nút thao tác bên phải vào một `Row(mainAxisSize: MainAxisSize.min)` (hoặc `Wrap`) để đạt được bố cục tương đương mà không bị crash.
+
+**Quy tắc cần nhớ:** Tuyệt đối không dùng `Spacer` hoặc `Expanded` trực tiếp trong `Wrap`. Luôn dùng `WrapAlignment` hoặc bọc các widget con vào `Row`/`Column` nếu muốn căn chỉnh khoảng cách.
+
+**Các file liên quan:** `tools/alpha-crm/lib/features/settings/presentation/widgets/live_logs_tab.dart`, `tools/alpha-crm/lib/features/settings/presentation/widgets/reported_errors_tab.dart`.
+
+---
+
+## Live Chat desktop không có realtime — chỉ dựa vào polling 12s (chết khi rời tab)
+
+**Triệu chứng:** Trên bản desktop production, tin nhắn Zalo mới chỉ được phát hiện sau tối đa 12s
+polling timer sống trong `State` của `LiveChatScreen`. Vì timer đó bị `dispose()` khi rời tab, việc
+rời khỏi Live Chat để làm việc khác khiến ứng dụng KHÔNG BAO GIỜ báo tin nhắn mới cho đến khi người
+dùng tự quay lại tab và polling chạy lại.
+
+**Nguyên nhân:** `LiveChatRepository.watchEvents()` chỉ mở local SSE stream khi `localFirstEnabled ==
+true`, nhưng setting `localFirstLiveChat` mặc định `false` và không có UI để bật. Mọi hành động local
+khác trong repository đều dùng pattern `_preferLocalZaloActions || localFirstEnabled` (đúng trên
+desktop), riêng `watchEvents()` bị bỏ sót và chỉ check `localFirstEnabled` một mình → luôn rơi vào
+`return const Stream.empty()` trên desktop. Cùng nhóm lỗi với bug "Bot toggle" trước đây (gate thiếu
+`_preferLocalZaloActions`).
+
+**Cách sửa:** Đổi gate thành `if (!_preferLocalZaloActions && !localFirstEnabled) return const
+Stream.empty();` (`live_chat_repository.dart`) + test hồi quy `test/live_chat_repository_watch_events_test.dart`.
+Đồng thời thêm timeout không hoạt động 60s cho SSE client
+(`live_chat_local_bridge_api.dart::watchEvents`) vì backend gửi `: heartbeat` mỗi 20s — quá 60s
+không có dữ liệu nghĩa là socket đã chết im lặng, cần ném lỗi để notifier tự reconnect thay vì treo
+`realtimeConnected = true` mãi mãi (khi đó fallback polling bị gate `!realtimeConnected` sẽ không bao
+giờ chạy). **Quy tắc cần nhớ:** mọi capability local-bridge mới PHẢI dùng pattern
+`_preferLocalZaloActions || localFirstEnabled`, không bao giờ dùng `localFirstEnabled` một mình.
+
+**Bổ sung — hardening supervisor backend (`zalo_backend_manager.dart`):** probe `/health` timeout
+2s→5s và ngưỡng lỗi liên tiếp 2→3 lần (chịu đựng query đồng bộ `better-sqlite3` chặn event loop vài
+giây), thêm cờ chống chồng chéo (`_ticking`) cho mỗi nhịp watchdog, circuit breaker không còn latch
+vĩnh viễn mà tự thử lại một lần sau mỗi 5 phút cooldown (nút "Thử lại" thủ công vẫn hoạt động song
+song), và sửa race điều kiện exit-listener cũ trong `waitUntilReady` (listener của tiến trình bị kill
+trong một chu kỳ restart trước đó có thể ghi đè trạng thái của lần khởi động mới). Backend
+(`server.ts`) cũng bắt thêm `process.on('uncaughtException', ...)` bên cạnh `unhandledRejection` sẵn
+có, để một lỗi throw đồng bộ từ trong callback listener zca-js không giết chết tiến trình.
 
 ---
 

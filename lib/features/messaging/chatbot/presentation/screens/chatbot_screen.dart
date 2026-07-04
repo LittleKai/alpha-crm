@@ -628,21 +628,41 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Row(
+                    children: [
+                      Text('Tiêu đề tài liệu *', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: AppSpacing.xs),
+                      Tooltip(
+                        message: 'Tên hoặc tiêu đề nhận diện của tài liệu này (chỉ hiển thị nội bộ trong phần quản lý).',
+                        child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   TextField(
                     controller: titleController,
                     onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
-                      labelText: 'Tiêu đề tài liệu *',
                       hintText: 'VD: Chính sách giao hàng',
                       border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.m),
+                  Row(
+                    children: [
+                      Text('Từ khóa kích hoạt', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: AppSpacing.xs),
+                      Tooltip(
+                        message: 'Các từ khóa/cụm từ gợi ý (cách nhau bởi dấu phẩy) để AI kích hoạt việc sử dụng tài liệu này. Nếu nhập dấu *, tài liệu này sẽ luôn luôn được cung cấp làm ngữ cảnh mặc định cho mọi cuộc trò chuyện.',
+                        child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   TextField(
                     controller: keywordsController,
                     onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
-                      labelText: 'Từ khóa kích hoạt',
                       hintText:
                           'VD: ship, phí ship, giao hàng, vận chuyển (cách nhau bằng dấu phẩy)',
                       border: OutlineInputBorder(),
@@ -656,13 +676,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.m),
+                  Row(
+                    children: [
+                      Text('Nội dung kiến thức *', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: AppSpacing.xs),
+                      Tooltip(
+                        message: 'Nội dung thông tin chi tiết bằng văn bản. Nên viết rõ ràng dưới dạng câu hỏi-đáp hoặc gạch đầu dòng để AI dễ dàng trích xuất thông tin trả lời chính xác.',
+                        child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   TextField(
                     controller: contentController,
                     onChanged: (_) => setDialogState(() {}),
                     minLines: 6,
                     maxLines: 10,
                     decoration: const InputDecoration(
-                      labelText: 'Nội dung kiến thức *',
                       hintText:
                           'Nhập nội dung kiến thức chi tiết gạch đầu dòng để AI học và trả lời khách hàng...',
                       border: OutlineInputBorder(),
@@ -1183,11 +1213,21 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Sử dụng kịch bản từ khóa',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'Sử dụng kịch bản từ khóa',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Tooltip(
+                          message: 'Kích hoạt hoặc tắt toàn bộ các kịch bản phản hồi theo từ khóa cố định đã thiết lập phía dưới.',
+                          child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1697,7 +1737,16 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Prompt mặc định', style: AppTextStyles.label),
+                        Row(
+                          children: [
+                            Text('Prompt mặc định', style: AppTextStyles.label),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Quy định ngữ cảnh chung và mục tiêu phản hồi cho chatbot (ví dụ: tư vấn bán hàng, hỗ trợ kỹ thuật).',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: AppSpacing.xs),
                         TextField(
                           controller: promptController,
@@ -1709,9 +1758,18 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.m),
-                        Text(
-                          'Soul / đối tượng nhập vai',
-                          style: AppTextStyles.label,
+                        Row(
+                          children: [
+                            Text(
+                              'Soul / đối tượng nhập vai',
+                              style: AppTextStyles.label,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Quy định tính cách, giọng điệu, xưng hô của chatbot (ví dụ: thân thiện, lịch sự, xưng "Em" và gọi khách là "Anh/Chị").',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         TextField(
@@ -1724,7 +1782,16 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.m),
-                        Text('Rule ví dụ bắt buộc', style: AppTextStyles.label),
+                        Row(
+                          children: [
+                            Text('Rule ví dụ bắt buộc', style: AppTextStyles.label),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Các nguyên tắc cứng chatbot phải tuân thủ (ví dụ: không cung cấp giá nếu chưa xin được SĐT, luôn trả lời ngắn gọn dưới 3 câu).',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: AppSpacing.xs),
                         TextField(
                           controller: rulesController,
@@ -1749,12 +1816,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Độ sáng tạo (Temperature): ${temperature.toStringAsFixed(1)}',
                               style: AppTextStyles.label,
                             ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Giá trị thấp (0.1 - 0.3) giúp bot trả lời chính xác, bám sát tài liệu. Giá trị cao (0.7 - 1.0) giúp bot trả lời sinh động, tự nhiên và sáng tạo hơn.',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                            const Spacer(),
                             Text(
                               temperature < 0.4
                                   ? 'Chính xác'
@@ -1779,12 +1851,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         ),
                         const SizedBox(height: AppSpacing.s),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Chờ khách nhập thêm: $debounceSeconds giây',
                               style: AppTextStyles.label,
                             ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Thời gian bot đợi sau tin nhắn cuối của khách trước khi tạo câu trả lời. Giúp gom nhiều tin nhắn liên tiếp của khách thành một lượt đọc, tránh bot trả lời ngắt quãng.',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                            const Spacer(),
                             Text(
                               debounceSeconds >= 60
                                   ? '${(debounceSeconds / 60).toStringAsFixed(1)} phút'
@@ -1810,12 +1887,17 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         ),
                         const SizedBox(height: AppSpacing.m),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Số tin nhắn gần nhất AI đọc',
                               style: AppTextStyles.label,
                             ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Tooltip(
+                              message: 'Số lượng hội thoại gần nhất được gửi kèm làm ngữ cảnh cho AI. Giá trị càng lớn AI hiểu ngữ cảnh càng tốt nhưng sẽ tiêu tốn nhiều token hơn.',
+                              child: Icon(Icons.help_outline, size: 14, color: AppColors.iconMuted),
+                            ),
+                            const Spacer(),
                             Text(
                               aiHistoryLimit == 0
                                   ? 'Tắt (không đọc lịch sử)'
@@ -2118,41 +2200,65 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           const SizedBox(height: AppSpacing.m),
           Divider(height: 1, color: AppColors.borderSoft),
           const SizedBox(height: AppSpacing.m),
-          Text(
-            'Trò chuyện cá nhân (1-1)',
-            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
+          Row(
+            children: [
+              Icon(Icons.person_outline, size: 16, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Trò chuyện cá nhân (1-1)',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: AppSpacing.xs),
           _buildChoiceTile(
             selected: state.personalAudience == 'all',
             title: 'Tất cả khách hàng',
+            subtitle: 'AI tự động phản hồi cho tất cả tin nhắn cá nhân gửi đến tài khoản Zalo của bạn.',
             onTap: () => notifier.updateAudienceConfig(personalAudience: 'all'),
           ),
           _buildChoiceTile(
             selected: state.personalAudience == 'crmOnly',
-            title: 'Chỉ nhóm nhân CRM khách hàng được chỉ định',
+            title: 'Chỉ khách hàng được lưu trong CRM',
+            subtitle: 'Chỉ tự động phản hồi nếu số điện thoại hoặc tài khoản Zalo của khách hàng đó đã tồn tại trong danh sách CRM.',
             onTap: () =>
                 notifier.updateAudienceConfig(personalAudience: 'crmOnly'),
           ),
-          const SizedBox(height: AppSpacing.s),
-          Text(
-            'Trò chuyện Nhóm (Group)',
-            style: AppTextStyles.label.copyWith(color: AppColors.textPrimary),
+          const SizedBox(height: AppSpacing.m),
+          Row(
+            children: [
+              Icon(Icons.groups_outlined, size: 16, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Trò chuyện Nhóm (Group)',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: AppSpacing.xs),
           _buildChoiceTile(
             selected: state.groupAudience == 'none',
             title: 'Không tự động trả lời trong nhóm',
+            subtitle: 'Tắt hoàn toàn tính năng phản hồi tự động đối với các tin nhắn gửi vào nhóm.',
             onTap: () => notifier.updateAudienceConfig(groupAudience: 'none'),
           ),
           _buildChoiceTile(
             selected: state.groupAudience == 'tagOnly',
-            title: 'Trả lời ở tất cả các nhóm khi được tag',
+            title: 'Trả lời ở tất cả các nhóm khi được tag (@)',
+            subtitle: 'AI tự động phản hồi trong bất kỳ nhóm Zalo nào khi có thành viên tag @tên Zalo của bạn.',
             onTap: () =>
                 notifier.updateAudienceConfig(groupAudience: 'tagOnly'),
           ),
           _buildChoiceTile(
             selected: state.groupAudience == 'selected',
             title: 'Chỉ trả lời ở các nhóm được chọn',
-            subtitle: 'Danh sách nhóm sẽ được agent Zalo đồng bộ.',
+            subtitle: 'Chọn cụ thể các nhóm Zalo bạn muốn chatbot hoạt động (cấu hình trong danh sách bên dưới).',
             onTap: () =>
                 notifier.updateAudienceConfig(groupAudience: 'selected'),
           ),
@@ -2295,9 +2401,20 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Cấu hình AI Chatbot tự động',
-                      style: AppTextStyles.sectionTitle,
+                    Row(
+                      children: [
+                        Text(
+                          'Cấu hình AI Chatbot tự động',
+                          style: AppTextStyles.sectionTitle.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Tooltip(
+                          message: 'Cấu hình kịch bản phản hồi thông minh sử dụng Trí tuệ Nhân tạo (AI/LLM). AI sẽ tự động đọc hiểu câu hỏi của khách hàng và trích xuất thông tin từ tài liệu kiến thức để trả lời.',
+                          child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -2590,12 +2707,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'TÀI LIỆU KIẾN THỨC NỀN TẢNG',
-            style: AppTextStyles.label.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              Icon(Icons.folder_open_outlined, color: AppColors.primary, size: 20),
+              const SizedBox(width: AppSpacing.s),
+              Text(
+                'TÀI LIỆU KIẾN THỨC NỀN TẢNG',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Tooltip(
+                message: 'Tài liệu kiến thức được lưu trữ cục bộ tại máy chạy Zalo Bot Service của bạn. AI sẽ tự động đọc nội dung file này để làm dữ liệu trả lời khách hàng.',
+                child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.m),
           Row(

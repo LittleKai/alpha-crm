@@ -1,21 +1,6 @@
-enum CrmChannel {
-  zaloPersonal('zalo_personal', 'Zalo cá nhân'),
-  zaloOa('zalo_oa', 'Zalo OA'),
-  facebookPage('facebook_page', 'Trang Facebook'),
-  email('email', 'Email');
+import '../../../shared/models/crm_channel.dart';
 
-  final String apiValue;
-  final String label;
-
-  const CrmChannel(this.apiValue, this.label);
-
-  static CrmChannel fromApiValue(String value) {
-    return CrmChannel.values.firstWhere(
-      (channel) => channel.apiValue == value,
-      orElse: () => CrmChannel.zaloPersonal,
-    );
-  }
-}
+export '../../../shared/models/crm_channel.dart';
 
 enum WorkflowTemplateCategory {
   sales('ban_hang', 'Bán hàng'),

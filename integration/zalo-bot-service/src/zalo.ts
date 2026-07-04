@@ -166,3 +166,8 @@ export async function acceptFriendRequest(userId: string, accountId?: string): P
   if (!channel.acceptFriendRequest) return { success: false, error: 'Method not supported on current channel.' };
   return channel.acceptFriendRequest(userId, accountId);
 }
+
+/** Exposes the active Zalo channel instance for registration in the multi-channel registry. */
+export function getChannelInstance(): ZaloChannel {
+  return channel;
+}

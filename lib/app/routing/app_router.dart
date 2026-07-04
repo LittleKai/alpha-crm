@@ -9,6 +9,8 @@ import '../../features/dashboard/presentation/screens/dashboard_screen_placehold
 import '../../features/customers/presentation/screens/customers_screen_placeholder.dart';
 import '../../features/content/presentation/screens/content_templates_screen_placeholder.dart';
 import '../../features/workflows/presentation/screens/workflow_automation_screen.dart';
+import '../../features/workflows/presentation/screens/email_settings_screen.dart';
+import '../../features/workflows/presentation/screens/facebook_settings_screen.dart';
 import '../../features/messaging/bulk/presentation/screens/bulk_messaging_screen_placeholder.dart';
 import '../../features/messaging/live_chat/presentation/screens/live_chat_screen_placeholder.dart';
 import '../../features/messaging/chatbot/presentation/screens/chatbot_screen_placeholder.dart';
@@ -100,6 +102,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.workflows,
             builder: (context, state) => const WorkflowAutomationScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.integrationsEmail,
+            builder: (context, state) => const EmailSettingsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.integrationsFacebook,
+            builder: (context, state) => const FacebookSettingsScreen(),
           ),
           GoRoute(
             path: AppRoutes.messagingBulk,

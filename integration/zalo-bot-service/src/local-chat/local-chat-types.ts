@@ -14,6 +14,8 @@ export interface LocalConversation {
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';
+  /** Channel this conversation belongs to (e.g. 'zalo_personal', 'zalo_oa', 'facebook_page', 'tiktok'). */
+  channel: string;
   displayName: string;
   avatarUrl: string;
   lastMessagePreview: string;
@@ -46,6 +48,8 @@ export interface LocalMessage {
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';
+  /** Channel this message was sent/received on (e.g. 'zalo_personal', 'zalo_oa', 'facebook_page', 'tiktok'). */
+  channel: string;
   direction: 'inbound' | 'outbound';
   senderId: string;
   senderName: string;
@@ -90,6 +94,8 @@ export interface InboundMessageInput {
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';
+  /** Channel this message arrived on. Defaults to the current Zalo channelMode when omitted. */
+  channel?: string;
   /**
    * Message direction. Self-sent messages that arrive through the live
    * `message` / `old_messages` listener (e.g. the operator typing on their
@@ -120,6 +126,8 @@ export interface OutboundMessageInput {
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';
+  /** Channel this message is sent on. Defaults to the current Zalo channelMode when omitted. */
+  channel?: string;
   content: string;
   messageType?: string;
   clientMessageId?: string;

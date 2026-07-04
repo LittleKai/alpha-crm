@@ -227,6 +227,10 @@ Container(
 - Keep mobile layouts stacked and avoid overflow.
 - Avoid large speculative UI not present in `img/*.png`.
 
+### Headers & Tooltips (Tiêu đề & Hướng dẫn)
+- **Màu sắc tiêu đề:** Các tiêu đề phân đoạn chính (section headers) hoặc tiêu đề hiển thị bên dưới các tab cần sử dụng màu sắc chủ đạo (`AppColors.primary`) để tăng tính thẩm mỹ và dễ phân biệt.
+- **Hướng dẫn chi tiết (?) cho người dùng:** Đối với những trường thông tin, cấu hình phức tạp hoặc dễ gây nhầm lẫn (ví dụ: Spintax, chế độ gửi tin Group vs Member, độ sáng tạo Temperature, thời gian gom tin Debounce, lịch sử hội thoại AI đọc, hoặc lưu trữ cục bộ của tài liệu kiến thức), bắt buộc phải thêm biểu tượng trợ giúp `(?)` (sử dụng `Icons.help_outline` cỡ 14-16, màu `AppColors.iconMuted`) kèm theo `Tooltip` hiển thị mô tả giải thích chi tiết, rõ ràng để hướng dẫn cho người dùng.
+
 ### Chatbot Knowledge Attachments (Tài liệu kiến thức)
 
 `_showKnowledgeDialog` in `lib/features/messaging/chatbot/presentation/screens/chatbot_screen.dart`:

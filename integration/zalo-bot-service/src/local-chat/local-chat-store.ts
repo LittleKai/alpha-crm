@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
+import { config } from '../config.js';
 import type {
   LocalConversation,
   LocalConversationTimelineItem,
@@ -168,6 +169,11 @@ function dateKey(value: string | undefined): string {
   const parsed = value ? new Date(value) : new Date();
   if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10);
   return parsed.toISOString().slice(0, 10);
+}
+
+/** Default channel for rows that don't specify one, based on the active Zalo channel mode. */
+function defaultChannel(): string {
+  return config.channelMode === 'official_oa' ? 'zalo_oa' : 'zalo_personal';
 }
 
 export class LocalChatStore {
@@ -469,6 +475,10 @@ export class LocalChatStore {
       ['attachments', "downloadedAt TEXT NOT NULL DEFAULT ''"],
       // Operator-reply cooldown: while in the future the bot is temporarily paused.
       ['chatbot_conversation_state', 'paused_until INTEGER'],
+      // Multi-channel support (Facebook Messenger, TikTok alongside Zalo). Backfill
+      // existing rows with the channel the agent was running under before this column existed.
+      ['conversations', `channel TEXT NOT NULL DEFAULT '${defaultChannel()}'`],
+      ['messages', `channel TEXT NOT NULL DEFAULT '${defaultChannel()}'`],
     ] as const;
     for (const [table, definition] of additionalColumns) {
       try {
@@ -515,6 +525,7 @@ export class LocalChatStore {
     displayName: string,
     avatarUrl: string,
     createdAt?: string,
+    channel?: string,
   ): string {
     const existing = this.db
       .prepare('SELECT id FROM conversations WHERE accountId = ? AND threadId = ?')
@@ -551,10 +562,21 @@ export class LocalChatStore {
          (id, accountId, threadId, threadType, displayName, avatarUrl,
           lastMessagePreview, lastMessageAt, unreadCount, tagsJson, notes,
           customAttributesJson, archived, assignedTo, followUpAt, managedGroup,
-          cloudConversationId, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, '', ?, 0, '[]', '', '{}', 0, '', '', 0, '', ?, ?)`,
+          cloudConversationId, channel, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, '', ?, 0, '[]', '', '{}', 0, '', '', 0, '', ?, ?, ?)`,
       )
-      .run(id, accountId, threadId, threadType, displayName || '', avatarUrl || '', now, now, now);
+      .run(
+        id,
+        accountId,
+        threadId,
+        threadType,
+        displayName || '',
+        avatarUrl || '',
+        now,
+        channel || defaultChannel(),
+        now,
+        now,
+      );
     this._incrementConversationMetric(dateKey(now), accountId, 'newConversations');
     this._addTimelineEvent(id, 'created', 'Conversation created', {}, now);
     return id;
@@ -580,6 +602,7 @@ export class LocalChatStore {
       accountId: row.accountId,
       threadId: row.threadId,
       threadType: row.threadType,
+      channel: row.channel || defaultChannel(),
       displayName: row.displayName,
       avatarUrl: row.avatarUrl,
       lastMessagePreview: row.lastMessagePreview,
@@ -659,6 +682,7 @@ export class LocalChatStore {
       displayName,
       conversationAvatar,
       input.timestamp || new Date().toISOString(),
+      input.channel,
     );
 
     const id = randomUUID();
@@ -671,9 +695,9 @@ export class LocalChatStore {
           senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
           clientMessageId, zaloMsgId, status, errorText, quoteJson, mentionsJson,
           stylesJson, metadataJson, recalledContent, isDeleted, receivedAt, sentAt,
-          createdAt, updatedAt)
+          channel, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'delivered', '',
-                 ?, ?, ?, ?, '', 0, ?, '', ?, ?)`,
+                 ?, ?, ?, ?, '', 0, ?, '', ?, ?, ?)`,
       )
       .run(
         id,
@@ -694,6 +718,7 @@ export class LocalChatStore {
         JSON.stringify(input.styles || []),
         JSON.stringify(input.metadata || {}),
         input.timestamp || now,
+        input.channel || defaultChannel(),
         now,
         now,
       );
@@ -772,6 +797,8 @@ export class LocalChatStore {
       input.threadType,
       '',
       '',
+      undefined,
+      input.channel,
     );
 
     if (input.clientMessageId) {
@@ -793,9 +820,9 @@ export class LocalChatStore {
           senderId, senderName, senderAvatarUrl, content, messageType, providerMessageId,
           clientMessageId, zaloMsgId, status, errorText, quoteJson, mentionsJson,
           stylesJson, metadataJson, recalledContent, isDeleted, receivedAt, sentAt,
-          createdAt, updatedAt)
+          channel, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, 'outbound', '', '', '', ?, ?, '', ?, '', 'queued', '',
-                 ?, ?, ?, ?, '', 0, '', ?, ?, ?)`,
+                 ?, ?, ?, ?, '', 0, '', ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -811,6 +838,7 @@ export class LocalChatStore {
         JSON.stringify(input.styles || []),
         JSON.stringify(input.metadata || {}),
         now,
+        input.channel || defaultChannel(),
         now,
         now,
       );
@@ -1956,6 +1984,7 @@ export class LocalChatStore {
       accountId: row.accountId,
       threadId: row.threadId,
       threadType: row.threadType,
+      channel: row.channel || defaultChannel(),
       direction: row.direction,
       senderId: row.senderId,
       senderName: row.senderName,
