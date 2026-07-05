@@ -79,6 +79,12 @@ final List<NavGroup> navigationGroups = [
         routePath: '/integrations/facebook',
         color: Color(0xFF1877F2),
       ),
+      NavItem(
+        title: 'TikTok Messaging',
+        icon: Icons.music_note_outlined,
+        routePath: '/integrations/tiktok',
+        color: Color(0xFF010101),
+      ),
     ],
   ),
   const NavGroup(

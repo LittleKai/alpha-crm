@@ -34,6 +34,7 @@ class AppRoutes {
   // Integrations (channel settings)
   static const String integrationsEmail = '/integrations/email';
   static const String integrationsFacebook = '/integrations/facebook';
+  static const String integrationsTiktok = '/integrations/tiktok';
 
   // Settings
   static const String settings = '/settings';

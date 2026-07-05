@@ -11,29 +11,28 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_dialog.dart';
 import '../../providers/workflow_automation_provider.dart';
 
-class FacebookSettingsScreen extends ConsumerStatefulWidget {
-  const FacebookSettingsScreen({super.key});
+class TiktokSettingsScreen extends ConsumerStatefulWidget {
+  const TiktokSettingsScreen({super.key});
 
   @override
-  ConsumerState<FacebookSettingsScreen> createState() =>
-      _FacebookSettingsScreenState();
+  ConsumerState<TiktokSettingsScreen> createState() =>
+      _TiktokSettingsScreenState();
 }
 
-class _FacebookSettingsScreenState
-    extends ConsumerState<FacebookSettingsScreen> {
+class _TiktokSettingsScreenState extends ConsumerState<TiktokSettingsScreen> {
   static const _cloudWebhookUrl =
-      'https://alpha-studio-backend.fly.dev/api/crm/facebook/webhook';
+      'https://alpha-studio-backend.fly.dev/api/crm/tiktok/webhook';
 
-  final _facebookPageNameController = TextEditingController();
-  final _facebookPageIdController = TextEditingController();
-  final _facebookAppIdController = TextEditingController();
-  final _facebookVerifyTokenController = TextEditingController();
-  final _facebookAppSecretController = TextEditingController();
-  final _facebookPageTokenController = TextEditingController();
-  bool _facebookEnabled = false;
-  bool _facebookEnforce24hWindow = true;
+  final _tiktokAccountNameController = TextEditingController();
+  final _tiktokAccountIdController = TextEditingController();
+  final _tiktokAppIdController = TextEditingController();
+  final _tiktokVerifyTokenController = TextEditingController();
+  final _tiktokAppSecretController = TextEditingController();
+  final _tiktokAccessTokenController = TextEditingController();
+  bool _tiktokEnabled = false;
+  bool _tiktokEnforce24hWindow = true;
   bool _showForm = false;
-  String? _editingPageId;
+  String? _editingAccountId;
   String? _editingCloudId;
 
   @override
@@ -46,12 +45,12 @@ class _FacebookSettingsScreenState
 
   @override
   void dispose() {
-    _facebookPageNameController.dispose();
-    _facebookPageIdController.dispose();
-    _facebookAppIdController.dispose();
-    _facebookVerifyTokenController.dispose();
-    _facebookAppSecretController.dispose();
-    _facebookPageTokenController.dispose();
+    _tiktokAccountNameController.dispose();
+    _tiktokAccountIdController.dispose();
+    _tiktokAppIdController.dispose();
+    _tiktokVerifyTokenController.dispose();
+    _tiktokAppSecretController.dispose();
+    _tiktokAccessTokenController.dispose();
     super.dispose();
   }
 
@@ -80,7 +79,16 @@ class _FacebookSettingsScreenState
           children: [
             // ── Header ────────────────────────────────────────────────
             _buildHeader(state.isLoading),
-            const SizedBox(height: AppSpacing.l),
+            const SizedBox(height: AppSpacing.m),
+
+            // ── Verification-pending disclosure (always shown) ──
+            const _StatusBanner(
+              icon: Icons.info_outline,
+              text:
+                  'Tích hợp TikTok đang ở dạng khung sườn, mô phỏng cấu trúc Facebook Messenger. Phần gọi API thực tế (endpoint, chữ ký webhook, định dạng payload) cần được xác thực lại khi có tài liệu/credential chính thức từ TikTok Business Messaging API.',
+              color: AppColors.warning,
+            ),
+            const SizedBox(height: AppSpacing.m),
 
             // ── Error banner ──────────────────────────────────────────
             if (state.errorText != null) ...[
@@ -96,21 +104,21 @@ class _FacebookSettingsScreenState
             _buildOverviewSection(isMobile),
             const SizedBox(height: AppSpacing.l),
 
-            // ── Connected pages list ──────────────────────────────────
-            _buildAccountListCard(state.facebookPages),
+            // ── Connected accounts list ───────────────────────────────
+            _buildAccountListCard(state.tiktokAccounts),
             const SizedBox(height: AppSpacing.l),
 
             // ── Add / edit form ───────────────────────────────────────
             if (_showForm)
-              _buildFacebookSettingsCard(notifier)
+              _buildTiktokSettingsCard(notifier)
             else
               OutlinedButton.icon(
                 onPressed: _startAdd,
                 icon: const Icon(Icons.add),
-                label: const Text('Thêm Facebook Page mới'),
+                label: const Text('Thêm tài khoản TikTok mới'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF1877F2),
-                  side: const BorderSide(color: Color(0xFF1877F2)),
+                  foregroundColor: const Color(0xFF010101),
+                  side: const BorderSide(color: Color(0xFF010101)),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 14,
@@ -136,16 +144,16 @@ class _FacebookSettingsScreenState
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Icon(
-                    Icons.facebook_outlined,
-                    color: Color(0xFF1877F2),
+                    Icons.music_note_outlined,
+                    color: Color(0xFF010101),
                     size: 32,
                   ),
                   const SizedBox(width: AppSpacing.s),
                   Flexible(
                     child: Text(
-                      'Facebook Page Messenger',
+                      'TikTok Messaging',
                       style: AppTextStyles.pageTitle.copyWith(
-                        color: const Color(0xFF1877F2),
+                        color: const Color(0xFF010101),
                       ),
                     ),
                   ),
@@ -157,14 +165,14 @@ class _FacebookSettingsScreenState
                     ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1877F2), Color(0xFF42A5F5)],
+                        colors: [Color(0xFF25F4EE), Color(0xFFFE2C55)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      'MESSENGER API',
+                      'BUSINESS MESSAGING API',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 9,
@@ -186,7 +194,7 @@ class _FacebookSettingsScreenState
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Kết nối Facebook Page để nhận và gửi tin nhắn Messenger qua CRM',
+          'Kết nối tài khoản TikTok để nhận và gửi tin nhắn qua CRM',
           style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
         ),
       ],
@@ -201,19 +209,19 @@ class _FacebookSettingsScreenState
         icon: Icons.verified_user_outlined,
         iconColor: Color(0xFF10B981),
         title: 'API chính thức',
-        subtitle: 'Chỉ dùng Messenger Platform API',
+        subtitle: 'Chỉ dùng TikTok Business Messaging API',
       ),
       _InfoCard(
         icon: Icons.lock_outline,
         iconColor: Color(0xFF6366F1),
         title: 'Bảo mật cao',
-        subtitle: 'Page token lưu local, App Secret gửi cloud để xác thực webhook',
+        subtitle: 'Access token lưu local, App Secret gửi cloud để xác thực webhook',
       ),
       _InfoCard(
         icon: Icons.timer_outlined,
         iconColor: Color(0xFFF59E0B),
         title: 'Cửa sổ 24h',
-        subtitle: 'Messenger reply window policy',
+        subtitle: 'Reply window policy (cần xác thực lại)',
       ),
     ];
 
@@ -238,37 +246,40 @@ class _FacebookSettingsScreenState
     );
   }
 
-  // ─── Connected pages list ────────────────────────────────────────────
+  // ─── Connected accounts list ─────────────────────────────────────────
 
-  Widget _buildAccountListCard(List<FacebookSettingsState> pages) {
+  Widget _buildAccountListCard(List<TiktokSettingsState> accounts) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Facebook Page đã kết nối (${pages.length})',
+            'Tài khoản TikTok đã kết nối (${accounts.length})',
             style: AppTextStyles.sectionTitle,
           ),
           const SizedBox(height: AppSpacing.m),
-          if (pages.isEmpty)
+          if (accounts.isEmpty)
             Text(
-              'Chưa có Facebook Page nào được kết nối. Nhấn "Thêm Facebook Page mới" bên dưới để bắt đầu.',
+              'Chưa có tài khoản TikTok nào được kết nối. Nhấn "Thêm tài khoản TikTok mới" bên dưới để bắt đầu.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),
             )
           else
-            for (int i = 0; i < pages.length; i++) ...[
-              _buildAccountRow(pages[i]),
-              if (i < pages.length - 1) const SizedBox(height: AppSpacing.s),
+            for (int i = 0; i < accounts.length; i++) ...[
+              _buildAccountRow(accounts[i]),
+              if (i < accounts.length - 1)
+                const SizedBox(height: AppSpacing.s),
             ],
         ],
       ),
     );
   }
 
-  Widget _buildAccountRow(FacebookSettingsState page) {
-    final label = page.pageName.isNotEmpty ? page.pageName : page.pageId;
+  Widget _buildAccountRow(TiktokSettingsState account) {
+    final label = account.accountName.isNotEmpty
+        ? account.accountName
+        : account.accountId;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -281,12 +292,12 @@ class _FacebookSettingsScreenState
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1877F2).withValues(alpha: 0.1),
+              color: const Color(0xFF010101).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.facebook_outlined,
-              color: Color(0xFF1877F2),
+              Icons.music_note_outlined,
+              color: Color(0xFF010101),
               size: 20,
             ),
           ),
@@ -309,7 +320,7 @@ class _FacebookSettingsScreenState
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: page.enabled
+                        color: account.enabled
                             ? AppColors.success
                             : AppColors.textMuted,
                         shape: BoxShape.circle,
@@ -317,11 +328,11 @@ class _FacebookSettingsScreenState
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      page.enabled
-                          ? 'Đang hoạt động (Page ID: ${page.pageId})'
-                          : 'Đã tắt (Page ID: ${page.pageId})',
+                      account.enabled
+                          ? 'Đang hoạt động (Account ID: ${account.accountId})'
+                          : 'Đã tắt (Account ID: ${account.accountId})',
                       style: AppTextStyles.caption.copyWith(
-                        color: page.enabled
+                        color: account.enabled
                             ? AppColors.successText
                             : AppColors.textSecondary,
                       ),
@@ -334,7 +345,7 @@ class _FacebookSettingsScreenState
           IconButton(
             tooltip: 'Chỉnh sửa',
             icon: const Icon(Icons.edit_outlined, size: 20),
-            onPressed: () => _startEdit(page),
+            onPressed: () => _startEdit(account),
           ),
           IconButton(
             tooltip: 'Xoá',
@@ -343,7 +354,7 @@ class _FacebookSettingsScreenState
               color: AppColors.error,
               size: 20,
             ),
-            onPressed: () => _confirmDeleteFacebookPage(page),
+            onPressed: () => _confirmDeleteTiktokAccount(account),
           ),
         ],
       ),
@@ -352,7 +363,7 @@ class _FacebookSettingsScreenState
 
   // ─── Main settings card ──────────────────────────────────────────────
 
-  Widget _buildFacebookSettingsCard(WorkflowAutomationNotifier notifier) {
+  Widget _buildTiktokSettingsCard(WorkflowAutomationNotifier notifier) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,8 +371,8 @@ class _FacebookSettingsScreenState
           Row(
             children: [
               const Icon(
-                Icons.facebook_outlined,
-                color: Color(0xFF1877F2),
+                Icons.music_note_outlined,
+                color: Color(0xFF010101),
                 size: 24,
               ),
               const SizedBox(width: AppSpacing.s),
@@ -370,25 +381,25 @@ class _FacebookSettingsScreenState
                   children: [
                     Flexible(
                       child: Text(
-                        'Facebook Page Messenger',
+                        'TikTok Messaging',
                         style: AppTextStyles.sectionTitle.copyWith(
-                          color: const Color(0xFF1877F2),
+                          color: const Color(0xFF010101),
                         ),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Tooltip(
-                      message: 'Kết nối Facebook Page với CRM qua Messenger Platform API chính thức của Meta. Cho phép nhận và trả lời tin nhắn Messenger từ khách hàng trong Live Chat.',
+                      message: 'Kết nối tài khoản TikTok với CRM qua TikTok Business Messaging API. Cho phép nhận và trả lời tin nhắn TikTok từ khách hàng trong Live Chat. Cấu trúc mô phỏng theo Facebook Messenger, cần xác thực lại khi có tài liệu TikTok thật.',
                       child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
                     ),
                   ],
                 ),
               ),
               Switch(
-                value: _facebookEnabled,
-                activeThumbColor: const Color(0xFF1877F2),
+                value: _tiktokEnabled,
+                activeThumbColor: const Color(0xFF010101),
                 onChanged: (value) =>
-                    setState(() => _facebookEnabled = value),
+                    setState(() => _tiktokEnabled = value),
               ),
               IconButton(
                 tooltip: 'Đóng',
@@ -399,9 +410,9 @@ class _FacebookSettingsScreenState
           ),
           const SizedBox(height: 2),
           Text(
-            _editingPageId == null
-                ? 'Thêm Facebook Page mới'
-                : 'Đang chỉnh sửa Page đã kết nối',
+            _editingAccountId == null
+                ? 'Thêm tài khoản TikTok mới'
+                : 'Đang chỉnh sửa tài khoản đã kết nối',
             style: AppTextStyles.caption.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -413,56 +424,56 @@ class _FacebookSettingsScreenState
               final left = Column(
                 children: [
                   _TextField(
-                    controller: _facebookPageNameController,
-                    label: 'Tên Page',
+                    controller: _tiktokAccountNameController,
+                    label: 'Tên tài khoản',
                     hint: 'Alpha CRM',
                   ),
                   const SizedBox(height: AppSpacing.s),
                   _TextField(
-                    controller: _facebookPageIdController,
-                    label: 'Page ID',
+                    controller: _tiktokAccountIdController,
+                    label: 'Account ID',
                     hint: '1234567890',
-                    suffixTooltip: 'Vào Facebook Page → Giới thiệu (About) → Miền bình luận để tìm Page ID, hoặc lấy từ URL trang Page của bạn.',
+                    suffixTooltip: 'ID tài khoản Business được cấp khi đăng ký TikTok Business Messaging API (cần xác thực lại vị trí chính xác trong tài liệu TikTok thật).',
                   ),
                   const SizedBox(height: AppSpacing.s),
                   _TextField(
-                    controller: _facebookAppIdController,
-                    label: 'Facebook App ID',
-                    hint: 'Meta App ID',
-                    suffixTooltip: 'Tạo ứng dụng tại developers.facebook.com → My Apps → Create App. Chọn loại Business, thêm sản phẩm Messenger và Webhooks.',
+                    controller: _tiktokAppIdController,
+                    label: 'TikTok App ID',
+                    hint: 'TikTok App ID',
+                    suffixTooltip: 'Tạo ứng dụng tại TikTok for Business Developer Portal (cần xác thực lại URL/luồng chính thức khi có tài liệu thật).',
                   ),
                 ],
               );
               final right = Column(
                 children: [
                   _ReadOnlyCopyField(
-                    label: 'Webhook callback URL (dán vào Meta App)',
+                    label: 'Webhook callback URL (dán vào TikTok App)',
                     value: _cloudWebhookUrl,
-                    tooltip: 'URL webhook cố định do cloud backend của Alpha CRM cung cấp. Dán URL này vào Meta App → Messenger → Webhooks. Không cần ngrok hay tunnel local.',
+                    tooltip: 'URL webhook cố định do cloud backend của Alpha CRM cung cấp. Dán URL này vào cấu hình webhook của TikTok App. Không cần ngrok hay tunnel local.',
                   ),
                   const SizedBox(height: AppSpacing.s),
                   _TextField(
-                    controller: _facebookVerifyTokenController,
+                    controller: _tiktokVerifyTokenController,
                     label: 'Verify token',
-                    hint: 'Meta webhook verify token',
+                    hint: 'TikTok webhook verify token',
                     obscureText: true,
-                    suffixTooltip: 'Chuỗi bảo mật tùy chọn do bạn tự đặt. Meta sẽ gửi token này khi xác minh webhook. Phải khớp giữa CRM và cấu hình Meta App. Token này được gửi lên cloud backend để xác thực webhook.',
+                    suffixTooltip: 'Chuỗi bảo mật tùy chọn do bạn tự đặt, dùng khi TikTok xác minh webhook. Phải khớp giữa CRM và cấu hình TikTok App. Token này được gửi lên cloud backend để xác thực webhook.',
                   ),
                   const SizedBox(height: AppSpacing.s),
                   _TextField(
-                    controller: _facebookAppSecretController,
+                    controller: _tiktokAppSecretController,
                     label: 'App Secret',
-                    hint: 'Meta App Secret',
+                    hint: 'TikTok App Secret',
                     obscureText: true,
-                    suffixTooltip: 'Lấy từ developers.facebook.com → App → Settings → Basic → App Secret. Được gửi lên cloud backend (mã hoá khi lưu) để xác thực chữ ký (X-Hub-Signature-256) của mỗi webhook Meta gửi đến — đây là ngoại lệ duy nhất, các thông tin khác vẫn lưu local.',
+                    suffixTooltip: 'Lấy từ TikTok for Business Developer Portal. Được gửi lên cloud backend (mã hoá khi lưu) để xác thực chữ ký webhook — đây là ngoại lệ duy nhất, các thông tin khác vẫn lưu local.',
                   ),
                   const SizedBox(height: AppSpacing.s),
                   _TextField(
-                    controller: _facebookPageTokenController,
-                    label: 'Page access token',
-                    hint: 'EAAB...',
+                    controller: _tiktokAccessTokenController,
+                    label: 'Access token',
+                    hint: 'act.xxxxx',
                     obscureText: true,
-                    suffixTooltip: 'Lấy từ developers.facebook.com → App → Messenger → Access Tokens. Chọn Page và Generate Token. Nên dùng long-lived token. Token này chỉ lưu ở backend local, dùng để gửi tin nhắn trực tiếp tới Graph API.',
+                    suffixTooltip: 'Access token cấp cho tài khoản Business. Token này chỉ lưu ở backend local, dùng để gửi tin nhắn trực tiếp tới TikTok API.',
                   ),
                 ],
               );
@@ -489,15 +500,15 @@ class _FacebookSettingsScreenState
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
-            value: _facebookEnforce24hWindow,
+            value: _tiktokEnforce24hWindow,
             onChanged: (value) =>
-                setState(() => _facebookEnforce24hWindow = value != false),
+                setState(() => _tiktokEnforce24hWindow = value != false),
             title: Row(
               children: [
-                const Flexible(child: Text('Áp dụng cửa sổ phản hồi Messenger 24h')),
+                const Flexible(child: Text('Áp dụng cửa sổ phản hồi 24h (cần xác thực lại)')),
                 const SizedBox(width: 6),
                 Tooltip(
-                  message: 'Messenger chỉ cho phép Page trả lời trong 24h kể từ tin nhắn cuối của khách. Sau 24h cần dùng Message Tag hoặc One-Time Notification. Bật để CRM tự động tuân thủ.',
+                  message: 'Mô phỏng theo chính sách cửa sổ phản hồi 24h của Messenger. Chưa xác thực đây có phải chính sách thật của TikTok Business Messaging API hay không.',
                   child: Icon(Icons.help_outline, size: 16, color: AppColors.iconMuted),
                 ),
               ],
@@ -507,27 +518,27 @@ class _FacebookSettingsScreenState
           const _CapabilityRow(
             icon: Icons.verified_user_outlined,
             label:
-                'Chỉ dùng Messenger Platform API chính thức, không dùng cookie cá nhân',
+                'Chỉ dùng TikTok Business Messaging API chính thức, không dùng cookie cá nhân',
             iconColor: Color(0xFF10B981),
           ),
           const SizedBox(height: AppSpacing.s),
           const _CapabilityRow(
             icon: Icons.lock_outline,
             label:
-                'Page access token và verify token lưu ở backend local; App Secret được gửi lên cloud backend (mã hoá) để xác thực chữ ký webhook',
+                'Access token và verify token lưu ở backend local; App Secret được gửi lên cloud backend (mã hoá) để xác thực chữ ký webhook',
             iconColor: Color(0xFF6366F1),
           ),
           const SizedBox(height: AppSpacing.m),
           ElevatedButton.icon(
-            onPressed: () => _saveFacebookAccount(notifier),
+            onPressed: () => _saveTiktokAccount(notifier),
             icon: const Icon(Icons.save_outlined),
             label: Text(
-              _editingPageId == null
-                  ? 'Lưu Facebook Page mới'
-                  : 'Cập nhật Facebook Page',
+              _editingAccountId == null
+                  ? 'Lưu tài khoản TikTok mới'
+                  : 'Cập nhật tài khoản TikTok',
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1877F2),
+              backgroundColor: const Color(0xFF010101),
               foregroundColor: Colors.white,
               elevation: 0,
             ),
@@ -541,32 +552,32 @@ class _FacebookSettingsScreenState
 
   void _startAdd() {
     setState(() {
-      _editingPageId = null;
+      _editingAccountId = null;
       _editingCloudId = null;
-      _facebookEnabled = false;
-      _facebookEnforce24hWindow = true;
-      _facebookPageNameController.clear();
-      _facebookPageIdController.clear();
-      _facebookAppIdController.clear();
-      _facebookVerifyTokenController.clear();
-      _facebookAppSecretController.clear();
-      _facebookPageTokenController.clear();
+      _tiktokEnabled = false;
+      _tiktokEnforce24hWindow = true;
+      _tiktokAccountNameController.clear();
+      _tiktokAccountIdController.clear();
+      _tiktokAppIdController.clear();
+      _tiktokVerifyTokenController.clear();
+      _tiktokAppSecretController.clear();
+      _tiktokAccessTokenController.clear();
       _showForm = true;
     });
   }
 
-  void _startEdit(FacebookSettingsState page) {
+  void _startEdit(TiktokSettingsState account) {
     setState(() {
-      _editingPageId = page.pageId;
-      _editingCloudId = page.cloudId;
-      _facebookEnabled = page.enabled;
-      _facebookEnforce24hWindow = page.enforce24hWindow;
-      _facebookPageNameController.text = page.pageName;
-      _facebookPageIdController.text = page.pageId;
-      _facebookAppIdController.text = page.appId;
-      _facebookVerifyTokenController.text = page.verifyToken;
-      _facebookAppSecretController.text = page.appSecret;
-      _facebookPageTokenController.text = page.pageAccessToken;
+      _editingAccountId = account.accountId;
+      _editingCloudId = account.cloudId;
+      _tiktokEnabled = account.enabled;
+      _tiktokEnforce24hWindow = account.enforce24hWindow;
+      _tiktokAccountNameController.text = account.accountName;
+      _tiktokAccountIdController.text = account.accountId;
+      _tiktokAppIdController.text = account.appId;
+      _tiktokVerifyTokenController.text = account.verifyToken;
+      _tiktokAppSecretController.text = account.appSecret;
+      _tiktokAccessTokenController.text = account.accessToken;
       _showForm = true;
     });
   }
@@ -574,46 +585,46 @@ class _FacebookSettingsScreenState
   void _cancelForm() {
     setState(() {
       _showForm = false;
-      _editingPageId = null;
+      _editingAccountId = null;
       _editingCloudId = null;
     });
   }
 
-  FacebookSettingsState _readFacebookSettings() {
-    return FacebookSettingsState(
-      enabled: _facebookEnabled,
-      pageName: _facebookPageNameController.text.trim(),
-      pageId: _facebookPageIdController.text.trim(),
-      appId: _facebookAppIdController.text.trim(),
+  TiktokSettingsState _readTiktokSettings() {
+    return TiktokSettingsState(
+      enabled: _tiktokEnabled,
+      accountName: _tiktokAccountNameController.text.trim(),
+      accountId: _tiktokAccountIdController.text.trim(),
+      appId: _tiktokAppIdController.text.trim(),
       webhookCallbackUrl: _cloudWebhookUrl,
-      verifyToken: _facebookVerifyTokenController.text.trim(),
-      appSecret: _facebookAppSecretController.text.trim(),
-      pageAccessToken: _facebookPageTokenController.text.trim(),
-      enforce24hWindow: _facebookEnforce24hWindow,
+      verifyToken: _tiktokVerifyTokenController.text.trim(),
+      appSecret: _tiktokAppSecretController.text.trim(),
+      accessToken: _tiktokAccessTokenController.text.trim(),
+      enforce24hWindow: _tiktokEnforce24hWindow,
       cloudId: _editingCloudId,
     );
   }
 
-  Future<void> _saveFacebookAccount(
-    WorkflowAutomationNotifier notifier,
-  ) async {
-    await notifier.saveFacebookAccount(_readFacebookSettings());
+  Future<void> _saveTiktokAccount(WorkflowAutomationNotifier notifier) async {
+    await notifier.saveTiktokAccount(_readTiktokSettings());
     if (!mounted) return;
     if (ref.read(workflowAutomationProvider).errorText == null) {
       setState(() {
         _showForm = false;
-        _editingPageId = null;
+        _editingAccountId = null;
         _editingCloudId = null;
       });
     }
   }
 
-  Future<void> _confirmDeleteFacebookPage(FacebookSettingsState page) async {
-    final label = page.pageName.isNotEmpty ? page.pageName : page.pageId;
+  Future<void> _confirmDeleteTiktokAccount(TiktokSettingsState account) async {
+    final label = account.accountName.isNotEmpty
+        ? account.accountName
+        : account.accountId;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
-        title: 'Xoá Facebook Page',
+        title: 'Xoá tài khoản TikTok',
         icon: Icons.delete_outline_rounded,
         actions: [
           AppDialogAction(
@@ -628,21 +639,21 @@ class _FacebookSettingsScreenState
           ),
         ],
         child: Text(
-          'Bạn có chắc chắn muốn xoá Facebook Page "$label" khỏi CRM không? CRM sẽ ngừng nhận và gửi tin nhắn Messenger cho Page này.',
+          'Bạn có chắc chắn muốn xoá tài khoản TikTok "$label" khỏi CRM không? CRM sẽ ngừng nhận và gửi tin nhắn cho tài khoản này.',
           style: AppTextStyles.bodyMedium,
         ),
       ),
     );
 
     if (confirmed == true && mounted) {
-      final pageId = page.pageId;
+      final accountId = account.accountId;
       await ref
           .read(workflowAutomationProvider.notifier)
-          .deleteFacebookAccount(pageId);
-      if (mounted && _editingPageId == pageId) {
+          .deleteTiktokAccount(accountId);
+      if (mounted && _editingAccountId == accountId) {
         setState(() {
           _showForm = false;
-          _editingPageId = null;
+          _editingAccountId = null;
           _editingCloudId = null;
         });
       }

@@ -15,6 +15,7 @@ import {
   sendTyping,
 } from '../zalo.js';
 import type { ZaloSendMessageRequest } from '../channels/types.js';
+import { getChannel } from '../channels/channel-registry.js';
 import { localChatEvents, type LocalChatEvent } from './local-chat-events.js';
 import { reportOutboundMessageEvent } from '../agent/outbound-reporter.js';
 import type { LocalMessage } from './local-chat-types.js';
@@ -1341,8 +1342,14 @@ async function handleLocalSend(
     return;
   }
 
+  const convRow = store.db
+    .prepare('SELECT channel FROM conversations WHERE accountId = ? AND threadId = ? AND threadType = ?')
+    .get(accountId, recipientId, threadType) as { channel?: string } | undefined;
+  const channel = convRow?.channel || 'zalo_personal';
+  const isZaloChannel = channel === 'zalo_personal' || channel === 'zalo_oa';
+
   // Check account status against the live pool (in-memory, no `accounts` table).
-  if (accountId) {
+  if (isZaloChannel && accountId) {
     const { getAccounts } = await import('../zalo.js');
     const acc = getAccounts().find((a) => a.id === accountId);
     if (acc && acc.status === 'disconnected_expired') {
@@ -1416,7 +1423,12 @@ async function handleLocalSend(
       voice: payload.voice,
       metadata: payload.metadata,
     };
-    const result = await sendMessage(sendReq, false);
+    const result = isZaloChannel
+      ? await sendMessage(sendReq, false)
+      : await getChannel(channel)?.sendMessage(sendReq, false) ?? {
+        success: false,
+        error: `Không có channel adapter cho '${channel}'.`,
+      };
 
     if (result.success) {
       store.updateMessageStatus(
@@ -1438,6 +1450,7 @@ async function handleLocalSend(
         },
       });
       reportOutboundMessageEvent({
+        channel,
         accountId,
         threadId: recipientId,
         threadType,
@@ -1559,6 +1572,12 @@ async function handleLocalSendAttachment(
     return;
   }
 
+  const convRow = store.db
+    .prepare('SELECT channel FROM conversations WHERE accountId = ? AND threadId = ? AND threadType = ?')
+    .get(accountId, recipientId, threadType) as { channel?: string } | undefined;
+  const channel = convRow?.channel || 'zalo_personal';
+  const isZaloChannel = channel === 'zalo_personal' || channel === 'zalo_oa';
+
   // 1. Persist locally
   const clientMessageId = payload.clientMessageId || randomUUID();
   const attachmentInputs = attachments.map((path: string) => ({
@@ -1601,7 +1620,12 @@ async function handleLocalSendAttachment(
       styles: payload.styles,
       metadata: payload.metadata,
     };
-    const result = await sendMessage(sendReq, false);
+    const result = isZaloChannel
+      ? await sendMessage(sendReq, false)
+      : await getChannel(channel)?.sendMessage(sendReq, false) ?? {
+        success: false,
+        error: `Không có channel adapter cho '${channel}'.`,
+      };
 
     if (result.success) {
       store.updateMessageStatus(
@@ -1623,6 +1647,7 @@ async function handleLocalSendAttachment(
         },
       });
       reportOutboundMessageEvent({
+        channel,
         accountId,
         threadId: recipientId,
         threadType,

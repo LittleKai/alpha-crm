@@ -6,6 +6,8 @@ import {
 } from './cloud-api.js';
 
 export interface OutboundReportEvent {
+  /** Multi-platform discriminator; defaults to 'zalo_personal' when absent. */
+  channel?: string;
   accountId: string;
   threadId: string;
   threadType: 'user' | 'group';

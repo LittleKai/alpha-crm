@@ -572,6 +572,7 @@ class AppSidebar extends ConsumerWidget {
     if (path == '/workflows') return const Color(0xFF8B5CF6);
     if (path == '/integrations/email') return const Color(0xFF3B82F6);
     if (path == '/integrations/facebook') return const Color(0xFF1877F2);
+    if (path == '/integrations/tiktok') return const Color(0xFF010101);
     if (path == '/messaging/bulk') return const Color(0xFF6366F1);
     if (path == '/messaging/live-chat') return const Color(0xFF0D9488);
     if (path == '/messaging/chatbot') return const Color(0xFFD946EF);
@@ -595,6 +596,7 @@ class AppSidebar extends ConsumerWidget {
     if (path == '/workflows') return const Color(0xFFF5F3FF);
     if (path == '/integrations/email') return const Color(0xFFEFF6FF);
     if (path == '/integrations/facebook') return const Color(0xFFEFF6FF);
+    if (path == '/integrations/tiktok') return const Color(0xFFF3F4F6);
     if (path == '/messaging/bulk') return const Color(0xFFEEF2FF);
     if (path == '/messaging/live-chat') return const Color(0xFFF0FDFA);
     if (path == '/messaging/chatbot') return const Color(0xFFFDF4FF);

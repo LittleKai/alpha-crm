@@ -14,6 +14,7 @@ import {
   leaveGroup,
   getGroupMembers
 } from '../zalo.js';
+import { getChannel } from '../channels/channel-registry.js';
 
 // Local campaign tracking
 const runningCampaigns = new Set<string>();
@@ -118,6 +119,16 @@ export async function executeCommand(command: Command, deviceId?: string, agentS
         throw new Error(recallResult.error || 'Thu hồi tin nhắn thất bại.');
       }
       return recallResult;
+    }
+
+    case 'channel.message.relay': {
+      const relayChannel = String(payload.channel || '').trim();
+      const channelInstance = getChannel(relayChannel);
+      if (!channelInstance?.handleWebhookEvent) {
+        throw new Error(`Không có channel adapter cho '${relayChannel}' hoặc adapter không hỗ trợ webhook relay.`);
+      }
+      channelInstance.handleWebhookEvent(payload.event as Record<string, unknown>);
+      return { relayed: true };
     }
 
     case 'START_CAMPAIGN':

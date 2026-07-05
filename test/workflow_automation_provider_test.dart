@@ -60,6 +60,7 @@ void main() {
       appId: 'app-1',
       webhookCallbackUrl: 'https://alpha.example/webhook/facebook',
       verifyToken: 'verify-secret',
+      appSecret: 'app-secret',
       pageAccessToken: 'page-secret',
       enforce24hWindow: false,
     );
@@ -72,13 +73,14 @@ void main() {
       'appId': 'app-1',
       'webhookCallbackUrl': 'https://alpha.example/webhook/facebook',
       'verifyToken': 'verify-secret',
+      'appSecret': 'app-secret',
       'pageAccessToken': 'page-secret',
       'enforce24hWindow': false,
     });
   });
 
   test(
-    'WorkflowAutomationApi wraps Email and Facebook settings payloads',
+    'WorkflowAutomationApi wraps Email settings and per-account Facebook payloads',
     () async {
       final requests = <Map<String, dynamic>>[];
       final api = WorkflowAutomationApi(
@@ -100,8 +102,8 @@ void main() {
           smtpHost: 'smtp.example.com',
         ).toJson(),
       );
-      final facebookResult = await api.saveFacebookSettings(
-        facebook: const FacebookSettingsState(
+      final facebookResult = await api.saveFacebookAccount(
+        const FacebookSettingsState(
           enabled: true,
           pageId: 'page-1',
           pageAccessToken: 'page-secret',
@@ -117,8 +119,12 @@ void main() {
         'http://127.0.0.1:28080/api/integrations/n8n/settings',
       );
       expect(requests.first['body']['email']['smtpHost'], 'smtp.example.com');
-      expect(requests.last['body']['facebook']['pageId'], 'page-1');
-      expect(requests.last['body']['facebook']['status'], 'configured');
+      expect(
+        requests.last['url'],
+        'http://127.0.0.1:28080/api/integrations/facebook/accounts',
+      );
+      expect(requests.last['body']['pageId'], 'page-1');
+      expect(requests.last['body']['status'], 'configured');
     },
   );
 

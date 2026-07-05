@@ -328,6 +328,7 @@ async function handleInboundMessageEvent(
         const localMessageId =
           reconciledId ||
           localStore.upsertInboundMessage({
+            channel: event.channel,
             accountId: event.accountId,
             threadId: event.threadId,
             threadType: event.threadType,
@@ -400,7 +401,16 @@ async function handleInboundMessageEvent(
         return;
       }
 
-      if (alreadyReportedAtSendTime) {
+      // Relayed channels (Facebook/TikTok) already got a durable Mongo write
+      // from the cloud webhook route before this event was relayed down via
+      // CrmAgentCommand — reporting it again here would duplicate the message.
+      const isRelayedChannel = Boolean(
+        event.channel && event.channel !== 'zalo_personal' && event.channel !== 'zalo_oa',
+      );
+
+      if (isRelayedChannel) {
+        // no-op: already durably recorded by the cloud webhook.
+      } else if (alreadyReportedAtSendTime) {
         // Echo/duplicate of an already-reported send — skip the cloud report.
       } else if (event.threadType === 'group') {
         if (isManaged) {

@@ -52,10 +52,32 @@ class WorkflowAutomationApi {
     return _post('/api/integrations/n8n/settings', {'email': email});
   }
 
-  Future<Map<String, dynamic>> saveFacebookSettings({
-    required Map<String, dynamic> facebook,
-  }) async {
-    return _post('/api/integrations/n8n/settings', {'facebook': facebook});
+  Future<Map<String, dynamic>> fetchFacebookAccounts() async {
+    return _get('/api/integrations/facebook/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveFacebookAccount(
+    Map<String, dynamic> account,
+  ) async {
+    return _post('/api/integrations/facebook/accounts', account);
+  }
+
+  Future<Map<String, dynamic>> deleteFacebookAccount(String pageId) async {
+    return _delete('/api/integrations/facebook/accounts/$pageId');
+  }
+
+  Future<Map<String, dynamic>> fetchTiktokAccounts() async {
+    return _get('/api/integrations/tiktok/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveTiktokAccount(
+    Map<String, dynamic> account,
+  ) async {
+    return _post('/api/integrations/tiktok/accounts', account);
+  }
+
+  Future<Map<String, dynamic>> deleteTiktokAccount(String accountId) async {
+    return _delete('/api/integrations/tiktok/accounts/$accountId');
   }
 
   Future<Map<String, dynamic>> testN8nConnection({
@@ -127,6 +149,17 @@ class WorkflowAutomationApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
+          .timeout(const Duration(seconds: 15));
+      return _processResponse(response);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> _delete(String path) async {
+    try {
+      final response = await _client
+          .delete(Uri.parse('$baseUrl$path'))
           .timeout(const Duration(seconds: 15));
       return _processResponse(response);
     } catch (e) {

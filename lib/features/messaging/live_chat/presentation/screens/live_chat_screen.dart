@@ -17,6 +17,7 @@ import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../mock/mock_messages.dart';
+import '../../../../../shared/models/crm_channel.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_dialog.dart';
@@ -605,10 +606,36 @@ class _ConversationList extends ConsumerWidget {
                         selected: selected,
                         selectedTileColor: AppColors.primarySoft,
                         isThreeLine: true,
-                        leading: _buildAvatar(
-                          url: conversation.customerAvatar,
-                          fallbackText: conversation.customerName,
-                          radius: 20,
+                        leading: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _buildAvatar(
+                              url: conversation.customerAvatar,
+                              fallbackText: conversation.customerName,
+                              radius: 20,
+                            ),
+                            if (conversation.channel != CrmChannel.zaloPersonal &&
+                                conversation.channel != CrmChannel.zaloOa)
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: Tooltip(
+                                  message: conversation.channel.label,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      conversation.channel.icon,
+                                      size: 12,
+                                      color: conversation.channel.color,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         title: Row(
                           children: [
@@ -793,6 +820,7 @@ class _ConversationList extends ConsumerWidget {
 
   Widget _buildFilterBar(BuildContext context) {
     final labels = state.availableLabels;
+    final channels = state.conversations.map((c) => c.channel).toSet().toList();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -850,6 +878,17 @@ class _ConversationList extends ConsumerWidget {
               },
             ),
           ],
+          if (channels.length > 1)
+            for (final channel in channels) ...[
+              const SizedBox(width: AppSpacing.xs),
+              _ConversationFilterChip(
+                label: channel.label,
+                selected: state.channelFilter == channel.apiValue,
+                onSelected: (selected) {
+                  notifier.setChannelFilter(selected ? channel.apiValue : '');
+                },
+              ),
+            ],
           const SizedBox(width: AppSpacing.xs),
           PopupMenuButton<String>(
             tooltip: 'Bộ lọc đã lưu',

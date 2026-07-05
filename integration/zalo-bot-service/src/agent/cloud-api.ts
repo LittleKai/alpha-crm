@@ -232,6 +232,45 @@ export async function reportCommandProgress(
   });
 }
 
+export interface ChannelIntegrationPayload {
+  channel: 'facebook_page' | 'tiktok';
+  externalAccountId: string;
+  appId?: string;
+  verifyToken: string;
+  appSecret: string;
+  enabled?: boolean;
+}
+
+export async function registerChannelIntegration(
+  deviceId: string,
+  agentSecret: string,
+  payload: ChannelIntegrationPayload,
+): Promise<any> {
+  return callCloudApi('/crm/agent/channels/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteChannelIntegration(
+  deviceId: string,
+  agentSecret: string,
+  cloudId: string,
+): Promise<any> {
+  return callCloudApi(`/crm/agent/channels/${cloudId}`, {
+    method: 'DELETE',
+    headers: {
+      'x-agent-device-id': deviceId,
+      'x-agent-secret': agentSecret,
+    },
+  });
+}
+
 export async function reportInboundMessage(
   deviceId: string,
   agentSecret: string,

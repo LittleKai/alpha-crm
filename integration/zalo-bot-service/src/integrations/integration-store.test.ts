@@ -22,15 +22,17 @@ test('integration settings persist n8n secrets and return masked status', () => 
           eventWebhookUrl: 'https://n8n.example.com/webhook/alpha',
           callbackUrl: 'https://alpha.example/api/crm/n8n/actions',
         },
-        facebook: {
-          status: 'configured',
-          enabled: true,
-          pageName: 'Alpha Page',
-          pageId: '123456',
-          pageAccessToken: 'page-token-abcdef',
-          verifyToken: 'verify-token-123456',
-          enforce24hWindow: true,
-        },
+        facebookPages: [
+          {
+            status: 'configured',
+            enabled: true,
+            pageName: 'Alpha Page',
+            pageId: '123456',
+            pageAccessToken: 'page-token-abcdef',
+            verifyToken: 'verify-token-123456',
+            enforce24hWindow: true,
+          },
+        ],
         email: {
           enabled: true,
           mode: 'inbox',
@@ -60,9 +62,9 @@ test('integration settings persist n8n secrets and return masked status', () => 
 
     const masked = maskIntegrationSettings(settings);
     assert.equal(masked.n8n.apiKey, '************3456');
-    assert.equal(masked.facebook.status, 'configured');
-    assert.equal(masked.facebook.pageAccessToken, '************cdef');
-    assert.equal(masked.facebook.verifyToken, '************3456');
+    assert.equal(masked.facebookPages[0].status, 'configured');
+    assert.equal(masked.facebookPages[0].pageAccessToken, '************cdef');
+    assert.equal(masked.facebookPages[0].verifyToken, '************3456');
     assert.equal(masked.email.smtpPassword, '************3456');
     assert.equal(masked.email.imapPassword, '************3456');
   } finally {

@@ -21,7 +21,7 @@ import type { LoginQRCallback, LoginQRCallbackEvent } from 'zca-js';
 import { addAccountInstance, createZaloClient } from './channels/personal-zca-channel.js';
 import { writeSecure } from './secure-store.js';
 import { getAgentCredentials } from './agent/agent-identity.js';
-import { startPairingSession } from './agent/cloud-api.js';
+import { startPairingSession, registerChannelIntegration, deleteChannelIntegration } from './agent/cloud-api.js';
 import { maskIntegrationSettings, readIntegrationSettings, writeIntegrationSettings } from './integrations/integration-store.js';
 import { readRiskControlSettings, writeRiskControlSettings, applyRiskControlToConfig } from './risk-control-store.js';
 import { N8nClient } from './integrations/n8n-client.js';
@@ -246,7 +246,6 @@ const server = createServer(async (req, res) => {
       const incomingApiKey = typeof incomingN8n.apiKey === 'string' ? incomingN8n.apiKey.trim() : '';
       const apiKey = incomingApiKey.includes('*') ? current.n8n.apiKey : incomingApiKey;
       const incomingEmail = payload.email || {};
-      const incomingFacebook = payload.facebook || {};
       const saved = writeIntegrationSettings({
         ...current,
         n8n: {
@@ -260,20 +259,233 @@ const server = createServer(async (req, res) => {
           smtpPassword: preserveMaskedSecret(incomingEmail.smtpPassword, current.email.smtpPassword),
           imapPassword: preserveMaskedSecret(incomingEmail.imapPassword, current.email.imapPassword),
         },
-        facebook: {
-          ...current.facebook,
-          ...incomingFacebook,
-          verifyToken: preserveMaskedSecret(incomingFacebook.verifyToken, current.facebook.verifyToken || ''),
-          pageAccessToken: preserveMaskedSecret(
-            incomingFacebook.pageAccessToken,
-            current.facebook.pageAccessToken || '',
-          ),
-        },
       });
+
       json(res, 200, { success: true, settings: maskIntegrationSettings(saved) });
     } catch (err) {
       json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
     }
+    return;
+  }
+
+  // Facebook Page accounts: list/add-or-update/delete. Each Page is its own
+  // entity (see integration-store.ts FacebookIntegrationStatus[]) — unlike
+  // the n8n/email settings above, these are managed one account at a time so
+  // the Flutter list+detail UI can add/edit/remove a single Page without
+  // resending every other linked account.
+  if (method === 'GET' && url === '/api/integrations/facebook/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).facebookPages });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/facebook/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const pageId = String(payload.pageId || '').trim();
+      if (!pageId) {
+        json(res, 400, { success: false, error: 'pageId is required.' });
+        return;
+      }
+      const current = readIntegrationSettings();
+      const existing = current.facebookPages.find((page) => page.pageId === pageId);
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        pageId,
+        verifyToken: preserveMaskedSecret(payload.verifyToken, existing?.verifyToken || ''),
+        appSecret: preserveMaskedSecret(payload.appSecret, existing?.appSecret || ''),
+        pageAccessToken: preserveMaskedSecret(payload.pageAccessToken, existing?.pageAccessToken || ''),
+      };
+      const facebookPages = existing
+        ? current.facebookPages.map((page) => (page.pageId === pageId ? merged : page))
+        : [...current.facebookPages, merged];
+      const saved = writeIntegrationSettings({ ...current, facebookPages });
+      const savedPage = saved.facebookPages.find((page) => page.pageId === pageId)!;
+
+      // App secret is sent to the cloud (encrypted at rest there) so the
+      // webhook route can verify Meta's X-Hub-Signature-256; the page access
+      // token stays local since outbound sends go straight to Graph API.
+      if (savedPage.enabled && savedPage.verifyToken && savedPage.appSecret) {
+        const credentials = getAgentCredentials();
+        if (credentials) {
+          try {
+            const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+              channel: 'facebook_page',
+              externalAccountId: pageId,
+              appId: savedPage.appId,
+              verifyToken: savedPage.verifyToken,
+              appSecret: savedPage.appSecret,
+              enabled: savedPage.enabled,
+            });
+            if (cloudResult?.id) {
+              const withCloudId = writeIntegrationSettings({
+                ...saved,
+                facebookPages: saved.facebookPages.map((page) => (
+                  page.pageId === pageId ? { ...page, cloudId: cloudResult.id } : page
+                )),
+              });
+              json(res, 200, {
+                success: true,
+                data: maskIntegrationSettings(withCloudId).facebookPages.find((page) => page.pageId === pageId),
+              });
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              '[integrations] Failed to register Facebook channel with cloud:',
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).facebookPages.find((page) => page.pageId === pageId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const facebookAccountDeleteMatch = url.match(/^\/api\/integrations\/facebook\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && facebookAccountDeleteMatch) {
+    const pageId = decodeURIComponent(facebookAccountDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.facebookPages.find((page) => page.pageId === pageId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'Facebook Page not found.' });
+      return;
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete Facebook channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      facebookPages: current.facebookPages.filter((page) => page.pageId !== pageId),
+    });
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // TikTok accounts: same list/add-or-update/delete shape as Facebook above.
+  if (method === 'GET' && url === '/api/integrations/tiktok/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).tiktokAccounts });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/tiktok/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const accountId = String(payload.accountId || '').trim();
+      if (!accountId) {
+        json(res, 400, { success: false, error: 'accountId is required.' });
+        return;
+      }
+      const current = readIntegrationSettings();
+      const existing = current.tiktokAccounts.find((account) => account.accountId === accountId);
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        accountId,
+        verifyToken: preserveMaskedSecret(payload.verifyToken, existing?.verifyToken || ''),
+        appSecret: preserveMaskedSecret(payload.appSecret, existing?.appSecret || ''),
+        accessToken: preserveMaskedSecret(payload.accessToken, existing?.accessToken || ''),
+      };
+      const tiktokAccounts = existing
+        ? current.tiktokAccounts.map((account) => (account.accountId === accountId ? merged : account))
+        : [...current.tiktokAccounts, merged];
+      const saved = writeIntegrationSettings({ ...current, tiktokAccounts });
+      const savedAccount = saved.tiktokAccounts.find((account) => account.accountId === accountId)!;
+
+      // Same cloud-relay registration as Facebook, mirrored for TikTok — see
+      // tiktok-channel.ts for the "needs re-verification" caveat.
+      if (savedAccount.enabled && savedAccount.verifyToken && savedAccount.appSecret) {
+        const credentials = getAgentCredentials();
+        if (credentials) {
+          try {
+            const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+              channel: 'tiktok',
+              externalAccountId: accountId,
+              appId: savedAccount.appId,
+              verifyToken: savedAccount.verifyToken,
+              appSecret: savedAccount.appSecret,
+              enabled: savedAccount.enabled,
+            });
+            if (cloudResult?.id) {
+              const withCloudId = writeIntegrationSettings({
+                ...saved,
+                tiktokAccounts: saved.tiktokAccounts.map((account) => (
+                  account.accountId === accountId ? { ...account, cloudId: cloudResult.id } : account
+                )),
+              });
+              json(res, 200, {
+                success: true,
+                data: maskIntegrationSettings(withCloudId).tiktokAccounts.find((account) => account.accountId === accountId),
+              });
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              '[integrations] Failed to register TikTok channel with cloud:',
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).tiktokAccounts.find((account) => account.accountId === accountId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const tiktokAccountDeleteMatch = url.match(/^\/api\/integrations\/tiktok\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && tiktokAccountDeleteMatch) {
+    const accountId = decodeURIComponent(tiktokAccountDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.tiktokAccounts.find((account) => account.accountId === accountId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'TikTok account not found.' });
+      return;
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete TikTok channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      tiktokAccounts: current.tiktokAccounts.filter((account) => account.accountId !== accountId),
+    });
+    json(res, 200, { success: true });
     return;
   }
 

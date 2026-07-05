@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/api/crm_cloud_api.dart';
 import '../../../../shared/api/crm_sse_provider.dart';
+import '../../../../shared/models/crm_channel.dart';
 import '../../../../shared/models/crm_customer.dart';
 import '../../../../shared/utils/image_helper.dart';
 import '../../../../shared/utils/desktop_notifier.dart';
@@ -82,6 +83,7 @@ class ChatMessage {
   final List<Map<String, dynamic>> receipts;
   final Map<String, dynamic> metadata;
   final dynamic attachments;
+  final CrmChannel channel;
 
   const ChatMessage({
     required this.id,
@@ -102,6 +104,7 @@ class ChatMessage {
     this.receipts = const [],
     this.metadata = const {},
     this.attachments,
+    this.channel = CrmChannel.zaloPersonal,
   });
 
   bool get isMine => direction == 'outbound';
@@ -142,6 +145,7 @@ class ChatMessage {
       receipts: receipts ?? this.receipts,
       metadata: metadata,
       attachments: attachments,
+      channel: channel,
     );
   }
 
@@ -181,6 +185,9 @@ class ChatMessage {
           _mapFromJsonField(json['metadata'] ?? json['metadataJson']) ??
           const {},
       attachments: json['attachments'],
+      channel: CrmChannel.fromApiValue(
+        (json['channel'] ?? 'zalo_personal').toString(),
+      ),
     );
   }
 }
@@ -209,6 +216,7 @@ class Conversation {
   final List<ConversationTimelineItem> timeline;
   final List<ChatMessage> messages;
   final CrmCustomer? crmCustomer;
+  final CrmChannel channel;
 
   const Conversation({
     required this.id,
@@ -232,6 +240,7 @@ class Conversation {
     this.timeline = const [],
     required this.messages,
     this.crmCustomer,
+    this.channel = CrmChannel.zaloPersonal,
   });
 
   /// True when the bot is on for this thread AND not in an operator-pause window.
@@ -299,6 +308,7 @@ class Conversation {
       crmCustomer: crmCustomerSet == _unset
           ? (crmCustomer ?? this.crmCustomer)
           : (crmCustomerSet as CrmCustomer?),
+      channel: channel,
     );
   }
 
@@ -379,6 +389,9 @@ class Conversation {
           : const [],
       messages: const [],
       crmCustomer: null,
+      channel: CrmChannel.fromApiValue(
+        (json['channel'] ?? 'zalo_personal').toString(),
+      ),
     );
   }
 }
@@ -505,6 +518,7 @@ class LiveChatState {
   final bool unreadOnlyFilter;
   final bool labeledOnlyFilter;
   final InboxStatusFilter inboxStatusFilter;
+  final String channelFilter;
   final String selectedSavedFilterId;
   final List<ConversationSavedFilter> savedFilters;
   // Per-account AI auto-reply switch (Live Chat settings dialog). Accounts
@@ -527,13 +541,18 @@ class LiveChatState {
       selectedLabelFilter.isNotEmpty ||
       unreadOnlyFilter ||
       labeledOnlyFilter ||
-      inboxStatusFilter != InboxStatusFilter.all;
+      inboxStatusFilter != InboxStatusFilter.all ||
+      channelFilter.isNotEmpty;
 
   List<Conversation> get filteredConversations {
     return conversations.where((conversation) {
       final labels = conversation.displayLabels;
       if (selectedLabelFilter.isNotEmpty &&
           !labels.contains(selectedLabelFilter)) {
+        return false;
+      }
+      if (channelFilter.isNotEmpty &&
+          conversation.channel.apiValue != channelFilter) {
         return false;
       }
       if (unreadOnlyFilter && conversation.unreadCount <= 0) return false;
@@ -593,6 +612,7 @@ class LiveChatState {
     this.unreadOnlyFilter = false,
     this.labeledOnlyFilter = false,
     this.inboxStatusFilter = InboxStatusFilter.all,
+    this.channelFilter = '',
     this.selectedSavedFilterId = '',
     this.savedFilters = const [],
     this.accountAiAutoReply = const {},
@@ -626,6 +646,7 @@ class LiveChatState {
       unreadOnlyFilter: false,
       labeledOnlyFilter: false,
       inboxStatusFilter: InboxStatusFilter.all,
+      channelFilter: '',
       selectedSavedFilterId: '',
       savedFilters: [],
     );
@@ -659,6 +680,7 @@ class LiveChatState {
     bool? unreadOnlyFilter,
     bool? labeledOnlyFilter,
     InboxStatusFilter? inboxStatusFilter,
+    String? channelFilter,
     String? selectedSavedFilterId,
     List<ConversationSavedFilter>? savedFilters,
     Map<String, bool>? accountAiAutoReply,
@@ -701,6 +723,7 @@ class LiveChatState {
       unreadOnlyFilter: unreadOnlyFilter ?? this.unreadOnlyFilter,
       labeledOnlyFilter: labeledOnlyFilter ?? this.labeledOnlyFilter,
       inboxStatusFilter: inboxStatusFilter ?? this.inboxStatusFilter,
+      channelFilter: channelFilter ?? this.channelFilter,
       selectedSavedFilterId:
           selectedSavedFilterId ?? this.selectedSavedFilterId,
       savedFilters: savedFilters ?? this.savedFilters,
@@ -983,6 +1006,13 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
   }
 
+  void setChannelFilter(String channel) {
+    state = state.copyWith(
+      channelFilter: channel,
+      selectedSavedFilterId: '',
+    );
+  }
+
   void setUnreadOnlyFilter(bool enabled) {
     state = state.copyWith(
       unreadOnlyFilter: enabled,
@@ -1011,6 +1041,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       unreadOnlyFilter: false,
       labeledOnlyFilter: false,
       inboxStatusFilter: InboxStatusFilter.all,
+      channelFilter: '',
       selectedSavedFilterId: '',
     );
   }

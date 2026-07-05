@@ -123,8 +123,10 @@ class FacebookSettingsState {
   final String appId;
   final String webhookCallbackUrl;
   final String verifyToken;
+  final String appSecret;
   final String pageAccessToken;
   final bool enforce24hWindow;
+  final String? cloudId;
 
   const FacebookSettingsState({
     this.enabled = false,
@@ -134,8 +136,10 @@ class FacebookSettingsState {
     this.appId = '',
     this.webhookCallbackUrl = '',
     this.verifyToken = '',
+    this.appSecret = '',
     this.pageAccessToken = '',
     this.enforce24hWindow = true,
+    this.cloudId,
   });
 
   factory FacebookSettingsState.fromJson(Map<dynamic, dynamic> json) {
@@ -147,8 +151,10 @@ class FacebookSettingsState {
       appId: json['appId']?.toString() ?? '',
       webhookCallbackUrl: json['webhookCallbackUrl']?.toString() ?? '',
       verifyToken: json['verifyToken']?.toString() ?? '',
+      appSecret: json['appSecret']?.toString() ?? '',
       pageAccessToken: json['pageAccessToken']?.toString() ?? '',
       enforce24hWindow: json['enforce24hWindow'] != false,
+      cloudId: json['cloudId']?.toString(),
     );
   }
 
@@ -161,8 +167,74 @@ class FacebookSettingsState {
       'appId': appId,
       'webhookCallbackUrl': webhookCallbackUrl,
       'verifyToken': verifyToken,
+      'appSecret': appSecret,
       'pageAccessToken': pageAccessToken,
       'enforce24hWindow': enforce24hWindow,
+      if (cloudId != null) 'cloudId': cloudId,
+    };
+  }
+}
+
+/// TikTok integration state, structurally mirroring [FacebookSettingsState].
+/// Field names/shape are a placeholder pending real TikTok Business
+/// Messaging API docs/credentials — see `tiktok-channel.ts` for the backend
+/// side of this same caveat.
+class TiktokSettingsState {
+  final bool enabled;
+  final String status;
+  final String accountName;
+  final String accountId;
+  final String appId;
+  final String webhookCallbackUrl;
+  final String verifyToken;
+  final String appSecret;
+  final String accessToken;
+  final bool enforce24hWindow;
+  final String? cloudId;
+
+  const TiktokSettingsState({
+    this.enabled = false,
+    this.status = 'cloud_required',
+    this.accountName = '',
+    this.accountId = '',
+    this.appId = '',
+    this.webhookCallbackUrl = '',
+    this.verifyToken = '',
+    this.appSecret = '',
+    this.accessToken = '',
+    this.enforce24hWindow = true,
+    this.cloudId,
+  });
+
+  factory TiktokSettingsState.fromJson(Map<dynamic, dynamic> json) {
+    return TiktokSettingsState(
+      enabled: json['enabled'] == true,
+      status: json['status']?.toString() ?? 'cloud_required',
+      accountName: json['accountName']?.toString() ?? '',
+      accountId: json['accountId']?.toString() ?? '',
+      appId: json['appId']?.toString() ?? '',
+      webhookCallbackUrl: json['webhookCallbackUrl']?.toString() ?? '',
+      verifyToken: json['verifyToken']?.toString() ?? '',
+      appSecret: json['appSecret']?.toString() ?? '',
+      accessToken: json['accessToken']?.toString() ?? '',
+      enforce24hWindow: json['enforce24hWindow'] != false,
+      cloudId: json['cloudId']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'status': enabled ? 'configured' : status,
+      'accountName': accountName,
+      'accountId': accountId,
+      'appId': appId,
+      'webhookCallbackUrl': webhookCallbackUrl,
+      'verifyToken': verifyToken,
+      'appSecret': appSecret,
+      'accessToken': accessToken,
+      'enforce24hWindow': enforce24hWindow,
+      if (cloudId != null) 'cloudId': cloudId,
     };
   }
 }
@@ -282,7 +354,8 @@ class WorkflowAutomationState {
   final String searchQuery;
   final N8nSettingsState n8n;
   final EmailSettingsState email;
-  final FacebookSettingsState facebook;
+  final List<FacebookSettingsState> facebookPages;
+  final List<TiktokSettingsState> tiktokAccounts;
   final bool isLoading;
   final String? errorText;
   final String? statusText;
@@ -295,7 +368,8 @@ class WorkflowAutomationState {
     this.searchQuery = '',
     this.n8n = const N8nSettingsState(),
     this.email = const EmailSettingsState(),
-    this.facebook = const FacebookSettingsState(),
+    this.facebookPages = const [],
+    this.tiktokAccounts = const [],
     this.isLoading = false,
     this.errorText,
     this.statusText,
@@ -320,7 +394,8 @@ class WorkflowAutomationState {
     String? searchQuery,
     N8nSettingsState? n8n,
     EmailSettingsState? email,
-    FacebookSettingsState? facebook,
+    List<FacebookSettingsState>? facebookPages,
+    List<TiktokSettingsState>? tiktokAccounts,
     bool? isLoading,
     String? errorText,
     String? statusText,
@@ -337,7 +412,8 @@ class WorkflowAutomationState {
       searchQuery: searchQuery ?? this.searchQuery,
       n8n: n8n ?? this.n8n,
       email: email ?? this.email,
-      facebook: facebook ?? this.facebook,
+      facebookPages: facebookPages ?? this.facebookPages,
+      tiktokAccounts: tiktokAccounts ?? this.tiktokAccounts,
       isLoading: isLoading ?? this.isLoading,
       errorText: errorText,
       statusText: statusText,
@@ -353,6 +429,7 @@ class WorkflowAutomationNotifier
   WorkflowAutomationNotifier(this._ref)
     : super(WorkflowAutomationState(automationRules: _defaultAutomationRules)) {
     unawaited(loadAutomationRules());
+    unawaited(loadChannelAccounts());
   }
 
   WorkflowAutomationApi _getApi() {
@@ -372,7 +449,6 @@ class WorkflowAutomationNotifier
       final settings = result['settings'];
       final n8n = settings is Map ? settings['n8n'] : null;
       final email = settings is Map ? settings['email'] : null;
-      final facebook = settings is Map ? settings['facebook'] : null;
       state = state.copyWith(
         isLoading: false,
         n8n: n8n is Map
@@ -385,15 +461,35 @@ class WorkflowAutomationNotifier
               )
             : state.n8n,
         email: email is Map ? EmailSettingsState.fromJson(email) : state.email,
-        facebook: facebook is Map
-            ? FacebookSettingsState.fromJson(facebook)
-            : state.facebook,
       );
     } else {
       state = state.copyWith(
         isLoading: false,
         errorText:
             result['error']?.toString() ?? 'Không tải được cấu hình n8n.',
+      );
+    }
+  }
+
+  Future<void> loadChannelAccounts() async {
+    final facebookResult = await _getApi().fetchFacebookAccounts();
+    if (!mounted) return;
+    if (facebookResult['success'] == true && facebookResult['data'] is List) {
+      state = state.copyWith(
+        facebookPages: (facebookResult['data'] as List)
+            .whereType<Map>()
+            .map(FacebookSettingsState.fromJson)
+            .toList(),
+      );
+    }
+    final tiktokResult = await _getApi().fetchTiktokAccounts();
+    if (!mounted) return;
+    if (tiktokResult['success'] == true && tiktokResult['data'] is List) {
+      state = state.copyWith(
+        tiktokAccounts: (tiktokResult['data'] as List)
+            .whereType<Map>()
+            .map(TiktokSettingsState.fromJson)
+            .toList(),
       );
     }
   }
@@ -536,22 +632,107 @@ class WorkflowAutomationNotifier
     );
   }
 
-  Future<void> saveFacebookSettings(FacebookSettingsState settings) async {
+  Future<void> saveFacebookAccount(FacebookSettingsState account) async {
     state = state.copyWith(isLoading: true, errorText: null, statusText: null);
-    final result = await _getApi().saveFacebookSettings(
-      facebook: settings.toJson(),
-    );
-    state = state.copyWith(
-      isLoading: false,
-      facebook: result['success'] == true ? settings : state.facebook,
-      statusText: result['success'] == true
-          ? 'Đã lưu cấu hình Facebook Page.'
-          : null,
-      errorText: result['success'] == true
-          ? null
-          : result['error']?.toString() ??
-                'Không lưu được cấu hình Facebook Page.',
-    );
+    final result = await _getApi().saveFacebookAccount(account.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? FacebookSettingsState.fromJson(result['data'] as Map)
+          : account;
+      final exists = state.facebookPages.any(
+        (page) => page.pageId == saved.pageId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        facebookPages: exists
+            ? [
+                for (final page in state.facebookPages)
+                  page.pageId == saved.pageId ? saved : page,
+              ]
+            : [...state.facebookPages, saved],
+        statusText: 'Đã lưu cấu hình Facebook Page.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ??
+            'Không lưu được cấu hình Facebook Page.',
+      );
+    }
+  }
+
+  Future<void> deleteFacebookAccount(String pageId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteFacebookAccount(pageId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        facebookPages: state.facebookPages
+            .where((page) => page.pageId != pageId)
+            .toList(),
+        statusText: 'Đã xóa Facebook Page.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được Facebook Page.',
+      );
+    }
+  }
+
+  Future<void> saveTiktokAccount(TiktokSettingsState account) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().saveTiktokAccount(account.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? TiktokSettingsState.fromJson(result['data'] as Map)
+          : account;
+      final exists = state.tiktokAccounts.any(
+        (acc) => acc.accountId == saved.accountId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        tiktokAccounts: exists
+            ? [
+                for (final acc in state.tiktokAccounts)
+                  acc.accountId == saved.accountId ? saved : acc,
+              ]
+            : [...state.tiktokAccounts, saved],
+        statusText: 'Đã lưu cấu hình TikTok.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không lưu được cấu hình TikTok.',
+      );
+    }
+  }
+
+  Future<void> deleteTiktokAccount(String accountId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteTiktokAccount(accountId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        tiktokAccounts: state.tiktokAccounts
+            .where((acc) => acc.accountId != accountId)
+            .toList(),
+        statusText: 'Đã xóa tài khoản TikTok.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được tài khoản TikTok.',
+      );
+    }
   }
 
   Future<void> testN8nConnection(N8nSettingsState settings) async {

@@ -19,8 +19,32 @@ export interface FacebookIntegrationStatus {
   appId?: string;
   webhookCallbackUrl?: string;
   verifyToken?: string;
+  /** Meta App Secret. Sent to the cloud backend (encrypted) so it can verify webhook signatures. */
+  appSecret?: string;
   pageAccessToken?: string;
   enforce24hWindow?: boolean;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
+}
+
+export interface TiktokIntegrationStatus {
+  status: 'not_configured' | 'cloud_required' | 'configured';
+  enabled?: boolean;
+  accountName?: string;
+  accountId?: string;
+  appId?: string;
+  webhookCallbackUrl?: string;
+  verifyToken?: string;
+  /**
+   * TikTok App Secret. Sent to the cloud backend (encrypted) so it can verify
+   * webhook signatures, mirroring the Facebook flow. Placeholder shape —
+   * not yet verified against real TikTok Business Messaging API docs.
+   */
+  appSecret?: string;
+  accessToken?: string;
+  enforce24hWindow?: boolean;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
 }
 
 export interface EmailIntegrationSettings {
@@ -43,7 +67,8 @@ export interface EmailIntegrationSettings {
 
 export interface IntegrationSettings {
   n8n: N8nIntegrationSettings;
-  facebook: FacebookIntegrationStatus;
+  facebookPages: FacebookIntegrationStatus[];
+  tiktokAccounts: TiktokIntegrationStatus[];
   email: EmailIntegrationSettings;
 }
 
@@ -55,10 +80,8 @@ const defaultSettings: IntegrationSettings = {
     eventWebhookUrl: '',
     callbackUrl: '',
   },
-  facebook: {
-    status: 'cloud_required',
-    enforce24hWindow: true,
-  },
+  facebookPages: [],
+  tiktokAccounts: [],
   email: {
     enabled: false,
     mode: 'transactional',
@@ -117,11 +140,18 @@ export function maskIntegrationSettings(settings: IntegrationSettings): Integrat
       smtpPassword: maskSecret(settings.email.smtpPassword),
       imapPassword: maskSecret(settings.email.imapPassword),
     },
-    facebook: {
-      ...settings.facebook,
-      verifyToken: maskSecret(settings.facebook.verifyToken || ''),
-      pageAccessToken: maskSecret(settings.facebook.pageAccessToken || ''),
-    },
+    facebookPages: settings.facebookPages.map((page) => ({
+      ...page,
+      verifyToken: maskSecret(page.verifyToken || ''),
+      appSecret: maskSecret(page.appSecret || ''),
+      pageAccessToken: maskSecret(page.pageAccessToken || ''),
+    })),
+    tiktokAccounts: settings.tiktokAccounts.map((account) => ({
+      ...account,
+      verifyToken: maskSecret(account.verifyToken || ''),
+      appSecret: maskSecret(account.appSecret || ''),
+      accessToken: maskSecret(account.accessToken || ''),
+    })),
   };
 }
 
@@ -134,17 +164,8 @@ function normalizeSettings(settings: Partial<IntegrationSettings>): IntegrationS
       eventWebhookUrl: normalizeBaseUrl(settings.n8n?.eventWebhookUrl || ''),
       callbackUrl: normalizeBaseUrl(settings.n8n?.callbackUrl || ''),
     },
-    facebook: {
-      status: settings.facebook?.status || 'cloud_required',
-      enabled: settings.facebook?.enabled === true,
-      pageName: settings.facebook?.pageName || undefined,
-      pageId: settings.facebook?.pageId || undefined,
-      appId: settings.facebook?.appId || undefined,
-      webhookCallbackUrl: normalizeBaseUrl(settings.facebook?.webhookCallbackUrl || ''),
-      verifyToken: String(settings.facebook?.verifyToken || '').trim(),
-      pageAccessToken: String(settings.facebook?.pageAccessToken || '').trim(),
-      enforce24hWindow: settings.facebook?.enforce24hWindow !== false,
-    },
+    facebookPages: normalizeFacebookList(settings),
+    tiktokAccounts: normalizeTiktokList(settings),
     email: {
       enabled: settings.email?.enabled === true,
       mode: settings.email?.mode === 'inbox' ? 'inbox' : 'transactional',
@@ -163,6 +184,58 @@ function normalizeSettings(settings: Partial<IntegrationSettings>): IntegrationS
       imapPassword: String(settings.email?.imapPassword || '').trim(),
     },
   };
+}
+
+function normalizeFacebookEntry(entry: Partial<FacebookIntegrationStatus>): FacebookIntegrationStatus {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    pageName: entry.pageName || undefined,
+    pageId: entry.pageId || undefined,
+    appId: entry.appId || undefined,
+    webhookCallbackUrl: normalizeBaseUrl(entry.webhookCallbackUrl || ''),
+    verifyToken: String(entry.verifyToken || '').trim(),
+    appSecret: String(entry.appSecret || '').trim(),
+    pageAccessToken: String(entry.pageAccessToken || '').trim(),
+    enforce24hWindow: entry.enforce24hWindow !== false,
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
+function normalizeTiktokEntry(entry: Partial<TiktokIntegrationStatus>): TiktokIntegrationStatus {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    accountName: entry.accountName || undefined,
+    accountId: entry.accountId || undefined,
+    appId: entry.appId || undefined,
+    webhookCallbackUrl: normalizeBaseUrl(entry.webhookCallbackUrl || ''),
+    verifyToken: String(entry.verifyToken || '').trim(),
+    appSecret: String(entry.appSecret || '').trim(),
+    accessToken: String(entry.accessToken || '').trim(),
+    enforce24hWindow: entry.enforce24hWindow !== false,
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
+// One-time migration: settings.json written before multi-account support
+// stored a single `facebook`/`tiktok` object instead of an array. Wrap it
+// into a one-element array the first time it's read; the next write persists
+// the new array shape.
+function normalizeFacebookList(settings: Partial<IntegrationSettings>): FacebookIntegrationStatus[] {
+  if (Array.isArray(settings.facebookPages)) {
+    return settings.facebookPages.map(normalizeFacebookEntry);
+  }
+  const legacy = (settings as { facebook?: Partial<FacebookIntegrationStatus> }).facebook;
+  return legacy?.pageId ? [normalizeFacebookEntry(legacy)] : [];
+}
+
+function normalizeTiktokList(settings: Partial<IntegrationSettings>): TiktokIntegrationStatus[] {
+  if (Array.isArray(settings.tiktokAccounts)) {
+    return settings.tiktokAccounts.map(normalizeTiktokEntry);
+  }
+  const legacy = (settings as { tiktok?: Partial<TiktokIntegrationStatus> }).tiktok;
+  return legacy?.accountId ? [normalizeTiktokEntry(legacy)] : [];
 }
 
 function normalizeBaseUrl(value: string): string {
