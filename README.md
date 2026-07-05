@@ -8,9 +8,7 @@ The system is built as a hybrid local-cloud application consisting of:
 
 ---
 
-## 📸 Screenshots & Design System
-
-The system strictly adheres to the standard **Design System** defined in [DESIGN.md](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/DESIGN.md) and [PRODUCT.md](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/PRODUCT.md). It features a highly polished dark/light corporate aesthetic using the `Be Vietnam Pro` (Inter-derived) typography, an 8px spacing grid, and fluid layouts optimized across Desktop, Tablet, and Mobile viewports.
+## 📸 Screenshots
 
 ![Alpha CRM Dashboard](img/crm_dashboard.png)
 
