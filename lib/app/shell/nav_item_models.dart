@@ -85,6 +85,30 @@ final List<NavGroup> navigationGroups = [
         routePath: '/integrations/tiktok',
         color: Color(0xFF010101),
       ),
+      NavItem(
+        title: 'Instagram Messaging',
+        icon: Icons.camera_alt_outlined,
+        routePath: '/integrations/instagram',
+        color: Color(0xFFE1306C),
+      ),
+      NavItem(
+        title: 'WhatsApp Business',
+        icon: Icons.chat_outlined,
+        routePath: '/integrations/whatsapp',
+        color: Color(0xFF25D366),
+      ),
+      NavItem(
+        title: 'Telegram Bot',
+        icon: Icons.send_outlined,
+        routePath: '/integrations/telegram',
+        color: Color(0xFF26A5E4),
+      ),
+      NavItem(
+        title: 'Webchat Widget',
+        icon: Icons.forum_outlined,
+        routePath: '/integrations/webchat',
+        color: Color(0xFF4F46E5),
+      ),
     ],
   ),
   const NavGroup(

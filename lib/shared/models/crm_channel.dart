@@ -5,6 +5,10 @@ enum CrmChannel {
   zaloOa('zalo_oa', 'Zalo OA'),
   facebookPage('facebook_page', 'Trang Facebook'),
   tiktok('tiktok', 'TikTok'),
+  instagram('instagram', 'Instagram'),
+  whatsapp('whatsapp', 'WhatsApp'),
+  telegram('telegram', 'Telegram'),
+  webchat('webchat', 'Webchat'),
   email('email', 'Email');
 
   final String apiValue;
@@ -28,6 +32,14 @@ enum CrmChannel {
         return Icons.facebook_outlined;
       case CrmChannel.tiktok:
         return Icons.music_note_outlined;
+      case CrmChannel.instagram:
+        return Icons.camera_alt_outlined;
+      case CrmChannel.whatsapp:
+        return Icons.chat_outlined;
+      case CrmChannel.telegram:
+        return Icons.send_outlined;
+      case CrmChannel.webchat:
+        return Icons.forum_outlined;
       case CrmChannel.email:
         return Icons.mail_outline;
     }
@@ -42,6 +54,14 @@ enum CrmChannel {
         return const Color(0xFF1877F2);
       case CrmChannel.tiktok:
         return const Color(0xFF010101);
+      case CrmChannel.instagram:
+        return const Color(0xFFE1306C);
+      case CrmChannel.whatsapp:
+        return const Color(0xFF25D366);
+      case CrmChannel.telegram:
+        return const Color(0xFF26A5E4);
+      case CrmChannel.webchat:
+        return const Color(0xFF4F46E5);
       case CrmChannel.email:
         return const Color(0xFF6366F1);
     }

@@ -233,11 +233,17 @@ export async function reportCommandProgress(
 }
 
 export interface ChannelIntegrationPayload {
-  channel: 'facebook_page' | 'tiktok';
+  channel: 'facebook_page' | 'tiktok' | 'instagram' | 'whatsapp' | 'telegram' | 'webchat';
   externalAccountId: string;
   appId?: string;
-  verifyToken: string;
-  appSecret: string;
+  verifyToken?: string;
+  appSecret?: string;
+  /** Telegram only: Bot API token, used by the cloud backend to identify/verify the bot. */
+  botToken?: string;
+  /** Webchat only: public widget display config, since there's no 3rd-party API for the cloud config endpoint to read it from. */
+  widgetName?: string;
+  welcomeMessage?: string;
+  primaryColorHex?: string;
   enabled?: boolean;
 }
 

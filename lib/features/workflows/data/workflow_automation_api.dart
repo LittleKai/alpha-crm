@@ -80,6 +80,62 @@ class WorkflowAutomationApi {
     return _delete('/api/integrations/tiktok/accounts/$accountId');
   }
 
+  Future<Map<String, dynamic>> fetchInstagramAccounts() async {
+    return _get('/api/integrations/instagram/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveInstagramAccount(
+    Map<String, dynamic> account,
+  ) async {
+    return _post('/api/integrations/instagram/accounts', account);
+  }
+
+  Future<Map<String, dynamic>> deleteInstagramAccount(String accountId) async {
+    return _delete('/api/integrations/instagram/accounts/$accountId');
+  }
+
+  Future<Map<String, dynamic>> fetchWhatsappAccounts() async {
+    return _get('/api/integrations/whatsapp/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveWhatsappAccount(
+    Map<String, dynamic> account,
+  ) async {
+    return _post('/api/integrations/whatsapp/accounts', account);
+  }
+
+  Future<Map<String, dynamic>> deleteWhatsappAccount(String accountId) async {
+    return _delete('/api/integrations/whatsapp/accounts/$accountId');
+  }
+
+  Future<Map<String, dynamic>> fetchTelegramBots() async {
+    return _get('/api/integrations/telegram/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveTelegramBot(
+    Map<String, dynamic> bot,
+  ) async {
+    return _post('/api/integrations/telegram/accounts', bot);
+  }
+
+  Future<Map<String, dynamic>> deleteTelegramBot(String accountId) async {
+    return _delete('/api/integrations/telegram/accounts/$accountId');
+  }
+
+  Future<Map<String, dynamic>> fetchWebchatWidgets() async {
+    return _get('/api/integrations/webchat/accounts');
+  }
+
+  Future<Map<String, dynamic>> saveWebchatWidget(
+    Map<String, dynamic> widget,
+  ) async {
+    return _post('/api/integrations/webchat/accounts', widget);
+  }
+
+  Future<Map<String, dynamic>> deleteWebchatWidget(String widgetId) async {
+    return _delete('/api/integrations/webchat/accounts/$widgetId');
+  }
+
   Future<Map<String, dynamic>> testN8nConnection({
     required String baseUrl,
     required String apiKey,

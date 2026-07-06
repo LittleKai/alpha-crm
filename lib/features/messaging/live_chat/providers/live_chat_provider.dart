@@ -47,12 +47,14 @@ class LiveChatAccount {
   final String label;
   final int totalGroups;
   final int managedGroups;
+  final CrmChannel channel;
 
   const LiveChatAccount({
     required this.id,
     required this.label,
     this.totalGroups = 0,
     this.managedGroups = 0,
+    this.channel = CrmChannel.zaloPersonal,
   });
 
   @override

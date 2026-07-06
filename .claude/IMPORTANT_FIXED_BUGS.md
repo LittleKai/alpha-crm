@@ -199,6 +199,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
+### 2026-07-05 - Live Chat composer bị khóa nhầm cho hội thoại Facebook/TikTok (gate "connected" chỉ tính theo Zalo account pool)
+
+- Symptom: Mở hội thoại Facebook Page/TikTok trong Live Chat (chế độ local-bridge), ô soạn tin bị vô hiệu hóa như thể tài khoản "đã ngắt kết nối", dù integration Facebook/TikTok tương ứng đang bật và hoạt động bình thường.
+- Root cause: Trong `live_chat_screen.dart`, ở nhánh transport không phải `cloudRemote`, `isAccountConnected` được suy ra bằng cách tìm `conversation.accountId` trong `zaloState.accounts` (`zaloIntegrationProvider`, Zalo-only) qua `firstWhere(..., orElse: () => ZaloConnectedAccount(..., connected: false, status: 'disconnected_expired'))`. Vì accountId của Facebook Page/TikTok không bao giờ khớp bất kỳ Zalo account nào, mọi hội thoại ngoài Zalo đều rơi vào `orElse` → `connected=false` → composer bị khóa vĩnh viễn cho kênh đó.
+- Fix summary: Chỉ áp dụng gate theo Zalo account pool khi `conversation.channel` là `zaloPersonal`/`zaloOa`; các channel khác (`facebookPage`, `tiktok`, và channel tương lai) mặc định `isAccountConnected = true` — kết nối của chúng do integration settings riêng (`enabled` flag) quản lý, không qua Zalo pool.
+- Rule: Không bao giờ tái sử dụng trạng thái "connected" của Zalo account pool để gate UI cho hội thoại của channel khác — luôn kiểm tra `conversation.channel` trước. Lỗi này sẽ tái diễn mỗi khi thêm channel mới vào Live Chat nếu không thêm nhánh theo channel tương tự.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`.
+
 ### 2026-07-03 - Self-echo Zalo messages double-reported to cloud and bumped unread; explicit `unreadCountDelta: 0` swallowed by `|| 1`
 
 - Symptom: on mobile/web (cloud SSE mode), every message the operator sent from Desktop/chatbot flipped the conversation to "unread" and risked duplicate CrmMessage rows; inbound customer bubbles never appeared in local-first mode.
@@ -451,3 +459,31 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Fix summary: (1) Added poll detection in the backend `personal-zca-channel.ts` normalizer to check if message bodies contain poll JSON structures and set `messageType` to `'poll'`. Updated the frontend `live_chat_screen.dart` to parse poll JSON data even if the message arrived under other content types (reconciling legacy DB rows). (2) Enhanced the backend `local-chat-media-worker.ts`'s `safeExtension` helper to extract file extensions from `attachment.mimeType` (using a comprehensive MIME mapping table), URL query parameters, and fallback to the URL pathname.
 - Rule: Always check `attachment.mimeType` and URL query parameters for file extensions before falling back to the URL pathname, as Zalo attachments store file details inside query parameters and are often served as `application/octet-stream`.
 - Related files: `tools/alpha-crm/integration/zalo-bot-service/src/channels/personal-zca-channel.ts`, `tools/alpha-crm/integration/zalo-bot-service/src/local-chat/local-chat-media-worker.ts`, `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`.
+
+---
+
+## Instagram/WhatsApp/Telegram inbound webhook messages bị Mongoose reject do enum thiếu giá trị
+
+**Triệu chứng:** Khi Instagram/WhatsApp/Telegram (Giai đoạn G/H/I) được thêm vào `CrmChannelIntegration.channel` enum và `channelWebhooks.js`, tin nhắn inbound từ 3 kênh này sẽ throw `ValidationError` khi gọi `CrmMessage.create({..., channel: 'instagram'|'whatsapp'|'telegram', ...})` — không hề lộ ra ở `tsc`/`flutter analyze` vì đây là lỗi runtime chỉ xảy ra khi có webhook thật gửi tới.
+
+**Nguyên nhân:** `CrmConversation.js` và `CrmMessage.js` vẫn giữ enum cũ `['zalo_personal', 'zalo_oa', 'facebook_page', 'tiktok']` — chỉ `CrmChannelIntegration.js` được cập nhật khi thêm kênh mới, 2 model còn lại bị bỏ sót. `upsertConversationFromInbound()` (`server/routes/crm.js`) dùng `findOneAndUpdate(..., { upsert: true })` KHÔNG có `runValidators: true` nên phần update `CrmConversation` không lộ lỗi ngay, nhưng bước tạo `CrmMessage.create(...)` ngay sau đó dùng `.create()` (luôn chạy full schema validation) nên sẽ throw ngay khi channel không nằm trong enum.
+
+**Cách sửa:** Thêm đầy đủ giá trị kênh vào enum `channel` của cả `CrmConversation.js` VÀ `CrmMessage.js`, không chỉ `CrmChannelIntegration.js`.
+
+**Quy tắc cần nhớ:** Khi thêm 1 kênh mới (`channel` enum value), phải rà soát và cập nhật ĐỒNG THỜI cả 3 model: `CrmChannelIntegration.js`, `CrmConversation.js`, `CrmMessage.js` — không chỉ model dùng cho cấu hình tích hợp. Vì `findOneAndUpdate` mặc định không chạy validator, lỗi enum có thể im lặng ở bước upsert conversation nhưng vẫn nổ ở bước tạo message ngay sau đó.
+
+**Các file liên quan:** `alpha-studio-backend/server/models/CrmConversation.js`, `alpha-studio-backend/server/models/CrmMessage.js`, `alpha-studio-backend/server/models/CrmChannelIntegration.js`, `alpha-studio-backend/server/routes/crm.js` (`upsertConversationFromInbound`), `alpha-studio-backend/server/routes/channelWebhooks.js`.
+
+---
+
+## WhatsApp/Telegram không thực sự chọn được trong bộ chuyển tài khoản Live Chat dù Phase H/I đã "hoàn thành"
+
+**Triệu chứng:** Sau khi cắm xong WhatsApp (Phase H) và Telegram (Phase I) — settings screen, provider, backend route đều hoạt động — tài khoản của 2 kênh này vẫn không xuất hiện trong dropdown chuyển tài khoản ở đầu trang Live Chat. Người dùng không thể chọn hộp thoại WhatsApp/Telegram từ Live Chat dù đã kết nối thành công ở trang cài đặt.
+
+**Nguyên nhân:** Dropdown chuyển tài khoản trong `_Header` (`live_chat_screen.dart`) được xây dựng bằng cách nối tay từng danh sách tài khoản (`zaloState.accounts`, `facebookPages`, `tiktokAccounts`, `instagramAccounts`) — không có cơ chế tự động duyệt qua mọi kênh đã đăng ký. Khi thêm Facebook/TikTok/Instagram, mỗi phase đều tự tay thêm khối `...accounts.map(...)` + nhánh `onChanged` tương ứng, nhưng khối tương tự cho WhatsApp và Telegram chưa từng được thêm — task tracker đánh dấu Phase H/I "hoàn thành" chỉ dựa trên cài đặt kênh, không kiểm tra điểm merge này.
+
+**Cách sửa:** Thêm 3 khối còn thiếu (WhatsApp, Telegram, và Webchat mới) vào cùng chỗ: field `whatsappAccounts`/`telegramBots`/`webchatWidgets` ở đầu `build()`, mở rộng điều kiện `value:` ternary, thêm 3 khối `...accounts.map((account) => DropdownMenuItem(...))` dùng `channelAvatar(CrmChannel.X)`, và 3 nhánh `where()` tương ứng trong `onChanged`.
+
+**Quy tắc cần nhớ:** Khi thêm 1 kênh mới vào hệ thống, phải rà soát VÀ xác nhận nó thực sự xuất hiện trong dropdown chuyển tài khoản Live Chat (`live_chat_screen.dart` → `_Header`) — không chỉ kiểm tra trang cài đặt kênh riêng lẻ. Đánh dấu 1 phase "hoàn thành" trong task tracker không đồng nghĩa với việc mọi điểm tích hợp chéo (cross-cutting integration point) đã được nối dây đầy đủ.
+
+**Các file liên quan:** `lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`.

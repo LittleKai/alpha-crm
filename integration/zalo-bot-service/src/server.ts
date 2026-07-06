@@ -11,6 +11,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { randomBytes, randomUUID } from 'crypto';
 import { config, dataRoot, projectRoot } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
 import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
@@ -484,6 +485,475 @@ const server = createServer(async (req, res) => {
     writeIntegrationSettings({
       ...current,
       tiktokAccounts: current.tiktokAccounts.filter((account) => account.accountId !== accountId),
+    });
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // Instagram accounts: same list/add-or-update/delete shape as Facebook
+  // above (Instagram DMs ride the same Meta Graph API/App Secret).
+  if (method === 'GET' && url === '/api/integrations/instagram/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).instagramAccounts });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/instagram/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const accountId = String(payload.accountId || '').trim();
+      if (!accountId) {
+        json(res, 400, { success: false, error: 'accountId is required.' });
+        return;
+      }
+      const current = readIntegrationSettings();
+      const existing = current.instagramAccounts.find((account) => account.accountId === accountId);
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        accountId,
+        verifyToken: preserveMaskedSecret(payload.verifyToken, existing?.verifyToken || ''),
+        appSecret: preserveMaskedSecret(payload.appSecret, existing?.appSecret || ''),
+        accessToken: preserveMaskedSecret(payload.accessToken, existing?.accessToken || ''),
+      };
+      const instagramAccounts = existing
+        ? current.instagramAccounts.map((account) => (account.accountId === accountId ? merged : account))
+        : [...current.instagramAccounts, merged];
+      const saved = writeIntegrationSettings({ ...current, instagramAccounts });
+      const savedAccount = saved.instagramAccounts.find((account) => account.accountId === accountId)!;
+
+      // Same cloud-relay registration as Facebook, mirrored for Instagram —
+      // app secret goes to the cloud (encrypted) so the webhook route can
+      // verify Meta's X-Hub-Signature-256; the access token stays local.
+      if (savedAccount.enabled && savedAccount.verifyToken && savedAccount.appSecret) {
+        const credentials = getAgentCredentials();
+        if (credentials) {
+          try {
+            const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+              channel: 'instagram',
+              externalAccountId: accountId,
+              appId: savedAccount.appId,
+              verifyToken: savedAccount.verifyToken,
+              appSecret: savedAccount.appSecret,
+              enabled: savedAccount.enabled,
+            });
+            if (cloudResult?.id) {
+              const withCloudId = writeIntegrationSettings({
+                ...saved,
+                instagramAccounts: saved.instagramAccounts.map((account) => (
+                  account.accountId === accountId ? { ...account, cloudId: cloudResult.id } : account
+                )),
+              });
+              json(res, 200, {
+                success: true,
+                data: maskIntegrationSettings(withCloudId).instagramAccounts.find((account) => account.accountId === accountId),
+              });
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              '[integrations] Failed to register Instagram channel with cloud:',
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).instagramAccounts.find((account) => account.accountId === accountId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const instagramAccountDeleteMatch = url.match(/^\/api\/integrations\/instagram\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && instagramAccountDeleteMatch) {
+    const accountId = decodeURIComponent(instagramAccountDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.instagramAccounts.find((account) => account.accountId === accountId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'Instagram account not found.' });
+      return;
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete Instagram channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      instagramAccounts: current.instagramAccounts.filter((account) => account.accountId !== accountId),
+    });
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // WhatsApp accounts: same list/add-or-update/delete shape as Facebook/
+  // Instagram above (WhatsApp Cloud API rides the same Meta Graph API/App
+  // Secret; accountId here is the phone_number_id).
+  if (method === 'GET' && url === '/api/integrations/whatsapp/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).whatsappAccounts });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/whatsapp/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const accountId = String(payload.accountId || '').trim();
+      if (!accountId) {
+        json(res, 400, { success: false, error: 'accountId is required.' });
+        return;
+      }
+      const current = readIntegrationSettings();
+      const existing = current.whatsappAccounts.find((account) => account.accountId === accountId);
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        accountId,
+        verifyToken: preserveMaskedSecret(payload.verifyToken, existing?.verifyToken || ''),
+        appSecret: preserveMaskedSecret(payload.appSecret, existing?.appSecret || ''),
+        accessToken: preserveMaskedSecret(payload.accessToken, existing?.accessToken || ''),
+      };
+      const whatsappAccounts = existing
+        ? current.whatsappAccounts.map((account) => (account.accountId === accountId ? merged : account))
+        : [...current.whatsappAccounts, merged];
+      const saved = writeIntegrationSettings({ ...current, whatsappAccounts });
+      const savedAccount = saved.whatsappAccounts.find((account) => account.accountId === accountId)!;
+
+      // Same cloud-relay registration as Facebook/Instagram — app secret goes
+      // to the cloud (encrypted) so the webhook route can verify Meta's
+      // X-Hub-Signature-256; the access token stays local.
+      if (savedAccount.enabled && savedAccount.verifyToken && savedAccount.appSecret) {
+        const credentials = getAgentCredentials();
+        if (credentials) {
+          try {
+            const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+              channel: 'whatsapp',
+              externalAccountId: accountId,
+              appId: savedAccount.appId,
+              verifyToken: savedAccount.verifyToken,
+              appSecret: savedAccount.appSecret,
+              enabled: savedAccount.enabled,
+            });
+            if (cloudResult?.id) {
+              const withCloudId = writeIntegrationSettings({
+                ...saved,
+                whatsappAccounts: saved.whatsappAccounts.map((account) => (
+                  account.accountId === accountId ? { ...account, cloudId: cloudResult.id } : account
+                )),
+              });
+              json(res, 200, {
+                success: true,
+                data: maskIntegrationSettings(withCloudId).whatsappAccounts.find((account) => account.accountId === accountId),
+              });
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              '[integrations] Failed to register WhatsApp channel with cloud:',
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).whatsappAccounts.find((account) => account.accountId === accountId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const whatsappAccountDeleteMatch = url.match(/^\/api\/integrations\/whatsapp\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && whatsappAccountDeleteMatch) {
+    const accountId = decodeURIComponent(whatsappAccountDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.whatsappAccounts.find((account) => account.accountId === accountId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'WhatsApp account not found.' });
+      return;
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete WhatsApp channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      whatsappAccounts: current.whatsappAccounts.filter((account) => account.accountId !== accountId),
+    });
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // Telegram bots: list/add-or-update/delete, mirroring the Meta channels'
+  // shape but with Telegram's own registration flow — saving a bot token
+  // calls Telegram's getMe (to resolve the numeric bot id used as
+  // accountId/externalAccountId) and setWebhook (with a generated
+  // secret_token, sent to the cloud as verifyToken so the webhook route can
+  // check X-Telegram-Bot-Api-Secret-Token) instead of the user manually
+  // pasting a verify token + app secret from a developer dashboard.
+  if (method === 'GET' && url === '/api/integrations/telegram/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).telegramBots });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/telegram/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const botToken = preserveMaskedSecret(payload.botToken, '').trim();
+      if (!botToken) {
+        json(res, 400, { success: false, error: 'botToken is required.' });
+        return;
+      }
+
+      const meResponse = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+      const meBody: any = await meResponse.json().catch(() => null);
+      if (!meResponse.ok || !meBody?.ok) {
+        json(res, 400, { success: false, error: meBody?.description || 'Invalid Telegram bot token.' });
+        return;
+      }
+      const accountId = String(meBody.result.id);
+      const accountName = meBody.result.username || meBody.result.first_name || accountId;
+
+      const current = readIntegrationSettings();
+      const existing = current.telegramBots.find((bot) => bot.accountId === accountId);
+      const verifyToken = existing?.verifyToken || randomBytes(24).toString('hex');
+      const webhookCallbackUrl = `${config.crmCloudApiUrl}/crm/telegram/webhook/${accountId}`;
+
+      const setWebhookResponse = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookCallbackUrl, secret_token: verifyToken }),
+      });
+      const setWebhookBody: any = await setWebhookResponse.json().catch(() => null);
+      if (!setWebhookResponse.ok || !setWebhookBody?.ok) {
+        json(res, 400, { success: false, error: setWebhookBody?.description || 'Failed to register Telegram webhook.' });
+        return;
+      }
+
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        accountId,
+        accountName,
+        botToken,
+        verifyToken,
+        webhookCallbackUrl,
+      };
+      const telegramBots = existing
+        ? current.telegramBots.map((bot) => (bot.accountId === accountId ? merged : bot))
+        : [...current.telegramBots, merged];
+      const saved = writeIntegrationSettings({ ...current, telegramBots });
+      const savedBot = saved.telegramBots.find((bot) => bot.accountId === accountId)!;
+
+      // The cloud copy is used only for backend-side bot lookup/verification
+      // on inbound webhooks; outbound sends always use the local botToken.
+      if (savedBot.enabled) {
+        const credentials = getAgentCredentials();
+        if (credentials) {
+          try {
+            const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+              channel: 'telegram',
+              externalAccountId: accountId,
+              verifyToken: savedBot.verifyToken,
+              botToken: savedBot.botToken,
+              enabled: savedBot.enabled,
+            });
+            if (cloudResult?.id) {
+              const withCloudId = writeIntegrationSettings({
+                ...saved,
+                telegramBots: saved.telegramBots.map((bot) => (
+                  bot.accountId === accountId ? { ...bot, cloudId: cloudResult.id } : bot
+                )),
+              });
+              json(res, 200, {
+                success: true,
+                data: maskIntegrationSettings(withCloudId).telegramBots.find((bot) => bot.accountId === accountId),
+              });
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              '[integrations] Failed to register Telegram channel with cloud:',
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).telegramBots.find((bot) => bot.accountId === accountId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const telegramBotDeleteMatch = url.match(/^\/api\/integrations\/telegram\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && telegramBotDeleteMatch) {
+    const accountId = decodeURIComponent(telegramBotDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.telegramBots.find((bot) => bot.accountId === accountId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'Telegram bot not found.' });
+      return;
+    }
+    if (target.botToken) {
+      try {
+        await fetch(`https://api.telegram.org/bot${target.botToken}/deleteWebhook`, { method: 'POST' });
+      } catch (err) {
+        console.warn('[integrations] Failed to delete Telegram webhook:', err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete Telegram channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      telegramBots: current.telegramBots.filter((bot) => bot.accountId !== accountId),
+    });
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // Webchat widgets: list/add-or-update/delete. Unlike the Meta/Telegram
+  // channels, there's no 3rd-party webhook secret or API call — the widgetId
+  // is generated locally (crypto.randomUUID) and doubles as the cloud
+  // externalAccountId and the embed script's data-widget-id. Registration
+  // just syncs display config (widgetName/welcomeMessage/primaryColorHex) to
+  // the cloud so its public config endpoint can serve it to guest browsers.
+  if (method === 'GET' && url === '/api/integrations/webchat/accounts') {
+    const settings = readIntegrationSettings();
+    json(res, 200, { success: true, data: maskIntegrationSettings(settings).webchatWidgets });
+    return;
+  }
+
+  if (method === 'POST' && url === '/api/integrations/webchat/accounts') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      const widgetId = String(payload.widgetId || '').trim() || randomUUID();
+      const current = readIntegrationSettings();
+      const existing = current.webchatWidgets.find((widget) => widget.widgetId === widgetId);
+      const merged = {
+        ...existing,
+        ...payload,
+        status: 'configured' as const,
+        widgetId,
+        enabled: payload.enabled !== false,
+      };
+      const webchatWidgets = existing
+        ? current.webchatWidgets.map((widget) => (widget.widgetId === widgetId ? merged : widget))
+        : [...current.webchatWidgets, merged];
+      const saved = writeIntegrationSettings({ ...current, webchatWidgets });
+      const savedWidget = saved.webchatWidgets.find((widget) => widget.widgetId === widgetId)!;
+
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          const cloudResult = await registerChannelIntegration(credentials.deviceId, credentials.agentSecret, {
+            channel: 'webchat',
+            externalAccountId: widgetId,
+            widgetName: savedWidget.widgetName,
+            welcomeMessage: savedWidget.welcomeMessage,
+            primaryColorHex: savedWidget.primaryColorHex,
+            enabled: savedWidget.enabled,
+          });
+          if (cloudResult?.id) {
+            const withCloudId = writeIntegrationSettings({
+              ...saved,
+              webchatWidgets: saved.webchatWidgets.map((widget) => (
+                widget.widgetId === widgetId ? { ...widget, cloudId: cloudResult.id } : widget
+              )),
+            });
+            json(res, 200, {
+              success: true,
+              data: maskIntegrationSettings(withCloudId).webchatWidgets.find((widget) => widget.widgetId === widgetId),
+            });
+            return;
+          }
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to register Webchat channel with cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+
+      json(res, 200, {
+        success: true,
+        data: maskIntegrationSettings(saved).webchatWidgets.find((widget) => widget.widgetId === widgetId),
+      });
+    } catch (err) {
+      json(res, 400, { success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  const webchatWidgetDeleteMatch = url.match(/^\/api\/integrations\/webchat\/accounts\/([^/?]+)$/);
+  if (method === 'DELETE' && webchatWidgetDeleteMatch) {
+    const widgetId = decodeURIComponent(webchatWidgetDeleteMatch[1]);
+    const current = readIntegrationSettings();
+    const target = current.webchatWidgets.find((widget) => widget.widgetId === widgetId);
+    if (!target) {
+      json(res, 404, { success: false, error: 'Webchat widget not found.' });
+      return;
+    }
+    if (target.cloudId) {
+      const credentials = getAgentCredentials();
+      if (credentials) {
+        try {
+          await deleteChannelIntegration(credentials.deviceId, credentials.agentSecret, target.cloudId);
+        } catch (err) {
+          console.warn(
+            '[integrations] Failed to delete Webchat channel from cloud:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+    writeIntegrationSettings({
+      ...current,
+      webchatWidgets: current.webchatWidgets.filter((widget) => widget.widgetId !== widgetId),
     });
     json(res, 200, { success: true });
     return;

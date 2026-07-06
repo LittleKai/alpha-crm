@@ -239,6 +239,225 @@ class TiktokSettingsState {
   }
 }
 
+/// Instagram Direct Messaging integration state, structurally mirroring
+/// [TiktokSettingsState]. Instagram rides the same Meta Graph API/App
+/// Secret as Facebook — see `instagram-channel.ts` for the backend side.
+class InstagramSettingsState {
+  final bool enabled;
+  final String status;
+  final String accountName;
+  final String accountId;
+  final String appId;
+  final String webhookCallbackUrl;
+  final String verifyToken;
+  final String appSecret;
+  final String accessToken;
+  final bool enforce24hWindow;
+  final String? cloudId;
+
+  const InstagramSettingsState({
+    this.enabled = false,
+    this.status = 'cloud_required',
+    this.accountName = '',
+    this.accountId = '',
+    this.appId = '',
+    this.webhookCallbackUrl = '',
+    this.verifyToken = '',
+    this.appSecret = '',
+    this.accessToken = '',
+    this.enforce24hWindow = true,
+    this.cloudId,
+  });
+
+  factory InstagramSettingsState.fromJson(Map<dynamic, dynamic> json) {
+    return InstagramSettingsState(
+      enabled: json['enabled'] == true,
+      status: json['status']?.toString() ?? 'cloud_required',
+      accountName: json['accountName']?.toString() ?? '',
+      accountId: json['accountId']?.toString() ?? '',
+      appId: json['appId']?.toString() ?? '',
+      webhookCallbackUrl: json['webhookCallbackUrl']?.toString() ?? '',
+      verifyToken: json['verifyToken']?.toString() ?? '',
+      appSecret: json['appSecret']?.toString() ?? '',
+      accessToken: json['accessToken']?.toString() ?? '',
+      enforce24hWindow: json['enforce24hWindow'] != false,
+      cloudId: json['cloudId']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'status': enabled ? 'configured' : status,
+      'accountName': accountName,
+      'accountId': accountId,
+      'appId': appId,
+      'webhookCallbackUrl': webhookCallbackUrl,
+      'verifyToken': verifyToken,
+      'appSecret': appSecret,
+      'accessToken': accessToken,
+      'enforce24hWindow': enforce24hWindow,
+      if (cloudId != null) 'cloudId': cloudId,
+    };
+  }
+}
+
+class WhatsappSettingsState {
+  final bool enabled;
+  final String status;
+  final String accountName;
+  final String accountId;
+  final String appId;
+  final String webhookCallbackUrl;
+  final String verifyToken;
+  final String appSecret;
+  final String accessToken;
+  final bool enforce24hWindow;
+  final String? cloudId;
+
+  const WhatsappSettingsState({
+    this.enabled = false,
+    this.status = 'cloud_required',
+    this.accountName = '',
+    this.accountId = '',
+    this.appId = '',
+    this.webhookCallbackUrl = '',
+    this.verifyToken = '',
+    this.appSecret = '',
+    this.accessToken = '',
+    this.enforce24hWindow = true,
+    this.cloudId,
+  });
+
+  factory WhatsappSettingsState.fromJson(Map<dynamic, dynamic> json) {
+    return WhatsappSettingsState(
+      enabled: json['enabled'] == true,
+      status: json['status']?.toString() ?? 'cloud_required',
+      accountName: json['accountName']?.toString() ?? '',
+      accountId: json['accountId']?.toString() ?? '',
+      appId: json['appId']?.toString() ?? '',
+      webhookCallbackUrl: json['webhookCallbackUrl']?.toString() ?? '',
+      verifyToken: json['verifyToken']?.toString() ?? '',
+      appSecret: json['appSecret']?.toString() ?? '',
+      accessToken: json['accessToken']?.toString() ?? '',
+      enforce24hWindow: json['enforce24hWindow'] != false,
+      cloudId: json['cloudId']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'status': enabled ? 'configured' : status,
+      'accountName': accountName,
+      'accountId': accountId,
+      'appId': appId,
+      'webhookCallbackUrl': webhookCallbackUrl,
+      'verifyToken': verifyToken,
+      'appSecret': appSecret,
+      'accessToken': accessToken,
+      'enforce24hWindow': enforce24hWindow,
+      if (cloudId != null) 'cloudId': cloudId,
+    };
+  }
+}
+
+class TelegramSettingsState {
+  final bool enabled;
+  final String status;
+  final String accountName;
+  final String accountId;
+  final String webhookCallbackUrl;
+  final String botToken;
+  final String verifyToken;
+  final String? cloudId;
+
+  const TelegramSettingsState({
+    this.enabled = false,
+    this.status = 'cloud_required',
+    this.accountName = '',
+    this.accountId = '',
+    this.webhookCallbackUrl = '',
+    this.botToken = '',
+    this.verifyToken = '',
+    this.cloudId,
+  });
+
+  factory TelegramSettingsState.fromJson(Map<dynamic, dynamic> json) {
+    return TelegramSettingsState(
+      enabled: json['enabled'] == true,
+      status: json['status']?.toString() ?? 'cloud_required',
+      accountName: json['accountName']?.toString() ?? '',
+      accountId: json['accountId']?.toString() ?? '',
+      webhookCallbackUrl: json['webhookCallbackUrl']?.toString() ?? '',
+      botToken: json['botToken']?.toString() ?? '',
+      verifyToken: json['verifyToken']?.toString() ?? '',
+      cloudId: json['cloudId']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'status': enabled ? 'configured' : status,
+      'accountName': accountName,
+      'accountId': accountId,
+      'webhookCallbackUrl': webhookCallbackUrl,
+      'botToken': botToken,
+      'verifyToken': verifyToken,
+      if (cloudId != null) 'cloudId': cloudId,
+    };
+  }
+}
+
+class WebchatSettingsState {
+  final bool enabled;
+  final String status;
+  final String widgetId;
+  final String widgetName;
+  final String welcomeMessage;
+  final String primaryColorHex;
+  final String siteLabel;
+  final String? cloudId;
+
+  const WebchatSettingsState({
+    this.enabled = false,
+    this.status = 'cloud_required',
+    this.widgetId = '',
+    this.widgetName = '',
+    this.welcomeMessage = '',
+    this.primaryColorHex = '#4F46E5',
+    this.siteLabel = '',
+    this.cloudId,
+  });
+
+  factory WebchatSettingsState.fromJson(Map<dynamic, dynamic> json) {
+    return WebchatSettingsState(
+      enabled: json['enabled'] == true,
+      status: json['status']?.toString() ?? 'cloud_required',
+      widgetId: json['widgetId']?.toString() ?? '',
+      widgetName: json['widgetName']?.toString() ?? '',
+      welcomeMessage: json['welcomeMessage']?.toString() ?? '',
+      primaryColorHex: json['primaryColorHex']?.toString() ?? '#4F46E5',
+      siteLabel: json['siteLabel']?.toString() ?? '',
+      cloudId: json['cloudId']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'status': enabled ? 'configured' : status,
+      'widgetId': widgetId,
+      'widgetName': widgetName,
+      'welcomeMessage': welcomeMessage,
+      'primaryColorHex': primaryColorHex,
+      'siteLabel': siteLabel,
+      if (cloudId != null) 'cloudId': cloudId,
+    };
+  }
+}
+
 class AutomationRule {
   final String id;
   final String name;
@@ -356,6 +575,10 @@ class WorkflowAutomationState {
   final EmailSettingsState email;
   final List<FacebookSettingsState> facebookPages;
   final List<TiktokSettingsState> tiktokAccounts;
+  final List<InstagramSettingsState> instagramAccounts;
+  final List<WhatsappSettingsState> whatsappAccounts;
+  final List<TelegramSettingsState> telegramBots;
+  final List<WebchatSettingsState> webchatWidgets;
   final bool isLoading;
   final String? errorText;
   final String? statusText;
@@ -370,6 +593,10 @@ class WorkflowAutomationState {
     this.email = const EmailSettingsState(),
     this.facebookPages = const [],
     this.tiktokAccounts = const [],
+    this.instagramAccounts = const [],
+    this.whatsappAccounts = const [],
+    this.telegramBots = const [],
+    this.webchatWidgets = const [],
     this.isLoading = false,
     this.errorText,
     this.statusText,
@@ -396,6 +623,10 @@ class WorkflowAutomationState {
     EmailSettingsState? email,
     List<FacebookSettingsState>? facebookPages,
     List<TiktokSettingsState>? tiktokAccounts,
+    List<InstagramSettingsState>? instagramAccounts,
+    List<WhatsappSettingsState>? whatsappAccounts,
+    List<TelegramSettingsState>? telegramBots,
+    List<WebchatSettingsState>? webchatWidgets,
     bool? isLoading,
     String? errorText,
     String? statusText,
@@ -414,6 +645,10 @@ class WorkflowAutomationState {
       email: email ?? this.email,
       facebookPages: facebookPages ?? this.facebookPages,
       tiktokAccounts: tiktokAccounts ?? this.tiktokAccounts,
+      instagramAccounts: instagramAccounts ?? this.instagramAccounts,
+      whatsappAccounts: whatsappAccounts ?? this.whatsappAccounts,
+      telegramBots: telegramBots ?? this.telegramBots,
+      webchatWidgets: webchatWidgets ?? this.webchatWidgets,
       isLoading: isLoading ?? this.isLoading,
       errorText: errorText,
       statusText: statusText,
@@ -489,6 +724,46 @@ class WorkflowAutomationNotifier
         tiktokAccounts: (tiktokResult['data'] as List)
             .whereType<Map>()
             .map(TiktokSettingsState.fromJson)
+            .toList(),
+      );
+    }
+    final instagramResult = await _getApi().fetchInstagramAccounts();
+    if (!mounted) return;
+    if (instagramResult['success'] == true && instagramResult['data'] is List) {
+      state = state.copyWith(
+        instagramAccounts: (instagramResult['data'] as List)
+            .whereType<Map>()
+            .map(InstagramSettingsState.fromJson)
+            .toList(),
+      );
+    }
+    final whatsappResult = await _getApi().fetchWhatsappAccounts();
+    if (!mounted) return;
+    if (whatsappResult['success'] == true && whatsappResult['data'] is List) {
+      state = state.copyWith(
+        whatsappAccounts: (whatsappResult['data'] as List)
+            .whereType<Map>()
+            .map(WhatsappSettingsState.fromJson)
+            .toList(),
+      );
+    }
+    final telegramResult = await _getApi().fetchTelegramBots();
+    if (!mounted) return;
+    if (telegramResult['success'] == true && telegramResult['data'] is List) {
+      state = state.copyWith(
+        telegramBots: (telegramResult['data'] as List)
+            .whereType<Map>()
+            .map(TelegramSettingsState.fromJson)
+            .toList(),
+      );
+    }
+    final webchatResult = await _getApi().fetchWebchatWidgets();
+    if (!mounted) return;
+    if (webchatResult['success'] == true && webchatResult['data'] is List) {
+      state = state.copyWith(
+        webchatWidgets: (webchatResult['data'] as List)
+            .whereType<Map>()
+            .map(WebchatSettingsState.fromJson)
             .toList(),
       );
     }
@@ -731,6 +1006,210 @@ class WorkflowAutomationNotifier
         isLoading: false,
         errorText:
             result['error']?.toString() ?? 'Không xóa được tài khoản TikTok.',
+      );
+    }
+  }
+
+  Future<void> saveInstagramAccount(InstagramSettingsState account) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().saveInstagramAccount(account.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? InstagramSettingsState.fromJson(result['data'] as Map)
+          : account;
+      final exists = state.instagramAccounts.any(
+        (acc) => acc.accountId == saved.accountId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        instagramAccounts: exists
+            ? [
+                for (final acc in state.instagramAccounts)
+                  acc.accountId == saved.accountId ? saved : acc,
+              ]
+            : [...state.instagramAccounts, saved],
+        statusText: 'Đã lưu cấu hình Instagram.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không lưu được cấu hình Instagram.',
+      );
+    }
+  }
+
+  Future<void> deleteInstagramAccount(String accountId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteInstagramAccount(accountId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        instagramAccounts: state.instagramAccounts
+            .where((acc) => acc.accountId != accountId)
+            .toList(),
+        statusText: 'Đã xóa tài khoản Instagram.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được tài khoản Instagram.',
+      );
+    }
+  }
+
+  Future<void> saveWhatsappAccount(WhatsappSettingsState account) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().saveWhatsappAccount(account.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? WhatsappSettingsState.fromJson(result['data'] as Map)
+          : account;
+      final exists = state.whatsappAccounts.any(
+        (acc) => acc.accountId == saved.accountId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        whatsappAccounts: exists
+            ? [
+                for (final acc in state.whatsappAccounts)
+                  acc.accountId == saved.accountId ? saved : acc,
+              ]
+            : [...state.whatsappAccounts, saved],
+        statusText: 'Đã lưu cấu hình WhatsApp.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không lưu được cấu hình WhatsApp.',
+      );
+    }
+  }
+
+  Future<void> deleteWhatsappAccount(String accountId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteWhatsappAccount(accountId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        whatsappAccounts: state.whatsappAccounts
+            .where((acc) => acc.accountId != accountId)
+            .toList(),
+        statusText: 'Đã xóa tài khoản WhatsApp.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được tài khoản WhatsApp.',
+      );
+    }
+  }
+
+  Future<void> saveTelegramBot(TelegramSettingsState bot) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().saveTelegramBot(bot.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? TelegramSettingsState.fromJson(result['data'] as Map)
+          : bot;
+      final exists = state.telegramBots.any(
+        (acc) => acc.accountId == saved.accountId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        telegramBots: exists
+            ? [
+                for (final acc in state.telegramBots)
+                  acc.accountId == saved.accountId ? saved : acc,
+              ]
+            : [...state.telegramBots, saved],
+        statusText: 'Đã lưu cấu hình Telegram.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không lưu được cấu hình Telegram.',
+      );
+    }
+  }
+
+  Future<void> deleteTelegramBot(String accountId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteTelegramBot(accountId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        telegramBots: state.telegramBots
+            .where((acc) => acc.accountId != accountId)
+            .toList(),
+        statusText: 'Đã xóa bot Telegram.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được bot Telegram.',
+      );
+    }
+  }
+
+  Future<void> saveWebchatWidget(WebchatSettingsState widget) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().saveWebchatWidget(widget.toJson());
+    if (result['success'] == true) {
+      final saved = result['data'] is Map
+          ? WebchatSettingsState.fromJson(result['data'] as Map)
+          : widget;
+      final exists = state.webchatWidgets.any(
+        (w) => w.widgetId == saved.widgetId,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        webchatWidgets: exists
+            ? [
+                for (final w in state.webchatWidgets)
+                  w.widgetId == saved.widgetId ? saved : w,
+              ]
+            : [...state.webchatWidgets, saved],
+        statusText: 'Đã lưu cấu hình Webchat.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không lưu được cấu hình Webchat.',
+      );
+    }
+  }
+
+  Future<void> deleteWebchatWidget(String widgetId) async {
+    state = state.copyWith(isLoading: true, errorText: null, statusText: null);
+    final result = await _getApi().deleteWebchatWidget(widgetId);
+    if (result['success'] == true) {
+      state = state.copyWith(
+        isLoading: false,
+        webchatWidgets: state.webchatWidgets
+            .where((w) => w.widgetId != widgetId)
+            .toList(),
+        statusText: 'Đã xóa widget Webchat.',
+        errorText: null,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorText:
+            result['error']?.toString() ?? 'Không xóa được widget Webchat.',
       );
     }
   }

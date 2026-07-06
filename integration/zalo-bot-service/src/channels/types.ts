@@ -6,8 +6,8 @@ import type { ZaloChannelMode } from '../config.js';
 
 export interface ZaloChannelStatus {
   connected: boolean;
-  mode: ZaloChannelMode | 'disconnected' | 'facebook_page' | 'tiktok';
-  accountType: 'personal' | 'official' | 'mock' | 'none' | 'facebook_page' | 'tiktok';
+  mode: ZaloChannelMode | 'disconnected' | 'facebook_page' | 'tiktok' | 'instagram' | 'whatsapp' | 'telegram' | 'webchat';
+  accountType: 'personal' | 'official' | 'mock' | 'none' | 'facebook_page' | 'tiktok' | 'instagram' | 'whatsapp' | 'telegram' | 'webchat';
   accountLabel: string;
   listenerRunning: boolean;
   lastEventAt: string | null;

@@ -47,6 +47,69 @@ export interface TiktokIntegrationStatus {
   cloudId?: string;
 }
 
+export interface InstagramIntegrationStatus {
+  status: 'not_configured' | 'cloud_required' | 'configured';
+  enabled?: boolean;
+  accountName?: string;
+  accountId?: string;
+  appId?: string;
+  webhookCallbackUrl?: string;
+  verifyToken?: string;
+  /** Meta App Secret (same app as Facebook Messenger). Sent to the cloud backend (encrypted) so it can verify webhook signatures. */
+  appSecret?: string;
+  accessToken?: string;
+  enforce24hWindow?: boolean;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
+}
+
+export interface WhatsappIntegrationStatus {
+  status: 'not_configured' | 'cloud_required' | 'configured';
+  enabled?: boolean;
+  accountName?: string;
+  /** WhatsApp phone_number_id, one CrmChannelIntegration row per registered phone number. */
+  accountId?: string;
+  appId?: string;
+  webhookCallbackUrl?: string;
+  verifyToken?: string;
+  /** Meta App Secret (WhatsApp Cloud API rides the same Graph API app). Sent to the cloud backend (encrypted) so it can verify webhook signatures. */
+  appSecret?: string;
+  accessToken?: string;
+  enforce24hWindow?: boolean;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
+}
+
+export interface TelegramIntegrationStatus {
+  status: 'not_configured' | 'cloud_required' | 'configured';
+  enabled?: boolean;
+  /** Bot username (e.g. "MyCrmBot"), for display only. */
+  accountName?: string;
+  /** Bot's numeric id (the part of botToken before ':'), used by the cloud webhook route to identify the bot. */
+  accountId?: string;
+  webhookCallbackUrl?: string;
+  /** Telegram Bot API token, e.g. "123456789:ABC-DEF...". Sent to the cloud backend (encrypted); only used locally for outbound sendMessage calls. */
+  botToken?: string;
+  /** Telegram webhook secret_token, echoed back on every update via X-Telegram-Bot-Api-Secret-Token. */
+  verifyToken?: string;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
+}
+
+export interface WebchatWidgetSettings {
+  status: 'not_configured' | 'cloud_required' | 'configured';
+  enabled?: boolean;
+  /** Randomly generated locally; doubles as the public widgetId (externalAccountId on the cloud) and the embed script's data-widget-id value. */
+  widgetId?: string;
+  widgetName?: string;
+  welcomeMessage?: string;
+  primaryColorHex?: string;
+  /** Free-text label for the site/domain this widget is embedded on, display only. */
+  siteLabel?: string;
+  /** Mongo _id returned by the cloud CrmChannelIntegration register call, used to target cloud deletes. */
+  cloudId?: string;
+}
+
 export interface EmailIntegrationSettings {
   enabled: boolean;
   mode: 'transactional' | 'inbox';
@@ -69,6 +132,10 @@ export interface IntegrationSettings {
   n8n: N8nIntegrationSettings;
   facebookPages: FacebookIntegrationStatus[];
   tiktokAccounts: TiktokIntegrationStatus[];
+  instagramAccounts: InstagramIntegrationStatus[];
+  whatsappAccounts: WhatsappIntegrationStatus[];
+  telegramBots: TelegramIntegrationStatus[];
+  webchatWidgets: WebchatWidgetSettings[];
   email: EmailIntegrationSettings;
 }
 
@@ -82,6 +149,10 @@ const defaultSettings: IntegrationSettings = {
   },
   facebookPages: [],
   tiktokAccounts: [],
+  instagramAccounts: [],
+  whatsappAccounts: [],
+  telegramBots: [],
+  webchatWidgets: [],
   email: {
     enabled: false,
     mode: 'transactional',
@@ -152,6 +223,23 @@ export function maskIntegrationSettings(settings: IntegrationSettings): Integrat
       appSecret: maskSecret(account.appSecret || ''),
       accessToken: maskSecret(account.accessToken || ''),
     })),
+    instagramAccounts: settings.instagramAccounts.map((account) => ({
+      ...account,
+      verifyToken: maskSecret(account.verifyToken || ''),
+      appSecret: maskSecret(account.appSecret || ''),
+      accessToken: maskSecret(account.accessToken || ''),
+    })),
+    whatsappAccounts: settings.whatsappAccounts.map((account) => ({
+      ...account,
+      verifyToken: maskSecret(account.verifyToken || ''),
+      appSecret: maskSecret(account.appSecret || ''),
+      accessToken: maskSecret(account.accessToken || ''),
+    })),
+    telegramBots: settings.telegramBots.map((bot) => ({
+      ...bot,
+      botToken: maskSecret(bot.botToken || ''),
+      verifyToken: maskSecret(bot.verifyToken || ''),
+    })),
   };
 }
 
@@ -166,6 +254,10 @@ function normalizeSettings(settings: Partial<IntegrationSettings>): IntegrationS
     },
     facebookPages: normalizeFacebookList(settings),
     tiktokAccounts: normalizeTiktokList(settings),
+    instagramAccounts: normalizeInstagramList(settings),
+    whatsappAccounts: normalizeWhatsappList(settings),
+    telegramBots: normalizeTelegramList(settings),
+    webchatWidgets: normalizeWebchatList(settings),
     email: {
       enabled: settings.email?.enabled === true,
       mode: settings.email?.mode === 'inbox' ? 'inbox' : 'transactional',
@@ -218,6 +310,22 @@ function normalizeTiktokEntry(entry: Partial<TiktokIntegrationStatus>): TiktokIn
   };
 }
 
+function normalizeInstagramEntry(entry: Partial<InstagramIntegrationStatus>): InstagramIntegrationStatus {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    accountName: entry.accountName || undefined,
+    accountId: entry.accountId || undefined,
+    appId: entry.appId || undefined,
+    webhookCallbackUrl: normalizeBaseUrl(entry.webhookCallbackUrl || ''),
+    verifyToken: String(entry.verifyToken || '').trim(),
+    appSecret: String(entry.appSecret || '').trim(),
+    accessToken: String(entry.accessToken || '').trim(),
+    enforce24hWindow: entry.enforce24hWindow !== false,
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
 // One-time migration: settings.json written before multi-account support
 // stored a single `facebook`/`tiktok` object instead of an array. Wrap it
 // into a one-element array the first time it's read; the next write persists
@@ -236,6 +344,76 @@ function normalizeTiktokList(settings: Partial<IntegrationSettings>): TiktokInte
   }
   const legacy = (settings as { tiktok?: Partial<TiktokIntegrationStatus> }).tiktok;
   return legacy?.accountId ? [normalizeTiktokEntry(legacy)] : [];
+}
+
+function normalizeInstagramList(settings: Partial<IntegrationSettings>): InstagramIntegrationStatus[] {
+  if (Array.isArray(settings.instagramAccounts)) {
+    return settings.instagramAccounts.map(normalizeInstagramEntry);
+  }
+  return [];
+}
+
+function normalizeWhatsappEntry(entry: Partial<WhatsappIntegrationStatus>): WhatsappIntegrationStatus {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    accountName: entry.accountName || undefined,
+    accountId: entry.accountId || undefined,
+    appId: entry.appId || undefined,
+    webhookCallbackUrl: normalizeBaseUrl(entry.webhookCallbackUrl || ''),
+    verifyToken: String(entry.verifyToken || '').trim(),
+    appSecret: String(entry.appSecret || '').trim(),
+    accessToken: String(entry.accessToken || '').trim(),
+    enforce24hWindow: entry.enforce24hWindow !== false,
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
+function normalizeWhatsappList(settings: Partial<IntegrationSettings>): WhatsappIntegrationStatus[] {
+  if (Array.isArray(settings.whatsappAccounts)) {
+    return settings.whatsappAccounts.map(normalizeWhatsappEntry);
+  }
+  return [];
+}
+
+function normalizeTelegramEntry(entry: Partial<TelegramIntegrationStatus>): TelegramIntegrationStatus {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    accountName: entry.accountName || undefined,
+    accountId: entry.accountId || undefined,
+    webhookCallbackUrl: normalizeBaseUrl(entry.webhookCallbackUrl || ''),
+    botToken: String(entry.botToken || '').trim(),
+    verifyToken: String(entry.verifyToken || '').trim(),
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
+function normalizeTelegramList(settings: Partial<IntegrationSettings>): TelegramIntegrationStatus[] {
+  if (Array.isArray(settings.telegramBots)) {
+    return settings.telegramBots.map(normalizeTelegramEntry);
+  }
+  return [];
+}
+
+function normalizeWebchatEntry(entry: Partial<WebchatWidgetSettings>): WebchatWidgetSettings {
+  return {
+    status: entry.status || 'cloud_required',
+    enabled: entry.enabled === true,
+    widgetId: entry.widgetId || undefined,
+    widgetName: String(entry.widgetName || '').trim(),
+    welcomeMessage: String(entry.welcomeMessage || '').trim(),
+    primaryColorHex: String(entry.primaryColorHex || '#4F46E5').trim(),
+    siteLabel: String(entry.siteLabel || '').trim(),
+    cloudId: entry.cloudId || undefined,
+  };
+}
+
+function normalizeWebchatList(settings: Partial<IntegrationSettings>): WebchatWidgetSettings[] {
+  if (Array.isArray(settings.webchatWidgets)) {
+    return settings.webchatWidgets.map(normalizeWebchatEntry);
+  }
+  return [];
 }
 
 function normalizeBaseUrl(value: string): string {

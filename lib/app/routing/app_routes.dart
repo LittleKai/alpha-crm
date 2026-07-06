@@ -35,6 +35,10 @@ class AppRoutes {
   static const String integrationsEmail = '/integrations/email';
   static const String integrationsFacebook = '/integrations/facebook';
   static const String integrationsTiktok = '/integrations/tiktok';
+  static const String integrationsInstagram = '/integrations/instagram';
+  static const String integrationsWhatsapp = '/integrations/whatsapp';
+  static const String integrationsTelegram = '/integrations/telegram';
+  static const String integrationsWebchat = '/integrations/webchat';
 
   // Settings
   static const String settings = '/settings';

@@ -27,6 +27,7 @@ import '../../../../../shared/widgets/app_select_field.dart';
 import '../../../../../shared/widgets/app_search_field.dart';
 import '../../../../content/providers/templates_provider.dart';
 import '../../../../settings/providers/settings_provider.dart';
+import '../../../../workflows/providers/workflow_automation_provider.dart';
 import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../data/live_chat_download_service.dart';
 import '../../data/live_chat_transport.dart';
@@ -370,6 +371,21 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final zaloState = ref.watch(zaloIntegrationProvider);
+    final workflowState = ref.watch(workflowAutomationProvider);
+    final facebookAccounts = workflowState.facebookPages;
+    final tiktokAccounts = workflowState.tiktokAccounts;
+    final instagramAccounts = workflowState.instagramAccounts;
+    final whatsappAccounts = workflowState.whatsappAccounts;
+    final telegramAccounts = workflowState.telegramBots;
+    final webchatAccounts = workflowState.webchatWidgets;
+
+    Widget channelAvatar(CrmChannel channel) {
+      return CircleAvatar(
+        radius: 12,
+        backgroundColor: channel.color.withValues(alpha: 0.15),
+        child: Icon(channel.icon, size: 14, color: channel.color),
+      );
+    }
 
     return Row(
       children: [
@@ -393,8 +409,26 @@ class _Header extends ConsumerWidget {
           child: AppSelectField<String>(
             value:
                 zaloState.accounts.any(
-                  (acc) => acc.id == state.selectedAccount?.id,
-                )
+                      (acc) => acc.id == state.selectedAccount?.id,
+                    ) ||
+                    facebookAccounts.any(
+                      (p) => p.pageId == state.selectedAccount?.id,
+                    ) ||
+                    tiktokAccounts.any(
+                      (a) => a.accountId == state.selectedAccount?.id,
+                    ) ||
+                    instagramAccounts.any(
+                      (a) => a.accountId == state.selectedAccount?.id,
+                    ) ||
+                    whatsappAccounts.any(
+                      (a) => a.accountId == state.selectedAccount?.id,
+                    ) ||
+                    telegramAccounts.any(
+                      (a) => a.accountId == state.selectedAccount?.id,
+                    ) ||
+                    webchatAccounts.any(
+                      (w) => w.widgetId == state.selectedAccount?.id,
+                    )
                 ? state.selectedAccount?.id
                 : '',
             hintText: 'Chọn tài khoản...',
@@ -451,13 +485,244 @@ class _Header extends ConsumerWidget {
                   ),
                 );
               }),
+              ...facebookAccounts.map((page) {
+                final label = page.pageName.isNotEmpty
+                    ? page.pageName
+                    : page.pageId;
+                return DropdownMenuItem(
+                  value: page.pageId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.facebookPage),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ...tiktokAccounts.map((account) {
+                final label = account.accountName.isNotEmpty
+                    ? account.accountName
+                    : account.accountId;
+                return DropdownMenuItem(
+                  value: account.accountId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.tiktok),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ...instagramAccounts.map((account) {
+                final label = account.accountName.isNotEmpty
+                    ? account.accountName
+                    : account.accountId;
+                return DropdownMenuItem(
+                  value: account.accountId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.instagram),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ...whatsappAccounts.map((account) {
+                final label = account.accountName.isNotEmpty
+                    ? account.accountName
+                    : account.accountId;
+                return DropdownMenuItem(
+                  value: account.accountId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.whatsapp),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ...telegramAccounts.map((account) {
+                final label = account.accountName.isNotEmpty
+                    ? account.accountName
+                    : account.accountId;
+                return DropdownMenuItem(
+                  value: account.accountId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.telegram),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ...webchatAccounts.map((widget) {
+                final label = widget.widgetName.isNotEmpty
+                    ? widget.widgetName
+                    : widget.widgetId;
+                return DropdownMenuItem(
+                  value: widget.widgetId,
+                  child: Row(
+                    children: [
+                      channelAvatar(CrmChannel.webchat),
+                      const SizedBox(width: AppSpacing.s),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: AppTextStyles.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ],
             onChanged: (val) {
-              if (val != null) {
-                final label = val.isEmpty
-                    ? 'Tất cả tài khoản'
-                    : (zaloState.accounts.firstWhere((a) => a.id == val).label);
-                onAccountChanged(LiveChatAccount(id: val, label: label));
+              if (val == null) return;
+              if (val.isEmpty) {
+                onAccountChanged(
+                  const LiveChatAccount(id: '', label: 'Tất cả tài khoản'),
+                );
+                return;
+              }
+              final zaloMatches = zaloState.accounts.where(
+                (a) => a.id == val,
+              );
+              if (zaloMatches.isNotEmpty) {
+                onAccountChanged(
+                  LiveChatAccount(id: val, label: zaloMatches.first.label),
+                );
+                return;
+              }
+              final facebookMatches = facebookAccounts.where(
+                (p) => p.pageId == val,
+              );
+              if (facebookMatches.isNotEmpty) {
+                final page = facebookMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: page.pageName.isNotEmpty
+                        ? page.pageName
+                        : page.pageId,
+                    channel: CrmChannel.facebookPage,
+                  ),
+                );
+                return;
+              }
+              final tiktokMatches = tiktokAccounts.where(
+                (a) => a.accountId == val,
+              );
+              if (tiktokMatches.isNotEmpty) {
+                final account = tiktokMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: account.accountName.isNotEmpty
+                        ? account.accountName
+                        : account.accountId,
+                    channel: CrmChannel.tiktok,
+                  ),
+                );
+                return;
+              }
+              final instagramMatches = instagramAccounts.where(
+                (a) => a.accountId == val,
+              );
+              if (instagramMatches.isNotEmpty) {
+                final account = instagramMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: account.accountName.isNotEmpty
+                        ? account.accountName
+                        : account.accountId,
+                    channel: CrmChannel.instagram,
+                  ),
+                );
+                return;
+              }
+              final whatsappMatches = whatsappAccounts.where(
+                (a) => a.accountId == val,
+              );
+              if (whatsappMatches.isNotEmpty) {
+                final account = whatsappMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: account.accountName.isNotEmpty
+                        ? account.accountName
+                        : account.accountId,
+                    channel: CrmChannel.whatsapp,
+                  ),
+                );
+                return;
+              }
+              final telegramMatches = telegramAccounts.where(
+                (a) => a.accountId == val,
+              );
+              if (telegramMatches.isNotEmpty) {
+                final account = telegramMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: account.accountName.isNotEmpty
+                        ? account.accountName
+                        : account.accountId,
+                    channel: CrmChannel.telegram,
+                  ),
+                );
+                return;
+              }
+              final webchatMatches = webchatAccounts.where(
+                (w) => w.widgetId == val,
+              );
+              if (webchatMatches.isNotEmpty) {
+                final widget = webchatMatches.first;
+                onAccountChanged(
+                  LiveChatAccount(
+                    id: val,
+                    label: widget.widgetName.isNotEmpty
+                        ? widget.widgetName
+                        : widget.widgetId,
+                    channel: CrmChannel.webchat,
+                  ),
+                );
               }
             },
           ),
@@ -1297,6 +1562,11 @@ class _ConversationPanel extends ConsumerWidget {
       } else if (!agentStatus.sseConnected) {
         remoteBlockedReason = 'Đang kết nối lại...';
       }
+    } else if (conversation.channel != CrmChannel.zaloPersonal &&
+        conversation.channel != CrmChannel.zaloOa) {
+      // Facebook/TikTok connectivity is governed by their own integration
+      // settings, not the Zalo account pool — never gate on it here.
+      isAccountConnected = true;
     } else {
       isAccountConnected =
           matchingAccount.connected &&
