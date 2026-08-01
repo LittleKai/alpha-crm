@@ -1,6 +1,4 @@
-import 'live_chat_download_service_io.dart'
-    if (dart.library.html) 'live_chat_download_service_web.dart'
-    as platform;
+import 'live_chat_download_service_io.dart' as platform;
 
 class LiveChatDownloadService {
   const LiveChatDownloadService();

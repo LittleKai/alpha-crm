@@ -820,14 +820,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
-  String _formatFileSize(Object? size) {
-    final bytes = int.tryParse(size?.toString() ?? '') ?? 0;
-    if (bytes <= 0) return 'không rõ dung lượng';
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   // ignore: unused_element
   Future<void> _showLegacyAddKnowledgeDialog(
     BuildContext context,

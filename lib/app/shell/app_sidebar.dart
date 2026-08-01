@@ -30,7 +30,6 @@ class AppSidebar extends ConsumerWidget {
     // Force dark blue (xanh đen) theme cho toàn bộ sidebar
     final surfaceColor = const Color(0xFF0F172A); // Xanh đen (Slate 900)
     final dividerColor = const Color(0xFF1E293B); // Xanh đen nhạt hơn (Slate 800)
-    final textSecondary = Colors.white.withValues(alpha: 0.85); // Thay đổi từ 0.7 sang 0.85 để sáng hơn
 
     final bool isCollapsed =
         forceCollapsed ?? ref.watch(sidebarCollapsedProvider);
@@ -127,7 +126,6 @@ class AppSidebar extends ConsumerWidget {
 
   Widget _buildBrandingHeader(BuildContext context, bool isCollapsed) {
     final textPrimary = const Color(0xFFFFFFFF);
-    final textMuted = Colors.white.withValues(alpha: 0.75); // Sáng hơn một chút so với white60
 
     return Container(
       height: 64,
@@ -278,19 +276,11 @@ class AppSidebar extends ConsumerWidget {
         : (item.routePath == '/tasks' ? openTaskCount : 0);
     final bool showBadge = badgeCount > 0;
     final isDark = true; // Force dark sidebar
-    final textSecondary = Colors.white.withValues(alpha: 0.85); // Sáng hơn
     final activeBg = _activeBgColor(item, isDark);
     final activeIcon = _activeIconColor(item, isDark);
 
-    final Color itemTextColor;
-    final Color itemIconColor;
-    if (isDark) {
-      itemTextColor = isActive ? Colors.white : Colors.white.withValues(alpha: 0.85); // Sáng hơn
-      itemIconColor = item.color ?? (isActive ? activeIcon : Colors.white.withValues(alpha: 0.75)); // Sáng hơn
-    } else {
-      itemTextColor = isActive ? activeIcon : textSecondary;
-      itemIconColor = item.color ?? (isActive ? activeIcon : textSecondary);
-    }
+    final itemTextColor = isActive ? Colors.white : Colors.white.withValues(alpha: 0.85); // Sáng hơn
+    final itemIconColor = item.color ?? (isActive ? activeIcon : Colors.white.withValues(alpha: 0.75)); // Sáng hơn
 
     if (isCollapsed) {
       return Tooltip(
@@ -403,17 +393,10 @@ class AppSidebar extends ConsumerWidget {
     WidgetRef ref,
     bool isCollapsed,
   ) {
-    final isDark = true; // Force dark sidebar
     final textPrimary = const Color(0xFFF8FAFC);
-    final textSecondary = isDark
-        ? Colors.white.withValues(alpha: 0.85) // Sáng hơn
-        : AppColors.textSecondary;
-    final textMuted = isDark
-        ? Colors.white.withValues(alpha: 0.75) // Sáng hơn
-        : AppColors.textMuted;
-    final surfaceMuted = isDark
-        ? const Color(0xFF162033)
-        : AppColors.surfaceMuted;
+    final textSecondary = Colors.white.withValues(alpha: 0.85); // Sáng hơn
+    final textMuted = Colors.white.withValues(alpha: 0.75); // Sáng hơn
+    final surfaceMuted = const Color(0xFF162033);
 
     final authState = ref.watch(crmAuthProvider);
     final user = authState.user;
@@ -514,7 +497,6 @@ class AppSidebar extends ConsumerWidget {
   }
 
   Widget _buildDefaultAvatar(BuildContext context, String displayName) {
-    final isDark = true; // Force dark sidebar
     final primarySoft = const Color(0xFF1E293B);
 
     return Container(
@@ -694,7 +676,6 @@ class _SidebarGroupWidgetState extends State<_SidebarGroupWidget> {
     final hasActiveItem = widget.group.items.any(
       (item) => widget.currentRoute == item.routePath,
     );
-    final isDark = true;
     final textMuted = Colors.white.withValues(alpha: 0.65); // Sáng hơn một chút so với 0.4 trước đây
     final activeGroupColor = const Color(0xFF60A5FA); // Màu xanh nhạt (Blue 400) để nổi bật khi kích hoạt
 
@@ -725,9 +706,7 @@ class _SidebarGroupWidgetState extends State<_SidebarGroupWidget> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? (hasActiveItem ? activeGroupColor : textMuted)
-                            : (hasActiveItem ? activeGroupColor : textMuted),
+                        color: hasActiveItem ? activeGroupColor : textMuted,
                         letterSpacing: 1.0,
                       ),
                     ),

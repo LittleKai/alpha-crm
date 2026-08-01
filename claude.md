@@ -90,7 +90,6 @@ Update if changed:
 flutter pub get        # Install Flutter dependencies
 flutter analyze        # Static analysis
 flutter test           # Widget/unit tests
-flutter run -d chrome  # Run web app locally
 flutter run -d windows # Run Windows desktop app
 ```
 

@@ -107,22 +107,6 @@ int _normalizeAiHistoryLimit(Object? value) {
   return (parsed ?? 5).clamp(0, 20);
 }
 
-Map<String, List<String>> _parseAiApiKeys(Object? value) {
-  if (value is! Map) return {};
-  final result = <String, List<String>>{};
-  for (final entry in value.entries) {
-    final key = entry.key.toString();
-    if (entry.value is List) {
-      final keys = (entry.value as List)
-          .map((e) => e.toString())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (keys.isNotEmpty) result[key] = keys;
-    }
-  }
-  return result;
-}
-
 class ChatbotRule {
   final String id;
   final String name;

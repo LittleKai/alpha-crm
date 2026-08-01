@@ -813,7 +813,6 @@ class _TextField extends StatelessWidget {
   final String label;
   final String hint;
   final bool obscureText;
-  final TextInputType? keyboardType;
   final String? suffixTooltip;
 
   const _TextField({
@@ -821,7 +820,6 @@ class _TextField extends StatelessWidget {
     required this.label,
     required this.hint,
     this.obscureText = false,
-    this.keyboardType,
     this.suffixTooltip,
   });
 
@@ -830,7 +828,6 @@ class _TextField extends StatelessWidget {
     return TextField(
       controller: controller,
       obscureText: obscureText,
-      keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

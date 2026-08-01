@@ -53,7 +53,7 @@ class LocalAgentSessionClient implements LocalAgentSessionGateway {
        _baseUrlResolver = baseUrlResolver,
        _isSupportedPlatform =
            isSupportedPlatform ??
-           (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
+           (defaultTargetPlatform == TargetPlatform.windows);
 
   Uri _resolve(String path) {
     final base = _baseUrlResolver?.call();

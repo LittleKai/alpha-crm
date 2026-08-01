@@ -251,7 +251,6 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
   }
 
   String getDevicePlatform() {
-    if (kIsWeb) return 'Web';
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return 'Android';
@@ -269,14 +268,11 @@ class CrmDeviceNotifier extends StateNotifier<CrmDeviceState> {
   }
 
   String getDeviceDisplayName() {
-    if (kIsWeb) return 'Trình duyệt Web';
     try {
-      if (!kIsWeb) {
-        final name = Platform.localHostname;
-        if (name.isNotEmpty) {
-          final os = getDevicePlatform();
-          return '$os ($name)';
-        }
+      final name = Platform.localHostname;
+      if (name.isNotEmpty) {
+        final os = getDevicePlatform();
+        return '$os ($name)';
       }
     } catch (_) {}
 

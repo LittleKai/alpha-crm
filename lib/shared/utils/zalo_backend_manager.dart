@@ -114,9 +114,9 @@ class ZaloBackendManager {
   /// Khởi động tiến trình chạy ngầm Zalo Bot Service
   static Future<bool> startBackend() async {
     // 1. Chỉ thực thi trên môi trường Desktop (Windows, macOS, Linux)
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       debugPrint(
-        "ZaloBackendManager: Chạy trên Web/Mobile, tự động bỏ qua tự chạy backend.",
+        "ZaloBackendManager: Chạy trên Mobile, tự động bỏ qua tự chạy backend.",
       );
       return false;
     }
@@ -328,7 +328,7 @@ class ZaloBackendManager {
   static Future<bool> waitUntilReady({
     Duration timeout = const Duration(seconds: 20),
   }) async {
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       return false;
     }
 
@@ -426,7 +426,7 @@ class ZaloBackendManager {
   /// Điểm vào cho app: khởi động backend rồi bật watchdog giám sát liên tục.
   /// Không blocking — gọi viên (caller) có thể fire-and-forget để UI hiện ngay.
   static Future<void> startSupervised() async {
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       return;
     }
     _manualStop = false;
@@ -441,7 +441,7 @@ class ZaloBackendManager {
 
   /// Người dùng bấm "Thử lại" khi circuit đã mở: reset bộ đếm và khởi động lại.
   static Future<void> retryManually() async {
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       return;
     }
     _manualStop = false;

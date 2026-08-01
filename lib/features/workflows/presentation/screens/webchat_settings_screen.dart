@@ -724,14 +724,12 @@ class _TextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final String hint;
-  final bool obscureText;
   final String? suffixTooltip;
 
   const _TextField({
     required this.controller,
     required this.label,
     required this.hint,
-    this.obscureText = false,
     this.suffixTooltip,
   });
 
@@ -739,7 +737,6 @@ class _TextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      obscureText: obscureText,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

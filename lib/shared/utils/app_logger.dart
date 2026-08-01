@@ -75,52 +75,50 @@ class AppLogger {
         methodCount: 0,
         errorMethodCount: 4,
         lineLength: 120,
-        colors: !kIsWeb && !Platform.isWindows,
+        colors: !Platform.isWindows,
         printEmojis: true,
         dateTimeFormat: DateTimeFormat.dateAndTime,
       ),
       output: ConsoleOutput(),
     );
 
-    if (!kIsWeb) {
-      final fileName =
-          'app_log_${DateTime.now().toIso8601String().replaceAll(':', '-')}.txt';
+    final fileName =
+        'app_log_${DateTime.now().toIso8601String().replaceAll(':', '-')}.txt';
 
-      // Thử thư mục Documents (qua path_provider). Nếu lỗi (plugin chưa sẵn sàng
-      // trong bản đóng gói), FALLBACK ghi log cạnh file thực thi để KHÔNG bao giờ
-      // mất log.
-      Directory? logDirectory;
+    // Thử thư mục Documents (qua path_provider). Nếu lỗi (plugin chưa sẵn sàng
+    // trong bản đóng gói), FALLBACK ghi log cạnh file thực thi để KHÔNG bao giờ
+    // mất log.
+    Directory? logDirectory;
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      logDirectory = Directory('${directory.path}/AlphaCRM/Logs');
+    } catch (e) {
+      debugPrint('getApplicationDocumentsDirectory lỗi, fallback cạnh exe: $e');
+    }
+
+    logDirectory ??= () {
       try {
-        final directory = await getApplicationDocumentsDirectory();
-        logDirectory = Directory('${directory.path}/AlphaCRM/Logs');
-      } catch (e) {
-        debugPrint('getApplicationDocumentsDirectory lỗi, fallback cạnh exe: $e');
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        return Directory('$exeDir/logs');
+      } catch (_) {
+        return Directory('logs');
       }
+    }();
 
-      logDirectory ??= () {
-        try {
-          final exeDir = File(Platform.resolvedExecutable).parent.path;
-          return Directory('$exeDir/logs');
-        } catch (_) {
-          return Directory('logs');
-        }
-      }();
-
-      try {
-        if (!await logDirectory.exists()) {
-          await logDirectory.create(recursive: true);
-        }
-        _logFile = File('${logDirectory.path}/$fileName');
-        // Ghi ngay một dòng để xác nhận file log hoạt động.
-        await _logFile!.writeAsString(
-          '=== LOG FILE INIT @ ${DateTime.now().toIso8601String()} '
-          '(dir: ${logDirectory.path}) ===\n',
-          mode: FileMode.append,
-        );
-      } catch (e) {
-        debugPrint('Failed to initialize local log file: $e');
-        _logFile = null;
+    try {
+      if (!await logDirectory.exists()) {
+        await logDirectory.create(recursive: true);
       }
+      _logFile = File('${logDirectory.path}/$fileName');
+      // Ghi ngay một dòng để xác nhận file log hoạt động.
+      await _logFile!.writeAsString(
+        '=== LOG FILE INIT @ ${DateTime.now().toIso8601String()} '
+        '(dir: ${logDirectory.path}) ===\n',
+        mode: FileMode.append,
+      );
+    } catch (e) {
+      debugPrint('Failed to initialize local log file: $e');
+      _logFile = null;
     }
 
     _isInitialized = true;
@@ -182,7 +180,7 @@ class AppLogger {
         'message': message,
         'error': error?.toString(),
         'stackTrace': stackTrace?.toString(),
-        'platform': kIsWeb ? 'Web' : Platform.operatingSystem,
+        'platform': Platform.operatingSystem,
         'timestamp': DateTime.now().toIso8601String(),
       };
 

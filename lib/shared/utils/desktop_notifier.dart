@@ -10,10 +10,9 @@ class DesktopNotifier {
   bool _ready = false;
 
   bool get _supported =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.linux);
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   Future<void> init() async {
     if (!_supported || _ready) return;

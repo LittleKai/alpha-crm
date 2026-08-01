@@ -16,9 +16,9 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tự động hóa'), findsOneWidget);
+    expect(find.text('Workflow n8n'), findsOneWidget);
 
-    await tester.tap(find.text('Tự động hóa'));
+    await tester.tap(find.text('Workflow n8n'));
     await tester.pumpAndSettle();
 
     expect(find.text('Kho workflow mẫu'), findsWidgets);

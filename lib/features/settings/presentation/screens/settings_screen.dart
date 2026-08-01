@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -80,13 +79,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _resolveDefaultDownloadsPath() async {
     try {
-      if (!kIsWeb) {
-        final dir = await getDownloadsDirectory();
-        if (dir != null && mounted) {
-          setState(() {
-            _defaultDownloadsPath = '${dir.path}${Platform.pathSeparator}AlphaCRM';
-          });
-        }
+      final dir = await getDownloadsDirectory();
+      if (dir != null && mounted) {
+        setState(() {
+          _defaultDownloadsPath = '${dir.path}${Platform.pathSeparator}AlphaCRM';
+        });
       }
     } catch (_) {}
   }
@@ -165,7 +162,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final notifier = ref.read(settingsProvider.notifier);
     final zaloState = ref.watch(zaloIntegrationProvider);
     final isMobile = ResponsiveBreakpoints.isMobile(context);
-    final isClient = kIsWeb || Platform.isAndroid || Platform.isIOS;
+    final isClient = Platform.isAndroid || Platform.isIOS;
     final connectedCount = zaloState.accounts.length;
 
     if (state.isSaved) {
@@ -238,36 +235,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     readOnly: true,
                     decoration: InputDecoration(
                       labelText: 'Thư mục tải xuống',
-                      hintText: kIsWeb
-                          ? 'Dùng thư mục tải xuống của trình duyệt'
-                          : 'Thư mục Downloads mặc định',
-                      suffixIcon: kIsWeb
-                          ? null
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Tooltip(
-                                  message: 'Mở thư mục tải xuống hiện tại',
-                                  child: IconButton(
-                                    icon: const Icon(Icons.folder_open_outlined),
-                                    onPressed: () => _openDownloadFolder(state.settings.downloadFolder),
-                                  ),
-                                ),
-                                Tooltip(
-                                  message: 'Chọn thư mục tải xuống riêng',
-                                  child: IconButton(
-                                    icon: const Icon(Icons.drive_file_move_outlined),
-                                    onPressed: () async {
-                                      final path = await FilePicker.platform
-                                          .getDirectoryPath();
-                                      if (path != null) {
-                                        notifier.updateDownloadFolder(path);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
+                      hintText: 'Thư mục Downloads mặc định',
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Tooltip(
+                            message: 'Mở thư mục tải xuống hiện tại',
+                            child: IconButton(
+                              icon: const Icon(Icons.folder_open_outlined),
+                              onPressed: () => _openDownloadFolder(state.settings.downloadFolder),
                             ),
+                          ),
+                          Tooltip(
+                            message: 'Chọn thư mục tải xuống riêng',
+                            child: IconButton(
+                              icon: const Icon(Icons.drive_file_move_outlined),
+                              onPressed: () async {
+                                final path = await FilePicker.platform
+                                    .getDirectoryPath();
+                                if (path != null) {
+                                  notifier.updateDownloadFolder(path);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.m),
@@ -308,16 +301,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: AppSpacing.s),
                   Text(
-                    kIsWeb
-                        ? 'Web tải file trực tiếp, không mở tab mới. Vị trí lưu do trình duyệt quản lý.'
-                        : 'Mặc định lưu vào Downloads/AlphaCRM. Media hội thoại được cache trên máy chạy Zalo bridge.',
+                    'Mặc định lưu vào Downloads/AlphaCRM. Media hội thoại được cache trên máy chạy Zalo bridge.',
                     style: AppTextStyles.caption,
                   ),
                   const SizedBox(height: AppSpacing.m),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ...[
+                      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
                         AppButton(
                           text: 'Mở thư mục cache',
                           icon: Icons.folder_open_outlined,
@@ -754,7 +745,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Text('Kiểu chữ hệ thống (Font Family)', style: AppTextStyles.label),
                   const SizedBox(height: AppSpacing.xs),
                   DropdownButtonFormField<String>(
-                    value: currentFamily,
+                    initialValue: currentFamily,
                     decoration: const InputDecoration(
                       contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
                     ),

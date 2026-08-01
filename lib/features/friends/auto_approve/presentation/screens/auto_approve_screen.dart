@@ -353,7 +353,7 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> with Sing
             value: value,
             onChanged: onChanged,
             activeTrackColor: effectiveColor.withValues(alpha: 0.2),
-            activeColor: effectiveColor,
+            activeThumbColor: effectiveColor,
           ),
         ],
       ),

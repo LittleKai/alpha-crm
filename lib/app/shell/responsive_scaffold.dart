@@ -1,6 +1,5 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
@@ -32,7 +31,7 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
   void initState() {
     super.initState();
     // Tự động kiểm tra cập nhật khi app khởi động (chỉ Windows/Android)
-    if (!kIsWeb && (Platform.isWindows || Platform.isAndroid)) {
+    if (Platform.isWindows || Platform.isAndroid) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _triggerStartupUpdateCheck();
       });
@@ -52,7 +51,7 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
   @override
   Widget build(BuildContext context) {
     // Lắng nghe kết quả kiểm tra cập nhật và hiện dialog khi có bản mới
-    if (!kIsWeb && (Platform.isWindows || Platform.isAndroid)) {
+    if (Platform.isWindows || Platform.isAndroid) {
       ref.listen<UpdateState>(updateProvider, (previous, next) {
         if (previous?.status != UpdateStatus.available &&
             next.status == UpdateStatus.available) {

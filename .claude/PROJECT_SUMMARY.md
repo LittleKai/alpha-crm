@@ -2,13 +2,13 @@
 
 ## 1. Project Overview
 
-- **Type:** Cross-platform CRM UI application for web, Android, and Windows desktop.
+- **Type:** Cross-platform CRM UI application for Android and Windows desktop (Web platform support was fully removed).
 - **Tech Stack:** Flutter, Dart SDK 3.10.7, Material 3, Riverpod, GoRouter.
 - **Package Manager:** Flutter pub via `pubspec.yaml` and `pubspec.lock`.
 - **i18n:** No formal app-string localization solution; Vietnamese UI strings are inline. `intl` is used for formatting. `flutter_localizations` is wired into `MaterialApp.router` with `locale: Locale('vi')` so built-in Material widgets (date/time pickers, default tooltips) render in Vietnamese with 24h time.
 - **State Management:** `flutter_riverpod` with `StateNotifierProvider`, `StateProvider`, and local widget state.
 - **Styling:** Central design tokens in `lib/app/theme/` plus reusable widgets in `lib/shared/widgets/`.
-- **Deployment:** Automated release is handled by `alpha-studio-backend/scripts/release-to-b2.js` for Android APK, Windows ZIP, and Flutter Web under `/crm/`. The Windows ZIP includes the Flutter runner plus the local Zalo backend bundle required for production desktop use.
+- **Deployment:** Automated release is handled by `alpha-studio-backend/scripts/release-to-b2.js` for Android APK and Windows ZIP. The Windows ZIP includes the Flutter runner plus the local Zalo backend bundle required for production desktop use.
 - **Knowledge Graph:** `.understand-anything/` is not present. Recommend running `/understand` before large impact analysis work.
 
 ---
@@ -30,7 +30,6 @@ lib/
   mock/                       Mock domain models and sample/default data (includes ZaloChannelMode enum)
   shared/                     Reusable widgets and responsive utilities
 test/                         Flutter widget tests
-web/                          Flutter web manifest, icons, and index page
 windows/                      Native Windows runner and CMake config
 integration/
   zalo-bot-service/            Node.js/TypeScript backend bridge — personal-first via zca-js
@@ -80,9 +79,8 @@ docs/
 | `analysis_options.yaml` | Analyzer and lint configuration | Includes `package:flutter_lints/flutter.yaml`. |
 | `lib/main.dart` | Entry point | Wraps `MyApp` in `ProviderScope`; uses `MaterialApp.router`. Boot is non-blocking: fires `ZaloBackendManager.startSupervised()` (fire-and-forget) and mounts `BackendStatusBanner` above the router child. |
 | `lib/shared/api/crm_cloud_api.dart` | Alpha Studio cloud API client | Uses `ALPHA_STUDIO_API_URL` with production fallback and Bearer JWT headers. |
-| `lib/shared/auth/crm_auth_token_store.dart` | CRM JWT storage abstraction | Conditional import: web → localStorage; native Android/Windows → `token_store_native.dart`. |
+| `lib/shared/auth/crm_auth_token_store.dart` | CRM JWT storage abstraction | Direct native import of `token_store_native.dart` (Android/Windows only; web variant removed). |
 | `lib/shared/auth/token_store_native.dart` | Native CRM token store | Stores the JWT in the OS keystore via `flutter_secure_storage` (Windows DPAPI / Android Keystore). One-time migration imports any legacy plaintext `crm_token.json` then deletes it. All ops are best-effort (swallow errors → null). |
-| `lib/shared/auth/web_auth_bridge.dart` | Flutter web iframe SSO bridge | Accepts Alpha Studio `{ type: 'AUTH_TOKEN', token }` postMessage and sends `AUTH_READY`. |
 | `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 27 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
@@ -138,7 +136,7 @@ docs/
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 | `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
-| `lib/features/messaging/live_chat/data/live_chat_transport.dart` | Live Chat transport mode | `resolveLiveChatTransportMode()` returns `localBridge` (Windows desktop) or `cloudRemote` (web/Android/iOS) using the same `kIsWeb`/`defaultTargetPlatform` check as `zalo_integration_provider.dart`. Override via `--dart-define=LIVE_CHAT_TRANSPORT_MODE=local\|remote`. `liveChatRepositoryProvider` wires the resolved mode + shared `CrmSseClient` into `LiveChatRepository`, which now gates ALL Zalo-action branches (`_preferLocalZaloActions`) on it instead of a hardcoded `true` — desktop behavior is unchanged (mode defaults to `localBridge`), remote mode routes through the existing cloud endpoints. Local-only methods with no cloud equivalent (`retryMessage`, `searchMessages`, `messagesAround`, `sendTyping`, account chat settings) return a `NOT_SUPPORTED_REMOTE` stub in remote mode. `LiveChatRepository.watchEvents()` follows the same `_preferLocalZaloActions || localFirstEnabled` gate, so on desktop it always opens the local `/local/events` SSE stream regardless of the `localFirstLiveChat` flag; the local bridge client (`live_chat_local_bridge_api.dart`) applies a 60s inactivity timeout on that stream so a silently dead socket surfaces as a stream error instead of hanging `realtimeConnected`. |
+| `lib/features/messaging/live_chat/data/live_chat_transport.dart` | Live Chat transport mode | `resolveLiveChatTransportMode()` returns `localBridge` (Windows desktop) or `cloudRemote` (Android/iOS) using the same `defaultTargetPlatform` check as `zalo_integration_provider.dart`. Override via `--dart-define=LIVE_CHAT_TRANSPORT_MODE=local\|remote`. `liveChatRepositoryProvider` wires the resolved mode + shared `CrmSseClient` into `LiveChatRepository`, which now gates ALL Zalo-action branches (`_preferLocalZaloActions`) on it instead of a hardcoded `true` — desktop behavior is unchanged (mode defaults to `localBridge`), remote mode routes through the existing cloud endpoints. Local-only methods with no cloud equivalent (`retryMessage`, `searchMessages`, `messagesAround`, `sendTyping`, account chat settings) return a `NOT_SUPPORTED_REMOTE` stub in remote mode. `LiveChatRepository.watchEvents()` follows the same `_preferLocalZaloActions || localFirstEnabled` gate, so on desktop it always opens the local `/local/events` SSE stream regardless of the `localFirstLiveChat` flag; the local bridge client (`live_chat_local_bridge_api.dart`) applies a 60s inactivity timeout on that stream so a silently dead socket surfaces as a stream error instead of hanging `realtimeConnected`. |
 | `lib/shared/api/crm_sse_client.dart` | Cloud SSE client | `CrmSseClient` opens ONE shared `GET /crm/events/subscribe` connection (Bearer auth header, lazy-connect on first listener, exponential reconnect 1/2/5/10s) exposing a broadcast `Stream<CrmSseEvent>`. `CrmSseDecoder` is the pure line-parser (`id:`/`event:`/`data:`), unit-tested in `test/crm_sse_client_test.dart`. Streaming works identically on IO and Flutter Web — verified against the resolved `http` 1.6.0 source: `BrowserClient` is `fetch()` + `ReadableStream`-backed, not XHR-buffered, so no io/web conditional split was needed (a deviation from the tasklist's suggested file split). `lib/shared/api/crm_sse_provider.dart` exposes the app-lifetime singleton (`crmSseClientProvider`) and pauses/resumes the connection on app background/foreground via `WidgetsBindingObserver`. |
 | `lib/features/messaging/live_chat/data/live_chat_cloud_event_mapper.dart` | Cloud SSE → Live Chat event mapper | `mapCloudSseEvents()` maps cloud vocabulary (`hello`/`message.new`/`message.status`/`conversation.updated`) onto the existing bridge vocabulary (`bridge.connected`/`message.created`/`message.status`/`friend.updated`) so `LiveChatNotifier._handleRealtimeEvent` needs no local-vs-remote branching. `device.status`/`pairing.completed` are intentionally dropped here — they aren't chat events, see `agent_status_provider.dart`. |
 | `lib/features/messaging/live_chat/providers/agent_status_provider.dart` | Desktop Agent health (remote mode) | `agentStatusProvider` listens to the shared `CrmSseClient` (`hello` snapshot + `device.status` updates) to track per-device online/offline + worst Zalo account health. Only active when transport mode is `cloudRemote` — on desktop the agent IS the local process, so nothing to watch. Drives the Offline Fallback banner + composer lock in `live_chat_screen.dart` (3 states: SSE reconnecting = soft banner, composer stays open; agent offline or Zalo session expired = blocking banner + composer disabled). |
@@ -178,7 +176,6 @@ docs/
 ```bash
 # Development
 flutter pub get
-flutter run -d chrome
 flutter run -d windows
 
 # Analysis
@@ -188,7 +185,6 @@ flutter analyze
 flutter test
 
 # Build examples
-flutter build web
 flutter build apk
 flutter build windows
 ```

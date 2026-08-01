@@ -19,8 +19,7 @@ class LocalDb {
   /// Initialize FFI for desktop if needed.
   static void _ensureFfiInitialized() {
     if (_ffiInitialized) return;
-    if (!kIsWeb &&
-        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }

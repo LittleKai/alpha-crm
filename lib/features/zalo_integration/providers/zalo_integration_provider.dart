@@ -134,11 +134,10 @@ class ZaloIntegrationNotifier extends StateNotifier<ZaloIntegrationState> {
   }
 
   void startPollingBackend() {
-    if (kIsWeb ||
-        defaultTargetPlatform == TargetPlatform.android ||
+    if (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS) {
       debugPrint(
-        '[ZaloIntegrationNotifier] Bỏ qua kiểm tra kết nối local backend trên Web/Mobile.',
+        '[ZaloIntegrationNotifier] Bỏ qua kiểm tra kết nối local backend trên Mobile.',
       );
       return;
     }

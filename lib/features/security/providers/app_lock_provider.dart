@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -55,7 +54,6 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
   AppLockNotifier() : super(const AppLockState());
 
   Future<void> load() async {
-    if (kIsWeb) return;
     state = state.copyWith(isLoading: true, errorText: null);
     try {
       final file = await _settingsFile();
@@ -155,7 +153,6 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
 
   Future<void> clearPassword() async {
     state = const AppLockState();
-    if (kIsWeb) return;
     final file = await _settingsFile();
     if (await file.exists()) await file.delete();
   }
@@ -166,7 +163,7 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
   }
 
   Future<void> _save() async {
-    if (kIsWeb || !state.hasPassword) return;
+    if (!state.hasPassword) return;
     final file = await _settingsFile();
     await file.parent.create(recursive: true);
     await file.writeAsString(

@@ -42,7 +42,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
     if (success && mounted) {
       _codeController.clear();
-      final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+      final isClient = defaultTargetPlatform == TargetPlatform.android;
       if (isClient) {
         // Newly paired mobile/web client: refresh the Zalo account list so
         // Live Chat has something to show immediately (FE-6).
@@ -194,7 +194,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   @override
   Widget build(BuildContext context) {
     final deviceState = ref.watch(crmDeviceProvider);
-    final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+    final isClient = defaultTargetPlatform == TargetPlatform.android;
 
     final bool showPairedState = isClient
         ? deviceState.isPaired
@@ -350,7 +350,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   }
 
   Widget _buildPairedState(CrmDeviceState state) {
-    final isClient = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+    final isClient = defaultTargetPlatform == TargetPlatform.android;
 
     if (isClient) {
       return Column(
@@ -688,7 +688,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
       children: [
         if (!showCode) ...[
           Text(
-            'Hệ thống đang chạy trên Windows / Web Client.',
+            'Hệ thống đang chạy trên Windows.',
             style: AppTextStyles.body,
             textAlign: TextAlign.center,
           ),

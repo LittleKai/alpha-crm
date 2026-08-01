@@ -24,7 +24,7 @@ class DesktopShell with WindowListener, TrayListener {
   /// xác nhận. UI gọi lại [exitApp]/[hideToTray]/[cancelClose] theo lựa chọn.
   static final ValueNotifier<bool> closeRequest = ValueNotifier<bool>(false);
 
-  bool get _supported => !kIsWeb && Platform.isWindows;
+  bool get _supported => Platform.isWindows;
   bool _isExiting = false;
 
   Future<void> init() async {

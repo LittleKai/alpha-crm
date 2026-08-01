@@ -31,9 +31,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   
-  if (!kIsWeb) {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
-  }
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
 
   // Cửa sổ + System Tray (Windows): maximize khi mở, nút X ẩn xuống tray.
   // Bọc try/catch để lỗi window/tray KHÔNG làm sập toàn bộ app.

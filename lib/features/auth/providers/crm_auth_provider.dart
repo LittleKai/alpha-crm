@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/api/crm_cloud_api.dart';
 import '../../../shared/auth/crm_auth_token_store.dart';
-import '../../../shared/auth/web_auth_bridge.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../data/local_agent_session_client.dart';
@@ -165,8 +164,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
        _localAgent = localAgent ?? LocalAgentSessionClient(),
        _tokenStore = tokenStore,
        _isWindows =
-           isWindows ??
-           (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows),
+           isWindows ?? (defaultTargetPlatform == TargetPlatform.windows),
        super(const CrmAuthState()) {
     if (autoInitialize) {
       unawaited(_initialize());
@@ -175,21 +173,6 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
   Future<void> _initialize() async {
     state = state.copyWith(isLoading: true);
-    var receivedWebToken = false;
-    if (kIsWeb) {
-      setupWebAuthListener(
-        onTokenReceived: (token) async {
-          receivedWebToken = true;
-          await setTokenAndFetchUser(token);
-        },
-      );
-      Future.delayed(const Duration(seconds: 3), () async {
-        if (!receivedWebToken && mounted) {
-          await _checkLocalToken();
-        }
-      });
-      return;
-    }
     await _checkLocalToken();
   }
 
