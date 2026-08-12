@@ -145,6 +145,74 @@ docs/
 
 ---
 
+## 3. State & Data Dependency Graph
+
+```mermaid
+flowchart LR
+    UI["lib/features/**/presentation<br/>GoRouter · ShellRoute · 27 routes"]
+    PROV["Riverpod StateNotifier<br/>crmAuth · liveChat · zaloIntegration<br/>workflowAutomation · customers · bulk<br/>scheduledCampaigns · update · agentStatus"]
+    LDB[("LocalDb — SQLite sqflite/ffi<br/>cache_entries (TTL 30d) · scheduled_campaigns<br/>hội thoại/tin nhắn cục bộ")]
+    SS[("flutter_secure_storage<br/>JWT CRM — DPAPI / Android Keystore")]
+    MODE{"resolveLiveChatTransportMode()"}
+    BRIDGE["Local Zalo backend (Node/TS)<br/>127.0.0.1 — zalo-bot-service"]
+    MGR["ZaloBackendManager<br/>watchdog 5s · Job Object"]
+    SEC[("secure-store.ts — AES-256-GCM + DPAPI<br/>credentials_*.json · account-settings.json")]
+    REG["channel-registry<br/>zalo_personal · zalo_oa · facebook_page<br/>tiktok · instagram · whatsapp · telegram · webchat"]
+    SSE["CrmSseClient<br/>1 kết nối GET /crm/events/subscribe"]
+    CLOUD["alpha-studio-backend<br/>/api/crm/*"]
+    B2[("B2: version.json · APK · Windows ZIP")]
+
+    UI --> PROV
+    PROV --> LDB
+    PROV --> SS
+    PROV --> MODE
+    MODE -->|"localBridge — Windows"| BRIDGE
+    MODE -->|"cloudRemote — Android"| CLOUD
+    MGR --> BRIDGE --> SEC
+    BRIDGE --> REG
+    BRIDGE -->|"agent-runner heartbeat 10s<br/>+ long-poll lệnh"| CLOUD
+    PROV --> SSE --> CLOUD
+    PROV --> B2
+```
+
+**Invalidate / refresh rules** — hợp đồng bắt buộc:
+
+| Sau khi / Khi | Phải làm | Nếu quên sẽ bị |
+|---|---|---|
+| Repository/API ghi xong | Cập nhật state trong `StateNotifier` tương ứng (Riverpod không tự invalidate cache thủ công của bạn) | UI giữ dữ liệu cũ |
+| 🔴 Thêm kênh mới vào Live Chat | Đăng ký ở **cả 4 chỗ**: `CrmChannel` enum · `channel-registry.ts` · `WorkflowAutomationNotifier.loadChannelAccounts()` · dropdown chọn tài khoản ở `_Header` (`live_chat_screen.dart`) | Kênh gửi/nhận được nhưng **không chọn được** trong dropdown — đúng lỗi đã xảy ra với WhatsApp/Telegram (Phase H/I → mãi Phase L mới lộ), xem `IMPORTANT_FIXED_BUGS.md` |
+| Đọc danh sách tài khoản Live Chat | Dùng `zaloIntegrationProvider` + `workflowAutomationProvider`. ⚠️ `LiveChatNotifier.loadAccounts()` / `state.accounts` (`GET /crm/groups/accounts`) là danh sách **Zalo-only, hiện không dùng cho UI** — **không** phải nguồn của dropdown | Sửa nhầm chỗ, dropdown không đổi |
+| Ghi cache khách hàng | `LocalDb.putCache(key, value, ttl)` keyed theo user id, TTL 30 ngày; khi cloud fail thì fallback snapshot + hiện thông báo offline (không phải danh sách rỗng) | User tưởng mất sạch dữ liệu khi rớt mạng |
+| Lên lịch chiến dịch | Ghi vào bảng `scheduled_campaigns` **và** tạo Timer; **re-arm ở `main.dart` lúc khởi động**, quá hạn → `missed` | Chiến dịch đã lên lịch biến mất sau khi khởi động lại app |
+| Gửi tin (operator hoặc chatbot) | `outbound-reporter.reportOutboundMessageEvent()` báo cloud **ngay lúc gửi**; `agent-runner` phải **bỏ qua** echo của chính nó (`reconciledId`/`existingProviderMessage`) | Tin nhắn nhân đôi trên mobile/web |
+| Xử lý inbound từ kênh relay (không phải zalo_personal/zalo_oa) | **Bỏ qua** báo cáo lên cloud — webhook cloud đã ghi bản Mongo bền vững trước khi relay xuống | Ghi trùng bản ghi |
+| 🔒 Tóm tắt AI nhóm | Đọc tin nhắn từ **local store**, gửi **transient** trong body `POST /crm/groups/:id/summarize`; cloud chỉ lưu summary + insight đã suy ra. **Nội dung tin nhắn nhóm KHÔNG được lưu trên backend** | Vi phạm cam kết riêng tư đã chốt của sản phẩm |
+| Gộp nhóm trùng | Gộp theo `groupIdentityKey` (tên sạch + số thành viên), **không** theo `groupId` Zalo thô; config/history/watermark đều key theo identity này | Cùng một nhóm thật bị tách thành nhiều dòng khi đồng bộ từ nhiều tài khoản |
+| Backend cục bộ chết | `ZaloBackendManager.startSupervised()` tự khởi động lại (watchdog 5s, 3 lần miss, backoff + circuit breaker); Job Object đảm bảo `node.exe` chết theo app | Tiến trình `node.exe` mồ côi chạy nền sau khi thoát app |
+| Phát hành bản mới | Chạy `alpha-studio-backend/scripts/release-to-b2.js`; Windows ZIP **phải kèm** bundle backend Zalo cục bộ + Node runtime, **loại trừ** `.env` và `.data` | Bản Windows cài xong không chạy được, hoặc phát tán secret của máy build |
+
+> **Hai transport, một UI:** desktop chạy `localBridge` (agent chính là tiến trình cục bộ), mobile chạy `cloudRemote` (qua SSE + Desktop Agent ở xa). Khi thêm tính năng Live Chat, phải nghĩ cho **cả hai** — method chỉ có ở local phải trả stub `NOT_SUPPORTED_REMOTE`, không được ném lỗi.
+
+---
+
+## 4. Secrets & Credentials
+
+| Thứ | Nơi lưu | Ghi chú |
+|---|---|---|
+| JWT CRM (Alpha Studio) | `flutter_secure_storage` → Windows DPAPI / Android Keystore (`token_store_native.dart`) | Đã có migration một lần từ `crm_token.json` plaintext rồi **xoá** file cũ — đừng quay lại lưu plaintext |
+| Cookie/credential Zalo cá nhân | `dataRoot/credentials_*.json` — **AES-256-GCM**, khoá 32 byte niêm bằng DPAPI trong `.secure-key` (`secure-store.ts`) | 🔴 **Không re-serialize cookie jar** — byte giải mã phải giống hệt bản gốc để giữ `zpw_sek` bất biến, nếu không phiên Zalo hỏng |
+| Token các kênh (FB/IG/WhatsApp/TikTok/Telegram) | `dataRoot/integrations/*` mã hoá at-rest; API trả về dạng **đã che** | Không log token, không trả nguyên giá trị về UI |
+| `ZALO_BOT_TOKEN`, cấu hình n8n/proxy | `.env` của `zalo-bot-service` (gitignored) | Bản release **loại trừ** `.env` và `.data` |
+| `ALPHA_STUDIO_API_URL` | Biến build, có fallback production | Giá trị public, không phải secret |
+
+- HTTP server của backend cục bộ **bind `127.0.0.1`** và giới hạn CORS — không nới ra `0.0.0.0`.
+- App Flutter là client không tin cậy: không nhúng API key của bên thứ ba vào `lib/` hay `assets/`.
+- Có đề xuất mã hoá SQLite tin nhắn (`docs/specs/sqlite-encryption-at-rest-proposal.md`) — hiện **chưa** áp dụng, DB tin nhắn cục bộ vẫn là plaintext trên đĩa máy người dùng.
+
+> Chỉ ghi **tên biến và nơi lưu**. Không bao giờ ghi giá trị thật vào file này.
+
+---
+
 ## 7. Important Notes for Claude
 
 ### When making changes to:
