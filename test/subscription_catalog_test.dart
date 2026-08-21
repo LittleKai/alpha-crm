@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('monthly CRM plan matches backend catalog', () {
     expect(crmMonthlyPlan.productId, 'crm_monthly');
-    expect(crmMonthlyPlan.priceVnd, 500000);
-    expect(crmMonthlyPlan.priceCredits, 5250);
-    expect(crmMonthlyPlan.includedAiLimit, 1000);
+    expect(crmMonthlyPlan.priceVnd, 200000);
+    expect(crmMonthlyPlan.priceCredits, 2100);
+    expect(crmMonthlyPlan.includedAiLimit, 100);
   });
 
   test('AI top-up packs match backend catalog', () {
@@ -23,8 +23,8 @@ void main() {
     final details = buildRenewalDetails(balanceCredits: 200);
 
     expect(details.canPayWithCredits, isFalse);
-    expect(details.missingCredits, 5050);
-    expect(details.rows, contains(('Hạn mức AI mới', '1000 yêu cầu AI')));
+    expect(details.missingCredits, 1900);
+    expect(details.rows, contains(('Hạn mức AI mới', '100 yêu cầu AI')));
   });
 
   test('parses bank transfer checkout response', () {
@@ -37,8 +37,8 @@ void main() {
         'accountHolder': 'NGUYEN ANH DUC',
       },
       'order': {
-        'amountVnd': 500000,
-        'credits': 5250,
+        'amountVnd': 200000,
+        'credits': 2100,
         'transactionCode': 'CRM123456',
       },
     });
@@ -47,6 +47,6 @@ void main() {
     expect(checkout.transferContent, 'CRM123456');
     expect(checkout.bankName, 'OCB (Phương Đông)');
     expect(checkout.accountNumber, 'CASS55252503');
-    expect(checkout.amountVnd, 500000);
+    expect(checkout.amountVnd, 200000);
   });
 }

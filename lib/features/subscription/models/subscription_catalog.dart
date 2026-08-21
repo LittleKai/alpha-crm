@@ -88,9 +88,9 @@ const crmTrialPlan = CrmSubscriptionProduct(
 const crmMonthlyPlan = CrmSubscriptionProduct(
   productId: 'crm_monthly',
   name: 'Gói Alpha CRM hàng tháng',
-  priceVnd: 500000,
-  priceCredits: 5250,
-  aiRequests: 1000,
+  priceVnd: 200000,
+  priceCredits: 2100,
+  aiRequests: 100,
   badge: 'Gói chính',
   isPlan: true,
 );
@@ -136,8 +136,8 @@ RenewalDetails buildRenewalDetails({required int balanceCredits}) {
     missingCredits: missingCredits,
     rows: const [
       ('Gói gia hạn', 'Alpha CRM 1 tháng'),
-      ('Chi phí', '5250 Credits hoặc 500.000 VND'),
-      ('Hạn mức AI mới', '1000 yêu cầu AI'),
+      ('Chi phí', '2100 Credits hoặc 200.000 VND'),
+      ('Hạn mức AI mới', '100 yêu cầu AI'),
       ('Hiệu lực', 'Gia hạn thêm 30 ngày và đặt lại quota gói chính'),
     ],
   );

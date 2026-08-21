@@ -456,7 +456,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
     final features = [
       'Kết nối thiết bị Windows Client & Android Connector',
-      isTrial ? '100 yêu cầu AI chất lượng cao' : '1.000 yêu cầu AI chất lượng cao mỗi tháng',
+      isTrial ? '100 yêu cầu AI chất lượng cao' : '100 yêu cầu AI chất lượng cao mỗi tháng',
       'Chatbot tự động phản hồi & Live Chat tập trung',
       'Gửi tin nhắn hàng loạt & Chiến dịch Zalo marketing',
       'Tự động tóm tắt cuộc hội thoại nhóm bằng AI',
@@ -524,7 +524,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             runSpacing: AppSpacing.xs,
             children: [
               Text(
-                isTrial ? 'Miễn phí' : '500.000đ',
+                isTrial ? 'Miễn phí' : '200.000đ',
                 style: AppTextStyles.pageTitle.copyWith(
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
@@ -541,7 +541,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                 ),
                 Text(
-                  '5.250 Credits',
+                  '2.100 Credits',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.bold,
@@ -549,7 +549,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 ),
               ] else ...[
                 Text(
-                  '/ 14 ngày',
+                  '/ 2 tháng',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                 ),
               ]
@@ -602,7 +602,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   : isActive
                   ? isTrial
                         ? 'Gói dùng thử chỉ cấp 1 lần cho tài khoản mới. Bạn có thể nâng cấp lên gói chính bất cứ lúc nào.'
-                        : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 1000 yêu cầu AI.'
+                        : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 100 yêu cầu AI.'
                   : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị Zalo.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
@@ -633,8 +633,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget _buildQuotaCard(CrmAuthState authState) {
     final totalRemaining =
         authState.includedAiRemaining + authState.extraAiRemaining;
-    final isTrial = authState.isTrialSubscription;
-    final totalLimit = isTrial ? 100 : 1000;
+    final totalLimit = 100;
     final double progress = (totalRemaining / totalLimit).clamp(0.0, 1.0);
 
     return _SurfaceCard(
