@@ -524,7 +524,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             runSpacing: AppSpacing.xs,
             children: [
               Text(
-                isTrial ? 'Miễn phí' : '200.000đ',
+                isTrial ? 'Miễn phí' : '100.000đ',
                 style: AppTextStyles.pageTitle.copyWith(
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
@@ -541,7 +541,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                 ),
                 Text(
-                  '2.100 Credits',
+                  '1.050 Credits',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.bold,
@@ -549,7 +549,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 ),
               ] else ...[
                 Text(
-                  '/ 2 tháng',
+                  '/ 1 tháng',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                 ),
               ]
