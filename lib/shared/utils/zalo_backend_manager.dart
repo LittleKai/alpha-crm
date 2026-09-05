@@ -17,6 +17,18 @@ class _BackendPortOwner {
   final List<int> processIds;
 }
 
+/// Kết quả một nhịp health-check.
+enum BackendProbe {
+  /// `/health` trả về đúng identity của backend này.
+  healthy,
+
+  /// Không ai lắng nghe ở cổng, hoặc một tiến trình lạ trả lời.
+  dead,
+
+  /// Có tiến trình nhưng không kịp trả lời — event loop đang kẹt.
+  busy,
+}
+
 /// Trạng thái vòng đời của backend cục bộ, dùng để UI phản ứng.
 enum BackendStatus {
   /// Chưa khởi động hoặc đã dừng có chủ đích (đóng app).
@@ -46,7 +58,15 @@ enum BackendStatus {
 class ZaloBackendManager {
   static Process? _backendProcess;
   static bool _isRunning = false;
-  static int? _activePort;
+  static int? _activePortValue;
+
+  /// Mọi gán `_activePort = ...` đều đẩy cổng sang [AppLogger] để việc báo lỗi
+  /// về backend luôn trỏ đúng tiến trình đang chạy (trước đây hardcode 28080).
+  static int? get _activePort => _activePortValue;
+  static set _activePort(int? value) {
+    _activePortValue = value;
+    AppLogger.backendPort = value;
+  }
 
   // --- Cấu hình supervisor ---
   static const String _serviceId = 'alpha-crm-zalo-bot-service';
@@ -54,8 +74,14 @@ class ZaloBackendManager {
   static const int _fallbackPortLimit = 10;
   static const Duration _watchdogInterval = Duration(seconds: 5);
 
-  /// Số nhịp health-check lỗi liên tiếp trước khi coi backend là chết.
+  /// Số nhịp health-check lỗi liên tiếp trước khi coi backend là chết
+  /// (không ai lắng nghe ở cổng — refused, hoặc là tiến trình lạ).
   static const int _failureThreshold = 3;
+
+  /// Ngưỡng riêng, rộng hơn, cho trường hợp backend CÒN SỐNG nhưng không kịp
+  /// trả lời (event loop kẹt vì truy vấn SQLite đồng bộ). Kill một tiến trình
+  /// đang bận giữa transaction là cách làm hỏng DB.
+  static const int _busyFailureThreshold = 6;
 
   /// Số lần khởi động lại tối đa trong [_circuitWindow] trước khi mở circuit.
   static const int _maxRestartsPerWindow = 5;
@@ -100,6 +126,10 @@ class ZaloBackendManager {
 
   /// Cổng đang hoạt động của backend (null nếu chưa dò được)
   static int? get activePort => _activePort;
+
+  /// Pid của tiến trình backend đang chạy (null nếu chưa/không còn chạy).
+  /// Luồng cập nhật đọc nó TRƯỚC khi tắt để script updater chờ đúng tiến trình.
+  static int? get backendPid => _backendProcess?.pid;
 
   @visibleForTesting
   static bool isAlphaCrmZaloBackendHealthForTest(Map<dynamic, dynamic> body) {
@@ -312,7 +342,9 @@ class ZaloBackendManager {
         final line = utf8.decode(data, allowMalformed: true).trim().toWellFormed();
         if (line.isEmpty) return;
         debugPrint("ZaloBot-Error-Log: $line");
-        AppLogger().error("ZaloBot stderr: $line");
+        // report: false — dòng này ĐẾN TỪ backend; POST ngược xuống backend sẽ
+        // tạo vòng lặp khuếch đại (xem AppLogger.warning/error).
+        AppLogger().error("ZaloBot stderr: $line", null, null, false);
       });
 
       return true;
@@ -414,6 +446,7 @@ class ZaloBackendManager {
       if (!identical(proc, _backendProcess)) return;
       _isRunning = false;
       if (_manualStop) return;
+      _lastExitCode = code;
       _lastStartupError = 'Tiến trình backend thoát bất ngờ với mã $code.';
       AppLogger().error('ZaloBackendManager: $_lastStartupError');
       debugPrint('ZaloBackendManager: $_lastStartupError → tự khởi động lại.');
@@ -489,8 +522,8 @@ class ZaloBackendManager {
       }
 
       final port = _activePort ?? _defaultPort;
-      final healthy = await _probeHealth(port);
-      if (healthy) {
+      final probe = await _probe(port);
+      if (probe == BackendProbe.healthy) {
         _consecutiveFailures = 0;
         _isRunning = true;
         // Ổn định đủ lâu → reset circuit breaker.
@@ -504,9 +537,18 @@ class ZaloBackendManager {
       }
 
       _consecutiveFailures++;
-      if (_consecutiveFailures < _failureThreshold) {
+      final threshold = probe == BackendProbe.busy
+          ? _busyFailureThreshold
+          : _failureThreshold;
+      if (_consecutiveFailures < threshold) {
         _setStatus(BackendStatus.degraded);
         return; // chịu đựng một lần lỡ tạm thời
+      }
+      if (probe == BackendProbe.busy) {
+        AppLogger().warning(
+          'ZaloBackendManager: backend không phản hồi $_consecutiveFailures '
+          'nhịp liên tiếp (bận, không phải chết) — vẫn phải khởi động lại.',
+        );
       }
       await _ensureRunning();
     } finally {
@@ -546,6 +588,7 @@ class ZaloBackendManager {
       }
 
       _restartCount++;
+      _totalRestarts++;
       _setStatus(
         _restartCount == 1 ? BackendStatus.starting : BackendStatus.restarting,
       );
@@ -570,11 +613,41 @@ class ZaloBackendManager {
       if (ready) {
         _consecutiveFailures = 0;
         _setStatus(BackendStatus.healthy);
+        unawaited(_pushSupervisorStats());
       } else {
         _setStatus(BackendStatus.degraded);
       }
     } finally {
       _ensuring = false;
+    }
+  }
+
+  /// Tổng số lần khởi động lại kể từ khi mở app (không reset theo cửa sổ circuit
+  /// breaker như [_restartCount] — con số này để báo cáo, không để ra quyết định).
+  static int _totalRestarts = 0;
+
+  /// Mã thoát của lần backend chết gần nhất.
+  static int? _lastExitCode;
+
+  /// Đẩy số liệu vòng đời sang backend để agent gửi kèm heartbeat lên cloud.
+  /// Backend không tự đếm được số lần restart — mỗi lần là một tiến trình mới.
+  static Future<void> _pushSupervisorStats() async {
+    final port = _activePort;
+    if (port == null) return;
+    try {
+      await http
+          .post(
+            Uri.parse('http://127.0.0.1:$port/internal/supervisor-stats'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'restartCount': _totalRestarts,
+              'lastExitCode': _lastExitCode,
+              'lastError': _lastStartupError ?? '',
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('ZaloBackendManager: không đẩy được supervisor stats: $e');
     }
   }
 
@@ -620,8 +693,57 @@ class ZaloBackendManager {
 
   /// Kiểm tra nhanh xem đã có backend khỏe mạnh đang lắng nghe ở [port] chưa.
   static Future<bool> _probeHealth(int port) async {
-    final body = await _readHealth(port);
-    return body != null && _isAlphaCrmZaloBackendHealth(body);
+    return await _probe(port) == BackendProbe.healthy;
+  }
+
+  /// Phân loại một nhịp health-check.
+  ///
+  /// Phân biệt "chết" với "bận" là quan trọng: `better-sqlite3` chạy ĐỒNG BỘ
+  /// trên cùng event loop với HTTP server, nên một truy vấn nặng làm `/health`
+  /// hết giờ dù tiến trình hoàn toàn khỏe. `taskkill /F` lúc đó rơi đúng vào
+  /// giữa một transaction — chính là cách làm hỏng DB.
+  static Future<BackendProbe> _probe(int port) async {
+    final client = http.Client();
+    try {
+      final response = await client
+          .get(Uri.parse('http://127.0.0.1:$port/health'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body is Map && _isAlphaCrmZaloBackendHealth(body)) {
+          _noteHealthDiagnostics(body);
+          return BackendProbe.healthy;
+        }
+      }
+      // Có thứ gì đó trả lời nhưng không phải backend của mình → coi như backend
+      // không có mặt ở cổng này; khởi động lại sẽ tự dò sang cổng khác.
+      return BackendProbe.dead;
+    } catch (e) {
+      return classifyProbeError(e);
+    } finally {
+      client.close();
+    }
+  }
+
+  @visibleForTesting
+  static BackendProbe classifyProbeError(Object error) {
+    // Hết giờ = tiến trình còn sống nhưng event loop đang kẹt → kiên nhẫn hơn.
+    if (error is TimeoutException) return BackendProbe.busy;
+    // SocketException (connection refused) và phần còn lại = không ai lắng nghe.
+    return BackendProbe.dead;
+  }
+
+  /// Ghi lại tín hiệu sức khỏe để có dữ liệu thật thay vì suy đoán khi backend
+  /// chậm. Chỉ log khi vượt ngưỡng để không làm ngập nhật ký.
+  static void _noteHealthDiagnostics(Map<dynamic, dynamic> body) {
+    final delay = body['eventLoopDelayMs'];
+    if (delay is num && delay >= 1000) {
+      final rss = body['rssMb'];
+      AppLogger().warning(
+        'ZaloBackendManager: backend chậm — event loop trễ ${delay.round()}ms'
+        '${rss is num ? ", RSS ${rss.round()}MB" : ""}.',
+      );
+    }
   }
 
   static Future<Map<dynamic, dynamic>?> _readHealth(int port) async {
@@ -858,6 +980,44 @@ if (\$process) {
       debugPrint("ZaloBackendManager: Đã yêu cầu ngắt tiến trình backend.");
     }
     _setStatus(BackendStatus.stopped);
+  }
+
+  /// Yêu cầu backend TỰ TẮT SẠCH rồi mới giết tiến trình.
+  ///
+  /// Trên Windows `Process.kill()` và `taskkill /F` đều là TerminateProcess —
+  /// Node không bao giờ nhận được SIGINT/SIGTERM, nên handler shutdown của nó
+  /// (đóng SQLite + checkpoint WAL) chưa từng chạy. `POST /internal/shutdown` là
+  /// đường duy nhất kích hoạt được nó. Có deadline: backend treo thì rơi thẳng
+  /// xuống kill như cũ, không giữ UI lại.
+  static Future<void> shutdownGracefully({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    _manualStop = true;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+
+    final proc = _backendProcess;
+    final port = _activePort;
+    if (proc != null && port != null) {
+      try {
+        await http
+            .post(
+              Uri.parse('http://127.0.0.1:$port/internal/shutdown'),
+              headers: const {'x-alpha-crm-shutdown': '1'},
+            )
+            .timeout(timeout);
+        // Chờ tiến trình thoát thật — chỉ khi nó đã thoát thì SQLite mới đóng
+        // xong và file mới hết bị khoá (quan trọng cho luồng cập nhật).
+        await proc.exitCode.timeout(timeout);
+        debugPrint('ZaloBackendManager: Backend đã tắt sạch theo yêu cầu.');
+      } catch (e) {
+        debugPrint(
+          'ZaloBackendManager: Tắt sạch thất bại ($e) — chuyển sang kill.',
+        );
+      }
+    }
+
+    prepareForShutdown();
   }
 
   /// Chuẩn bị THOÁT app: dừng watchdog + đánh dấu thoát có chủ đích và kill

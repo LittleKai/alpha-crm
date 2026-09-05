@@ -7,6 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { randomUUID } from 'crypto';
 import { createReadStream, existsSync, statSync } from 'fs';
 import { configureLocalChatMediaCache, getLocalChatStore } from './index.js';
+import { writeMediaCacheSettings } from './media-cache-store.js';
 import { config } from '../config.js';
 import {
   getZaloStatus,
@@ -828,14 +829,11 @@ async function handleLocalMediaCacheSettings(
   readBody: ReadBodyFn,
 ): Promise<void> {
   const payload = JSON.parse(await readBody(req).catch(() => '{}'));
-  const maxGb = Number(payload.maxGb || 20);
-  const maxAgeDays = Number(payload.maxAgeDays || 90);
-  if (!Number.isFinite(maxGb) || !Number.isFinite(maxAgeDays)) {
-    json(res, 400, { success: false, error: 'Invalid media cache settings.' }, req);
-    return;
-  }
-  configureLocalChatMediaCache(maxGb, maxAgeDays);
-  json(res, 200, { success: true, data: { maxGb, maxAgeDays } }, req);
+  // Lưu xuống đĩa rồi mới áp: backend restart phải nhớ được, không quay về
+  // mặc định cho tới khi người dùng mở lại màn hình cài đặt.
+  const settings = writeMediaCacheSettings(payload);
+  configureLocalChatMediaCache(settings.maxGb, settings.maxAgeDays);
+  json(res, 200, { success: true, data: settings }, req);
 }
 
 function handleLocalMessageSearch(

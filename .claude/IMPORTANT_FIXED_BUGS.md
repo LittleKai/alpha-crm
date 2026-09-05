@@ -199,6 +199,14 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 
 ## Fixed Bugs
 
+### 2026-09-05 - Backend cục bộ chưa bao giờ tắt sạch trên Windows → SQLite không được đóng, WAL phình vô hạn
+
+- Symptom: `live-chat.sqlite-wal` lớn hơn cả file DB chính (4.17MB vs 4.05MB) và mtime của DB chính đứng yên 2 tháng — toàn bộ tin nhắn trong khoảng đó chỉ tồn tại trong WAL. Không có triệu chứng nhìn thấy trên UI cho tới khi mất dữ liệu hoặc DB hỏng.
+- Root cause: `process.on(SIGINT/SIGTERM)` trong `server.ts` là **dead code trên Windows** — Dart `Process.kill()` và `taskkill /T /F` đều là TerminateProcess, Node không nhận signal. Nên `shutdown()` chưa từng chạy; và `closeLocalChatStore()` là export **không có caller nào** trong toàn repo. SQLite không được đóng lần nào ⇒ không có checkpoint lúc thoát.
+- Fix summary: thêm `POST /internal/shutdown` (loopback + bắt buộc header `x-alpha-crm-shutdown` để preflight của trình duyệt không tới được); `shutdown()` gọi `closeLocalChatStore()` và có timer thoát cưỡng bức 3s; Flutter `ZaloBackendManager.shutdownGracefully()` gọi endpoint này rồi chờ `exitCode` trước khi kill, dùng ở `exitApp()` và luồng cập nhật ZIP. Store thêm `checkpoint(reason)` chạy cả lúc **boot** (dọn WAL tồn của phiên trước) lẫn lúc `close()`, cộng pragma `busy_timeout=5000` và `synchronous=NORMAL`.
+- Rule: **không bao giờ dựa vào SIGINT/SIGTERM để tắt sạch trên Windows.** Mọi tài nguyên cần đóng có trật tự (SQLite, file handle) phải đi qua `/internal/shutdown`. Ai thay `shutdownGracefully()` bằng kill thẳng là tái tạo lại đúng lỗi này. Checkpoint lúc boot là lớp bảo vệ độc lập: đã kiểm chứng rằng sau nó, một lần kill cứng vẫn để lại WAL 0 byte.
+- Related files: `tools/alpha-crm/integration/zalo-bot-service/src/server.ts`, `.../src/local-chat/local-chat-store.ts`, `tools/alpha-crm/lib/shared/utils/zalo_backend_manager.dart`, `.../desktop_window_manager.dart`, `.../app_update_service.dart`.
+
 ### 2026-07-05 - Live Chat composer bị khóa nhầm cho hội thoại Facebook/TikTok (gate "connected" chỉ tính theo Zalo account pool)
 
 - Symptom: Mở hội thoại Facebook Page/TikTok trong Live Chat (chế độ local-bridge), ô soạn tin bị vô hiệu hóa như thể tài khoản "đã ngắt kết nối", dù integration Facebook/TikTok tương ứng đang bật và hoạt động bình thường.

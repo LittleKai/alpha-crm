@@ -14,6 +14,7 @@ import {
 } from '../channels/personal-zca-channel.js';
 import { localChatEvents } from './local-chat-events.js';
 import { LocalChatMediaWorker } from './local-chat-media-worker.js';
+import { readMediaCacheSettings } from './media-cache-store.js';
 
 let _store: LocalChatStore | null = null;
 let _mediaWorker: LocalChatMediaWorker | null = null;
@@ -31,8 +32,15 @@ export function getLocalChatStore(): LocalChatStore | null {
       _store,
       resolve(dataRoot, 'local-chat-media'),
     );
+    // Nạp lại hạn mức đã lưu TRƯỚC khi worker chạy vòng dọn đầu tiên, nếu không
+    // nó dọn theo mặc định 20GB/90 ngày dù người dùng đã đặt khác.
+    const mediaSettings = readMediaCacheSettings();
+    _mediaWorker.configure(mediaSettings.maxGb, mediaSettings.maxAgeDays);
     _mediaWorker.start();
-    console.log(`[local-chat] Initialized SQLite store at ${dbPath}`);
+    console.log(
+      `[local-chat] Initialized SQLite store at ${dbPath} ` +
+        `(media cache ${mediaSettings.maxGb}GB / ${mediaSettings.maxAgeDays} ngày)`,
+    );
 
     // Wire undo handler so listener recall events update local DB
     setUndoMessageHandler((_accountId: string, zaloMsgId: string) => {

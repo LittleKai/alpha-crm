@@ -277,16 +277,21 @@ class AppUpdateService {
         '${updateRoot.path}${Platform.pathSeparator}apply_update.cmd';
     final logPath = '${updateRoot.path}${Platform.pathSeparator}update.log';
 
+    // Lấy pid TRƯỚC khi tắt backend — sau shutdownGracefully() tham chiếu tiến
+    // trình đã bị gỡ, mà script cần đúng pid đó để chờ file hết bị khoá.
     final script = buildWindowsZipUpdaterScript(
       zipPath: zipPath,
       appDir: appDir,
       executableName: executableName,
       stagingDir: stagingDir,
       logPath: logPath,
+      backendPid: ZaloBackendManager.backendPid,
     );
     await File(scriptPath).writeAsString(script, flush: true);
 
-    ZaloBackendManager.stopBackend();
+    // Tắt sạch + CHỜ tiến trình thoát hẳn: robocopy trong apply_update.cmd sẽ
+    // đè lên chính node.exe và dist/server.cjs, nên file phải hết bị khoá trước.
+    await ZaloBackendManager.shutdownGracefully();
     // Mở cửa sổ updater có tiêu đề (hiện tiến trình giải nén/copy) — cửa sổ tự
     // đóng khi script kết thúc (cả nhánh thành công lẫn lỗi).
     await Process.start('cmd.exe', [
@@ -300,12 +305,18 @@ class AppUpdateService {
     exit(0);
   }
 
+  /// [backendPid] là pid của tiến trình backend ngay trước khi tắt. Script sẽ
+  /// chờ ĐÚNG pid đó biến mất rồi mới copy đè: robocopy ghi đè cả
+  /// `zalo-bot-service/node.exe` lẫn `dist/server.cjs`, mà Windows khoá file
+  /// đang chạy. Chờ theo pid, KHÔNG bao giờ `taskkill /IM node.exe` — lệnh đó
+  /// giết mọi tiến trình Node khác của người dùng.
   static String buildWindowsZipUpdaterScript({
     required String zipPath,
     required String appDir,
     required String executableName,
     required String stagingDir,
     required String logPath,
+    int? backendPid,
   }) {
     return '''
 @echo off
@@ -323,8 +334,22 @@ echo ===============================================
 echo   Alpha CRM - Đang cập nhật phiên bản mới
 echo ===============================================
 echo.
-echo [%date% %time%] Alpha CRM update started > "%LOG%"
+set "BPID=${backendPid ?? 0}"
+echo [%date% %time%] Alpha CRM update started (backend pid %BPID%) > "%LOG%"
 echo Chờ ứng dụng đóng... & timeout /t 3 /nobreak >nul
+
+rem Cho dung robocopy khi node.exe cua backend con song: Windows khoa file dang
+rem chay nen viec ghi de se that bai. Cho dung PID da biet, toi da ~15 giay.
+if not "%BPID%"=="0" (
+  for /l %%i in (1,1,15) do (
+    tasklist /FI "PID eq %BPID%" 2>nul | find "%BPID%" >nul
+    if errorlevel 1 goto backend_gone
+    echo [%date% %time%] Waiting for backend pid %BPID% to exit... >> "%LOG%"
+    timeout /t 1 /nobreak >nul
+  )
+  echo [%date% %time%] Backend pid %BPID% still alive; continuing anyway. >> "%LOG%"
+)
+:backend_gone
 
 if exist "%STAGE%" rmdir /s /q "%STAGE%" >> "%LOG%" 2>&1
 mkdir "%STAGE%" >> "%LOG%" 2>&1

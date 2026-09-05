@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalChatStore } from './local-chat-store.js';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, statSync, existsSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -694,5 +694,71 @@ describe('LocalChatStore', () => {
     ]);
     assert.equal(ids.length, 2);
     assert.equal(store.getMessagesByThread('acc1', 'thread1')?.messages.length, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Durability: pragmas + WAL checkpoint + corrupt-file recovery
+// ---------------------------------------------------------------------------
+describe('LocalChatStore durability', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'local-chat-durability-'));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('sets the defensive pragmas on open', () => {
+    const s = new LocalChatStore(join(dir, 'p.sqlite'));
+    try {
+      assert.equal(String(s.db.pragma('journal_mode', { simple: true })), 'wal');
+      assert.equal(s.db.pragma('busy_timeout', { simple: true }), 5000);
+      // synchronous NORMAL === 1
+      assert.equal(s.db.pragma('synchronous', { simple: true }), 1);
+      assert.equal(s.db.pragma('foreign_keys', { simple: true }), 1);
+    } finally {
+      s.close();
+    }
+  });
+
+  it('close() checkpoints the WAL so it does not survive the session', () => {
+    const dbPath = join(dir, 'wal.sqlite');
+    const s = new LocalChatStore(dbPath);
+    s.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread1',
+      threadType: 'user',
+      senderId: 'sender1',
+      senderName: 'A',
+      avatarUrl: '',
+      providerMessageId: 'pm-wal-1',
+      content: 'hello',
+      messageType: 'text',
+      timestamp: new Date().toISOString(),
+    });
+    assert.ok(statSync(`${dbPath}-wal`).size > 0, 'WAL should hold the write');
+    s.close();
+    // TRUNCATE checkpoint leaves an empty WAL (or removes it entirely).
+    const walSize = existsSync(`${dbPath}-wal`) ? statSync(`${dbPath}-wal`).size : 0;
+    assert.equal(walSize, 0);
+    assert.ok(statSync(dbPath).size > 0, 'main DB should hold the checkpointed pages');
+  });
+
+  it('quarantines a corrupt DB file and opens a fresh one instead of throwing', () => {
+    const dbPath = join(dir, 'corrupt.sqlite');
+    writeFileSync(dbPath, 'this is definitely not a sqlite database');
+
+    const s = new LocalChatStore(dbPath);
+    try {
+      // A usable, empty store came back.
+      assert.equal(s.listConversations({}).total, 0);
+    } finally {
+      s.close();
+    }
+
+    const quarantined = readdirSync(dir).filter((f) => f.includes('.corrupt-'));
+    assert.equal(quarantined.length, 1);
   });
 });

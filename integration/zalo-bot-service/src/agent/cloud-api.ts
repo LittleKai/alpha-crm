@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import type { SupervisorStats } from './supervisor-stats.js';
 
 export interface CommandResponse {
   _id: string;
@@ -154,6 +155,11 @@ export async function sendHeartbeat(
     zaloAccounts?: HeartbeatZaloAccount[];
     queueDepth?: number;
     clientConnections?: number;
+    // Tín hiệu ổn định: uptime của tiến trình backend, cộng số liệu restart do
+    // supervisor bên Flutter đẩy sang (backend không tự biết mình đã bị khởi
+    // động lại bao nhiêu lần — mỗi lần restart là một tiến trình mới).
+    uptimeSec?: number;
+    supervisor?: SupervisorStats;
   },
 ): Promise<any> {
   return callCloudApi('/crm/agent/heartbeat', {

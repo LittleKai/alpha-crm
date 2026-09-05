@@ -12,6 +12,7 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { randomBytes, randomUUID } from 'crypto';
+import { monitorEventLoopDelay } from 'perf_hooks';
 import { config, dataRoot, projectRoot } from './config.js';
 import { evaluateCompliance, ComplianceRequest } from './compliance.js';
 import { getZaloStatus, sendMessage, handleWebhookEvent, getAllGroups, leaveGroup, getAccounts, updateAccountSettings, deleteAccount, getAllFriends, getGroupMembers, getGroupLinkMembers, createGroup, joinGroup, inviteToGroup, findUser, sendFriendRequest, acceptFriendRequest } from './zalo.js';
@@ -29,9 +30,13 @@ import { N8nClient } from './integrations/n8n-client.js';
 import { buildN8nWorkflowPayload, workflowTemplates } from './integrations/workflow-templates.js';
 import { testProxyConnection } from './integrations/proxy-helper.js';
 import { handleLocalRoute } from './local-chat/local-chat-api.js';
+import { closeLocalChatStore } from './local-chat/index.js';
 import { handleLocalSessionRoute } from './local-session/local-session-api.js';
 import { saveClientLog, getClientLogs, deleteClientLogs } from './agent/client-log.js';
-import { logError } from './agent/logger.js';
+import { installConsoleFileTee, logError } from './agent/logger.js';
+import { setSupervisorStats } from './agent/supervisor-stats.js';
+import { claimDataRoot } from './data-root-owner.js';
+import { sweepExpiredSessions } from './pending-session-sweeper.js';
 import {
   sessionCoordinator,
   sessionEventHub,
@@ -39,9 +44,30 @@ import {
   resumeRuntimeFromStoredCredentials,
 } from './local-session/session-runtime.js';
 
+// Phải chạy TRƯỚC mọi thứ khác trong thân module: backend có ~270 lời gọi
+// console.* mà chỉ 4 lời gọi logInfo/logError, nên nếu không tee thì gần như
+// toàn bộ nhật ký chỉ sống trong pipe stdout và biến mất khi tiến trình chết.
+installConsoleFileTee();
+
+// Ghi nhận tiến trình này là chủ dataRoot (và cảnh báo nếu có bản khác đang chạy).
+const conflictingOwner = claimDataRoot(projectRoot);
+
 const VERSION = '0.2.0';
 const SERVICE_ID = 'alpha-crm-zalo-bot-service';
 let activePort = config.localBindPort;
+
+// better-sqlite3 chạy ĐỒNG BỘ trên event loop, nên một truy vấn nặng cũng khoá
+// luôn HTTP server. Đo độ trễ event loop và trả về trong /health để supervisor
+// phân biệt được "backend chết" với "backend đang bận" thay vì kill nhầm.
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
+eventLoopMonitor.enable();
+
+/** Độ trễ event loop tệ nhất kể từ lần đọc trước (ms). Đọc xong thì reset. */
+function takeEventLoopDelayMs(): number {
+  const maxMs = eventLoopMonitor.max / 1e6;
+  eventLoopMonitor.reset();
+  return Number.isFinite(maxMs) ? Math.round(maxMs) : 0;
+}
 
 if (!['127.0.0.1', 'localhost', '::1'].includes(config.localBindHost)) {
   throw new Error('LOCAL_BIND_HOST must be a loopback address.');
@@ -55,6 +81,17 @@ interface PendingSession {
   accountLabel?: string;
 }
 const pendingSessions = new Map<string, PendingSession>();
+
+const pendingSessionSweeper = setInterval(() => {
+  const removed = sweepExpiredSessions(
+    pendingSessions,
+    dirname(resolve(projectRoot, config.personalCredentialsPath)),
+  );
+  if (removed.length > 0) {
+    console.log(`[server] Đã dọn ${removed.length} phiên QR quá hạn.`);
+  }
+}, 60000);
+pendingSessionSweeper.unref?.();
 
 function setCorsHeaders(res: ServerResponse, req?: IncomingMessage): void {
   let origin = '*';
@@ -86,10 +123,35 @@ function json(res: ServerResponse, status: number, data: unknown, req?: Incoming
   res.end(JSON.stringify(data));
 }
 
+/**
+ * Trần kích thước thân request. Rộng tay vì tệp tri thức chatbot đi vào dạng
+ * base64 trong JSON (base64 nở 4/3), nhưng vẫn phải có trần: không có nó thì
+ * một client lỗi có thể nạp cả file vào RAM cho tới khi tiến trình chết.
+ */
+const MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super(`Request body vượt quá ${Math.round(MAX_BODY_BYTES / 1024 / 1024)}MB.`);
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        // pause chứ KHÔNG destroy: destroy ở đây giết socket trước khi kịp ghi
+        // 413, client chỉ thấy "connection reset" không hiểu vì sao.
+        req.pause();
+        reject(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => resolve(Buffer.concat(chunks).toString()));
     req.on('error', reject);
   });
@@ -136,7 +198,7 @@ function hasValidSendPayload(payload: unknown): payload is SendPayload {
   );
 }
 
-const server = createServer(async (req, res) => {
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url || '/';
   const method = req.method || 'GET';
 
@@ -171,6 +233,37 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // POST /internal/supervisor-stats — Flutter đẩy số liệu vòng đời sang để agent
+  // gửi kèm heartbeat. Backend không tự biết mình đã restart bao nhiêu lần vì
+  // mỗi lần restart là một tiến trình mới.
+  if (method === 'POST' && url === '/internal/supervisor-stats') {
+    try {
+      const payload = JSON.parse(await readBody(req));
+      json(res, 200, { success: true, data: setSupervisorStats(payload) }, req);
+    } catch {
+      json(res, 400, { success: false, error: 'Invalid payload.' }, req);
+    }
+    return;
+  }
+
+  // POST /internal/shutdown — tắt sạch theo yêu cầu của app Flutter.
+  // Trên Windows tiến trình luôn bị TerminateProcess/taskkill nên SIGINT/SIGTERM
+  // không bao giờ tới; đây là đường DUY NHẤT để chạy được shutdown() (đóng SQLite
+  // + checkpoint WAL) trước khi bị giết.
+  // Bắt buộc có header riêng: header này không nằm trong Access-Control-Allow-Headers
+  // nên preflight của trình duyệt sẽ trượt — một trang web bất kỳ không tắt được service.
+  if (method === 'POST' && url === '/internal/shutdown') {
+    if (!req.headers['x-alpha-crm-shutdown']) {
+      json(res, 403, { success: false, error: 'Missing shutdown header.' }, req);
+      return;
+    }
+    json(res, 200, { success: true, message: 'Shutting down.' }, req);
+    res.on('finish', () => {
+      void shutdown();
+    });
+    return;
+  }
+
   // GET /health
   if (method === 'GET' && url === '/health') {
     const credentials = getAgentCredentials();
@@ -185,6 +278,11 @@ const server = createServer(async (req, res) => {
       bindHost: config.localBindHost,
       bindPort: activePort,
       uptime: process.uptime(),
+      eventLoopDelayMs: takeEventLoopDelayMs(),
+      rssMb: Math.round(process.memoryUsage.rss() / (1024 * 1024)),
+      // Khác null = phát hiện một backend khác dùng chung dataRoot lúc khởi
+      // động; hiện ra ở đây để chẩn đoán từ xa, không chỉ nằm trong log.
+      dataRootConflictPid: conflictingOwner ? conflictingOwner.pid : null,
       timestamp: new Date().toISOString(),
       agent: {
         mode: config.crmAgentMode,
@@ -1796,6 +1894,31 @@ const server = createServer(async (req, res) => {
 
   // 404 for everything else
   json(res, 404, { error: 'Not found' });
+}
+
+// Lưới an toàn cấp server: một route quên bắt lỗi (điển hình là readBody vượt
+// trần) trước đây làm response treo tới tận requestTimeout. Trả mã lỗi ngay.
+const server = createServer((req, res) => {
+  void handleRequest(req, res).catch((err) => {
+    const tooLarge = err instanceof PayloadTooLargeError;
+    if (!tooLarge) {
+      logError(`[server] Unhandled error for ${req.method} ${req.url}:`, err);
+    }
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    json(
+      res,
+      tooLarge ? 413 : 500,
+      { success: false, error: tooLarge ? err.message : 'Internal server error' },
+      req,
+    );
+    if (tooLarge) {
+      // Đã trả lời xong mới cắt: phần thân còn lại không có ai đọc nữa.
+      res.on('finish', () => req.destroy());
+    }
+  });
 });
 
 function preserveMaskedSecret(value: unknown, current: string): string {
@@ -1803,6 +1926,13 @@ function preserveMaskedSecret(value: unknown, current: string): string {
   const trimmed = value.trim();
   return trimmed.includes('*') ? current : trimmed;
 }
+
+// Trần thời gian rõ ràng thay vì dựa vào mặc định của Node (headers 60s,
+// request 300s). Đây là dịch vụ loopback, mọi request hợp lệ xong trong vài
+// giây; một client kẹt không có lý do gì giữ kết nối 5 phút. Không đụng tới
+// server.timeout (mặc định tắt) — bật lên sẽ cắt đứt SSE của /local/events.
+server.headersTimeout = 30000;
+server.requestTimeout = 120000;
 
 function listenOnPort(port: number): void {
   server.listen(port, config.localBindHost, async () => {
@@ -1864,7 +1994,23 @@ let shuttingDown = false;
 async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  await shutdownSessionRuntime();
+  try {
+    await shutdownSessionRuntime();
+  } catch (err) {
+    console.error('[server] Session runtime shutdown failed:', err);
+  }
+  // Đóng SQLite SAU khi runtime dừng: close() chạy wal_checkpoint(TRUNCATE) nên
+  // WAL không được phình qua nhiều phiên nữa (xem local-chat-store.ts).
+  try {
+    closeLocalChatStore();
+  } catch (err) {
+    console.error('[server] Local chat store close failed:', err);
+  }
+  // Một SSE/keep-alive còn treo có thể làm server.close() không bao giờ gọi lại
+  // callback → tiến trình không thoát. Chốt hạ bằng timer thoát cưỡng bức.
+  const force = setTimeout(() => process.exit(0), 3000);
+  force.unref?.();
+  server.closeAllConnections?.();
   server.close(() => process.exit(0));
 }
 

@@ -29,6 +29,12 @@ await build({
   // source logic. The release script smoke-tests /health after staging, so a
   // minify-induced break aborts the release instead of shipping silently.
   minify: true,
+  // 'external' sinh dist/server.cjs.map NHƯNG không nhúng chú thích
+  // sourceMappingURL vào bundle. Map KHÔNG được đóng vào ZIP phát hành (xem
+  // release-to-b2.js, chỉ copy đúng server.cjs) — nó ở lại cùng artifact build
+  // để map ngược stack trace từ hiện trường; nếu không, mọi stack của
+  // uncaughtException chỉ là server.cjs:1:284719, vô dụng để chẩn đoán.
+  sourcemap: 'external',
   external,
   // config.js derives projectRoot from import.meta.url. In a CJS bundle import.meta
   // is empty, so shim it to the bundle's own path — keeps active-port.json landing in

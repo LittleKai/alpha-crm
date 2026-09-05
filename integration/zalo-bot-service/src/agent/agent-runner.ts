@@ -10,7 +10,9 @@ import {
   sendHeartbeat,
   type HeartbeatZaloAccount,
 } from './cloud-api.js';
-import { executeCommand, getRunningCampaignCount } from './command-executor.js';
+import { executeCommand, getRunningCampaignCount, isCampaignRunning } from './command-executor.js';
+import { finishCampaign, listInterruptedCampaigns } from './campaign-progress.js';
+import { getSupervisorStats } from './supervisor-stats.js';
 import { getZaloStatus, getAccounts } from '../zalo.js';
 import { config } from '../config.js';
 import {
@@ -97,6 +99,54 @@ export function startAgentRunner(credentials: AgentCredentials): void {
     void runHeartbeat(credentials);
   }, HEARTBEAT_INTERVAL_MS);
   scheduleNextPoll(credentials);
+  void reportInterruptedCampaigns(credentials);
+}
+
+/**
+ * Đóng lại những chiến dịch mà tiến trình trước đã chết giữa chừng.
+ *
+ * KHÔNG chạy tiếp: những người ở đầu danh sách đã nhận tin rồi, gửi lại là gửi
+ * trùng. Chỉ báo trung thực "gián đoạn ở người thứ N" để cloud không treo lệnh
+ * ở trạng thái đang chạy vĩnh viễn.
+ */
+async function reportInterruptedCampaigns(
+  credentials: AgentCredentials,
+): Promise<void> {
+  for (const record of listInterruptedCampaigns()) {
+    // Runtime có thể khởi động lại mà tiến trình thì không (re-sync phiên) —
+    // lúc đó chiến dịch vẫn đang chạy thật, không được đụng vào.
+    if (isCampaignRunning(record.campaignId)) continue;
+    try {
+      await reportCommandResult(
+        credentials.deviceId,
+        credentials.agentSecret,
+        record.commandId,
+        false,
+        {
+          campaignId: record.campaignId,
+          interrupted: true,
+          totalProcessed: record.processed,
+          total: record.total,
+          successCount: record.successCount,
+          failedCount: record.failedCount,
+          cancelledCount: record.cancelledCount,
+        },
+        `Chiến dịch bị gián đoạn do backend dừng đột ngột (đã xử lý ${record.processed}/${record.total}). Không tự gửi tiếp để tránh gửi trùng.`,
+      );
+      console.log(
+        `[agent-runner] Đã báo chiến dịch gián đoạn ${record.campaignId} ` +
+          `(${record.processed}/${record.total}).`,
+      );
+    } catch (err: any) {
+      // Không xoá bản ghi khi báo cáo thất bại — lần boot sau thử lại.
+      console.warn(
+        `[agent-runner] Không báo được chiến dịch gián đoạn ${record.campaignId}:`,
+        err.message,
+      );
+      continue;
+    }
+    finishCampaign(record.campaignId);
+  }
 }
 
 export function stopAgentRunner(): void {
@@ -483,6 +533,10 @@ async function runHeartbeat(credentials: AgentCredentials): Promise<void> {
       zaloAccounts: mapZaloAccountsForHeartbeat(),
       queueDepth: getRunningCampaignCount(),
       clientConnections: localChatEvents.listenerCount,
+      // Uptime tụt về gần 0 giữa hai nhịp heartbeat = tiến trình vừa bị khởi
+      // động lại; kèm số liệu supervisor thì cloud biết luôn vì sao.
+      uptimeSec: Math.round(process.uptime()),
+      supervisor: getSupervisorStats() ?? undefined,
     });
   } catch (error: any) {
     if (await handleCloudFailure(error)) {

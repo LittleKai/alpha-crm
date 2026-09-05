@@ -5,7 +5,7 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, renameSync } from 'fs';
 import { dirname } from 'path';
 import { config } from '../config.js';
 import type {
@@ -171,6 +171,55 @@ function dateKey(value: string | undefined): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+/**
+ * Mở DB, và nếu file đã hỏng thì cách ly nó rồi mở DB trống thay thế.
+ *
+ * DB này là CACHE của dữ liệu Zalo, không phải nguồn sự thật — mất lịch sử local
+ * còn hơn để backend chết ở module-load, vì lúc đó supervisor bên Flutter sẽ
+ * restart lặp cho tới khi circuit breaker mở và người dùng không mở được app.
+ */
+function openDatabase(dbPath: string): Database.Database {
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(dbPath);
+    // new Database() không đọc header ngay — file rác chỉ ném lỗi ở câu lệnh đầu
+    // tiên. Thăm dò ở đây để nhánh phục hồi bên dưới bắt được.
+    db.pragma('user_version');
+    return db;
+  } catch (err: any) {
+    try {
+      db?.close();
+    } catch {
+      /* ignore */
+    }
+    const code = String(err?.code ?? '');
+    const message = String(err?.message ?? '');
+    const corrupt =
+      code === 'SQLITE_CORRUPT' ||
+      code === 'SQLITE_NOTADB' ||
+      /malformed|not a database|file is encrypted/i.test(message);
+    if (!corrupt) throw err;
+
+    const quarantined = `${dbPath}.corrupt-${Date.now()}`;
+    console.error(
+      `[local-chat] SQLite hỏng (${code || 'unknown'}): ${message}. ` +
+        `Cách ly sang ${quarantined} và tạo DB mới.`,
+    );
+    try {
+      renameSync(dbPath, quarantined);
+      for (const suffix of ['-wal', '-shm']) {
+        if (existsSync(`${dbPath}${suffix}`)) {
+          renameSync(`${dbPath}${suffix}`, `${quarantined}${suffix}`);
+        }
+      }
+    } catch (renameErr) {
+      console.error('[local-chat] Không cách ly được DB hỏng:', renameErr);
+      throw err;
+    }
+    return new Database(dbPath);
+  }
+}
+
 /** Default channel for rows that don't specify one, based on the active Zalo channel mode. */
 function defaultChannel(): string {
   return config.channelMode === 'official_oa' ? 'zalo_oa' : 'zalo_personal';
@@ -188,10 +237,41 @@ export class LocalChatStore {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    this._db = new Database(dbPath);
+    this._db = openDatabase(dbPath);
     this._db.pragma('journal_mode = WAL');
     this._db.pragma('foreign_keys = ON');
+    // Không có busy_timeout thì mọi tranh chấp khoá ném SQLITE_BUSY ngay lập tức
+    // (xảy ra khi một bản dev và một bản đóng gói cùng mở dataRoot chung).
+    this._db.pragma('busy_timeout = 5000');
+    // WAL + NORMAL là cặp chuẩn: vẫn an toàn khi tiến trình bị kill, bỏ được
+    // fsync mỗi commit mà FULL bắt buộc.
+    this._db.pragma('synchronous = NORMAL');
     this._migrate();
+    // Dọn WAL tồn dư của lần chạy trước (tiến trình luôn bị taskkill /F trên
+    // Windows nên không có lần đóng sạch nào để checkpoint).
+    this.checkpoint('boot');
+  }
+
+  /**
+   * Ép SQLite gộp WAL về file DB chính rồi cắt WAL. Log kết quả để chẩn đoán:
+   * `busy = 1` nghĩa là có kết nối khác đang giữ khoá và WAL vẫn phình.
+   */
+  checkpoint(reason: string): void {
+    try {
+      const [row] = this._db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
+        busy: number;
+        log: number;
+        checkpointed: number;
+      }>;
+      if (row) {
+        console.log(
+          `[local-chat] WAL checkpoint (${reason}): busy=${row.busy} ` +
+            `log=${row.log} checkpointed=${row.checkpointed}`,
+        );
+      }
+    } catch (err) {
+      console.error(`[local-chat] WAL checkpoint (${reason}) failed:`, err);
+    }
   }
 
   /** Run idempotent schema migration */
@@ -1812,6 +1892,7 @@ export class LocalChatStore {
   // ---------------------------------------------------------------------------
 
   close(): void {
+    this.checkpoint('close');
     this.db.close();
   }
 

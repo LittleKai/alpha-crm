@@ -119,14 +119,32 @@ export async function resumeRuntimeFromStoredCredentials(): Promise<boolean> {
     console.log('[session-runtime] No stored credentials — chờ Flutter session sync.');
     return false;
   }
-  try {
-    console.log('[session-runtime] Found stored credentials — tự khôi phục runtime khi boot.');
-    await bootRuntime(credentials);
-    return true;
-  } catch (err) {
-    console.error('[session-runtime] Auto-resume runtime thất bại:', err);
-    return false;
+
+  // Có retry: nguyên nhân hỏng phổ biến nhất lúc boot là mạng chưa lên (máy vừa
+  // khởi động, Wi-Fi chưa kết nối). Bỏ cuộc ngay lần đầu để lại runtime chết cho
+  // tới khi Flutter tình cờ gửi /local/auth/sync — người dùng thấy 0 tài khoản.
+  const delaysMs = [0, 5000, 15000, 30000];
+  for (let attempt = 0; attempt < delaysMs.length; attempt++) {
+    if (delaysMs[attempt]! > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]!));
+    }
+    try {
+      console.log(
+        `[session-runtime] Found stored credentials — tự khôi phục runtime khi boot ` +
+          `(lần ${attempt + 1}/${delaysMs.length}).`,
+      );
+      await bootRuntime(credentials);
+      return true;
+    } catch (err) {
+      const last = attempt === delaysMs.length - 1;
+      console.error(
+        `[session-runtime] Auto-resume runtime thất bại (lần ${attempt + 1})` +
+          `${last ? ' — bỏ cuộc, chờ Flutter session sync.' : ', sẽ thử lại.'}:`,
+        err,
+      );
+    }
   }
+  return false;
 }
 
 export async function shutdownSessionRuntime(): Promise<void> {

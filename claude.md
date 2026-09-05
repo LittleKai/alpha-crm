@@ -80,9 +80,9 @@ Update if changed:
 - `lib/shared/widgets/` - Reusable CRM UI primitives.
 - `lib/features/` - Feature-first screen and provider modules.
 - `lib/mock/` - Mock domain data used by current UI.
-- `docs/00-image-analysis.md` - Visual requirements derived from reference images.
-- `docs/01-design-system.md` - Design tokens and responsive rules.
-- `docs/06-progress-tracker.md` - Agent task status.
+- `docs/specs/implementation-plan.md` - Implementation plan and feature scope.
+- `docs/compliance/zalo-integration-and-risk-controls.md` - Zalo risk-control rules.
+- `docs/api-catalog/zca-js-api-catalog.md` - Usable `zca-js` API surface.
 
 **Dev Commands:**
 
@@ -95,11 +95,12 @@ flutter run -d windows # Run Windows desktop app
 
 **Release & Packaging:**
 
-- The CRM production release (build app + bundle backend + zip + upload to B2) is driven by the **backend** script `alpha-studio-backend/scripts/release-to-b2.js`, NOT by a script inside `tools/alpha-crm`. Flow is documented in `alpha-studio/.claude/skills/CRM_AUTOMATED_RELEASE_SKILL.md`.
+- The CRM production release (build app + bundle backend + zip + upload to B2) is driven by the **backend** script `alpha-studio-backend/scripts/release-to-b2.js`, NOT by a script inside `tools/alpha-crm`. Flow is documented in `.claude/skills/CRM_AUTOMATED_RELEASE_SKILL.md` (ở gốc monorepo).
   - `node scripts/release-to-b2.js [patch|minor|major|x.y.z]` → full release to B2.
   - Platform flags: `--android` (APK only), `--windows` (Windows app + backend only). With **no platform flag the script builds both**. APK is built with `flutter build apk --release` → `crm-app/releases/alpha-crm-v<version>.apk`; Windows zip → fixed key `crm-app/releases/alpha-crm-windows.zip`.
   - `node scripts/release-to-b2.js --no-upload` (alias `--local`) → build + stage + zip locally, no B2 upload. Combine with `--android`/`--windows` to limit platforms.
   - `version.json` assets are **merged by platform** on upload: a single-platform release updates only that platform's asset and preserves the other's existing download link (it does NOT wipe it). Note the shared `tag_name`/version advances for both platforms, so a Windows-only bump still shows the new version to Android clients pointing at the previous APK.
+- The Windows ZIP ships a **pinned Node LTS runtime** (`PINNED_NODE_VERSION` in `release-to-b2.js`, currently v22.23.2), downloaded from nodejs.org and SHA256-verified — not `process.execPath` of the build machine. The staged `better-sqlite3` addon is the prebuild matching that runtime's ABI (`PINNED_NODE_ABI`), fetched separately so the dev machine's `node_modules` stays built for whatever Node is installed locally. Bumping the Node pin REQUIRES bumping the ABI constant too.
 - The local Zalo backend ships as a **single minified esbuild bundle** `zalo-bot-service/dist/server.cjs` (built via `npm run bundle`, `minify: true` in `integration/zalo-bot-service/scripts/bundle.mjs`). The release stages **only** `dist/server.cjs` plus the native `better-sqlite3` runtime closure — never the loose transpiled `dist/*.js` sources or the full `node_modules`. This keeps the public ZIP small and avoids leaking readable backend logic.
 
 ---
@@ -121,7 +122,7 @@ project-root/
 ## Notes for Claude
 
 - This project is a mock-first Flutter CRM UI for Zalo marketing workflows.
-- Prioritize visual fidelity to `img/*.png`, the design tokens in `lib/app/theme/`, and the architecture rules in `docs/02-architecture.md`.
+- Prioritize visual fidelity to `img/*.png`, the design tokens in `lib/app/theme/`, and the architecture rules in `.claude/CONVENTIONS.md`.
 - Keep feature changes inside the relevant `lib/features/<feature>/` module unless the task explicitly approves shared/app-layer changes.
 - Use Riverpod `StateNotifierProvider` or `StateProvider` for app state, and keep large mock lists in `lib/mock/`, not inside widget build methods.
 - When in doubt, ask before structural changes that affect routing, theme tokens, shared widget public APIs, or cross-feature data contracts.

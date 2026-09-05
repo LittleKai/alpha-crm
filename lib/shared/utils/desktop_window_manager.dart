@@ -137,8 +137,9 @@ class DesktopShell with WindowListener, TrayListener {
   Future<void> exitApp() async {
     _isExiting = true;
     closeRequest.value = false;
-    // Kill backend KHÔNG đồng bộ (tránh treo vì taskkill runSync).
-    ZaloBackendManager.prepareForShutdown();
+    // Xin backend tắt sạch (đóng SQLite + checkpoint WAL) trước, có deadline;
+    // hết hạn thì tự rơi xuống kill nên không treo được cửa sổ.
+    await ZaloBackendManager.shutdownGracefully();
     // Dọn icon tray, có timeout để không treo nếu plugin phản hồi chậm.
     try {
       await trayManager.destroy().timeout(const Duration(seconds: 2));

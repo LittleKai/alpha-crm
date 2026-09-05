@@ -15,6 +15,7 @@ import {
   getGroupMembers
 } from '../zalo.js';
 import { getChannel } from '../channels/channel-registry.js';
+import { beginCampaign, updateCampaign, finishCampaign } from './campaign-progress.js';
 
 // Local campaign tracking
 const runningCampaigns = new Set<string>();
@@ -34,6 +35,13 @@ export function resetCampaignCancellation(): void {
 
 // Number of campaigns currently running a bulk send on this agent — the
 // closest thing to an internal outbound "queue depth" this bridge has.
+// Chiến dịch có đang chạy thật trong TIẾN TRÌNH NÀY không. Dùng để phân biệt
+// "runtime khởi động lại trong cùng tiến trình" (chiến dịch vẫn sống) với
+// "tiến trình đã chết" (bản ghi trên đĩa là mồ côi, phải báo gián đoạn).
+export function isCampaignRunning(campaignId: string): boolean {
+  return runningCampaigns.has(campaignId);
+}
+
 export function getRunningCampaignCount(): number {
   return runningCampaigns.size;
 }
@@ -272,6 +280,9 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
 
   runningCampaigns.add(campaignId);
   cancelledCampaigns.delete(campaignId);
+  // Ghi xuống đĩa TRƯỚC lần gửi đầu tiên: nếu tiến trình chết giữa chừng, bản
+  // ghi này là thứ duy nhất cho biết chiến dịch từng chạy và dừng ở đâu.
+  beginCampaign({ campaignId, commandId: command._id, total: targetList.length });
 
   console.log(`[command-executor] [Background] Bắt đầu chạy chiến dịch ${campaignId} với ${targetList.length} khách hàng...`);
 
@@ -342,6 +353,15 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
       anyFailed = true;
     }
 
+    // Chốt tiến độ xuống đĩa trước khi báo lên cloud — các lần gửi cách nhau ít
+    // nhất vài giây nên một lần ghi file nhỏ ở đây không đáng kể.
+    updateCampaign(campaignId, {
+      processed: i + 1,
+      successCount,
+      failedCount,
+      cancelledCount,
+    });
+
     // Report intermediate progress
     try {
       const { reportCommandProgress } = await import('./cloud-api.js');
@@ -368,6 +388,10 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   runningCampaigns.delete(campaignId);
   const wasCancelled = cancelledCampaigns.has(campaignId);
   cancelledCampaigns.delete(campaignId);
+  // Vòng gửi đã chạy hết → bản ghi trên đĩa không còn là "dở dang" nữa. Xoá
+  // trước khi báo cáo: nếu báo cáo lỗi mạng, lần boot sau cũng không được báo
+  // lại thành "gián đoạn" cho một chiến dịch đã chạy xong.
+  finishCampaign(campaignId);
 
   // Report final detailed execution results back to the Cloud Backend crmAgentCommand result endpoint
   try {
