@@ -4,6 +4,61 @@
 
 ---
 
+## CỬA RA — file này không chỉ được dài thêm
+
+Chỉ chuyển văn xuôi xuống `archive/FIXED_BUGS_guarded.md` khi rào chắn đã chạy xanh và cố ý phá thì phép kiểm đỏ. Chưa đủ hai chiều thì giữ lại. Bài học mang tính phán đoán chuyển sang `CONVENTIONS.md`; bảng này chỉ chấm phần cơ học kiểm được.
+
+## Bảng bẫy
+
+| # | Bẫy | Rào chắn trong code | Văn xuôi ở đâu |
+|---|---|---|---|
+| 1 | `Spacer`/`Expanded` nằm trực tiếp trong `Wrap` | ❌ chưa có | dưới đây |
+| 2 | Desktop Live Chat không mở local SSE | 🔶 một phần: `live_chat_repository.dart::watchEvents` | dưới đây |
+| 3 | Cursor incremental dùng epoch cho cột ISO text | ❌ chưa có | dưới đây |
+| 4 | Biểu đồ bỏ sót dữ liệu kết bạn local | 🔶 một phần: `dashboard_chart_data.dart::mergeFriendStatsIntoPerformanceData` | dưới đây |
+| 5 | Risk-control UI không được backend thực thi | ❌ chưa có | dưới đây |
+| 6 | Animation vô hạn cộng `BackdropFilter` làm treo Windows | ❌ chưa có | dưới đây |
+| 7 | Bot toggle đi nhầm cloud route | ❌ chưa có | dưới đây |
+| 8 | Chatbot inbound không có runtime production | ❌ chưa có | dưới đây |
+| 9 | Kill cứng làm SQLite WAL không checkpoint | 🔶 một phần: `zalo_backend_manager.dart::shutdownGracefully` | dưới đây |
+| 10 | Composer khóa nhầm kênh không phải Zalo | ❌ chưa có | dưới đây |
+| 11 | Self-echo tăng unread do dùng `|| 1` | ❌ chưa có | dưới đây |
+| 12 | Dialog dùng outer context làm pop cả route | ❌ chưa có | dưới đây |
+| 13 | Windows debug tái dùng instance cũ | ❌ chưa có | dưới đây |
+| 14 | `clientMessageId` microsecond làm rơi cookie sống | ❌ chưa có | dưới đây |
+| 15 | Local backend chạy im lặng trên nhiều port | ❌ chưa có | dưới đây |
+| 16 | Lỗi credential bị che bởi pool error chung | ❌ chưa có | dưới đây |
+| 17 | Ghi đè cookie jar sống ra đĩa | ❌ chưa có | dưới đây |
+| 18 | Save risk-control gây GoRouter assertion | ❌ chưa có | dưới đây |
+| 19 | Duplicate account event làm mất kết nối | ❌ chưa có | dưới đây |
+| 20 | CMake cache cũ làm release build chết | ❌ chưa có | dưới đây |
+| 21 | CJS bundle làm `import.meta.url` rỗng | ❌ chưa có | dưới đây |
+| 22 | URL ảnh Zalo hết hạn, thiếu fallback local-first | ❌ chưa có | dưới đây |
+| 23 | Dart AOT bỏ qua getter override màu | ❌ chưa có | dưới đây |
+| 24 | Polling thay thế thay vì merge message active | ❌ chưa có | dưới đây |
+| 25 | ZCA group event để `threadType` ở root | ❌ chưa có | dưới đây |
+| 26 | Windows updater chỉ mở Explorer, không tự áp dụng | ❌ chưa có | dưới đây |
+| 27 | Pairing đọc sai nguồn `pairedMobileUserIds` | ❌ chưa có | dưới đây |
+| 28 | `localhost`/`127.0.0.1` lệch loopback | ❌ chưa có | dưới đây |
+| 29 | Inbound plain text bị mất | ❌ chưa có | dưới đây |
+| 30 | Background start đánh dấu campaign complete | ❌ chưa có | dưới đây |
+| 31 | Group dropdown dùng `groupId` thay vì `id` | ❌ chưa có | dưới đây |
+| 32 | Group member scan dùng sai account | ❌ chưa có | dưới đây |
+| 33 | `copyWith` vô tình xóa optional field | ❌ chưa có | dưới đây |
+| 34 | Windows video thiếu plugin implementation | ❌ chưa có | dưới đây |
+| 35 | `blockTyping` chỉ được lưu, không được enforce | 🔶 một phần: `personal-zca-channel.ts::sendTyping` | dưới đây |
+| 36 | Backend lên muộn nhưng history/SSE không load lại | ❌ chưa có | dưới đây |
+| 37 | Dispose cập nhật provider làm defunct assertion | ❌ chưa có | dưới đây |
+| 38 | Call/link bị render thành file card | ❌ chưa có | dưới đây |
+| 39 | Open containing folder không select file | ❌ chưa có | dưới đây |
+| 40 | Poll raw JSON và cache file thiếu extension | ❌ chưa có | dưới đây |
+| 41 | Enum channel lệch giữa ba Mongoose model | ❌ chưa có | dưới đây |
+| 42 | Kênh mới không vào account switcher Live Chat | ❌ chưa có | dưới đây |
+
+Mục ✅ mới được rút xuống archive; mục 🔶/❌ vẫn ở file này.
+
+---
+
 ## Lỗi ParentDataWidget gây crash app khi mở tab Nhật ký / Lỗi hệ thống
 
 **Triệu chứng:** Mở tab "Nhật ký hoạt động" hoặc "Lỗi hệ thống" trong cài đặt gây crash ứng dụng Flutter ngay lập tức với thông báo lỗi: `⛔ Flutter Framework Error: Incorrect use of ParentDataWidget. The offending Expanded is currently placed inside a Wrap widget.`

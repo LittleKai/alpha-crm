@@ -1,5 +1,23 @@
 # Project Summary
 
+**Last Updated:** 2026-09-16 · **Session:** 1
+
+> Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
+
+## 0. Gia dinh va refresh
+
+| Gia dinh | Gia tri | Nguon |
+|---|---|---|
+| Windows dung local bridge; Android dung cloud transport | platform runtime | repository/provider routing |
+| SQLite/media local la du lieu nguoi dung | khong commit/copy vao repo | local service paths |
+| Flutter state giu kien truc provider hien co | code trong `lib/features/` | project architecture |
+
+| Sau khi | Phai refresh/invalidate | Quen thi bi |
+|---|---|---|
+| Local DB/message mutation | Provider/notifier va SSE/poll merge | UI cu, unread sai |
+| Doi local bridge API | Dart client + TypeScript server + tests | desktop runtime gay |
+| Doi channel/account | Header switcher, model enum, webhook route | kenh ket noi nhung khong dung duoc |
+
 ## 1. Project Overview
 
 - **Type:** Cross-platform CRM UI application for Android and Windows desktop (Web platform support was fully removed).

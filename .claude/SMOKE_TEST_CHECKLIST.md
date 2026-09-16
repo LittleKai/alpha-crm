@@ -26,9 +26,14 @@ Lý do bắt buộc chạy bản build: `flutter run` **không** dựng được
 - [ ] **Đăng nhập + ghép thiết bị:** đăng nhập tài khoản Alpha Studio, ghép với Desktop Agent đang chạy
 - [ ] **Realtime qua SSE:** tin nhắn đến trên desktop hiện lên mobile; trạng thái agent offline → banner chặn + khoá ô soạn tin
 - [ ] **Offline cache:** bật máy bay → danh sách khách hàng vẫn hiện từ cache kèm thông báo offline (không phải danh sách rỗng)
+- [ ] **Vòng đời app:** đưa app xuống background rồi mở lại → SSE kết nối lại một lần, không nhân đôi event/tin nhắn
+- [ ] **Giới hạn remote:** thao tác chỉ có ở local bridge trả `NOT_SUPPORTED_REMOTE` rõ ràng, không crash màn Live Chat
 
 ## Sau khi test
 
+- [ ] Kết quả ghi nhận thuộc lần chạy này; không dùng log/báo cáo cũ làm bằng chứng
+- [ ] Chạy lần hai không sinh rác, không nhân đôi tin/chiến dịch và không để lại tiến trình mồ côi
+- [ ] Không hạng mục nào trong `items.json` còn `todo`; mọi `skip` đều có lý do
 - [ ] Không có tiến trình `node.exe` mồ côi sau khi thoát
 - [ ] Log không in ra JWT, cookie Zalo, hay token kênh nào (API phải trả secret dạng đã che)
 - [ ] `version.json` trên B2 khớp với APK + Windows ZIP vừa upload
