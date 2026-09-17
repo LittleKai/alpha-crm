@@ -29,6 +29,7 @@ Khong doc build output, local DB/media, secrets, temp/debug dump hay `.claude/ar
 2. Build dung platform bi tac dong; mo artifact release, khong nghiem thu bang `flutter run`.
 3. Smoke local bridge/cloud transport, ghi du lieu, dong/mo lai va kiem lan chay thu hai.
 4. Task chi sua docs duoc mien build; van phai kiem path, placeholder, secret va diff.
+5. Rao chan code: CI `.github/workflows/guard.yml` chay lai tren moi push.
 
 ## Sau moi task
 
