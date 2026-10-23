@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-10-23 · **Session:** 4
+**Last Updated:** 2026-10-23 · **Session:** 5
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -118,7 +118,7 @@ docs/
 | `lib/shared/models/crm_channel.dart` | `CrmChannel` enum (shared) | CrmChannel enum discriminator (zaloPersonal/OA/FB/TikTok/IG/WA/Tele/Webchat/Email). |
 | `lib/features/messaging/live_chat/` | Live Chat multi-account | Live Chat multi-account dropdown gộp Zalo + kênh workflow. Chi tiết xem CONVENTIONS.md. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
-| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + client-side queue Timer lưu bảng scheduled_campaigns (re-arm lúc boot). |
+| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer lưu bảng scheduled_campaigns (re-arm lúc boot). |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
