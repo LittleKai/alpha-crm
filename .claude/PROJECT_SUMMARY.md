@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-10-24 · **Session:** 7
+**Last Updated:** 2026-10-24 · **Session:** 8
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -248,7 +248,7 @@ flowchart LR
 - [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
 - [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
 
-Kiểm tra lần sửa: analyze sạch; Flutter 174/174, backend 172/172; PowerShell/Node release fixtures và media tests trong Docker không mạng ngoài pass. ZIP/APK local 0.2.2+30 đã build và xác minh metadata; ZIP không chứa .data/.env. Backend từ ZIP với Node 22.23.2 mở SQLite và boot lại hai lần, không rò tiến trình nghe cổng. Pipeline sibling `alpha-studio-backend/scripts/release-to-b2.js` dọn toàn bộ .data sau smoke; suite sibling 256/256 và syntax check pass.
+Kiểm tra lần sửa: analyze sạch; Flutter 174/174, backend 172/172; release 0.2.3+31 đã phát hành đồng thời lên GitHub Release và Backblaze B2 (ZIP Windows 71.39 MB, APK Android 149.32 MB) kèm manifest version.json cập nhật thành công. Backend từ ZIP với Node 22.23.2 mở SQLite và vượt qua smoke-test /health và /local/health.
 
 Chưa smoke giao diện/phiên Zalo thật và APK trên máy Android (không có thiết bị kết nối); chưa phát hành/commit. Echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
 
