@@ -288,10 +288,11 @@ if ($SkipGitHub) {
     } catch {
         $ReleaseJson = (@{
             tag_name               = $TagVersion
+            target_commitish       = if ($CurrentBranch -and $CurrentBranch -ne "HEAD") { $CurrentBranch } else { "main" }
             name                   = $Title
             body                   = $NotesContent
-            draft                  = [bool]$Draft
-            prerelease             = [bool]$Prerelease
+            draft                  = $Draft.IsPresent
+            prerelease             = $Prerelease.IsPresent
             generate_release_notes = $false
         } | ConvertTo-Json -Depth 3)
         $ReleaseBytes = [System.Text.Encoding]::UTF8.GetBytes($ReleaseJson)
