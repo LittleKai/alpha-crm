@@ -957,29 +957,51 @@ let activeDateNowPins = 0;
 // `senderId === accountId`, `agent-runner.ts` does not mistake it for a manual reply
 // typed on the operator's physical phone and falsely trigger `pauseChatbotForOperatorReply`.
 const PROGRAMMATIC_SEND_TTL_MS = 30 * 1000;
+const MAX_PROGRAMMATIC_SEND_IDS = 10000;
 const recentProgrammaticSends = new Map<string, number>();
 
-export function markProgrammaticSend(accountId: string, threadId: string): void {
+function programmaticSendKeys(
+  accountId: string, threadId: string, providerMessageId?: string, clientMessageId?: string,
+): string[] {
+  if (!accountId || !threadId) return [];
+  return [providerMessageId, clientMessageId].flatMap((id, index) =>
+    id ? [JSON.stringify([accountId, threadId, index, id])] : []);
+}
+
+export function markProgrammaticSend(
+  accountId: string, threadId: string, providerMessageId?: string, clientMessageId?: string,
+): () => void {
   const now = REAL_DATE_NOW();
   for (const [key, ts] of recentProgrammaticSends) {
     if (now - ts > PROGRAMMATIC_SEND_TTL_MS) {
       recentProgrammaticSends.delete(key);
     }
   }
-  if (accountId && threadId) {
-    recentProgrammaticSends.set(`${accountId}:${threadId}`, now);
+  const keys = programmaticSendKeys(accountId, threadId, providerMessageId, clientMessageId);
+  for (const key of keys) {
+    recentProgrammaticSends.delete(key);
+    recentProgrammaticSends.set(key, now);
   }
+  while (recentProgrammaticSends.size > MAX_PROGRAMMATIC_SEND_IDS) {
+    recentProgrammaticSends.delete(recentProgrammaticSends.keys().next().value!);
+  }
+  return () => {
+    for (const key of keys) recentProgrammaticSends.delete(key);
+  };
 }
 
-export function isRecentProgrammaticSend(accountId: string, threadId: string): boolean {
-  const key = `${accountId}:${threadId}`;
-  const ts = recentProgrammaticSends.get(key);
-  if (ts === undefined) return false;
-  if (REAL_DATE_NOW() - ts > PROGRAMMATIC_SEND_TTL_MS) {
-    recentProgrammaticSends.delete(key);
-    return false;
-  }
-  return true;
+export function isRecentProgrammaticSend(
+  accountId: string, threadId: string, providerMessageId?: string, clientMessageId?: string,
+): boolean {
+  return programmaticSendKeys(accountId, threadId, providerMessageId, clientMessageId).some((key) => {
+    const ts = recentProgrammaticSends.get(key);
+    if (ts === undefined) return false;
+    if (REAL_DATE_NOW() - ts > PROGRAMMATIC_SEND_TTL_MS) {
+      recentProgrammaticSends.delete(key);
+      return false;
+    }
+    return true;
+  });
 }
 
 export function isSafeOutboundAttachmentPath(filePath: string): boolean {
@@ -1704,6 +1726,7 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
 
     let selectedInstance: ZaloAccountInstance | undefined;
+    let removePendingEcho: (() => void) | undefined;
     const tempDirsToCleanup: string[] = [];
     try {
       await ensureLoginPool();
@@ -1765,8 +1788,6 @@ export class PersonalZcaChannel implements ZaloChannel {
           console.warn(`[PersonalZcaChannel] Failed to resolve phone ${recipientId} to UID: ${findErr.message || findErr}`);
         }
       }
-
-      markProgrammaticSend(selectedInstance.uId, recipientId);
 
       // Prepare processed attachments to preserve original filenames
       let processedAttachments: string[] = [];
@@ -1835,7 +1856,15 @@ export class PersonalZcaChannel implements ZaloChannel {
         }
         return runWithFixedDateNow(
           zcaClientMessageId,
-          () => apiInst.sendMessage(messageContent, recipientId, threadType),
+          () => {
+            // Only the pinned standard-send client ID is known before dispatch.
+            if (String(Date.now()) === zcaClientMessageId) {
+              removePendingEcho = markProgrammaticSend(
+                selectedInstance!.uId, recipientId, undefined, zcaClientMessageId,
+              );
+            }
+            return apiInst.sendMessage(messageContent, recipientId, threadType);
+          },
         );
       };
 
@@ -1874,12 +1903,19 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       // zca-js sendMessage returns { message: SendMessageResult | null, attachment: SendMessageResult[] }
       const msgResult = (result as any)?.message ?? result;
-      const attachmentMessageIds = Array.isArray((result as any)?.attachment)
+      const attachmentResults: any[] = Array.isArray((result as any)?.attachment)
         ? (result as any).attachment
-            .map((item: any) => item?.msgId)
-            .filter((item: unknown) => item != null)
-            .map(String)
         : [];
+      const attachmentMessageIds = attachmentResults
+        .map((item: any) => item?.msgId)
+        .filter((item: unknown) => item != null)
+        .map(String);
+      for (const sent of [msgResult, ...attachmentResults]) {
+        markProgrammaticSend(
+          selectedInstance.uId, recipientId,
+          toStringValue(sent?.msgId), toStringValue(sent?.cliMsgId ?? sent?.clientId),
+        );
+      }
       const msgId =
         msgResult?.msgId ??
         (result as any)?.msgId ??
@@ -1895,6 +1931,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         attachmentMessageIds,
       };
     } catch (err) {
+      removePendingEcho?.();
       console.error(`[PersonalZcaChannel] sendMessage error:`, err);
       const errAny = err as any;
       const code = errAny?.code ?? errAny?.data?.code ?? errAny?.details?.code;

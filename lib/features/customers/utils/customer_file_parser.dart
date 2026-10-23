@@ -1,11 +1,62 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import '../../../mock/mock_contacts.dart';
 
+// ponytail: bounded customer imports; split larger datasets into multiple files.
+const _maxInputBytes = 16 * 1024 * 1024;
+const _maxXmlBytes = 8 * 1024 * 1024;
+const _maxTotalXmlBytes = 12 * 1024 * 1024;
+const _maxRows = 50000;
+const _maxColumns = 256;
+const _maxCells = 500000;
+const _maxCellCharacters = 65536;
+const _limitMessage =
+    'File vượt giới hạn nhập khách hàng / Customer import limit exceeded.';
+const _invalidZip = 'File Excel không hợp lệ / Invalid Excel archive.';
+
+/// Keeps file IO, decompression and parsing off the Flutter UI isolate.
+Future<List<Contact>> parseCustomerImportFile({
+  String? path,
+  Uint8List? bytes,
+  required String fileName,
+}) async {
+  if (bytes != null && bytes.length > _maxInputBytes) {
+    throw const FormatException(_limitMessage);
+  }
+  return Isolate.run(() async {
+    if (path == null) {
+      if (bytes == null) {
+        throw const FormatException('Không đọc được file / Cannot read file.');
+      }
+      return parseCustomerImportBytes(bytes, fileName);
+    }
+    final file = await File(path).open();
+    try {
+      if (await file.length() > _maxInputBytes) {
+        throw const FormatException(_limitMessage);
+      }
+      final content = BytesBuilder(copy: false);
+      while (true) {
+        final chunk = await file.read(64 * 1024);
+        if (chunk.isEmpty) break;
+        if (content.length + chunk.length > _maxInputBytes) {
+          throw const FormatException(_limitMessage);
+        }
+        content.add(chunk);
+      }
+      return parseCustomerImportBytes(content.takeBytes(), fileName);
+    } finally {
+      await file.close();
+    }
+  });
+}
+
 /// Parses `.csv`, `.tsv`, `.txt`, or `.xlsx` bytes into [Contact] records.
 List<Contact> parseCustomerImportBytes(Uint8List bytes, String fileName) {
+  if (bytes.length > _maxInputBytes) throw const FormatException(_limitMessage);
   final ext = fileName.toLowerCase().split('.').last;
   final rows = ext == 'xlsx'
       ? _parseXlsxRows(bytes)
@@ -25,10 +76,8 @@ String _decodeText(Uint8List bytes) {
 
 List<List<String>> _parseDelimitedRows(String content) {
   final normalized = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-  final firstLine = normalized.split('\n').firstWhere(
-        (l) => l.trim().isNotEmpty,
-        orElse: () => '',
-      );
+  final firstLine = LineSplitter.split(normalized)
+      .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
   final delimiter = firstLine.contains('\t')
       ? '\t'
       : (';'.allMatches(firstLine).length > ','.allMatches(firstLine).length
@@ -39,6 +88,22 @@ List<List<String>> _parseDelimitedRows(String content) {
   var currentRow = <String>[];
   final cell = StringBuffer();
   var inQuotes = false;
+  var cellCount = 0;
+  var rowCount = 0;
+
+  void finishCell() {
+    if (currentRow.length >= _maxColumns || ++cellCount > _maxCells) {
+      throw const FormatException(_limitMessage);
+    }
+    currentRow.add(cell.toString().trim());
+    cell.clear();
+  }
+
+  void finishRow() {
+    if (++rowCount > _maxRows) throw const FormatException(_limitMessage);
+    if (currentRow.any((c) => c.isNotEmpty)) rows.add(currentRow);
+    currentRow = <String>[];
+  }
 
   for (var i = 0; i < normalized.length; i++) {
     final ch = normalized[i];
@@ -56,24 +121,20 @@ List<List<String>> _parseDelimitedRows(String content) {
     } else if (ch == '"') {
       inQuotes = true;
     } else if (ch == delimiter) {
-      currentRow.add(cell.toString().trim());
-      cell.clear();
+      finishCell();
     } else if (ch == '\n') {
-      currentRow.add(cell.toString().trim());
-      cell.clear();
-      if (currentRow.any((c) => c.isNotEmpty)) {
-        rows.add(currentRow);
-      }
-      currentRow = <String>[];
+      finishCell();
+      finishRow();
     } else {
       cell.write(ch);
     }
+    if (cell.length > _maxCellCharacters) {
+      throw const FormatException(_limitMessage);
+    }
   }
   if (cell.isNotEmpty || currentRow.isNotEmpty) {
-    currentRow.add(cell.toString().trim());
-    if (currentRow.any((c) => c.isNotEmpty)) {
-      rows.add(currentRow);
-    }
+    finishCell();
+    finishRow();
   }
   return rows;
 }
@@ -102,86 +163,196 @@ Map<String, Uint8List> _readZipEntries(Uint8List bytes) {
   var eocdOffset = -1;
   final minEocd = bytes.length - 65557 < 0 ? 0 : bytes.length - 65557;
   for (var i = bytes.length - 22; i >= minEocd; i--) {
-    if (data.getUint32(i, Endian.little) == 0x06054b50) {
+    if (data.getUint32(i, Endian.little) == 0x06054b50 &&
+        i + 22 + data.getUint16(i + 20, Endian.little) == bytes.length) {
       eocdOffset = i;
       break;
     }
   }
-  if (eocdOffset < 0) return const {};
+  if (eocdOffset < 0) throw const FormatException(_invalidZip);
 
   final totalEntries = data.getUint16(eocdOffset + 10, Endian.little);
   var cdOffset = data.getUint32(eocdOffset + 16, Endian.little);
-  final result = <String, Uint8List>{};
-  final rawZlib = ZLibCodec(raw: true);
-
-  for (var idx = 0; idx < totalEntries && cdOffset + 46 <= bytes.length; idx++) {
-    if (data.getUint32(cdOffset, Endian.little) != 0x02014b50) break;
-    final method = data.getUint16(cdOffset + 10, Endian.little);
-    final compSize = data.getUint32(cdOffset + 20, Endian.little);
+  final cdEnd = cdOffset + data.getUint32(eocdOffset + 12, Endian.little);
+  if (totalEntries > 4096 ||
+      data.getUint16(eocdOffset + 4, Endian.little) != 0 ||
+      data.getUint16(eocdOffset + 6, Endian.little) != 0 ||
+      data.getUint16(eocdOffset + 8, Endian.little) != totalEntries ||
+      cdOffset > eocdOffset ||
+      cdEnd > eocdOffset) {
+    throw const FormatException(_invalidZip);
+  }
+  final entries =
+      <
+        String,
+        ({int method, int flags, int compressedSize, int size, int offset})
+      >{};
+  for (var idx = 0; idx < totalEntries; idx++) {
+    if (cdOffset + 46 > cdEnd ||
+        data.getUint32(cdOffset, Endian.little) != 0x02014b50) {
+      throw const FormatException(_invalidZip);
+    }
     final nameLen = data.getUint16(cdOffset + 28, Endian.little);
-    final extraLen = data.getUint16(cdOffset + 30, Endian.little);
-    final commentLen = data.getUint16(cdOffset + 32, Endian.little);
-    final localOffset = data.getUint32(cdOffset + 42, Endian.little);
-
+    final nextOffset =
+        cdOffset +
+        46 +
+        nameLen +
+        data.getUint16(cdOffset + 30, Endian.little) +
+        data.getUint16(cdOffset + 32, Endian.little);
+    if (nextOffset > cdEnd) throw const FormatException(_invalidZip);
     final name = utf8.decode(
       Uint8List.sublistView(bytes, cdOffset + 46, cdOffset + 46 + nameLen),
       allowMalformed: true,
     );
-    cdOffset += 46 + nameLen + extraLen + commentLen;
-
-    if (localOffset + 30 > bytes.length) continue;
-    if (data.getUint32(localOffset, Endian.little) != 0x04034b50) continue;
+    if (entries.containsKey(name)) throw const FormatException(_invalidZip);
+    entries[name] = (
+      method: data.getUint16(cdOffset + 10, Endian.little),
+      flags: data.getUint16(cdOffset + 8, Endian.little),
+      compressedSize: data.getUint32(cdOffset + 20, Endian.little),
+      size: data.getUint32(cdOffset + 24, Endian.little),
+      offset: data.getUint32(cdOffset + 42, Endian.little),
+    );
+    if (data.getUint16(cdOffset + 34, Endian.little) != 0) {
+      throw const FormatException(_invalidZip);
+    }
+    cdOffset = nextOffset;
+  }
+  if (cdOffset != cdEnd) throw const FormatException(_invalidZip);
+  final sheet = entries.containsKey('xl/worksheets/sheet1.xml')
+      ? 'xl/worksheets/sheet1.xml'
+      : entries.keys.firstWhere(
+          (name) =>
+              name.startsWith('xl/worksheets/sheet') && name.endsWith('.xml'),
+          orElse: () => '',
+        );
+  final result = <String, Uint8List>{};
+  var totalBytes = 0;
+  for (final name in ['xl/sharedStrings.xml', if (sheet.isNotEmpty) sheet]) {
+    final entry = entries[name];
+    if (entry == null) continue;
+    final localOffset = entry.offset;
+    if (localOffset + 30 > data.getUint32(eocdOffset + 16, Endian.little) ||
+        data.getUint32(localOffset, Endian.little) != 0x04034b50 ||
+        entry.flags & 0x41 != 0 ||
+        data.getUint16(localOffset + 6, Endian.little) != entry.flags ||
+        data.getUint16(localOffset + 8, Endian.little) != entry.method ||
+        (entry.method != 0 && entry.method != 8)) {
+      throw const FormatException(_invalidZip);
+    }
+    if (entry.size > _maxXmlBytes ||
+        totalBytes + entry.size > _maxTotalXmlBytes) {
+      throw const FormatException(_limitMessage);
+    }
     final localNameLen = data.getUint16(localOffset + 26, Endian.little);
     final localExtraLen = data.getUint16(localOffset + 28, Endian.little);
     final dataStart = localOffset + 30 + localNameLen + localExtraLen;
-    if (dataStart + compSize > bytes.length) continue;
-
-    final slice = Uint8List.sublistView(bytes, dataStart, dataStart + compSize);
-    if (method == 0) {
-      result[name] = slice;
-    } else if (method == 8) {
-      result[name] = Uint8List.fromList(rawZlib.decode(slice));
+    if (dataStart + entry.compressedSize >
+            data.getUint32(eocdOffset + 16, Endian.little) ||
+        utf8.decode(
+              Uint8List.sublistView(
+                bytes,
+                localOffset + 30,
+                localOffset + 30 + localNameLen,
+              ),
+              allowMalformed: true,
+            ) !=
+            name) {
+      throw const FormatException(_invalidZip);
     }
+    final slice = Uint8List.sublistView(
+      bytes,
+      dataStart,
+      dataStart + entry.compressedSize,
+    );
+    final output = _BoundedXmlSink(_maxTotalXmlBytes - totalBytes);
+    if (entry.method == 0) {
+      output.add(slice);
+    } else {
+      final decoder = ZLibCodec(
+        raw: true,
+      ).decoder.startChunkedConversion(output);
+      for (var offset = 0; offset < slice.length; offset += 1024) {
+        decoder.add(
+          Uint8List.sublistView(
+            slice,
+            offset,
+            offset + 1024 < slice.length ? offset + 1024 : slice.length,
+          ),
+        );
+      }
+      decoder.close();
+    }
+    final xml = output.bytes.takeBytes();
+    if (xml.length != entry.size) throw const FormatException(_invalidZip);
+    totalBytes += xml.length;
+    result[name] = xml;
   }
   return result;
+}
+
+class _BoundedXmlSink implements Sink<List<int>> {
+  _BoundedXmlSink(this.totalRemaining);
+  final int totalRemaining;
+  final bytes = BytesBuilder(copy: false);
+
+  @override
+  void add(List<int> chunk) {
+    if (bytes.length + chunk.length > _maxXmlBytes ||
+        bytes.length + chunk.length > totalRemaining) {
+      throw const FormatException(_limitMessage);
+    }
+    bytes.add(chunk);
+  }
+
+  @override
+  void close() {}
 }
 
 List<String> _parseSharedStrings(String xml) {
   final siRegex = RegExp(r'<si\b[^>]*>(.*?)</si>', dotAll: true);
   final tRegex = RegExp(r'<t(?:\s[^>]*)?>(.*?)</t>', dotAll: true);
-  return [
-    for (final si in siRegex.allMatches(xml))
-      tRegex
-          .allMatches(si.group(1)!)
-          .map((m) => _unescapeXml(m.group(1)!))
-          .join(),
-  ];
+  final strings = <String>[];
+  for (final si in siRegex.allMatches(xml)) {
+    if (strings.length >= _maxCells) throw const FormatException(_limitMessage);
+    final value = tRegex
+        .allMatches(si.group(1)!)
+        .map((m) => _unescapeXml(m.group(1)!))
+        .join();
+    if (value.length > _maxCellCharacters) {
+      throw const FormatException(_limitMessage);
+    }
+    strings.add(value);
+  }
+  return strings;
 }
 
 List<List<String>> _parseWorksheetXml(String xml, List<String> sharedStrings) {
   final rowRegex = RegExp(r'<row\b[^>]*>(.*?)</row>', dotAll: true);
-  final cellRegex = RegExp(
-    r'<c\b([^>]*?)(?:/>|>(.*?)</c>)',
-    dotAll: true,
-  );
+  final cellRegex = RegExp(r'<c\b([^>]*?)(?:/>|>(.*?)</c>)', dotAll: true);
   final refAttr = RegExp(r'\br="([A-Z]+)\d+"');
   final typeAttr = RegExp(r'\bt="([^"]+)"');
   final vTag = RegExp(r'<v\b[^>]*>(.*?)</v>', dotAll: true);
   final tTag = RegExp(r'<t(?:\s[^>]*)?>(.*?)</t>', dotAll: true);
 
   final rows = <List<String>>[];
+  var rowCount = 0;
+  var cellCount = 0;
+  var allocatedCells = 0;
   for (final rowMatch in rowRegex.allMatches(xml)) {
+    if (++rowCount > _maxRows) throw const FormatException(_limitMessage);
     final rowCells = <int, String>{};
     var maxCol = -1;
     var nextCol = 0;
 
     for (final cellMatch in cellRegex.allMatches(rowMatch.group(1)!)) {
+      if (++cellCount > _maxCells) throw const FormatException(_limitMessage);
       final attrs = cellMatch.group(1) ?? '';
       final inner = cellMatch.group(2) ?? '';
       final refMatch = refAttr.firstMatch(attrs);
       final colIndex = refMatch != null
           ? _columnLettersToIndex(refMatch.group(1)!)
           : nextCol;
+      if (colIndex >= _maxColumns) throw const FormatException(_limitMessage);
       nextCol = colIndex + 1;
       if (colIndex > maxCol) maxCol = colIndex;
 
@@ -203,14 +374,18 @@ List<List<String>> _parseWorksheetXml(String xml, List<String> sharedStrings) {
           value = _unescapeXml(rawV);
         }
       }
+      if (value.length > _maxCellCharacters) {
+        throw const FormatException(_limitMessage);
+      }
       rowCells[colIndex] = value.trim();
     }
 
     if (maxCol >= 0) {
-      final row = List<String>.generate(
-        maxCol + 1,
-        (i) => rowCells[i] ?? '',
-      );
+      allocatedCells += maxCol + 1;
+      if (allocatedCells > _maxCells) {
+        throw const FormatException(_limitMessage);
+      }
+      final row = List<String>.generate(maxCol + 1, (i) => rowCells[i] ?? '');
       if (row.any((c) => c.isNotEmpty)) {
         rows.add(row);
       }
@@ -223,6 +398,7 @@ int _columnLettersToIndex(String letters) {
   var result = 0;
   for (var i = 0; i < letters.length; i++) {
     result = result * 26 + (letters.codeUnitAt(i) - 64);
+    if (result > _maxColumns) throw const FormatException(_limitMessage);
   }
   return result - 1;
 }

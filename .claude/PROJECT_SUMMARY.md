@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-10-23 · **Session:** 5
+**Last Updated:** 2026-10-24 · **Session:** 7
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -107,7 +107,7 @@ docs/
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 27 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
 | `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, real Excel/CSV import, and detail panel. |
-| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Parses `.csv`/`.tsv`/`.txt` & `.xlsx` (ZIP+XML) into `Contact` rows with custom field mapping. |
+| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Native isolate import; bounded file/XML/rows/cells; inflates only selected sheet and shared strings. |
 | `lib/features/customers/providers/customers_provider.dart` | Customers state + offline cache | Customers state + cache SQLite 30 ngày qua LocalDb.putCache với offline fallback. |
 | `lib/shared/local_db/local_db.dart` | Local SQLite (sqflite/ffi) | Adds generic `putCache(key,value,{ttl})` / `getCache(key)` over the `cache_entries` table (expired rows purged on read) used by the Customers offline cache. |
 | `lib/features/dashboard/utils/dashboard_chart_data.dart` | Dashboard chart data helpers | Normalizes daily dashboard chart metrics, merges local chatbot daily stats into campaign performance data, and protects cumulative message series from rendering as per-day values. |
@@ -135,7 +135,7 @@ docs/
 | `lib/features/subscription/models/subscription_catalog.dart` | CRM subscription catalog helper | Keeps Flutter plan/top-up prices aligned with backend catalog and parses VietQR checkout payloads. |
 | `lib/mock/` | Mock data | Contacts, campaigns, messages, groups, accounts, system settings (with Zalo compliance fields). |
 | `lib/shared/utils/zalo_compliance_guard.dart` | Shared compliance guard | Channel-mode-aware rule engine evaluating risk for all Zalo actions. |
-| `lib/shared/utils/app_update_service.dart` | Auto-update service | Auto-update B2 semver, tải zip/apk, script updater tại chỗ, checkPostUpdateResult. |
+| `lib/shared/utils/app_update_service.dart` | Auto-update service | B2 per-platform release metadata with legacy fallback; ZIP/APK download and in-place updater. |
 | `lib/shared/widgets/update_result_gate.dart` | Post-update result UI | Global inline gate: green success banner (auto-dismiss) or a "Cập nhật chưa hoàn tất → Tải lại bản mới" dialog when an in-place update did not apply. Driven by `postUpdateResultProvider`. |
 | `lib/features/settings/providers/update_provider.dart` | Update state provider | Riverpod `StateNotifierProvider` managing check/download/install lifecycle for app updates. |
 | `lib/features/zalo_integration/` | Zalo integration feature | API client, provider (with accountType, accountLabel, listenerRunning), and data models. |
@@ -235,6 +235,22 @@ flowchart LR
 - Có đề xuất mã hoá SQLite tin nhắn (`docs/specs/sqlite-encryption-at-rest-proposal.md`) — hiện **chưa** áp dụng, DB tin nhắn cục bộ vẫn là plaintext trên đĩa máy người dùng.
 
 > Chỉ ghi **tên biến và nơi lưu**. Không bao giờ ghi giá trị thật vào file này.
+
+---
+
+## 6. Known Issues & TODO
+
+Đã xử lý 5 phát hiện từ review `ed3fc11..c161233` (4 commits ngày 23/10):
+
+- [x] Outbound sync báo cloud cho `sent`/`delivered`/`seen`, retry khi cloud lỗi; không báo queued/failed.
+- [x] Release chọn đúng Targets, kiểm tra version/build nhúng và hash; manifest theo platform giữ snapshot cũ đến khi đủ hai nền tảng.
+- [x] Media xác thực từng redirect và mọi DNS result, ghim IP public trước request; giới hạn stream và deadline cả DNS.
+- [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
+- [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
+
+Kiểm tra lần sửa: analyze sạch; Flutter 174/174, backend 172/172; PowerShell/Node release fixtures và media tests trong Docker không mạng ngoài pass. ZIP/APK local 0.2.2+30 đã build và xác minh metadata; ZIP không chứa .data/.env. Backend từ ZIP với Node 22.23.2 mở SQLite và boot lại hai lần, không rò tiến trình nghe cổng. Pipeline sibling `alpha-studio-backend/scripts/release-to-b2.js` dọn toàn bộ .data sau smoke; suite sibling 256/256 và syntax check pass.
+
+Chưa smoke giao diện/phiên Zalo thật và APK trên máy Android (không có thiết bị kết nối); chưa phát hành/commit. Echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
 
 ---
 

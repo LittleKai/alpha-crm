@@ -7,17 +7,21 @@
       - crm-app/releases/alpha-crm-windows.zip
       - crm-app/releases/alpha-crm-v<version>.apk
       - crm-app/version.json
-    Merges assets by platform so a single-platform upload preserves the other platform's existing link,
+    Keeps per-platform release metadata; a partial upload preserves the legacy full-release manifest,
     and cleans up old releases on B2 (retaining the 3 newest versions).
 
 .PARAMETER Version
     Version/tag string (e.g. "v0.2.2" or "0.2.2").
 
 .PARAMETER ZipPath
-    Windows ZIP to upload. Default: build/release/alpha-crm-windows.zip (fallback: build/alpha-crm-windows.zip).
+    Explicit Windows ZIP to upload, selected only when windows is in Targets.
 
 .PARAMETER ApkPath
-    Android APK to upload. Default: build/release/alpha-crm-v<version>.apk (fallback: build/app/outputs/flutter-apk/app-release.apk).
+    Explicit Android APK to upload, selected only when android is in Targets.
+
+.PARAMETER Targets
+    Platforms to publish. Defaults to explicit paths when supplied, otherwise windows,android.
+    Selected platforms without an explicit path use only their exact build/release/ filename.
 
 .PARAMETER Title
     Release title stored in version.json (default: "Alpha CRM v<version>").
@@ -40,6 +44,8 @@ param(
 
     [string]$ApkPath = "",
 
+    [string]$Targets = "",
+
     [string]$Title = "",
 
     [string]$Notes = "",
@@ -50,6 +56,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'release-artifacts.ps1')
 
 function Write-Step {
     param([string]$Message)
@@ -104,51 +111,45 @@ if (-not $PublishedAt) {
     $PublishedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
-# Resolve Windows ZIP path
-if (-not $ZipPath) {
-    $Candidate1 = Join-Path $ProjectRoot "build\release\alpha-crm-windows.zip"
-    $Candidate2 = Join-Path $ProjectRoot "build\alpha-crm-windows.zip"
-    if (Test-Path $Candidate1 -PathType Leaf) {
-        $ZipPath = $Candidate1
-    } elseif (Test-Path $Candidate2 -PathType Leaf) {
-        $ZipPath = $Candidate2
-    }
+# Resolve only the requested platforms, and validate embedded metadata before credentials/network.
+if (-not $Targets) {
+    $ExplicitTargets = @()
+    if ($ZipPath) { $ExplicitTargets += 'windows' }
+    if ($ApkPath) { $ExplicitTargets += 'android' }
+    $Targets = if ($ExplicitTargets.Count) { $ExplicitTargets -join ',' } else { 'windows,android' }
 }
-
-# Resolve Android APK path
-if (-not $ApkPath) {
-    $ApkCandidate1 = Join-Path $ProjectRoot "build\release\alpha-crm-v$SemVer.apk"
-    $ApkCandidate2 = Join-Path $ProjectRoot "build\app\outputs\flutter-apk\app-release.apk"
-    if (Test-Path $ApkCandidate1 -PathType Leaf) {
-        $ApkPath = $ApkCandidate1
-    } elseif (Test-Path $ApkCandidate2 -PathType Leaf) {
-        $ApkPath = $ApkCandidate2
-    }
-}
-
-if ((-not $ZipPath -or -not (Test-Path $ZipPath -PathType Leaf)) -and (-not $ApkPath -or -not (Test-Path $ApkPath -PathType Leaf))) {
-    Write-Err "Neither Windows ZIP nor Android APK found to upload!"
-    exit 1
-}
+$PubspecRaw = Get-Content -LiteralPath (Join-Path $ProjectRoot 'pubspec.yaml') -Raw -Encoding UTF8
+if ($PubspecRaw -notmatch '(?m)^version:\s*([^\s+]+)\+(\d+)') { throw 'Could not parse pubspec.yaml version.' }
+if ($Matches[1] -ne $SemVer) { throw "Requested version $SemVer does not match pubspec.yaml $($Matches[1])." }
+$BuildNum = $Matches[2]
+$Artifacts = @(Get-ReleaseArtifacts -ProjectRoot $ProjectRoot -Version $SemVer -Build $BuildNum -Targets $Targets -ZipPath $ZipPath -ApkPath $ApkPath)
+$WindowsArtifact = $Artifacts | Where-Object Extension -eq '.zip'
+$AndroidArtifact = $Artifacts | Where-Object Extension -eq '.apk'
 
 Write-Step "Uploading Alpha CRM $TagVersion artifacts to Backblaze B2"
 
 $env:CRM_B2_PROJECT_ROOT = $ProjectRoot
 $env:CRM_B2_BACKEND_DIR  = $BackendDir
 $env:CRM_B2_SEMVER       = $SemVer
+$env:CRM_B2_BUILD        = $BuildNum
 $env:CRM_B2_TAG          = $TagVersion
 $env:CRM_B2_TITLE        = $Title
 $env:CRM_B2_NOTES        = $Notes
 $env:CRM_B2_RELEASE_URL  = $ReleaseUrl
 $env:CRM_B2_PUBLISHED_AT = $PublishedAt
-$env:CRM_B2_ZIP_PATH     = if ($ZipPath -and (Test-Path $ZipPath -PathType Leaf)) { (Resolve-Path $ZipPath).Path } else { "" }
-$env:CRM_B2_APK_PATH     = if ($ApkPath -and (Test-Path $ApkPath -PathType Leaf)) { (Resolve-Path $ApkPath).Path } else { "" }
+$env:CRM_B2_ZIP_PATH     = if ($WindowsArtifact) { $WindowsArtifact.FullName } else { '' }
+$env:CRM_B2_APK_PATH     = if ($AndroidArtifact) { $AndroidArtifact.FullName } else { '' }
+$env:CRM_B2_ZIP_SHA256   = if ($WindowsArtifact) { $WindowsArtifact.ReleaseSha256 } else { '' }
+$env:CRM_B2_APK_SHA256   = if ($AndroidArtifact) { $AndroidArtifact.ReleaseSha256 } else { '' }
+$env:CRM_B2_MANIFEST_HELPER = Join-Path $PSScriptRoot 'release-manifest.mjs'
 
 $NodeUploadScript = @'
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'node:url';
 import dotenv from 'dotenv';
-import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+const { mergeReleaseManifest, referencedAssetNames, readVerifiedArtifact } = await import(pathToFileURL(process.env.CRM_B2_MANIFEST_HELPER));
 
 const projectRoot = process.env.CRM_B2_PROJECT_ROOT;
 const backendDir = process.env.CRM_B2_BACKEND_DIR;
@@ -181,6 +182,9 @@ const releaseUrl = process.env.CRM_B2_RELEASE_URL || '';
 const publishedAt = process.env.CRM_B2_PUBLISHED_AT || new Date().toISOString();
 const zipPath = process.env.CRM_B2_ZIP_PATH;
 const apkPath = process.env.CRM_B2_APK_PATH;
+// Read and bind all upload bytes before the first remote operation.
+const zipBuffer = zipPath ? readVerifiedArtifact(zipPath, process.env.CRM_B2_ZIP_SHA256) : null;
+const apkBuffer = apkPath ? readVerifiedArtifact(apkPath, process.env.CRM_B2_APK_SHA256) : null;
 
 const s3 = new S3Client({
   endpoint: B2_ENDPOINT,
@@ -204,7 +208,7 @@ const streamToString = (stream) =>
     stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
   });
 
-async function cleanupOldReleases() {
+async function cleanupOldReleases(manifest) {
   console.log('\nCleaning up old releases on B2 (keeping 3 newest versions)...');
   try {
     const listRes = await s3.send(new ListObjectsV2Command({
@@ -237,8 +241,9 @@ async function cleanupOldReleases() {
     });
 
     const deleteVersions = uniqueVersions.slice(0, -3);
+    const protectedNames = referencedAssetNames(manifest);
     const deleteKeys = fileVersionMap
-      .filter((x) => deleteVersions.includes(x.version))
+      .filter((x) => deleteVersions.includes(x.version) && !protectedNames.has(path.posix.basename(x.key)))
       .map((x) => ({ Key: x.key }));
 
     if (deleteKeys.length > 0) {
@@ -254,26 +259,32 @@ async function cleanupOldReleases() {
 }
 
 async function main() {
-  let existingAssets = [];
+  let existing = null;
   try {
     const getRes = await s3.send(new GetObjectCommand({ Bucket: B2_BUCKET_NAME, Key: versionKey }));
-    const existing = JSON.parse(await streamToString(getRes.Body));
-    existingAssets = Array.isArray(existing.assets) ? existing.assets : [];
-    console.log(`Loaded existing version.json (${existing.tag_name}) with ${existingAssets.length} asset(s).`);
-  } catch {
+    existing = JSON.parse(await streamToString(getRes.Body));
+    console.log(`Loaded existing version.json (${existing.tag_name}).`);
+  } catch (error) {
+    if (error.name !== 'NoSuchKey' && error.$metadata?.httpStatusCode !== 404) throw error;
     console.log('No existing version.json found — creating a fresh one.');
   }
 
-  const assetsByPlatform = new Map();
-  for (const a of existingAssets) {
-    const platform = a.name && a.name.endsWith('.apk') ? 'android' : 'windows';
-    assetsByPlatform.set(platform, a);
-  }
+  const uploaded = {};
+  const releaseMetadata = {
+    tag_name: tag,
+    version: semver,
+    build_number: process.env.CRM_B2_BUILD,
+    name: title,
+    body: notes,
+    ...(releaseUrl ? { html_url: releaseUrl } : {}),
+    published_at: publishedAt,
+  };
+  // Check immutable semver/build identity before uploading any bytes.
+  mergeReleaseManifest(existing, releaseMetadata, {});
 
-  if (apkPath && fs.existsSync(apkPath)) {
+  if (apkBuffer) {
     const apkKey = `crm-app/releases/alpha-crm-v${semver}.apk`;
     const apkUrl = `${cdnBase}/${apkKey}`;
-    const apkBuffer = fs.readFileSync(apkPath);
     console.log(`Uploading Android APK: ${apkKey} (${(apkBuffer.length / 1024 / 1024).toFixed(2)} MB)...`);
     await s3.send(new PutObjectCommand({
       Bucket: B2_BUCKET_NAME,
@@ -282,45 +293,51 @@ async function main() {
       ContentType: 'application/vnd.android.package-archive',
     }));
     console.log(`[OK] APK -> ${apkUrl}`);
-    assetsByPlatform.set('android', {
+    uploaded.android = {
       name: `alpha-crm-v${semver}.apk`,
       browser_download_url: apkUrl,
       size: apkBuffer.length,
-    });
+    };
   }
 
-  if (zipPath && fs.existsSync(zipPath)) {
+  if (zipBuffer) {
     const winVersionedName = `alpha-crm-windows-v${semver}.zip`;
     const winVersionedKey = `crm-app/releases/${winVersionedName}`;
-    const winStaticKey = 'crm-app/releases/alpha-crm-windows.zip';
     const winUrl = `${cdnBase}/${winVersionedKey}`;
-    const winBuffer = fs.readFileSync(zipPath);
-    console.log(`Uploading Windows ZIP: ${winVersionedKey} + ${winStaticKey} (${(winBuffer.length / 1024 / 1024).toFixed(2)} MB)...`);
-    for (const key of [winVersionedKey, winStaticKey]) {
-      await s3.send(new PutObjectCommand({
+    console.log(`Uploading Windows ZIP: ${winVersionedKey} (${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB)...`);
+    await s3.send(new PutObjectCommand({
         Bucket: B2_BUCKET_NAME,
-        Key: key,
-        Body: winBuffer,
+        Key: winVersionedKey,
+        Body: zipBuffer,
         ContentType: 'application/zip',
       }));
-    }
     console.log(`[OK] Windows ZIP -> ${winUrl}`);
-    assetsByPlatform.set('windows', {
+    uploaded.windows = {
       name: winVersionedName,
       browser_download_url: winUrl,
-      size: winBuffer.length,
-    });
+      size: zipBuffer.length,
+    };
   }
 
-  const versionJson = {
-    tag_name: tag,
-    version: semver,
-    name: title,
-    body: notes,
-    ...(releaseUrl ? { html_url: releaseUrl } : {}),
-    published_at: publishedAt,
-    assets: [...assetsByPlatform.values()],
-  };
+  const versionJson = mergeReleaseManifest(existing, releaseMetadata, uploaded);
+
+  // Preserve a legacy static URL's bytes during a partial release.
+  if (versionJson.tag_name === tag &&
+      versionJson.platform_releases.windows?.tag_name === tag &&
+      versionJson.platform_releases.windows?.build_number === process.env.CRM_B2_BUILD &&
+      versionJson.platform_releases.android?.tag_name === tag &&
+      versionJson.platform_releases.android?.build_number === process.env.CRM_B2_BUILD) {
+    await s3.send(zipBuffer ? new PutObjectCommand({
+      Bucket: B2_BUCKET_NAME,
+      Key: 'crm-app/releases/alpha-crm-windows.zip',
+      Body: zipBuffer,
+      ContentType: 'application/zip',
+    }) : new CopyObjectCommand({
+      Bucket: B2_BUCKET_NAME,
+      Key: 'crm-app/releases/alpha-crm-windows.zip',
+      CopySource: `${B2_BUCKET_NAME}/crm-app/releases/alpha-crm-windows-v${semver}.zip`,
+    }));
+  }
 
   await s3.send(new PutObjectCommand({
     Bucket: B2_BUCKET_NAME,
@@ -330,7 +347,7 @@ async function main() {
   }));
   console.log(`[OK] version.json -> ${cdnBase}/${versionKey}`);
 
-  await cleanupOldReleases();
+  await cleanupOldReleases(versionJson);
 
   console.log('\n========================================');
   console.log(' B2 upload completed!');

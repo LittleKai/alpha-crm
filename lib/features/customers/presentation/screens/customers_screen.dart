@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:data_table_2/data_table_2.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -1131,22 +1129,26 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['csv', 'xlsx', 'tsv', 'txt'],
-        withData: true,
+        withData: false,
       );
       if (result == null || result.files.isEmpty) return;
       final picked = result.files.single;
-      final bytes =
-          picked.bytes ??
-          (picked.path != null ? await File(picked.path!).readAsBytes() : null);
-      if (bytes == null || bytes.isEmpty) {
+      if (picked.path == null && picked.bytes == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không đọc được nội dung file "${picked.name}".')),
+          SnackBar(
+            content: Text('Không đọc được nội dung file "${picked.name}".'),
+          ),
         );
         return;
       }
 
-      final contacts = parseCustomerImportBytes(bytes, picked.name);
+      final contacts = await parseCustomerImportFile(
+        path: picked.path,
+        bytes: picked.bytes,
+        fileName: picked.name,
+      );
+      if (!mounted) return;
       if (contacts.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

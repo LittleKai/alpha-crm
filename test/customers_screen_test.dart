@@ -210,4 +210,151 @@ void main() {
     expect(contacts.single.name, 'Lê Hoàng');
     expect(contacts.single.phone, '0988776655');
   });
+
+  test('rejects inflated XML even when ZIP declares a small size', () {
+    final bytes = _buildMinimalXlsx({
+      'xl/worksheets/sheet1.xml':
+          '<worksheet>${' ' * (9 * 1024 * 1024)}</worksheet>',
+    });
+    final data = ByteData.sublistView(bytes);
+    final central = data.getUint32(bytes.length - 6, Endian.little);
+    data.setUint32(central + 24, 1, Endian.little);
+    expect(
+      () => parseCustomerImportBytes(bytes, 'bomb.xlsx'),
+      throwsFormatException,
+    );
+  });
+
+  test('skips oversized irrelevant entries and unused worksheets', () {
+    final bytes = _buildMinimalXlsx({
+      'xl/media/image1.png': 'x' * (9 * 1024 * 1024),
+      'xl/worksheets/sheet2.xml': 'x' * (9 * 1024 * 1024),
+      'xl/worksheets/sheet1.xml':
+          '<worksheet><row><c t="inlineStr"><is><t>An</t></is></c>'
+          '<c t="inlineStr"><is><t>0901234567</t></is></c></row></worksheet>',
+    });
+    final contacts = parseCustomerImportBytes(bytes, 'images.xlsx');
+    expect(contacts.single.name, 'An');
+    expect(contacts.single.phone, '0901234567');
+  });
+
+  test('rejects malformed ZIP offsets as a format error', () {
+    final bytes = _buildMinimalXlsx({
+      'xl/worksheets/sheet1.xml': '<worksheet/>',
+    });
+    ByteData.sublistView(
+      bytes,
+    ).setUint32(bytes.length - 6, 0xfffffff0, Endian.little);
+    expect(
+      () => parseCustomerImportBytes(bytes, 'broken.xlsx'),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects encrypted, unsupported and out-of-range worksheet entries', () {
+    for (final kind in [
+      'encrypted',
+      'unsupported',
+      'local offset',
+      'name length',
+    ]) {
+      final bytes = _buildMinimalXlsx({
+        'xl/worksheets/sheet1.xml': '<worksheet/>',
+      });
+      final data = ByteData.sublistView(bytes);
+      final central = data.getUint32(bytes.length - 6, Endian.little);
+      switch (kind) {
+        case 'encrypted':
+          data.setUint16(6, 1, Endian.little);
+          data.setUint16(central + 8, 1, Endian.little);
+        case 'unsupported':
+          data.setUint16(8, 99, Endian.little);
+          data.setUint16(central + 10, 99, Endian.little);
+        case 'local offset':
+          data.setUint32(central + 42, 0xfffffff0, Endian.little);
+        case 'name length':
+          data.setUint16(central + 28, 65535, Endian.little);
+      }
+      expect(
+        () => parseCustomerImportBytes(bytes, 'broken.xlsx'),
+        throwsFormatException,
+        reason: kind,
+      );
+    }
+  });
+
+  test('bounds total selected XML and delimited row allocations', () {
+    final bytes = _buildMinimalXlsx({
+      'xl/sharedStrings.xml': '<sst>${' ' * (7 * 1024 * 1024)}</sst>',
+      'xl/worksheets/sheet1.xml':
+          '<worksheet>${' ' * (7 * 1024 * 1024)}</worksheet>',
+    });
+    expect(
+      () => parseCustomerImportBytes(bytes, 'total.xlsx'),
+      throwsFormatException,
+    );
+    expect(
+      () => parseCustomerImportBytes(
+        Uint8List.fromList(utf8.encode(',' * 256)),
+        'wide.csv',
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => parseCustomerImportBytes(
+        Uint8List.fromList(utf8.encode('a\n' * 50001)),
+        'rows.csv',
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects extreme worksheet column references before allocating rows', () {
+    final bytes = _buildMinimalXlsx({
+      'xl/worksheets/sheet1.xml':
+          '<worksheet><row><c r="ZZZZZZZZZZZZZZZZ1"><v>1</v></c></row></worksheet>',
+    });
+    expect(
+      () => parseCustomerImportBytes(bytes, 'columns.xlsx'),
+      throwsFormatException,
+    );
+  });
+
+  test(
+    'parses native file asynchronously and rejects oversized input',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'customer-import-test-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/contacts.csv');
+      await file.writeAsString('name,phone\nAn,0901234567\n');
+      final future = parseCustomerImportFile(
+        path: file.path,
+        fileName: 'contacts.csv',
+      );
+      var completed = false;
+      future.then((_) => completed = true);
+      await Future<void>.value();
+      expect(completed, isFalse);
+      expect((await future).single.phone, '0901234567');
+      final fromBytes = parseCustomerImportFile(
+        bytes: Uint8List.fromList(utf8.encode('name,phone\nBinh,0912345678')),
+        fileName: 'contacts.csv',
+      );
+      var bytesCompleted = false;
+      fromBytes.then((_) => bytesCompleted = true);
+      await Future<void>.value();
+      expect(bytesCompleted, isFalse);
+      expect((await fromBytes).single.name, 'Binh');
+
+      final handle = await file.open(mode: FileMode.write);
+      await handle.truncate(17 * 1024 * 1024);
+      await handle.close();
+      await expectLater(
+        parseCustomerImportFile(path: file.path, fileName: 'contacts.csv'),
+        throwsFormatException,
+      );
+    },
+  );
 }

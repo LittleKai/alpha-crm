@@ -19,7 +19,91 @@ import {
   clearReloginHistoryForTest,
   RELOGIN_MAX_IN_WINDOW_FOR_TEST,
   setLoginPoolInitializedForTest,
+  isRecentProgrammaticSend as isProgrammatic,
 } from './personal-zca-channel.js';
+
+test('programmatic sends match their own echoes but not manual replies in the same thread', async (t) => {
+  const accountId = 'echo-operator';
+  const threadId = 'echo-customer';
+  const clientMessageId = String(Date.now());
+  accountPool.clear();
+  setLoginPoolInitializedForTest(true);
+  t.after(() => { accountPool.clear(); setLoginPoolInitializedForTest(false); });
+  accountPool.set(accountId, {
+    uId: accountId, label: 'Echo operator', listenerRunning: false, lastEventAt: null,
+    api: {
+      sendMessage: async () => {
+        // Listener echoes may arrive before the API promise resolves.
+        assert.equal(isProgrammatic(accountId, threadId, 'early-provider', String(Date.now())), true);
+        assert.equal(isProgrammatic(accountId, threadId, 'phone-provider', 'phone-client'), false);
+        return { message: { msgId: 'echo-text' }, attachment: [
+          { msgId: 'echo-image-1', cliMsgId: 'attachment-client-1' },
+          { msgId: 'echo-image-2', clientId: 'attachment-client-2' },
+        ] };
+      },
+    } as any,
+  });
+  const result = await new PersonalZcaChannel().sendMessage({
+    accountId, recipientId: threadId, threadType: 'user', message: 'CRM reply', clientMessageId,
+  });
+  assert.equal(result.success, true);
+  for (const providerId of ['echo-text', 'echo-image-1', 'echo-image-2']) {
+    assert.equal(isProgrammatic(accountId, threadId, providerId), true);
+  }
+  assert.equal(isProgrammatic(accountId, threadId, undefined, clientMessageId), true);
+  assert.equal(isProgrammatic(accountId, threadId, undefined, 'attachment-client-1'), true);
+  assert.equal(isProgrammatic(accountId, threadId, undefined, 'attachment-client-2'), true);
+  assert.equal(isProgrammatic(accountId, threadId, 'phone-provider', 'phone-client'), false);
+  assert.equal(isProgrammatic(accountId, threadId), false);
+  assert.equal(isProgrammatic('another-account', threadId, 'echo-text'), false);
+  assert.equal(isProgrammatic(accountId, 'another-thread', 'echo-text'), false);
+  assert.equal(isProgrammatic(accountId, threadId, undefined, 'echo-text'), false);
+});
+
+test('failed sends remove the pending client echo marker', async (t) => {
+  const accountId = 'failed-echo-operator';
+  const threadId = 'failed-echo-customer';
+  const clientMessageId = String(Date.now());
+  accountPool.clear();
+  setLoginPoolInitializedForTest(true);
+  t.after(() => { accountPool.clear(); setLoginPoolInitializedForTest(false); });
+  accountPool.set(accountId, {
+    uId: accountId, label: 'Failed echo operator', listenerRunning: false, lastEventAt: null,
+    api: {
+      sendMessage: async () => {
+        assert.equal(isProgrammatic(accountId, threadId, undefined, clientMessageId), true);
+        throw new Error('test send rejected');
+      },
+    } as any,
+  });
+  const result = await new PersonalZcaChannel().sendMessage({
+    accountId, recipientId: threadId, threadType: 'user', message: 'CRM reply', clientMessageId,
+  });
+  assert.equal(result.success, false);
+  assert.equal(isProgrammatic(accountId, threadId, undefined, clientMessageId), false);
+  assert.equal(isProgrammatic(accountId, threadId, 'manual-after-failure'), false);
+});
+
+test('rich sends without provider IDs never suppress unidentified or manual phone replies', async (t) => {
+  const accountId = 'no-id-operator';
+  const threadId = 'no-id-customer';
+  accountPool.clear();
+  setLoginPoolInitializedForTest(true);
+  t.after(() => { accountPool.clear(); setLoginPoolInitializedForTest(false); });
+  accountPool.set(accountId, {
+    uId: accountId, label: 'No ID operator', listenerRunning: false, lastEventAt: null,
+    api: { sendLink: async () => ({}) } as any,
+  });
+  const result = await new PersonalZcaChannel().sendMessage({
+    accountId, recipientId: threadId, threadType: 'user', message: 'Link',
+    messageType: 'link', link: { link: 'https://example.invalid' },
+  });
+  assert.equal(result.success, true);
+  assert.equal(isProgrammatic(accountId, threadId), false);
+  assert.equal(isProgrammatic(accountId, threadId, result.messageId), false);
+  assert.equal(isProgrammatic(accountId, threadId, undefined, result.clientMessageId), false);
+  assert.equal(isProgrammatic(accountId, threadId, 'manual-phone-id'), false);
+});
 
 test('normalizes root ThreadType.Group message events as group threads', () => {
   const inbound = normalizeInboundMessageForTest(

@@ -1,6 +1,6 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-07-04 +07:00
+**Last Updated:** 2026-10-24 +07:00
 
 ---
 
@@ -54,8 +54,19 @@ Chỉ chuyển văn xuôi xuống `archive/FIXED_BUGS_guarded.md` khi rào chắ
 | 40 | Poll raw JSON và cache file thiếu extension | ❌ chưa có | dưới đây |
 | 41 | Enum channel lệch giữa ba Mongoose model | ❌ chưa có | dưới đây |
 | 42 | Kênh mới không vào account switcher Live Chat | ❌ chưa có | dưới đây |
+| 43 | Outbound sync xoá tác vụ của tin đã delivered/seen | 🔶 `sync-worker.ts::processSyncQueue`; SQLite regression test, chưa smoke Zalo thật | review 2026-10-23 bên dưới |
+| 44 | Echo guard theo thread nuốt phản hồi thật từ điện thoại | 🔶 `personal-zca-channel.ts::isRecentProgrammaticSend`; exact-ID test, rich-send race còn giới hạn | review 2026-10-23 bên dưới |
+| 45 | Kiểm tra redirect sau fetch đã gửi request vào mạng nội bộ | 🔶 `external-media.ts::downloadExternalMedia`; DNS/redirect/size/deadline fixture | review 2026-10-23 bên dưới |
 
 Mục ✅ mới được rút xuống archive; mục 🔶/❌ vẫn ở file này.
+
+### Review 2026-10-23 — outbound sync, echo và media (sửa 2026-10-24)
+
+Receipt và self-sent có thể đưa tin sang `delivered`/`seen` trước chu kỳ sync. `processSyncQueue` phải báo cloud cho cả ba trạng thái đã gửi; chỉ hoàn tất sau thành công, còn queued/failed được bỏ qua vì lần chuyển sang sent sẽ enqueue mới. `sync-worker.test.ts` dùng SQLite tạm và cloud giả, kiểm cả user/group và retry sau seen.
+
+Echo chỉ khớp account/thread + provider/client ID với namespace riêng; không dùng thread-only TTL. Đánh dấu client ID đã biết trước standard-send, thêm các ID trả về kể cả attachment và gỡ marker khi lỗi. `personal-zca-channel.test.ts` giữ phản hồi điện thoại không trùng ID. Rich-send echo tới trước khi biết ID vẫn có thể bị nhận là operator.
+
+Media dùng HTTP stdlib, xác thực IP literal/mọi DNS result và từng redirect trước kết nối, ghim địa chỉ đã kiểm vào lookup của request. Chặn private/reserved IPv4/IPv6/mapped/transition, tối đa 5 redirect, 500 MiB thực đọc và deadline 20 giây gồm DNS. `external-media.test.ts` chạy được trong Docker read-only, không mạng ngoài, DNS/HTTP giả.
 
 ---
 

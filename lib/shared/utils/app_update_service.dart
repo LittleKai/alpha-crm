@@ -31,6 +31,16 @@ class AppReleaseInfo {
   });
 
   factory AppReleaseInfo.fromJson(Map<String, dynamic> json) {
+    final platformReleases = json['platform_releases'];
+    if (platformReleases is Map<String, dynamic>) {
+      final platform = switch (defaultTargetPlatform) {
+        TargetPlatform.windows => 'windows',
+        TargetPlatform.android => 'android',
+        _ => '',
+      };
+      // A platform absent from a partial first release has no available update.
+      json = platformReleases[platform] as Map<String, dynamic>? ?? {};
+    }
     final tag = json['tag_name'] as String? ?? '';
     final assetsList =
         (json['assets'] as List<dynamic>?)

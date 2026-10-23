@@ -90,7 +90,11 @@ async function processSyncQueue(): Promise<void> {
           .prepare('SELECT * FROM messages WHERE id = ?')
           .get(msgId) as any;
 
-        if (msg) {
+        // Receipts may advance a successful send before this durable job runs.
+        // Unsent jobs can be acknowledged: transitioning to sent enqueues a new job.
+        const canReport = msg && (msg.direction !== 'outbound' ||
+          ['sent', 'delivered', 'seen'].includes(msg.status));
+        if (canReport) {
           // Group message content MUST NEVER leave the device (privacy rule).
           // Only managed groups report metadata; 1:1 threads report inbound/outbound according to direction.
           if (msg.threadType === 'group') {
@@ -116,23 +120,20 @@ async function processSyncQueue(): Promise<void> {
               }
             }
           } else if (msg.direction === 'outbound') {
-            // Only sync outbound messages after they have actually been sent
-            if (msg.status === 'sent') {
-              await reportOutboundMessage(credentials.deviceId, credentials.agentSecret, {
-                channel: msg.channel,
-                accountId: msg.accountId,
-                threadId: msg.threadId,
-                threadType: 'user',
-                senderId: msg.senderId || msg.accountId,
-                senderName: msg.senderName,
-                avatarUrl: msg.senderAvatarUrl,
-                content: msg.content,
-                messageType: msg.messageType,
-                providerMessageId: msg.providerMessageId,
-                clientMessageId: msg.clientMessageId,
-                timestamp: msg.sentAt || msg.createdAt,
-              });
-            }
+            await reportOutboundMessage(credentials.deviceId, credentials.agentSecret, {
+              channel: msg.channel,
+              accountId: msg.accountId,
+              threadId: msg.threadId,
+              threadType: 'user',
+              senderId: msg.senderId || msg.accountId,
+              senderName: msg.senderName,
+              avatarUrl: msg.senderAvatarUrl,
+              content: msg.content,
+              messageType: msg.messageType,
+              providerMessageId: msg.providerMessageId,
+              clientMessageId: msg.clientMessageId,
+              timestamp: msg.sentAt || msg.createdAt,
+            });
           } else {
             const event = {
               accountId: msg.accountId,

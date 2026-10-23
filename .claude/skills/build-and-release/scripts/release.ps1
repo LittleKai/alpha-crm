@@ -65,6 +65,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+. (Join-Path $PSScriptRoot 'release-artifacts.ps1')
+$null = Get-ReleaseTargets $Targets
 
 function Write-Step {
     param([string]$Message)
@@ -153,10 +155,9 @@ if (-not (Test-Path $ReleaseDir)) {
     exit 1
 }
 
-$Artifacts = Get-ChildItem $ReleaseDir -File
-if ($Artifacts.Count -eq 0) {
-    Write-Err "No artifacts found in build/release/"
-    exit 1
+$Artifacts = @(Get-ReleaseArtifacts -ProjectRoot $ProjectRoot -Version $SemVer -Build $BuildNum -Targets $Targets)
+if ($SkipBuild -and $Version -match '^v?\d+\.\d+\.\d+$' -and ($Version -replace '^v', '') -ne $SemVer) {
+    throw "Requested version '$Version' does not match pubspec.yaml $SemVer+$BuildNum."
 }
 
 Write-Host "Artifacts to publish ($TagVersion+$BuildNum):" -ForegroundColor Yellow
@@ -314,6 +315,9 @@ if ($SkipGitHub) {
     $UploadUrlBase = "https://uploads.github.com/repos/$Owner/$Repo/releases/$ReleaseId/assets"
 
     foreach ($Artifact in $Artifacts) {
+        if ((Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash -ne $Artifact.ReleaseSha256) {
+            throw "Artifact changed after validation: $($Artifact.FullName)"
+        }
         $FileName = $Artifact.Name
         $FilePath = $Artifact.FullName
         $FileSize = [math]::Round($Artifact.Length / 1MB, 2)
@@ -373,6 +377,7 @@ if ($SkipB2) {
         Version = $SemVer
         Title   = $Title
         Notes   = $NotesContent
+        Targets = $Targets
     }
     if ($HtmlUrl) {
         $UploadParams["ReleaseUrl"] = $HtmlUrl

@@ -37,6 +37,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'release-artifacts.ps1')
 
 function Write-Step {
     param([string]$Message)
@@ -77,7 +78,7 @@ Set-Location $ProjectRoot
 
 # --- Parse targets ---
 
-$TargetList = $Targets.Split(',') | ForEach-Object { $_.Trim().ToLower() }
+$TargetList = @(Get-ReleaseTargets $Targets)
 $WantWindows = $TargetList -contains "windows"
 $WantAndroid = ($TargetList -contains "android") -or ($TargetList -contains "apk")
 
@@ -184,6 +185,7 @@ if ($WantWindows) {
         exit 1
     }
     $ZipDest = Join-Path $ReleaseDir "alpha-crm-windows.zip"
+    $null = Get-ReleaseArtifacts -ProjectRoot $ProjectRoot -Version $FinalSemVer -Build $FinalBuild -Targets 'windows' -ZipPath $ZipSrc
     Copy-Item $ZipSrc $ZipDest -Force
     $ZipSize = [math]::Round((Get-Item $ZipDest).Length / 1MB, 2)
     Write-Success "Staged Windows ZIP: $ZipDest ($ZipSize MB)"
@@ -195,6 +197,8 @@ if ($WantAndroid) {
         Write-Err "Expected Android APK not found at $ApkSrc"
         exit 1
     }
+    # Validate even when -SkipApkBuild reuses an APK; renaming never makes an old build current.
+    $null = Get-ReleaseArtifacts -ProjectRoot $ProjectRoot -Version $FinalSemVer -Build $FinalBuild -Targets 'android' -ApkPath $ApkSrc
     # Remove older APK versions in build/release/ so only the active version is uploaded
     Get-ChildItem $ReleaseDir -Filter "alpha-crm-v*.apk" -ErrorAction SilentlyContinue | Remove-Item -Force
     $ApkDest = Join-Path $ReleaseDir "alpha-crm-v$FinalSemVer.apk"
@@ -207,7 +211,7 @@ if ($WantAndroid) {
 
 Write-Step "Build completed!"
 
-$Artifacts = Get-ChildItem $ReleaseDir -File
+$Artifacts = @(Get-ReleaseArtifacts -ProjectRoot $ProjectRoot -Version $FinalSemVer -Build $FinalBuild -Targets $Targets)
 Write-Host "Artifacts in build/release/:" -ForegroundColor Yellow
 foreach ($f in $Artifacts) {
     $Size = [math]::Round($f.Length / 1MB, 2)

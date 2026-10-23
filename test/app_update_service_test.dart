@@ -1,7 +1,63 @@
 import 'package:alpha_crm/shared/utils/app_update_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('partial manifest uses the current platform version and assets', () {
+    const windowsAsset = {
+      'name': 'alpha-crm-windows-v1.1.0.zip',
+      'browser_download_url': 'https://example.test/windows.zip',
+    };
+    const androidAsset = {
+      'name': 'alpha-crm-v1.0.0.apk',
+      'browser_download_url': 'https://example.test/android.apk',
+    };
+    final manifest = <String, dynamic>{
+      'tag_name': 'v1.0.0',
+      'assets': [androidAsset],
+      'platform_releases': {
+        'windows': {
+          'tag_name': 'v1.1.0',
+          'assets': [windowsAsset],
+        },
+        'android': {
+          'tag_name': 'v1.0.0',
+          'assets': [androidAsset],
+        },
+      },
+    };
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    expect(AppReleaseInfo.fromJson(manifest).version, '1.1.0');
+    expect(
+      AppReleaseInfo.fromJson(manifest).assets.single.name,
+      windowsAsset['name'],
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(AppReleaseInfo.fromJson(manifest).version, '1.0.0');
+    expect(
+      AppReleaseInfo.fromJson(manifest).assets.single.name,
+      androidAsset['name'],
+    );
+  });
+
+  test(
+    'legacy manifests remain supported and absent platforms have no update',
+    () {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(AppReleaseInfo.fromJson({'tag_name': 'v1.0.0'}).version, '1.0.0');
+      final release = AppReleaseInfo.fromJson({
+        'tag_name': 'v1.1.0',
+        'platform_releases': {
+          'windows': {'tag_name': 'v1.1.0'},
+        },
+      });
+      expect(release.version, isEmpty);
+      expect(release.assets, isEmpty);
+    },
+  );
+
   test('windows zip updater script extracts, copies, and restarts app', () {
     final script = AppUpdateService.buildWindowsZipUpdaterScript(
       zipPath: r'C:\Temp\alpha-crm-windows.zip',

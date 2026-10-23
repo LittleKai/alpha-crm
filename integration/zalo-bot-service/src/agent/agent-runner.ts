@@ -394,7 +394,7 @@ async function handleInboundMessageEvent(
             : undefined;
         const programmaticSend =
           event.senderId === event.accountId &&
-          isRecentProgrammaticSend(event.accountId, event.threadId);
+          isRecentProgrammaticSend(event.accountId, event.threadId, event.providerMessageId, event.clientMessageId);
         alreadyReportedAtSendTime = Boolean(
           reconciledId || existingProviderMessage || programmaticSend,
         );

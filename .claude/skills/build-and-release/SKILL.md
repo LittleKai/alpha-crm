@@ -145,6 +145,7 @@ powershell -ExecutionPolicy Bypass -File ".agents\skills\build-and-release\scrip
 
 Script `release.ps1` sẽ:
 1. Chạy `build.ps1` (nếu không truyền `-SkipBuild`).
+   Trước commit/push/upload, chỉ chọn artifact đúng `-Targets` và kiểm tra version + build nhúng trong EXE của ZIP hoặc APK (`aapt` từ Android SDK). File thiếu, sai version/build hoặc APK cũ qua `-SkipApkBuild` đều bị từ chối; tên file không phải bằng chứng version.
 2. Tự động commit `pubspec.yaml` (`chore(release): bump version to <semver>+<build>`) nếu file này vừa được bump version, đảm bảo git tag luôn trỏ đúng vào commit mang version mới.
 3. Push branch hiện tại lên `origin`.
 4. Tạo git tag `v<version>` và push tag lên `origin`.
@@ -152,8 +153,8 @@ Script `release.ps1` sẽ:
 6. Gọi `upload-b2.ps1` để upload lên **Backblaze B2** (bucket `alpha-studio`):
    - `crm-app/releases/alpha-crm-windows.zip`
    - `crm-app/releases/alpha-crm-v<version>.apk`
-   - `crm-app/version.json` (gộp `assets` theo từng nền tảng để nếu chỉ release 1 nền tảng thì vẫn giữ nguyên link tải của nền tảng kia)
-   - Tự động dọn các bản build cũ trên B2, giữ lại 3 phiên bản mới nhất.
+   - `crm-app/version.json`: `platform_releases.windows/android` giữ metadata và assets theo version/build thật của từng nền tảng. Release một nền tảng giữ nguyên snapshot global cho app cũ/web; chỉ nâng global khi cả hai nền tảng cùng version/build. App mới đọc `platform_releases`; lần đầu chỉ có một nền tảng thì nền tảng còn lại không có update.
+   - URL Windows tĩnh chỉ đổi khi global được nâng. Tự động dọn bản cũ, giữ 3 phiên bản mới nhất và mọi artifact đang được global/platform manifest tham chiếu.
 
 > Nếu bước B2 fail sau khi GitHub Release đã tạo xong: **đừng tạo lại tag**, chỉ cần chạy lại riêng `upload-b2.ps1` (xem mục "Chạy từng bước thủ công").
 
@@ -224,4 +225,16 @@ Chỉ đẩy lại bản tải + `version.json` lên Backblaze B2:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File ".agents\skills\build-and-release\scripts\upload-b2.ps1" -Version "<version>" -Title "Alpha CRM v<version>" -Notes "build\release_notes.md" -ReleaseUrl "https://github.com/LittleKai/alpha-crm/releases/tag/v<version>"
+```
+
+Upload riêng một nền tảng: thêm `-Targets "windows"` hoặc `-Targets "android"`; nếu chỉ truyền `-ZipPath`/`-ApkPath`, chỉ nền tảng có path được chọn. Không tự lấy artifact từ thư mục build khác; mặc định không path/Targets yêu cầu đủ hai artifact chính xác trong `build/release/`.
+
+Không tái dùng semver đã có trên B2 với build khác (hoặc manifest cũ chưa ghi build): phải tăng semver để tránh ghi đè artifact của snapshot trước. Retry cùng semver/build đã ghi trong manifest được phép.
+
+Kiểm tra hồi quy local, không build/publish/network:
+
+```powershell
+node .agents/skills/build-and-release/scripts/release-safety.test.mjs
+powershell -ExecutionPolicy Bypass -File .agents/skills/build-and-release/scripts/release-safety.test.ps1
+flutter test test/app_update_service_test.dart --no-pub
 ```

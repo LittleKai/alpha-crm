@@ -3,38 +3,12 @@ import { mkdir, rename, unlink, writeFile } from 'fs/promises';
 import { extname, resolve } from 'path';
 
 import { localChatEvents } from './local-chat-events.js';
+import { downloadExternalMedia } from './external-media.js';
 import type { LocalChatStore } from './local-chat-store.js';
 import type { LocalAttachment } from './local-chat-types.js';
 
-const MAX_MEDIA_BYTES = 500 * 1024 * 1024;
 const DEFAULT_CACHE_BYTES = 20 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_AGE_DAYS = 90;
-
-function isSafeExternalMediaUrl(rawUrl: string): boolean {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      return false;
-    }
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    if (
-      host === 'localhost' ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      host.endsWith('.local') ||
-      /^127\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-    ) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -105,14 +79,6 @@ export class LocalChatMediaWorker {
   }
 
   private async download(attachment: LocalAttachment): Promise<void> {
-    if (!isSafeExternalMediaUrl(attachment.url)) {
-      this.store.updateAttachmentDownload(attachment.id, {
-        status: 'failed',
-        errorText: 'Blocked unsafe or local media URL.',
-      });
-      this.publish(attachment, 'media.failed', { error: 'Blocked unsafe or local media URL.' });
-      return;
-    }
     this.store.updateAttachmentDownload(attachment.id, {
       status: 'downloading',
     });
@@ -122,31 +88,11 @@ export class LocalChatMediaWorker {
     let extension = this.safeExtension(attachment);
     let temporary: string | null = null;
     try {
-      const response = await fetch(attachment.url, {
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      if (response.url && !isSafeExternalMediaUrl(response.url)) {
-        throw new Error('Blocked redirect to unsafe or local media URL.');
-      }
-      const declaredSize = Number(response.headers.get('content-length') || 0);
-      if (declaredSize > MAX_MEDIA_BYTES) {
-        throw new Error('Media exceeds the 500 MB local cache limit.');
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.byteLength > MAX_MEDIA_BYTES) {
-        throw new Error('Media exceeds the 500 MB local cache limit.');
-      }
-
-      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      const { buffer, contentType } = await downloadExternalMedia(attachment.url, controller.signal);
 
       if (!extension) {
         const typeOnly = contentType.split(';')[0].trim();
         extension = MIME_TO_EXT[typeOnly] || '';
-        console.log(`[LocalChatMediaWorker] Extension fallback from Content-Type: "${contentType}" -> "${extension}"`);
       }
 
       const kind = (attachment.kind || '').toLowerCase();
@@ -166,12 +112,6 @@ export class LocalChatMediaWorker {
 
       const target = resolve(targetDir, `${attachment.id}${extension}`);
       temporary = `${target}.part`;
-
-      console.log(`[LocalChatMediaWorker] Auto-caching attachment id: ${attachment.id}`);
-      console.log(`  - Display Name: "${attachment.name}"`);
-      console.log(`  - Content-Type: "${contentType}"`);
-      console.log(`  - Inferred Extension: "${extension}"`);
-      console.log(`  - Target Path: "${target}"`);
 
       await writeFile(temporary, buffer);
       await rename(temporary, target);
@@ -266,17 +206,10 @@ export class LocalChatMediaWorker {
   }
 
   private safeExtension(attachment: LocalAttachment): string {
-    console.log(`[LocalChatMediaWorker] safeExtension check for attachment:`, {
-      id: attachment.id,
-      name: attachment.name,
-      mimeType: attachment.mimeType,
-      url: attachment.url,
-    });
     try {
       if (attachment.name) {
         const ext = extname(attachment.name);
         if (/^[.][a-zA-Z0-9]{1,8}$/.test(ext)) {
-          console.log(`  - Found extension from name: "${ext}"`);
           return ext;
         }
       }
@@ -285,7 +218,6 @@ export class LocalChatMediaWorker {
         const typeOnly = attachment.mimeType.split(';')[0].trim().toLowerCase();
         const ext = MIME_TO_EXT[typeOnly];
         if (ext) {
-          console.log(`  - Found extension from mimeType "${attachment.mimeType}": "${ext}"`);
           return ext;
         }
       }
@@ -297,7 +229,6 @@ export class LocalChatMediaWorker {
           if (paramVal) {
             const ext = extname(paramVal);
             if (/^[.][a-zA-Z0-9]{1,8}$/.test(ext)) {
-              console.log(`  - Found extension from URL query param "${paramName}": "${ext}"`);
               return ext;
             }
           }
@@ -305,14 +236,11 @@ export class LocalChatMediaWorker {
 
         const extension = extname(urlObj.pathname);
         if (/^[.][a-zA-Z0-9]{1,8}$/.test(extension)) {
-          console.log(`  - Found extension from URL pathname: "${extension}"`);
           return extension;
         }
       }
-      console.log(`  - No extension found`);
       return '';
-    } catch (err) {
-      console.log(`  - Error in safeExtension:`, err);
+    } catch {
       return '';
     }
   }
