@@ -51,6 +51,13 @@ class CustomersRepository {
     return response;
   }
 
+  Future<Map<String, dynamic>> patchCustomerFields(
+    String id,
+    Map<String, dynamic> fields,
+  ) async {
+    return CrmCloudApi.put('/crm/customers/$id', fields);
+  }
+
   Future<Map<String, dynamic>> deleteCustomer(String id) async {
     final response = await CrmCloudApi.delete('/crm/customers/$id');
     return response;

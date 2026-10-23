@@ -247,7 +247,15 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   const campaignId = payload.campaignId;
   const recipients = payload.recipients || [];
   const customerIds = payload.customerIds || [];
-  const templateText = payload.message || 'Tin nhắn chiến dịch';
+  const attachments = Array.isArray(payload.attachments)
+    ? payload.attachments.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const rawMessage = typeof payload.message === 'string' ? payload.message : '';
+  const templateText =
+    rawMessage === '[Đính kèm]' && attachments.length > 0
+      ? ''
+      : rawMessage || (attachments.length > 0 ? '' : 'Tin nhắn chiến dịch');
+  const accountId = payload.accountId || payload.selectedAccountId || undefined;
   const actionType = payload.channel === 'email' ? 'bulk_message_by_phone' : 'bulk_message_to_friends';
   const minDelaySeconds = Math.max(1, Number(payload.rateLimit?.minDelaySeconds) || 3);
   const maxDelaySeconds = Math.max(minDelaySeconds, Number(payload.rateLimit?.maxDelaySeconds) || minDelaySeconds);
@@ -319,10 +327,12 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
       const personalizedText = personalizeMessage(templateText, recipient);
 
       const sendResult = await sendMessage({
+        accountId,
         recipientId,
         message: personalizedText,
         threadType: recipient.threadType || 'user',
-        messageType: 'text'
+        messageType: attachments.length > 0 ? 'file' : 'text',
+        ...(attachments.length > 0 ? { attachments } : {}),
       }, payload.isTestMode || false);
 
       latestResult = {

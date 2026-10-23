@@ -207,6 +207,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
         final existing = _recipientsController.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
         _recipientsController.text = {...existing, ...phones}.join('\n');
         
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -216,6 +217,7 @@ class _BulkMessagingScreenState extends ConsumerState<BulkMessagingScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi khi đọc file: $e')));
@@ -1901,20 +1903,66 @@ class _ConfigPanel extends StatelessWidget {
                         icon: Icons.attach_file,
                         variant: AppButtonVariant.outline,
                         onPressed: () async {
-                          final result = await FilePicker.platform.pickFiles();
-                          if (result != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Đã chọn: ${result.files.single.name}',
+                          final result = await FilePicker.platform.pickFiles(
+                            allowMultiple: true,
+                            type: FileType.any,
+                          );
+                          if (!context.mounted) return;
+                          if (result != null && result.files.isNotEmpty) {
+                            final pickedPaths = result.files
+                                .map((f) => f.path)
+                                .whereType<String>()
+                                .where((p) => p.trim().isNotEmpty)
+                                .toList();
+                            if (pickedPaths.isNotEmpty) {
+                              notifier.setAttachmentPaths([
+                                ...state.attachmentPaths,
+                                ...pickedPaths,
+                              ]);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Đã đính kèm ${pickedPaths.length} tệp tin.',
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
                           }
                         },
                       ),
+                      if (state.attachmentPaths.isNotEmpty) ...[
+                        const SizedBox(width: AppSpacing.s),
+                        TextButton.icon(
+                          onPressed: notifier.clearAttachments,
+                          icon: const Icon(Icons.clear_all, size: 16),
+                          label: Text(
+                            'Xóa đính kèm (${state.attachmentPaths.length})',
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                  if (state.attachmentPaths.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.s),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        for (final path in state.attachmentPaths)
+                          InputChip(
+                            avatar: const Icon(
+                              Icons.insert_drive_file_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              path.split(RegExp(r'[/\\]')).last,
+                              style: AppTextStyles.caption,
+                            ),
+                            onDeleted: () => notifier.removeAttachmentPath(path),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1954,10 +2002,11 @@ class _ConfigPanel extends StatelessWidget {
                               : Icons.send,
                           variant: AppButtonVariant.primary,
                           // Block execution unless there is at least one valid
-                          // recipient AND message content.
+                          // recipient AND message content or attachment.
                           onPressed:
                               (!state.hasValidRecipients ||
-                                  state.messageText.trim().isEmpty)
+                                  (state.messageText.trim().isEmpty &&
+                                      state.attachmentPaths.isEmpty))
                               ? null
                               : () {
                                   if (state.scheduledAt == null) {

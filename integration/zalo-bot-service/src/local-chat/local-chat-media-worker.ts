@@ -10,6 +10,32 @@ const MAX_MEDIA_BYTES = 500 * 1024 * 1024;
 const DEFAULT_CACHE_BYTES = 20 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_AGE_DAYS = 90;
 
+function isSafeExternalMediaUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (
+      host === 'localhost' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host.endsWith('.local') ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/jpg': '.jpg',
@@ -79,20 +105,32 @@ export class LocalChatMediaWorker {
   }
 
   private async download(attachment: LocalAttachment): Promise<void> {
+    if (!isSafeExternalMediaUrl(attachment.url)) {
+      this.store.updateAttachmentDownload(attachment.id, {
+        status: 'failed',
+        errorText: 'Blocked unsafe or local media URL.',
+      });
+      this.publish(attachment, 'media.failed', { error: 'Blocked unsafe or local media URL.' });
+      return;
+    }
     this.store.updateAttachmentDownload(attachment.id, {
       status: 'downloading',
     });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
-    
+
     let extension = this.safeExtension(attachment);
     let temporary: string | null = null;
     try {
       const response = await fetch(attachment.url, {
         signal: controller.signal,
+        redirect: 'follow',
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
+      }
+      if (response.url && !isSafeExternalMediaUrl(response.url)) {
+        throw new Error('Blocked redirect to unsafe or local media URL.');
       }
       const declaredSize = Number(response.headers.get('content-length') || 0);
       if (declaredSize > MAX_MEDIA_BYTES) {
@@ -104,18 +142,16 @@ export class LocalChatMediaWorker {
       }
 
       const contentType = (response.headers.get('content-type') || '').toLowerCase();
-      
-      // Fallback: If extension was not found from name, mimeType, or URL, map from content-type header
+
       if (!extension) {
         const typeOnly = contentType.split(';')[0].trim();
         extension = MIME_TO_EXT[typeOnly] || '';
         console.log(`[LocalChatMediaWorker] Extension fallback from Content-Type: "${contentType}" -> "${extension}"`);
       }
 
-      // Determine content subfolder for auto-saving the cache file
       const kind = (attachment.kind || '').toLowerCase();
       const ext = extension.toLowerCase();
-      
+
       const isMedia = kind === 'image' ||
         kind === 'video' ||
         kind === 'audio' ||
@@ -131,7 +167,6 @@ export class LocalChatMediaWorker {
       const target = resolve(targetDir, `${attachment.id}${extension}`);
       temporary = `${target}.part`;
 
-      // Debug logs for verifying the downloaded cache file attributes
       console.log(`[LocalChatMediaWorker] Auto-caching attachment id: ${attachment.id}`);
       console.log(`  - Display Name: "${attachment.name}"`);
       console.log(`  - Content-Type: "${contentType}"`);
@@ -238,7 +273,6 @@ export class LocalChatMediaWorker {
       url: attachment.url,
     });
     try {
-      // 1. Try to extract from the attachment display name (e.g. "document.pdf")
       if (attachment.name) {
         const ext = extname(attachment.name);
         if (/^[.][a-zA-Z0-9]{1,8}$/.test(ext)) {
@@ -246,8 +280,7 @@ export class LocalChatMediaWorker {
           return ext;
         }
       }
-      
-      // 2. Try to extract from the attachment.mimeType
+
       if (attachment.mimeType) {
         const typeOnly = attachment.mimeType.split(';')[0].trim().toLowerCase();
         const ext = MIME_TO_EXT[typeOnly];
@@ -257,7 +290,6 @@ export class LocalChatMediaWorker {
         }
       }
 
-      // 3. Parse URL to check query params (e.g. ?name=doc.pdf or ?file=doc.pdf)
       if (attachment.url) {
         const urlObj = new URL(attachment.url);
         for (const paramName of ['name', 'filename', 'file', 'title']) {
@@ -271,7 +303,6 @@ export class LocalChatMediaWorker {
           }
         }
 
-        // 4. Fall back to the URL pathname extension
         const extension = extname(urlObj.pathname);
         if (/^[.][a-zA-Z0-9]{1,8}$/.test(extension)) {
           console.log(`  - Found extension from URL pathname: "${extension}"`);

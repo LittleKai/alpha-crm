@@ -123,7 +123,9 @@ class CrmAuthState {
     int? creditBalance,
     String? errorText,
     String? deviceRevokedReason,
+    bool clearDeviceRevokedReason = false,
     ActiveDeviceSummary? pendingDeviceConflict,
+    bool clearPendingDeviceConflict = false,
   }) {
     return CrmAuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -136,8 +138,12 @@ class CrmAuthState {
       extraAiRemaining: extraAiRemaining ?? this.extraAiRemaining,
       creditBalance: creditBalance ?? this.creditBalance,
       errorText: errorText,
-      deviceRevokedReason: deviceRevokedReason,
-      pendingDeviceConflict: pendingDeviceConflict,
+      deviceRevokedReason: clearDeviceRevokedReason
+          ? null
+          : (deviceRevokedReason ?? this.deviceRevokedReason),
+      pendingDeviceConflict: clearPendingDeviceConflict
+          ? null
+          : (pendingDeviceConflict ?? this.pendingDeviceConflict),
     );
   }
 
@@ -151,6 +157,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   final CrmTokenStore _tokenStore;
   final bool _isWindows;
   StreamSubscription<LocalAgentSessionEvent>? _eventSubscription;
+  Timer? _localAgentRetryTimer;
   bool _eventsReconnectScheduled = false;
   String? _pendingToken;
 
@@ -322,11 +329,12 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
   /// backend chưa kịp khởi động. Thử tối đa 20 lần, mỗi lần cách 3 giây (~60s)
   /// để chịu được cold start chậm (backend spawn + nạp pool zca).
   void _scheduleLocalAgentRetry(String token, String userId) {
+    _localAgentRetryTimer?.cancel();
     int attempt = 0;
     const maxAttempts = 20;
-    Timer.periodic(const Duration(seconds: 3), (timer) async {
+    _localAgentRetryTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       attempt++;
-      if (!mounted || attempt > maxAttempts) {
+      if (!mounted || attempt > maxAttempts || state.token != token) {
         timer.cancel();
         return;
       }
@@ -503,6 +511,8 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       StackTrace.current,
     );
     state = state.copyWith(isLoading: true);
+    _localAgentRetryTimer?.cancel();
+    _localAgentRetryTimer = null;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     if (_isWindows && token != null) {
@@ -521,9 +531,8 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     if (profile == null || !mounted) {
       return;
     }
-    state = CrmAuthState(
+    state = state.copyWith(
       isAuthenticated: true,
-      token: state.token,
       user: profile.user,
       subscriptionStatus: profile.subscriptionStatus,
       subscriptionPlan: profile.subscriptionPlan,
@@ -535,6 +544,7 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
 
   @override
   void dispose() {
+    _localAgentRetryTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     super.dispose();
   }

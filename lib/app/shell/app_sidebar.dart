@@ -16,6 +16,8 @@ import '../../features/tasks/providers/crm_tasks_provider.dart';
 import '../../features/messaging/bulk/providers/scheduled_campaigns_provider.dart';
 
 class AppSidebar extends ConsumerWidget {
+  static final Future<PackageInfo> _packageInfoFuture = PackageInfo.fromPlatform();
+
   final String currentRoute;
   final bool? forceCollapsed;
 
@@ -184,7 +186,7 @@ class AppSidebar extends ConsumerWidget {
                       ),
                       const SizedBox(width: AppSpacing.xs),
                       FutureBuilder<PackageInfo>(
-                        future: PackageInfo.fromPlatform(),
+                        future: _packageInfoFuture,
                         builder: (context, snapshot) {
                           if (snapshot.hasData) {
                             return Text(

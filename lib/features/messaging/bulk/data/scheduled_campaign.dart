@@ -44,6 +44,7 @@ class ScheduledCampaign {
   final String message; // raw markdown; formatting applied at launch
   final bool isGroupMessage;
   final List<ScheduledRecipient> recipients;
+  final List<String> attachments;
   final String? accountId;
   final int minDelay;
   final int maxDelay;
@@ -58,6 +59,7 @@ class ScheduledCampaign {
     required this.message,
     required this.isGroupMessage,
     required this.recipients,
+    this.attachments = const [],
     required this.accountId,
     required this.minDelay,
     required this.maxDelay,
@@ -70,6 +72,7 @@ class ScheduledCampaign {
   ScheduledCampaign copyWith({
     DateTime? scheduledAt,
     ScheduledStatus? status,
+    List<String>? attachments,
   }) {
     return ScheduledCampaign(
       id: id,
@@ -77,6 +80,7 @@ class ScheduledCampaign {
       message: message,
       isGroupMessage: isGroupMessage,
       recipients: recipients,
+      attachments: attachments ?? this.attachments,
       accountId: accountId,
       minDelay: minDelay,
       maxDelay: maxDelay,
@@ -92,7 +96,12 @@ class ScheduledCampaign {
     'name': name,
     'message': message,
     'isGroupMessage': isGroupMessage ? 1 : 0,
-    'recipientsJson': jsonEncode(recipients.map((r) => r.toJson()).toList()),
+    'recipientsJson': attachments.isEmpty
+        ? jsonEncode(recipients.map((r) => r.toJson()).toList())
+        : jsonEncode({
+            'recipients': recipients.map((r) => r.toJson()).toList(),
+            'attachments': attachments,
+          }),
     'accountId': accountId,
     'minDelay': minDelay,
     'maxDelay': maxDelay,
@@ -103,15 +112,25 @@ class ScheduledCampaign {
   };
 
   factory ScheduledCampaign.fromMap(Map<String, dynamic> map) {
-    final rawRecipients = jsonDecode((map['recipientsJson'] ?? '[]').toString());
+    final decoded = jsonDecode((map['recipientsJson'] ?? '[]').toString());
+    final List<dynamic> rawRecipients = decoded is Map
+        ? (decoded['recipients'] as List? ?? const [])
+        : (decoded as List? ?? const []);
+    final List<String> attachments = decoded is Map
+        ? ((decoded['attachments'] as List?) ?? const [])
+              .map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList()
+        : const [];
     return ScheduledCampaign(
       id: (map['id'] ?? '').toString(),
       name: (map['name'] ?? '').toString(),
       message: (map['message'] ?? '').toString(),
       isGroupMessage: (map['isGroupMessage'] ?? 0) == 1,
-      recipients: (rawRecipients as List)
+      recipients: rawRecipients
           .map((e) => ScheduledRecipient.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
+      attachments: attachments,
       accountId: map['accountId']?.toString(),
       minDelay: (map['minDelay'] ?? 30) as int,
       maxDelay: (map['maxDelay'] ?? 60) as int,

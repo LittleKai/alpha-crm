@@ -135,8 +135,13 @@ class _AppDropdownFieldState<T> extends State<AppDropdownField<T>>
 
   void _close() {
     if (!_isOpen) return;
+    final entryToRemove = _overlayEntry;
     _animController.reverse().then((_) {
-      _removeOverlay();
+      if (_overlayEntry == entryToRemove) {
+        _removeOverlay();
+      } else {
+        entryToRemove?.remove();
+      }
     });
     if (mounted) setState(() => _isOpen = false);
   }

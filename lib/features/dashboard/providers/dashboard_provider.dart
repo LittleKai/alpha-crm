@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../../shared/local_db/local_db.dart';
+import '../../auth/providers/crm_auth_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../messaging/chatbot/data/chatbot_local_bridge_api.dart';
 import '../../messaging/chatbot/providers/chatbot_provider.dart';
@@ -68,18 +69,25 @@ class DashboardState {
 }
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
+  final Ref _ref;
   final DashboardRepository _repository;
   final ChatbotLocalBridgeApi _chatbotBridge;
   final LiveChatLocalBridgeApi _liveChatBridge;
 
   DashboardNotifier(Ref ref)
-    : _repository = ref.read(dashboardRepositoryProvider),
+    : _ref = ref,
+      _repository = ref.read(dashboardRepositoryProvider),
       _chatbotBridge = ref.read(chatbotLocalBridgeApiProvider),
       _liveChatBridge = LiveChatLocalBridgeApi(
         baseUrl: ref.read(settingsProvider).settings.localBridgeBaseUrl,
       ),
       super(DashboardState.initial()) {
     _initDashboard();
+  }
+
+  String get _cacheKey {
+    final userId = _ref.read(crmAuthProvider).user?.id ?? 'anon';
+    return 'dashboard_cache:$userId';
   }
 
   Future<void> _initDashboard() async {
@@ -134,7 +142,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       };
 
       await db.insert('cache_entries', {
-        'key': 'dashboard_cache',
+        'key': _cacheKey,
         'value': jsonEncode(data),
         'expiresAt': expiresAt,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -149,7 +157,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       final results = await db.query(
         'cache_entries',
         where: 'key = ?',
-        whereArgs: ['dashboard_cache'],
+        whereArgs: [_cacheKey],
         limit: 1,
       );
 

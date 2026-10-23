@@ -1548,7 +1548,12 @@ class _ConversationPanel extends ConsumerWidget {
     // on the Desktop Agent's reported health instead (FE-4).
     final bool isAccountConnected;
     String? remoteBlockedReason;
-    if (transportMode == LiveChatTransportMode.cloudRemote) {
+    if (conversation.channel != CrmChannel.zaloPersonal &&
+        conversation.channel != CrmChannel.zaloOa) {
+      // Facebook/TikTok/other non-Zalo connectivity is governed by their own
+      // integration settings, not the Zalo account pool or Desktop Agent.
+      isAccountConnected = true;
+    } else if (transportMode == LiveChatTransportMode.cloudRemote) {
       final agentStatus = ref.watch(agentStatusProvider);
       final agentOffline = agentStatus.hasSnapshot && !agentStatus.anyDeviceOnline;
       final zaloIssue = agentStatus.anyOnlineDeviceHasZaloIssue;
@@ -1562,11 +1567,6 @@ class _ConversationPanel extends ConsumerWidget {
       } else if (!agentStatus.sseConnected) {
         remoteBlockedReason = 'Đang kết nối lại...';
       }
-    } else if (conversation.channel != CrmChannel.zaloPersonal &&
-        conversation.channel != CrmChannel.zaloOa) {
-      // Facebook/TikTok connectivity is governed by their own integration
-      // settings, not the Zalo account pool — never gate on it here.
-      isAccountConnected = true;
     } else {
       isAccountConnected =
           matchingAccount.connected &&
@@ -5310,7 +5310,7 @@ class _GalleryVideoItemState extends State<_GalleryVideoItem> {
 
   Future<void> _initializePlayer() async {
     try {
-      final source = widget.url.isNotEmpty ? widget.url : widget.localPath;
+      final source = widget.localPath.isNotEmpty ? widget.localPath : widget.url;
       await _player.open(
         Media(source),
         play: true,

@@ -695,13 +695,19 @@ class _AutoApproveScreenState extends ConsumerState<AutoApproveScreen> with Sing
                                       const SizedBox(width: AppSpacing.s),
                                       Expanded(
                                         child: Text(
-                                          hasWelcomeMsg
-                                              ? 'Đã duyệt & Gửi tin chào mừng'
-                                              : 'Đã duyệt kết bạn',
+                                          item.status == 'Thất bại'
+                                              ? (item.message.isNotEmpty
+                                                    ? item.message
+                                                    : 'Thất bại')
+                                              : (hasWelcomeMsg
+                                                    ? 'Đã duyệt & Gửi tin chào mừng'
+                                                    : 'Đã duyệt kết bạn'),
                                           style: AppTextStyles.caption.copyWith(
-                                            color: hasWelcomeMsg
-                                                ? Colors.orangeAccent
-                                                : Colors.teal,
+                                            color: item.status == 'Thất bại'
+                                                ? AppColors.error
+                                                : (hasWelcomeMsg
+                                                      ? Colors.orangeAccent
+                                                      : Colors.teal),
                                             fontWeight: FontWeight.w500,
                                             fontSize: 11.5,
                                           ),

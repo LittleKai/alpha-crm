@@ -949,23 +949,84 @@ function createZaloClientMessageId(seed?: unknown): string {
 // immediately, even right after a fresh QR login. When the id is not a sane current
 // ms timestamp, skip the pin and let zca-js use the real clock.
 const DATE_NOW_PIN_TOLERANCE_MS = 10 * 60 * 1000; // ±10 min around the real clock
+const REAL_DATE_NOW = Date.now.bind(Date);
+let activeDateNowPins = 0;
+
+// Tracks recent programmatic/API sends (Campaign, Cloud command, /api/zalo/send-message,
+// Chatbot, Live Chat) so that when Zalo echoes back our own sent message with
+// `senderId === accountId`, `agent-runner.ts` does not mistake it for a manual reply
+// typed on the operator's physical phone and falsely trigger `pauseChatbotForOperatorReply`.
+const PROGRAMMATIC_SEND_TTL_MS = 30 * 1000;
+const recentProgrammaticSends = new Map<string, number>();
+
+export function markProgrammaticSend(accountId: string, threadId: string): void {
+  const now = REAL_DATE_NOW();
+  for (const [key, ts] of recentProgrammaticSends) {
+    if (now - ts > PROGRAMMATIC_SEND_TTL_MS) {
+      recentProgrammaticSends.delete(key);
+    }
+  }
+  if (accountId && threadId) {
+    recentProgrammaticSends.set(`${accountId}:${threadId}`, now);
+  }
+}
+
+export function isRecentProgrammaticSend(accountId: string, threadId: string): boolean {
+  const key = `${accountId}:${threadId}`;
+  const ts = recentProgrammaticSends.get(key);
+  if (ts === undefined) return false;
+  if (REAL_DATE_NOW() - ts > PROGRAMMATIC_SEND_TTL_MS) {
+    recentProgrammaticSends.delete(key);
+    return false;
+  }
+  return true;
+}
+
+export function isSafeOutboundAttachmentPath(filePath: string): boolean {
+  const normalized = resolve(String(filePath || '')).toLowerCase().replace(/\\/g, '/');
+  const fileName = basename(normalized);
+  if (
+    fileName === '.secure-key' ||
+    fileName.startsWith('.env') ||
+    fileName === 'device-secret.json' ||
+    fileName === 'crm_token.json' ||
+    fileName === 'account-settings.json' ||
+    fileName === 'integrations.json' ||
+    fileName.startsWith('credentials') ||
+    fileName.startsWith('live-chat.sqlite') ||
+    fileName.startsWith('agent.log')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function getDefaultActiveInstance(): ZaloAccountInstance | undefined {
+  for (const acc of accountPool.values()) {
+    if (acc.status !== 'disconnected_expired') return acc;
+  }
+  return Array.from(accountPool.values())[0];
+}
 
 async function runWithFixedDateNow<T>(
   clientMessageId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
   const fixed = Number(clientMessageId);
-  const realNow = Date.now();
+  const realNow = REAL_DATE_NOW();
   const isPlausibleNowMs =
     Number.isFinite(fixed) &&
     Math.abs(fixed - realNow) <= DATE_NOW_PIN_TOLERANCE_MS;
   if (!isPlausibleNowMs) return fn();
-  const originalDateNow = Date.now;
+  activeDateNowPins++;
   Date.now = () => fixed;
   try {
     return await fn();
   } finally {
-    Date.now = originalDateNow;
+    activeDateNowPins = Math.max(0, activeDateNowPins - 1);
+    if (activeDateNowPins === 0) {
+      Date.now = REAL_DATE_NOW;
+    }
   }
 }
 
@@ -1656,7 +1717,9 @@ export class PersonalZcaChannel implements ZaloChannel {
       }
 
       // Dynamic Round-Robin rotation selector, unless CRM requested a sender account.
-      const instances = Array.from(accountPool.values());
+      const allInstances = Array.from(accountPool.values());
+      const activeInstances = allInstances.filter((acc) => acc.status !== 'disconnected_expired');
+      const instances = activeInstances.length > 0 ? activeInstances : allInstances;
       selectedInstance = req.accountId ? accountPool.get(req.accountId) : undefined;
       if (!selectedInstance && req.accountId) {
         throw new Error(
@@ -1676,6 +1739,11 @@ export class PersonalZcaChannel implements ZaloChannel {
       const attachments = (req.attachments || []).filter((item) =>
         String(item || '').trim(),
       );
+      for (const attPath of attachments) {
+        if (!isSafeOutboundAttachmentPath(attPath)) {
+          throw new Error(`Attachment path rejected for security reasons: ${basename(attPath)}`);
+        }
+      }
       if (!recipientId || (!messageText && attachments.length === 0)) {
         throw new Error('Missing recipientId or message/attachments.');
       }
@@ -1698,6 +1766,8 @@ export class PersonalZcaChannel implements ZaloChannel {
         }
       }
 
+      markProgrammaticSend(selectedInstance.uId, recipientId);
+
       // Prepare processed attachments to preserve original filenames
       let processedAttachments: string[] = [];
       if (attachments.length > 0) {
@@ -1708,8 +1778,11 @@ export class PersonalZcaChannel implements ZaloChannel {
           }
           for (let i = 0; i < attachments.length; i++) {
             const originalPath = attachments[i];
-            const originalName = req.attachmentNames[i];
-            if (originalName && existsSync(originalPath)) {
+            const rawOriginalName = req.attachmentNames[i];
+            const safeName = rawOriginalName
+              ? basename(String(rawOriginalName).trim()).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+              : '';
+            if (safeName && safeName !== '.' && safeName !== '..' && existsSync(originalPath)) {
               const uniqueSubdir = resolve(
                 tempBaseDir,
                 `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
@@ -1717,7 +1790,7 @@ export class PersonalZcaChannel implements ZaloChannel {
               mkdirSync(uniqueSubdir, { recursive: true });
               tempDirsToCleanup.push(uniqueSubdir);
 
-              const tempPath = resolve(uniqueSubdir, originalName);
+              const tempPath = resolve(uniqueSubdir, safeName);
               copyFileSync(originalPath, tempPath);
               processedAttachments.push(tempPath);
             } else {
@@ -2202,10 +2275,13 @@ export class PersonalZcaChannel implements ZaloChannel {
     try {
       await stopListenerForInstance(instance);
       accountPool.delete(accountId);
+      clearReloginHistory(accountId);
+      reloginInFlight.delete(accountId);
 
       // Invalidate caches
       friendsCache.delete(accountId);
       groupsCache.delete(accountId);
+      userProfileCache.delete(accountId);
 
       const credPath = resolve(projectRoot, config.personalCredentialsPath);
       const credDir = dirname(credPath);
@@ -2430,7 +2506,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
       if (!selectedInstance) {
-        selectedInstance = Array.from(accountPool.values())[0];
+        selectedInstance = getDefaultActiveInstance()!;
       }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to create group "${name}"`);
@@ -2467,7 +2543,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
       if (!selectedInstance) {
-        selectedInstance = Array.from(accountPool.values())[0];
+        selectedInstance = getDefaultActiveInstance()!;
       }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to join group from link: ${link}`);
@@ -2541,7 +2617,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
       if (!selectedInstance) {
-        selectedInstance = Array.from(accountPool.values())[0];
+        selectedInstance = getDefaultActiveInstance()!;
       }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to search phone: ${phoneNumber}`);
       const profile = await selectedInstance.api.findUser(phoneNumber);
@@ -2563,7 +2639,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
       if (!selectedInstance) {
-        selectedInstance = Array.from(accountPool.values())[0];
+        selectedInstance = getDefaultActiveInstance()!;
       }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to send friend request to ${userId}`);
       await selectedInstance.api.sendFriendRequest(message, userId);
@@ -2588,7 +2664,7 @@ export class PersonalZcaChannel implements ZaloChannel {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
       if (!selectedInstance) {
-        selectedInstance = Array.from(accountPool.values())[0];
+        selectedInstance = getDefaultActiveInstance()!;
       }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to accept friend request from ${userId}`);
       await selectedInstance.api.acceptFriendRequest(userId);

@@ -22,21 +22,9 @@ export async function handleLocalSessionRoute(
   response: ServerResponse,
   json: JsonResponder,
   coordinator: SessionCoordinator,
-  eventHub: SessionEventHub,
+  _eventHub?: SessionEventHub,
 ): Promise<boolean> {
   const pathname = new URL(rawUrl, 'http://127.0.0.1').pathname;
-
-  if (method === 'GET' && pathname === '/local/events') {
-    response.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    });
-    const remove = eventHub.addClient(response);
-    request.on('close', remove);
-    return true;
-  }
 
   if (method === 'POST' && pathname === '/local/auth/sync') {
     try {

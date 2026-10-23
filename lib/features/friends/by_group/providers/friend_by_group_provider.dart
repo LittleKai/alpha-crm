@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../mock/mock_groups.dart';
@@ -111,7 +112,7 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           selectedMemberIds: {},
           logs: [],
           groupLinkInput: '',
-          savedGroups: const [],
+          savedGroups: [],
           friendIds: {},
         ),
       ) {
@@ -293,6 +294,11 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           );
           return;
         }
+        state = state.copyWith(
+          isScanning: false,
+          errorText:
+              response['error']?.toString() ?? 'Không thể quét thành viên nhóm.',
+        );
       } catch (e) {
         state = state.copyWith(isScanning: false, errorText: e.toString());
       }
@@ -338,6 +344,11 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
           state = state.copyWith(members: members, isScanning: false);
           return;
         }
+        state = state.copyWith(
+          isScanning: false,
+          errorText:
+              response['error']?.toString() ?? 'Không thể tải thành viên nhóm.',
+        );
       } catch (e) {
         state = state.copyWith(isScanning: false, errorText: e.toString());
       }
@@ -589,13 +600,15 @@ class FriendByGroupNotifier extends StateNotifier<FriendByGroupState> {
             );
       }
 
+      if (!mounted || !state.isRunning) return;
+
       _currentIndex++;
 
       if (_currentIndex < _membersToInvite.length) {
         final delaySeconds =
             state.minDelay +
             (state.maxDelay > state.minDelay
-                ? (state.maxDelay - state.minDelay)
+                ? Random().nextInt(state.maxDelay - state.minDelay + 1)
                 : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(

@@ -93,24 +93,42 @@ const pendingSessionSweeper = setInterval(() => {
 }, 60000);
 pendingSessionSweeper.unref?.();
 
+const TRUSTED_ORIGINS = new Set([
+  'https://giaiphapsangtao.com',
+  'https://alphastudio.vercel.app',
+]);
+
+function isTrustedOrigin(reqOrigin: string): boolean {
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin)) {
+    return true;
+  }
+  return TRUSTED_ORIGINS.has(reqOrigin);
+}
+
+function isAllowedLoopbackHost(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return true;
+  return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(hostHeader.trim());
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function setCorsHeaders(res: ServerResponse, req?: IncomingMessage): void {
-  let origin = '*';
   if (req && req.headers.origin) {
     const reqOrigin = req.headers.origin;
-    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
-    const isTrustedDomain = [
-      'https://giaiphapsangtao.com',
-      'https://alphastudio.vercel.app'
-    ].includes(reqOrigin);
-    
-    if (reqOrigin === 'null' || isLocalhost || isTrustedDomain) {
-      origin = reqOrigin;
-    } else {
-      origin = 'null';
-    }
+    res.setHeader(
+      'Access-Control-Allow-Origin',
+      isTrustedOrigin(reqOrigin) ? reqOrigin : 'null',
+    );
+  } else if (!res.getHeader('Access-Control-Allow-Origin')) {
+    res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1');
   }
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Content-Type, x-bot-api-secret-token, x-zalo-webhook-secret',
@@ -202,9 +220,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   const url = req.url || '/';
   const method = req.method || 'GET';
 
+  setCorsHeaders(res, req);
+
+  if (!isAllowedLoopbackHost(req.headers.host)) {
+    json(res, 403, { success: false, error: 'Forbidden host header.' }, req);
+    return;
+  }
+
+  if (req.headers.origin && !isTrustedOrigin(req.headers.origin)) {
+    json(res, 403, { success: false, error: 'Origin not allowed.' }, req);
+    return;
+  }
+
   // Handle CORS preflight
   if (method === 'OPTIONS') {
-    setCorsHeaders(res, req);
     res.writeHead(204);
     res.end();
     return;
@@ -224,12 +253,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   // Handle local-first Live Chat APIs
   try {
-    if (handleLocalRoute(method, url, req, res, json, readBody)) {
+    if (handleLocalRoute(method, url, req, res, json, readBody, sessionEventHub)) {
       return;
     }
   } catch (err: any) {
     logError(`[server] Error handling local route ${method} ${url}:`, err);
-    json(res, 500, { success: false, error: err.message || 'Internal server error' });
+    json(res, 500, { success: false, error: err.message || 'Internal server error' }, req);
     return;
   }
 
@@ -452,7 +481,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const facebookAccountDeleteMatch = url.match(/^\/api\/integrations\/facebook\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && facebookAccountDeleteMatch) {
-    const pageId = decodeURIComponent(facebookAccountDeleteMatch[1]);
+    const pageId = safeDecodeURIComponent(facebookAccountDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.facebookPages.find((page) => page.pageId === pageId);
     if (!target) {
@@ -560,7 +589,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const tiktokAccountDeleteMatch = url.match(/^\/api\/integrations\/tiktok\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && tiktokAccountDeleteMatch) {
-    const accountId = decodeURIComponent(tiktokAccountDeleteMatch[1]);
+    const accountId = safeDecodeURIComponent(tiktokAccountDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.tiktokAccounts.find((account) => account.accountId === accountId);
     if (!target) {
@@ -670,7 +699,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const instagramAccountDeleteMatch = url.match(/^\/api\/integrations\/instagram\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && instagramAccountDeleteMatch) {
-    const accountId = decodeURIComponent(instagramAccountDeleteMatch[1]);
+    const accountId = safeDecodeURIComponent(instagramAccountDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.instagramAccounts.find((account) => account.accountId === accountId);
     if (!target) {
@@ -781,7 +810,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const whatsappAccountDeleteMatch = url.match(/^\/api\/integrations\/whatsapp\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && whatsappAccountDeleteMatch) {
-    const accountId = decodeURIComponent(whatsappAccountDeleteMatch[1]);
+    const accountId = safeDecodeURIComponent(whatsappAccountDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.whatsappAccounts.find((account) => account.accountId === accountId);
     if (!target) {
@@ -919,7 +948,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const telegramBotDeleteMatch = url.match(/^\/api\/integrations\/telegram\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && telegramBotDeleteMatch) {
-    const accountId = decodeURIComponent(telegramBotDeleteMatch[1]);
+    const accountId = safeDecodeURIComponent(telegramBotDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.telegramBots.find((bot) => bot.accountId === accountId);
     if (!target) {
@@ -1029,7 +1058,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const webchatWidgetDeleteMatch = url.match(/^\/api\/integrations\/webchat\/accounts\/([^/?]+)$/);
   if (method === 'DELETE' && webchatWidgetDeleteMatch) {
-    const widgetId = decodeURIComponent(webchatWidgetDeleteMatch[1]);
+    const widgetId = safeDecodeURIComponent(webchatWidgetDeleteMatch[1]);
     const current = readIntegrationSettings();
     const target = current.webchatWidgets.find((widget) => widget.widgetId === widgetId);
     if (!target) {
@@ -1245,6 +1274,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       // Wait for QR code image file to be successfully written to disk before responding
       await new Promise<void>((resolvePromise, rejectPromise) => {
         let isSettled = false;
+        let capturedLoginInfo: unknown = null;
 
         zalo.loginQR(
           {
@@ -1272,6 +1302,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             }
             if (event.type === LoginQRCallbackEventType.QRCodeExpired) {
               console.log(`[server - ${sessionId}] QR code expired!`);
+              capturedLoginInfo = null;
               const session = pendingSessions.get(sessionId);
               if (session) {
                 session.status = 'timeout';
@@ -1285,6 +1316,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             }
             if (event.type === LoginQRCallbackEventType.QRCodeDeclined) {
               console.log(`[server - ${sessionId}] QR code declined by user!`);
+              capturedLoginInfo = null;
               const session = pendingSessions.get(sessionId);
               if (session) {
                 session.status = 'failed';
@@ -1297,28 +1329,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
               } catch {}
             }
             if (event.type === LoginQRCallbackEventType.GotLoginInfo && event.data) {
-              console.log(`[server - ${sessionId}] Got credentials! Saving temp session...`);
-              const tempPath = resolve(credDir, `temp_${sessionId}.json`);
-              try {
-                writeFileSync(tempPath, JSON.stringify(event.data, null, 2), 'utf-8');
-              } catch (writeErr) {
-                console.error(`[server - ${sessionId}] Failed to write temp credentials:`, writeErr);
-              }
+              console.log(`[server - ${sessionId}] Got credentials in memory for session.`);
+              capturedLoginInfo = event.data;
             }
           }
         ).then(async (apiInstance) => {
           const uId = apiInstance.getOwnId ? apiInstance.getOwnId() : `personal_${Date.now()}`;
           console.log(`[server - ${sessionId}] Login success! Account ID: ${uId}`);
 
-          const tempPath = resolve(credDir, `temp_${sessionId}.json`);
           const targetPath = resolve(credDir, `credentials_${uId}.json`);
 
-          if (existsSync(tempPath)) {
+          if (capturedLoginInfo) {
             try {
-              const raw = readFileSync(tempPath, 'utf-8');
-              writeSecure(targetPath, raw);
-              unlinkSync(tempPath);
-              console.log(`[server - ${sessionId}] Saved credentials to ${targetPath}`);
+              writeSecure(targetPath, JSON.stringify(capturedLoginInfo, null, 2));
+              capturedLoginInfo = null;
+              console.log(`[server - ${sessionId}] Saved encrypted credentials to ${targetPath}`);
             } catch (moveErr) {
               console.error(`[server - ${sessionId}] Failed to save credentials file:`, moveErr);
             }
@@ -1338,6 +1363,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             session.accountLabel = uId;
           }
         }).catch((err) => {
+          capturedLoginInfo = null;
           console.error(`[server - ${sessionId}] QR login failed:`, err);
           const session = pendingSessions.get(sessionId);
           if (session) {

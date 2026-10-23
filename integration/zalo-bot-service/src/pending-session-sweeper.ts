@@ -46,6 +46,8 @@ export function sweepExpiredSessions(
     try {
       const qrPath = resolve(qrDir, session.qrFileName);
       if (existsSync(qrPath)) unlinkSync(qrPath);
+      const tempCredPath = resolve(qrDir, `temp_${sessionId}.json`);
+      if (existsSync(tempCredPath)) unlinkSync(tempCredPath);
     } catch (err) {
       console.warn(`[server] Không xoá được ảnh QR của ${sessionId}:`, err);
     }

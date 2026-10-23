@@ -204,7 +204,14 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
           .map((json) => ContactJson.fromJson(json))
           .toList();
       state = state.copyWith(contacts: loaded, isLoading: false);
-      _cacheContacts(raw);
+      final isUnfiltered =
+          state.searchQuery.trim().isEmpty &&
+          state.selectedStatus == 'Tất cả' &&
+          state.selectedTag == 'Tất cả' &&
+          state.selectedSegmentId.isEmpty;
+      if (isUnfiltered) {
+        _cacheContacts(raw);
+      }
     } else {
       // Cloud unreachable — fall back to the last cached snapshot so the
       // workspace still shows known contacts offline.
@@ -352,27 +359,38 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
     );
   }
 
-  void updateContactCustomAttribute(
+  Future<void> updateContactCustomAttribute(
     String contactId,
     String key,
     String value,
-  ) {
+  ) async {
     final trimmedValue = value.trim();
-    state = state.copyWith(
-      contacts: [
-        for (final contact in state.contacts)
-          if (contact.id == contactId)
-            contact.copyWith(
-              customAttributes: _updatedCustomAttributes(
-                contact.customAttributes,
-                key,
-                trimmedValue,
-              ),
-            )
-          else
-            contact,
-      ],
-    );
+    Map<String, String>? updatedForTarget;
+    final nextContacts = <Contact>[
+      for (final contact in state.contacts)
+        if (contact.id == contactId)
+          () {
+            final nextAttrs = _updatedCustomAttributes(
+              contact.customAttributes,
+              key,
+              trimmedValue,
+            );
+            updatedForTarget = nextAttrs;
+            return contact.copyWith(customAttributes: nextAttrs);
+          }()
+        else
+          contact,
+    ];
+    state = state.copyWith(contacts: nextContacts);
+    if (updatedForTarget != null) {
+      try {
+        await _repository.patchCustomerFields(contactId, {
+          'customFields': updatedForTarget,
+        });
+      } catch (_) {
+        // Ignore transient network errors; local state remains updated.
+      }
+    }
   }
 
   Map<String, String> _updatedCustomAttributes(
@@ -471,14 +489,14 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
     }
   }
 
-  Future<void> importContacts(List<Contact> newContacts) async {
+  Future<bool> importContacts(List<Contact> newContacts) async {
     final auth = _ref.read(crmAuthProvider);
     if (auth.subscriptionStatus == 'expired') {
       state = state.copyWith(
         errorMessage:
             'Gói dịch vụ đã hết hạn. Hệ thống đang hoạt động ở chế độ Đọc-Chỉ-Xem (Read-Only).',
       );
-      return;
+      return false;
     }
 
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -501,12 +519,14 @@ class CustomersNotifier extends StateNotifier<CustomersState> {
     if (response['success'] == true) {
       await loadContacts();
       state = state.copyWith(isLoading: false);
+      return true;
     } else {
       state = state.copyWith(
         isLoading: false,
         errorMessage: (response['message'] ?? 'Nhập khách hàng thất bại.')
             .toString(),
       );
+      return false;
     }
   }
 

@@ -31,9 +31,18 @@ import {
   saveKnowledgeFile,
 } from '../chatbot/chatbot-knowledge-store.js';
 import type { ChatbotConversationMode } from '../chatbot/chatbot-types.js';
+import type { SessionEventHub } from '../local-session/session-events.js';
 
 type JsonFn = (res: ServerResponse, status: number, data: unknown, req?: IncomingMessage) => void;
 type ReadBodyFn = (req: IncomingMessage) => Promise<string>;
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 /**
  * Try to handle a /local/* request. Returns true if handled.
@@ -45,6 +54,7 @@ export function handleLocalRoute(
   res: ServerResponse,
   json: JsonFn,
   readBody: ReadBodyFn,
+  eventHub?: SessionEventHub,
 ): boolean {
   if (!url.startsWith('/local/')) return false;
 
@@ -60,7 +70,7 @@ export function handleLocalRoute(
   const mediaMatch = url.match(/^\/local\/media\/([^/?]+)(\/download)?$/);
   if (method === 'GET' && mediaMatch) {
     handleLocalMedia(
-      decodeURIComponent(mediaMatch[1]),
+      safeDecodeURIComponent(mediaMatch[1]),
       mediaMatch[2] === '/download',
       req,
       res,
@@ -71,7 +81,7 @@ export function handleLocalRoute(
 
   // GET /local/events?accountId=&threadId=
   if (method === 'GET' && /^\/local\/events(\?.*)?$/.test(url)) {
-    handleLocalEvents(url, req, res);
+    handleLocalEvents(url, req, res, eventHub);
     return true;
   }
 
@@ -130,7 +140,7 @@ export function handleLocalRoute(
   );
   if (method === 'PUT' && acctSettingsMatch) {
     void handlePutAccountChatSettings(
-      decodeURIComponent(acctSettingsMatch[1]),
+      safeDecodeURIComponent(acctSettingsMatch[1]),
       req,
       res,
       json,
@@ -192,7 +202,7 @@ export function handleLocalRoute(
   ) {
     void handleLocalConversationChatbot(
       method,
-      decodeURIComponent(chatbotStateMatch[1]),
+      safeDecodeURIComponent(chatbotStateMatch[1]),
       req,
       res,
       json,
@@ -212,7 +222,7 @@ export function handleLocalRoute(
   // POST /local/conversations/:id/mark-read
   const markReadMatch = url.match(/^\/local\/conversations\/([^/?]+)\/mark-read$/);
   if (method === 'POST' && markReadMatch) {
-    const conversationId = decodeURIComponent(markReadMatch[1]);
+    const conversationId = safeDecodeURIComponent(markReadMatch[1]);
     handleLocalMarkRead(conversationId, req, res, json);
     return true;
   }
@@ -220,7 +230,7 @@ export function handleLocalRoute(
   const updateConversationMatch = url.match(/^\/local\/conversations\/([^/?]+)$/);
   if (method === 'PUT' && updateConversationMatch) {
     void handleLocalUpdateConversation(
-      decodeURIComponent(updateConversationMatch[1]),
+      safeDecodeURIComponent(updateConversationMatch[1]),
       req,
       res,
       json,
@@ -232,7 +242,7 @@ export function handleLocalRoute(
   // GET /local/conversations/:id/messages?before=&after=&limit=
   const msgMatch = url.match(/^\/local\/conversations\/([^/?]+)\/messages(\?.*)?$/);
   if (method === 'GET' && msgMatch) {
-    const conversationId = decodeURIComponent(msgMatch[1]);
+    const conversationId = safeDecodeURIComponent(msgMatch[1]);
     const queryStr = msgMatch[2] ? msgMatch[2].slice(1) : '';
     handleLocalMessages(conversationId, queryStr, req, res, json);
     return true;
@@ -248,7 +258,7 @@ export function handleLocalRoute(
   const aroundMatch = url.match(/^\/local\/messages\/([^/?]+)\/around(\?.*)?$/);
   if (method === 'GET' && aroundMatch) {
     handleLocalMessagesAround(
-      decodeURIComponent(aroundMatch[1]),
+      safeDecodeURIComponent(aroundMatch[1]),
       aroundMatch[2]?.slice(1) || '',
       req,
       res,
@@ -272,7 +282,7 @@ export function handleLocalRoute(
   // POST /local/messages/:id/recall
   const recallMatch = url.match(/^\/local\/messages\/([^/?]+)\/recall$/);
   if (method === 'POST' && recallMatch) {
-    const messageId = decodeURIComponent(recallMatch[1]);
+    const messageId = safeDecodeURIComponent(recallMatch[1]);
     handleLocalRecall(messageId, req, res, json);
     return true;
   }
@@ -280,7 +290,7 @@ export function handleLocalRoute(
   // POST /local/messages/:id/delete
   const deleteMatch = url.match(/^\/local\/messages\/([^/?]+)\/delete$/);
   if (method === 'POST' && deleteMatch) {
-    const messageId = decodeURIComponent(deleteMatch[1]);
+    const messageId = safeDecodeURIComponent(deleteMatch[1]);
     handleLocalDelete(messageId, req, res, json);
     return true;
   }
@@ -288,7 +298,7 @@ export function handleLocalRoute(
   const retryMatch = url.match(/^\/local\/messages\/([^/?]+)\/retry$/);
   if (method === 'POST' && retryMatch) {
     handleLocalRetry(
-      decodeURIComponent(retryMatch[1]),
+      safeDecodeURIComponent(retryMatch[1]),
       req,
       res,
       json,
@@ -299,7 +309,7 @@ export function handleLocalRoute(
   const reactionMatch = url.match(/^\/local\/messages\/([^/?]+)\/reactions$/);
   if (method === 'POST' && reactionMatch) {
     handleLocalReaction(
-      decodeURIComponent(reactionMatch[1]),
+      safeDecodeURIComponent(reactionMatch[1]),
       req,
       res,
       json,
@@ -317,8 +327,8 @@ export function handleLocalRoute(
   if ((method === 'GET' || method === 'PUT') && draftMatch) {
     handleLocalDraft(
       method,
-      decodeURIComponent(draftMatch[1]),
-      decodeURIComponent(draftMatch[2]),
+      safeDecodeURIComponent(draftMatch[1]),
+      safeDecodeURIComponent(draftMatch[2]),
       req,
       res,
       json,
@@ -671,6 +681,7 @@ function handleLocalEvents(
   url: string,
   req: IncomingMessage,
   res: ServerResponse,
+  eventHub?: SessionEventHub,
 ): void {
   const query = new URL(url, 'http://127.0.0.1').searchParams;
   const filter = {
@@ -683,7 +694,10 @@ function handleLocalEvents(
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
-  res.write(': connected\n\n');
+  const removeSessionClient = eventHub ? eventHub.addClient(res) : null;
+  if (!removeSessionClient) {
+    res.write(': connected\n\n');
+  }
 
   const lastEventId = req.headers['last-event-id'];
   if (typeof lastEventId === 'string' && lastEventId) {
@@ -699,6 +713,7 @@ function handleLocalEvents(
   req.on('close', () => {
     clearInterval(heartbeat);
     unsubscribe();
+    removeSessionClient?.();
   });
 }
 

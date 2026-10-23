@@ -1,6 +1,6 @@
 /**
  * secure-store — encryption-at-rest for sensitive local files (Zalo credential
- * JSON, account-settings.json with proxy credentials).
+ * JSON, account-settings.json with proxy credentials, device-secret.json, crm_token.json).
  *
  * Design (per product decision "OS-native"):
  *  - A single random AES-256 key is generated once and persisted to
@@ -21,7 +21,7 @@
  * decrypted plaintext is byte-identical, preserving the immutability policy
  * that protects `zpw_sek`.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { platform } from 'os';
 import { execFileSync } from 'child_process';
@@ -113,16 +113,23 @@ export function readSecure(filePath: string): string | null {
   }
 }
 
-/** Write a file encrypted-at-rest, or plaintext if the key is unavailable. */
+/** Write a file encrypted-at-rest, or plaintext if the key is unavailable. Uses atomic rename. */
 export function writeSecure(filePath: string, data: string): void {
   mkdirSync(dirname(filePath), { recursive: true });
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   const key = loadOrCreateKey();
-  if (!key) {
-    writeFileSync(filePath, data, 'utf-8');
-    return;
+  try {
+    if (!key) {
+      writeFileSync(tmpPath, data, 'utf-8');
+    } else {
+      const iv = randomBytes(IV_LEN);
+      const cipher = createCipheriv('aes-256-gcm', key, iv);
+      const ct = Buffer.concat([cipher.update(Buffer.from(data, 'utf-8')), cipher.final()]);
+      writeFileSync(tmpPath, Buffer.concat([MAGIC, iv, cipher.getAuthTag(), ct]));
+    }
+    renameSync(tmpPath, filePath);
+  } catch (err) {
+    try { rmSync(tmpPath, { force: true }); } catch { /* ignore */ }
+    throw err;
   }
-  const iv = randomBytes(IV_LEN);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ct = Buffer.concat([cipher.update(Buffer.from(data, 'utf-8')), cipher.final()]);
-  writeFileSync(filePath, Buffer.concat([MAGIC, iv, cipher.getAuthTag(), ct]));
 }

@@ -80,7 +80,14 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       _playgroundResponse = null;
     });
 
-    final aiApiKeys = ref.read(chatbotProvider).aiApiKeys;
+    final chatbotState = ref.read(chatbotProvider);
+    final activeProvider = chatbotState.aiProvider;
+    final activeKey = chatbotState.aiApiKeys[activeProvider];
+    final scopedKeys = (activeProvider != 'alpha_studio' &&
+            activeKey != null &&
+            activeKey.isNotEmpty)
+        ? <String, List<String>>{activeProvider: activeKey}
+        : const <String, List<String>>{};
 
     final response = await CrmCloudApi.post('/crm/chatbot/test', {
       'message': msg,
@@ -89,7 +96,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       'soulPrompt': _soulController.text,
       'responseRules': _rulesController.text,
       'temperature': _tempValue,
-      'aiApiKeys': aiApiKeys,
+      'aiApiKeys': scopedKeys,
     });
 
     setState(() {
@@ -107,7 +114,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             usage['promptTokens'] ?? usage['prompt_tokens'] ?? 0;
         final completionTokens =
             usage['completionTokens'] ?? usage['completion_tokens'] ?? 0;
-        print(
+        debugPrint(
           '🧮 [AI TOKENS] Input: $promptTokens | Output: $completionTokens | Total: ${promptTokens + completionTokens}',
         );
       }
@@ -2017,10 +2024,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                           ),
                                           const SizedBox(width: AppSpacing.s),
                                           Expanded(
-                                            child: TextField(
-                                              controller: TextEditingController(
-                                                text: keyValue,
+                                            child: TextFormField(
+                                              key: ValueKey(
+                                                'api_key_${provider.id}_$idx',
                                               ),
+                                              initialValue: keyValue,
                                               style: AppTextStyles.body
                                                   .copyWith(fontSize: 13),
                                               obscureText: true,
@@ -3039,8 +3047,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       if (_logsFilterCategory == 'AI') return log.keyword == 'ai';
       if (_logsFilterCategory == 'Từ khóa') return log.keyword == 'keyword';
       if (_logsFilterCategory == 'Chuyển NV') return log.keyword == 'handoff';
-      if (_logsFilterCategory == 'Khác')
+      if (_logsFilterCategory == 'Khác') {
         return !['ai', 'keyword', 'handoff'].contains(log.keyword);
+      }
       return true;
     }).toList();
 

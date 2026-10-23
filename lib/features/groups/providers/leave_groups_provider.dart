@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
@@ -17,6 +19,8 @@ class LeaveGroupsState {
   final bool isSilent;
   final String searchQuery;
   final bool isLoadingGroups;
+  final int minDelay;
+  final int maxDelay;
 
   const LeaveGroupsState({
     required this.isRunning,
@@ -27,6 +31,8 @@ class LeaveGroupsState {
     this.isSilent = true,
     this.searchQuery = '',
     this.isLoadingGroups = false,
+    this.minDelay = 5,
+    this.maxDelay = 15,
   });
 
   LeaveGroupsState copyWith({
@@ -38,6 +44,8 @@ class LeaveGroupsState {
     bool? isSilent,
     String? searchQuery,
     bool? isLoadingGroups,
+    int? minDelay,
+    int? maxDelay,
   }) {
     return LeaveGroupsState(
       isRunning: isRunning ?? this.isRunning,
@@ -48,6 +56,8 @@ class LeaveGroupsState {
       isSilent: isSilent ?? this.isSilent,
       searchQuery: searchQuery ?? this.searchQuery,
       isLoadingGroups: isLoadingGroups ?? this.isLoadingGroups,
+      minDelay: minDelay ?? this.minDelay,
+      maxDelay: maxDelay ?? this.maxDelay,
     );
   }
 }
@@ -143,7 +153,7 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
                   )) &&
               integrationState.accounts.isNotEmpty) {
             autoAccountId = integrationState.accounts.first.id;
-            print(
+            debugPrint(
               '[LeaveGroupsNotifier] Auto-selected account ID: $autoAccountId',
             );
           }
@@ -153,22 +163,22 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
             groups: realGroups,
             selectedAccountId: autoAccountId,
           );
-          print(
+          debugPrint(
             '[LeaveGroupsNotifier] Successfully reloaded ${realGroups.length} groups from backend.',
           );
           return;
         } else {
-          print(
+          debugPrint(
             '[LeaveGroupsNotifier] Failed to load groups from API: $result',
           );
         }
       } else {
-        print(
+        debugPrint(
           '[LeaveGroupsNotifier] Zalo backend is not connected: mode=${integrationState.mode}, error=${integrationState.errorText}',
         );
       }
     } catch (e, stack) {
-      print('[LeaveGroupsNotifier] Exception in reloadGroups: $e\n$stack');
+      debugPrint('[LeaveGroupsNotifier] Exception in reloadGroups: $e\n$stack');
     }
 
     final integrationState = _ref.read(zaloIntegrationProvider);
@@ -265,11 +275,12 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
         // Handled silently
       }
 
+      if (!mounted || !state.isRunning) return;
+
       final logTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
       List<LogItem> updatedLogs;
 
-      // If left successfully or we are in local offline fallback mock mode
-      if (leaveSuccess || !_ref.read(zaloIntegrationProvider).isConnected) {
+      if (leaveSuccess) {
         updatedLogs = [
           ...state.logs,
           LogItem(
@@ -289,34 +300,48 @@ class LeaveGroupsNotifier extends StateNotifier<LeaveGroupsState> {
         ];
       }
 
-      final updatedGroupsList = state.groups
-          .where((g) => g.id != groupId)
-          .toList();
+      final updatedGroupsList = leaveSuccess
+          ? state.groups.where((g) => g.id != groupId).toList()
+          : state.groups;
 
       state = state.copyWith(logs: updatedLogs, groups: updatedGroupsList);
 
       _currentGroupIndex++;
 
       if (_currentGroupIndex < _groupIdsToLeave.length) {
+        final delaySeconds =
+            state.minDelay +
+            (state.maxDelay > state.minDelay
+                ? Random().nextInt(state.maxDelay - state.minDelay + 1)
+                : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(
           logs: [
             ...state.logs,
             LogItem(
               timestamp: delayTimeStr,
-              message: 'Đang giãn cách 3s trước khi rời nhóm tiếp theo...',
+              message:
+                  'Đang giãn cách ${delaySeconds}s trước khi rời nhóm tiếp theo...',
               type: LogType.info,
             ),
           ],
         );
 
-        _timer = Timer(const Duration(seconds: 3), () {
+        _timer = Timer(Duration(seconds: delaySeconds), () {
           _runNextLeave();
         });
       } else {
         _runNextLeave();
       }
     });
+  }
+
+  void setMinDelay(int val) {
+    if (val > 0) state = state.copyWith(minDelay: val);
+  }
+
+  void setMaxDelay(int val) {
+    if (val >= state.minDelay) state = state.copyWith(maxDelay: val);
   }
 
   void stopLeaveCampaign() {

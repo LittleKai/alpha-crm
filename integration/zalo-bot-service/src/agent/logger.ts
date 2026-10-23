@@ -39,8 +39,11 @@ export function redactSecrets(content: string): string {
   // 2. Redact Agent secret hashes or passwords (hex of length 64)
   redacted = redacted.replace(/\b([a-fA-F0-9]{64})\b/g, '[REDACTED_SECRET_HASH]');
 
-  // 3. Redact Zalo cookies or credentials
-  redacted = redacted.replace(/(cookie|cookieValue|secret|agentSecret|token|zaloOaSecret|zaloOaAccessToken|zaloOaRefreshToken)":"?[a-zA-Z0-9-_=+/.]+"?/gi, '$1":"[REDACTED]"');
+  // 3. Redact Zalo cookies, API keys, or channel tokens in JSON or key=value form
+  redacted = redacted.replace(
+    /(cookie|cookieValue|zpw_sek|secret|agentSecret|token|accessToken|refreshToken|botToken|apiKey|appSecret|verifyToken|zaloOaSecret|zaloOaAccessToken|zaloOaRefreshToken)(["']?\s*[:=]\s*["']?)[a-zA-Z0-9-_=+/.]+(["']?)/gi,
+    '$1$2[REDACTED]$3',
+  );
 
   return redacted;
 }
@@ -61,13 +64,6 @@ export function formatLogArgs(args: unknown[]): string {
     .replace(/\r?\n/g, ' | ');
 }
 
-/**
- * Giữ fd mở thay vì `appendFileSync` (mở + ghi + đóng mỗi dòng). Tee bám vào
- * đường in nóng của backend nên số syscall mỗi dòng là chi phí có thật trên
- * event loop — nơi `/health` và mọi truy vấn SQLite đồng bộ cùng chen chân.
- * Vẫn ghi ĐỒNG BỘ: mục đích của file này là còn dấu vết khi tiến trình chết,
- * mà đệm bất đồng bộ thì mất đúng những dòng cuối cùng đáng giá nhất.
- */
 let logFd: number | null = null;
 let linesSinceRotateCheck = 0;
 const ROTATE_CHECK_EVERY = 200;
@@ -105,11 +101,6 @@ function rotateIfNeeded(): void {
   fs.renameSync(logFilePath, oldLogPath);
 }
 
-/**
- * Bỏ ghi file sau ngần này lần lỗi liên tiếp. Nếu người dùng giải nén bản build
- * vào thư mục chỉ đọc (Program Files), không có cái này thì MỖI dòng console
- * sinh thêm một dòng cảnh báo — biến một sự cố quyền ghi thành ngập nhật ký.
- */
 const MAX_CONSECUTIVE_WRITE_FAILURES = 5;
 let consecutiveWriteFailures = 0;
 
@@ -122,7 +113,7 @@ function appendToLogFile(level: string, message: string): void {
     fs.writeSync(openLogFd(), line);
     consecutiveWriteFailures = 0;
   } catch (err: any) {
-    closeLogFd(); // fd hỏng (file bị xoá/di chuyển) → lần sau mở lại
+    closeLogFd();
     consecutiveWriteFailures++;
     originalConsole.warn(
       `[logger] Failed to write to log file:`,
@@ -141,7 +132,6 @@ function writeLog(level: 'INFO' | 'WARN' | 'ERROR', message: string, ...optional
   const formattedMessage = formatLogArgs([message, ...optionalParams]);
   const safeMessage = redactSecrets(formattedMessage);
 
-  // In qua console GỐC để tee không ghi lặp dòng này (writeLog tự ghi file).
   if (level === 'ERROR') {
     originalConsole.error(`[${level}] ${safeMessage}`);
   } else if (level === 'WARN') {
@@ -155,29 +145,24 @@ function writeLog(level: 'INFO' | 'WARN' | 'ERROR', message: string, ...optional
 
 let teeInstalled = false;
 
-/**
- * Vá console.log/warn/error để mọi dòng cũng rơi vào agent.log.
- *
- * Backend có ~270 lời gọi console.* và chỉ 4 lời gọi logInfo/logError, nên
- * trước đây gần như toàn bộ nhật ký chỉ tồn tại trong pipe stdout — phụ thuộc
- * việc app Flutter còn sống để hứng. Backend chết trước khi Flutter kịp đọc là
- * không còn dấu vết nào để chẩn đoán.
- */
 export function installConsoleFileTee(): void {
   if (teeInstalled) return;
   teeInstalled = true;
 
   console.log = (...args: unknown[]) => {
-    originalConsole.log(...args);
-    appendToLogFile('INFO', formatLogArgs(args));
+    const formatted = formatLogArgs(args);
+    originalConsole.log(redactSecrets(formatted));
+    appendToLogFile('INFO', formatted);
   };
   console.warn = (...args: unknown[]) => {
-    originalConsole.warn(...args);
-    appendToLogFile('WARN', formatLogArgs(args));
+    const formatted = formatLogArgs(args);
+    originalConsole.warn(redactSecrets(formatted));
+    appendToLogFile('WARN', formatted);
   };
   console.error = (...args: unknown[]) => {
-    originalConsole.error(...args);
-    appendToLogFile('ERROR', formatLogArgs(args));
+    const formatted = formatLogArgs(args);
+    originalConsole.error(redactSecrets(formatted));
+    appendToLogFile('ERROR', formatted);
   };
 
   appendToLogFile('INFO', `=== console tee installed (pid ${process.pid}) ===`);

@@ -115,7 +115,7 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
       return;
     }
     final salt = AppLockCrypto.createSalt();
-    final passwordHash = AppLockCrypto.hashPassword(password, salt);
+    final passwordHash = await AppLockCrypto.hashPasswordAsync(password, salt);
     state = state.copyWith(
       hasPassword: true,
       salt: salt,
@@ -135,7 +135,7 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
       state = state.copyWith(errorText: 'Chưa thiết lập mật khẩu khóa.');
       return;
     }
-    if (!AppLockCrypto.verifyPassword(password, salt, passwordHash)) {
+    if (!await AppLockCrypto.verifyPasswordAsync(password, salt, passwordHash)) {
       state = state.copyWith(errorText: 'Sai mật khẩu.');
       return;
     }

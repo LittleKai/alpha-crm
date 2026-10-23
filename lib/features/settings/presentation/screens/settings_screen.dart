@@ -552,10 +552,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                             if (deleteDb) {
                               try {
-                                final db = await LocalDb.instance;
-                                await db.close();
+                                await LocalDb.closeAndReset();
                               } catch (_) {}
-                              
+
                               final appSupportDir = await getApplicationSupportDirectory();
                               final dbFile = File(join(appSupportDir.path, 'alpha_crm_local_v1.db'));
                               if (await dbFile.exists()) {

@@ -1,8 +1,9 @@
 import os from 'os';
 import crypto from 'crypto';
 import fs from 'fs';
-import { dirname, resolve } from 'path';
+import { resolve } from 'path';
 import { config, projectRoot } from '../config.js';
+import { readSecure, writeSecure } from '../secure-store.js';
 
 export interface AgentCredentials {
   userId: string;
@@ -48,10 +49,10 @@ export function getAgentCredentials(): AgentCredentials | null {
 
 export function readAgentCredentialsFile(secretPath: string): AgentCredentials | null {
   try {
-    if (!fs.existsSync(secretPath)) {
+    const raw = readSecure(secretPath);
+    if (!raw) {
       return null;
     }
-    const raw = fs.readFileSync(secretPath, 'utf-8');
     const parsed: unknown = JSON.parse(raw);
     if (
       parsed
@@ -97,10 +98,7 @@ export function writeAgentCredentialsFile(
   secretPath: string,
   credentials: AgentCredentials,
 ): void {
-  fs.mkdirSync(dirname(secretPath), { recursive: true });
-  const temporaryPath = `${secretPath}.tmp`;
-  fs.writeFileSync(temporaryPath, JSON.stringify(credentials, null, 2), 'utf-8');
-  fs.renameSync(temporaryPath, secretPath);
+  writeSecure(secretPath, JSON.stringify(credentials, null, 2));
 }
 
 export function deleteFileIfPresent(filePath: string): void {
@@ -144,7 +142,8 @@ export function getCrmToken(): string | null {
   const tokenPath = getCrmTokenPath();
   if (!tokenPath) return null;
   try {
-    const raw = fs.readFileSync(tokenPath, 'utf8');
+    const raw = readSecure(tokenPath);
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed.token || null;
   } catch (err) {
@@ -155,11 +154,8 @@ export function getCrmToken(): string | null {
 
 export function saveCrmToken(token: string, userId: string): void {
   const tokenPath = resolveCrmTokenPath();
-  const temporaryPath = `${tokenPath}.tmp`;
   const data: CrmTokenFile = { token, userId };
-  fs.mkdirSync(dirname(tokenPath), { recursive: true });
-  fs.writeFileSync(temporaryPath, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(temporaryPath, tokenPath);
+  writeSecure(tokenPath, JSON.stringify(data, null, 2));
 }
 
 export function deleteCrmToken(): void {
@@ -169,4 +165,3 @@ export function deleteCrmToken(): void {
 export function deleteAgentCredentials(): void {
   deleteFileIfPresent(resolve(projectRoot, config.crmAgentSecretPath));
 }
-

@@ -25,6 +25,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       if (is_responsive) {
         if (::IsIconic(existing)) {
           ::ShowWindow(existing, SW_RESTORE);
+        } else if (!::IsWindowVisible(existing)) {
+          ::ShowWindow(existing, SW_SHOW);
         }
         ::SetForegroundWindow(existing);
         if (hMutex) {

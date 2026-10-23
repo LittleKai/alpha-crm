@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../../../mock/mock_accounts.dart';
 import '../../../mock/mock_campaigns.dart';
 
@@ -48,33 +50,53 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     _loadSettings();
   }
 
+  Future<File> _resolveSettingsFile() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      await dir.create(recursive: true);
+      final target = File('${dir.path}${Platform.pathSeparator}zalo_settings.json');
+      if (!await target.exists()) {
+        try {
+          final legacy = File('zalo_settings.json');
+          if (await legacy.exists()) {
+            await legacy.copy(target.path);
+          }
+        } catch (_) {}
+      }
+      return target;
+    } catch (_) {
+      return File('zalo_settings.json');
+    }
+  }
+
   Future<void> _loadSettings() async {
     try {
-      final file = File('zalo_settings.json');
+      final file = await _resolveSettingsFile();
       if (await file.exists()) {
         final content = await file.readAsString();
         final Map<String, dynamic> jsonMap = jsonDecode(content);
         final loadedSettings = SystemSettings.fromJson(jsonMap);
+        if (!mounted) return;
         state = state.copyWith(settings: loadedSettings);
-        print('[SettingsNotifier] Loaded settings from zalo_settings.json');
+        debugPrint('[SettingsNotifier] Loaded settings from ${file.path}');
       } else {
         await _saveSettingsToFile(state.settings);
       }
     } catch (e) {
-      print('[SettingsNotifier] Error loading settings: $e');
+      debugPrint('[SettingsNotifier] Error loading settings: $e');
     }
   }
 
   Future<void> _saveSettingsToFile(SystemSettings settings) async {
     try {
-      final file = File('zalo_settings.json');
+      final file = await _resolveSettingsFile();
       final content = const JsonEncoder.withIndent(
         '  ',
       ).convert(settings.toJson());
       await file.writeAsString(content);
-      print('[SettingsNotifier] Saved settings to zalo_settings.json');
+      debugPrint('[SettingsNotifier] Saved settings to ${file.path}');
     } catch (e) {
-      print('[SettingsNotifier] Error saving settings: $e');
+      debugPrint('[SettingsNotifier] Error saving settings: $e');
     }
   }
 

@@ -704,6 +704,7 @@ class WorkflowAutomationNotifier
             result['error']?.toString() ?? 'Không tải được cấu hình n8n.',
       );
     }
+    await loadChannelAccounts();
   }
 
   Future<void> loadChannelAccounts() async {
@@ -773,7 +774,6 @@ class WorkflowAutomationNotifier
     final result = await _getApi().fetchAutomationRules();
     if (!mounted) return;
     if (result['success'] != true || result['data'] is! List) {
-      await _syncAutomationRules();
       return;
     }
     final rules = (result['data'] as List)
@@ -781,10 +781,6 @@ class WorkflowAutomationNotifier
         .map(AutomationRule.fromJson)
         .where((rule) => rule.id.isNotEmpty && rule.name.isNotEmpty)
         .toList();
-    if (rules.isEmpty) {
-      await _syncAutomationRules();
-      return;
-    }
     state = state.copyWith(automationRules: rules);
   }
 

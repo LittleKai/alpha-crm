@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'local_db.dart';
 
 class LocalDbMaintenance {
@@ -32,7 +33,7 @@ class LocalDbMaintenance {
       }
     } catch (e) {
       // Opportunistic cleanup should not crash the app
-      print('Local DB maintenance failed: $e');
+      debugPrint('Local DB maintenance failed: $e');
     }
   }
 }

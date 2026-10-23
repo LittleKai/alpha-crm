@@ -580,6 +580,12 @@ export class LocalChatStore {
            WHERE mode = 'disabled_by_operator' AND reason = 'manual_operator_reply'`,
         )
         .run();
+      this.db
+        .prepare(`UPDATE attachments SET status = 'pending' WHERE status = 'downloading'`)
+        .run();
+      this.db
+        .prepare(`DELETE FROM sync_queue WHERE status = 'completed'`)
+        .run();
     } catch {
       // Table not present yet on a brand-new DB — ignore.
     }
@@ -827,7 +833,9 @@ export class LocalChatStore {
       direction === 'inbound' ? 'inboundMessages' : 'outboundMessages',
     );
 
-    this.enqueueSyncAction('sync_message', { messageId: id });
+    if (input.threadType !== 'group') {
+      this.enqueueSyncAction('sync_message', { messageId: id });
+    }
     this.enqueueSyncAction('sync_conversation', { conversationId });
     if (direction === 'inbound') {
       this._applyAutomationRules(conversationId, input);
@@ -945,7 +953,6 @@ export class LocalChatStore {
       'outboundMessages',
     );
 
-    this.enqueueSyncAction('sync_message', { messageId: id });
     this.enqueueSyncAction('sync_conversation', { conversationId });
 
     return id;
@@ -997,7 +1004,9 @@ export class LocalChatStore {
         .prepare('UPDATE messages SET status = ?, errorText = ?, updatedAt = ? WHERE id = ?')
         .run(status, errorText, now, messageId);
     }
-    this.enqueueSyncAction('sync_message', { messageId });
+    if (status === 'sent') {
+      this.enqueueSyncAction('sync_message', { messageId });
+    }
   }
 
   /**
@@ -1803,10 +1812,8 @@ export class LocalChatStore {
 
   markSyncActionComplete(id: string): void {
     this.db
-      .prepare(`UPDATE sync_queue SET status = 'completed' WHERE id = ?`)
+      .prepare(`DELETE FROM sync_queue WHERE id = ?`)
       .run(id);
-    // Optionally delete it:
-    // this.db.prepare(`DELETE FROM sync_queue WHERE id = ?`).run(id);
   }
 
   markSyncActionFailed(id: string, nextRetryAt: string): void {

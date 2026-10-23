@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -63,7 +64,7 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
   Future<void>? _loadFuture;
 
   FriendHistoryNotifier() : super(const FriendHistoryState(records: [])) {
-    print('DEBUG: FriendHistoryNotifier initialized');
+    debugPrint('DEBUG: FriendHistoryNotifier initialized');
     _loadFuture = loadHistory();
   }
 
@@ -73,70 +74,70 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
       final crmDir = Directory('${directory.path}/AlphaCRM');
       final file = File('${crmDir.path}/zalo_friend_history.json');
       
-      print('DEBUG: Checking for legacy JSON at ${file.path}');
+      debugPrint('DEBUG: Checking for legacy JSON at ${file.path}');
       if (await file.exists()) {
         final content = await file.readAsString();
-        print('DEBUG: Found legacy JSON, length: ${content.length}');
+        debugPrint('DEBUG: Found legacy JSON, length: ${content.length}');
         if (content.trim().isNotEmpty) {
           final jsonList = jsonDecode(content) as List<dynamic>;
-          print('DEBUG: Parsed ${jsonList.length} legacy records. Migrating...');
+          debugPrint('DEBUG: Parsed ${jsonList.length} legacy records. Migrating...');
           for (final item in jsonList) {
             final record = FriendHistoryRecord.fromJson(item as Map<String, dynamic>);
             await db.insert('friend_history', record.toJson(), conflictAlgorithm: ConflictAlgorithm.ignore);
           }
         }
         await file.rename('${crmDir.path}/zalo_friend_history.json.migrated');
-        print('DEBUG: Legacy JSON migrated and renamed successfully.');
+        debugPrint('DEBUG: Legacy JSON migrated and renamed successfully.');
       } else {
-        print('DEBUG: No legacy JSON found.');
+        debugPrint('DEBUG: No legacy JSON found.');
       }
     } catch (e) {
-      print('DEBUG: Error migrating JSON: $e');
+      debugPrint('DEBUG: Error migrating JSON: $e');
     }
   }
 
   Future<void> loadHistory() async {
     try {
-      print('DEBUG: loadHistory started');
+      debugPrint('DEBUG: loadHistory started');
       final db = await LocalDb.instance;
-      print('DEBUG: DB instance retrieved');
+      debugPrint('DEBUG: DB instance retrieved');
       
       await _migrateJsonToSqlite(db);
 
-      print('DEBUG: Querying friend_history table...');
+      debugPrint('DEBUG: Querying friend_history table...');
       final maps = await db.query('friend_history', orderBy: 'id DESC');
-      print('DEBUG: DB returned ${maps.length} records');
+      debugPrint('DEBUG: DB returned ${maps.length} records');
       
       final loadedRecords = maps.map((e) => FriendHistoryRecord.fromJson(e)).toList();
       state = state.copyWith(records: loadedRecords);
-      print('DEBUG: state updated with ${state.records.length} records');
+      debugPrint('DEBUG: state updated with ${state.records.length} records');
     } catch (e) {
-      print('DEBUG: Exception in loadHistory: $e');
+      debugPrint('DEBUG: Exception in loadHistory: $e');
     }
   }
 
   Future<void> addRecord(FriendHistoryRecord record) async {
-    print('DEBUG: addRecord called for ${record.targetName} (${record.targetPhone})');
+    debugPrint('DEBUG: addRecord called for ${record.targetName} (${record.targetPhone})');
     if (_loadFuture != null) {
-      print('DEBUG: Waiting for initial loadHistory to complete...');
+      debugPrint('DEBUG: Waiting for initial loadHistory to complete...');
       await _loadFuture;
       _loadFuture = null;
     }
     
     state = state.copyWith(records: [record, ...state.records]);
-    print('DEBUG: Record added to local state. New total: ${state.records.length}');
+    debugPrint('DEBUG: Record added to local state. New total: ${state.records.length}');
     
     try {
       final db = await LocalDb.instance;
       await db.insert('friend_history', record.toJson(), conflictAlgorithm: ConflictAlgorithm.replace);
-      print('DEBUG: Record successfully inserted into DB');
+      debugPrint('DEBUG: Record successfully inserted into DB');
     } catch (e) {
-      print('DEBUG: Error inserting record into DB: $e');
+      debugPrint('DEBUG: Error inserting record into DB: $e');
     }
   }
 
   Future<void> clearHistory() async {
-    print('DEBUG: clearHistory called');
+    debugPrint('DEBUG: clearHistory called');
     if (_loadFuture != null) {
       await _loadFuture;
       _loadFuture = null;
@@ -147,9 +148,9 @@ class FriendHistoryNotifier extends StateNotifier<FriendHistoryState> {
     try {
       final db = await LocalDb.instance;
       await db.delete('friend_history');
-      print('DEBUG: clearHistory completed successfully');
+      debugPrint('DEBUG: clearHistory completed successfully');
     } catch (e) {
-      print('DEBUG: Error clearing history from DB: $e');
+      debugPrint('DEBUG: Error clearing history from DB: $e');
     }
   }
 }

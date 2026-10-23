@@ -18,6 +18,7 @@ class ScheduledCampaignsNotifier
   final BulkCampaignRepository _repository;
   final ScheduledCampaignsDao _dao;
   final Map<String, Timer> _timers = {};
+  final Set<String> _firingIds = {};
 
   ScheduledCampaignsNotifier(this._repository, this._dao) : super(const []) {
     _loadAndRearm();
@@ -107,8 +108,10 @@ class ScheduledCampaignsNotifier
   Future<void> sendNow(String id) => _fire(id);
 
   Future<void> _fire(String id) async {
+    if (_firingIds.contains(id)) return;
     final job = _byId(id);
     if (job == null) return;
+    _firingIds.add(id);
     _timers.remove(id)?.cancel();
 
     try {
@@ -120,6 +123,7 @@ class ScheduledCampaignsNotifier
           isGroupMessage: job.isGroupMessage,
           recipientIds: job.recipients.map((r) => r.id).toList(),
           recipientNames: {for (final r in job.recipients) r.id: r.name},
+          attachments: job.attachments,
           accountId: job.accountId,
           minDelay: job.minDelay,
           maxDelay: job.maxDelay,
@@ -136,6 +140,8 @@ class ScheduledCampaignsNotifier
       state = [
         for (final j in state) j.id == id ? failed : j,
       ];
+    } finally {
+      _firingIds.remove(id);
     }
   }
 

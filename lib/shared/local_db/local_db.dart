@@ -7,13 +7,31 @@ import 'local_db_schema.dart';
 
 class LocalDb {
   static Database? _db;
+  static Future<Database>? _openingFuture;
   static bool _ffiInitialized = false;
 
   /// Retrieves the shared instance, initializing if necessary.
   static Future<Database> get instance async {
-    if (_db != null) return _db!;
-    _db = await _initDb();
-    return _db!;
+    if (_db != null && _db!.isOpen) return _db!;
+    _openingFuture ??= _initDb().then((db) {
+      _db = db;
+      _openingFuture = null;
+      return db;
+    }).catchError((Object e) {
+      _openingFuture = null;
+      throw e;
+    });
+    return _openingFuture!;
+  }
+
+  /// Closes the current database instance and resets the singleton reference.
+  static Future<void> closeAndReset() async {
+    final current = _db;
+    _db = null;
+    _openingFuture = null;
+    if (current != null && current.isOpen) {
+      await current.close();
+    }
   }
 
   /// Initialize FFI for desktop if needed.
@@ -47,7 +65,7 @@ class LocalDb {
           }
         },
         onUpgrade: (db, oldVersion, newVersion) async {
-          print('DEBUG: LocalDb onUpgrade from $oldVersion to $newVersion');
+          debugPrint('DEBUG: LocalDb onUpgrade from $oldVersion to $newVersion');
           if (oldVersion < 2) {
             for (final script in LocalDbSchema.version2Scripts) {
               await db.execute(script);

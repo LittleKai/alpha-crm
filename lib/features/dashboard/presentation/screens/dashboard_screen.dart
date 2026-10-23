@@ -1873,7 +1873,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 SizedBox(
                                   width: 36,
                                   child: Text(
-                                    pct + '%',
+                                    '$pct%',
                                     style: AppTextStyles.caption.copyWith(
                                       color: AppColors.textMuted,
                                     ),
@@ -1976,7 +1976,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Row(
             children: [
               Text(
-                'Thành công: ' + totalSuccess.toString(),
+                'Thành công: $totalSuccess',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w700,
@@ -1984,7 +1984,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(width: AppSpacing.m),
               Text(
-                'Thất bại: ' + totalFailure.toString(),
+                'Thất bại: $totalFailure',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.error,
                   fontWeight: FontWeight.w700,

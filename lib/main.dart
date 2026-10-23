@@ -113,14 +113,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ZaloBackendManager.stopBackend();
+    unawaited(ZaloBackendManager.shutdownGracefully());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
-      ZaloBackendManager.stopBackend();
+      unawaited(ZaloBackendManager.shutdownGracefully());
     }
   }
 

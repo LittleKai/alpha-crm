@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 class LocalAiKeyStore {
@@ -34,7 +35,7 @@ class LocalAiKeyStore {
       }
       return result;
     } catch (e) {
-      print('Error loading local AI keys: $e');
+      debugPrint('Error loading local AI keys: $e');
       return {};
     }
   }
@@ -45,7 +46,7 @@ class LocalAiKeyStore {
       final jsonString = jsonEncode(keys);
       await file.writeAsString(jsonString);
     } catch (e) {
-      print('Error saving local AI keys: $e');
+      debugPrint('Error saving local AI keys: $e');
     }
   }
 }

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:data_table_2/data_table_2.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +23,7 @@ import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
 import '../../../../shared/widgets/app_table.dart';
 import '../../providers/customers_provider.dart';
+import '../../utils/customer_file_parser.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -834,7 +838,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         text: 'Import Excel/CSV',
         icon: Icons.description_outlined,
         variant: AppButtonVariant.outline,
-        onPressed: () => _importDemoContacts(notifier),
+        onPressed: () => _importContactsFromFile(notifier),
       ),
       AppButton(
         text: 'Xuất Excel',
@@ -1122,12 +1126,61 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     };
   }
 
-  Future<void> _importDemoContacts(CustomersNotifier notifier) async {
-    await notifier.importContacts(MockContacts.sampleContacts.take(5).toList());
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã gửi loạt nhập khách hàng lên backend.')),
-    );
+  Future<void> _importContactsFromFile(CustomersNotifier notifier) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'xlsx', 'tsv', 'txt'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      final bytes =
+          picked.bytes ??
+          (picked.path != null ? await File(picked.path!).readAsBytes() : null);
+      if (bytes == null || bytes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không đọc được nội dung file "${picked.name}".')),
+        );
+        return;
+      }
+
+      final contacts = parseCustomerImportBytes(bytes, picked.name);
+      if (contacts.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'File "${picked.name}" không có dòng dữ liệu khách hàng hợp lệ.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final ok = await notifier.importContacts(contacts);
+      if (!mounted) return;
+      final errorMessage = ref.read(customersProvider).errorMessage;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Đã nhập ${contacts.length} khách hàng từ "${picked.name}".'
+                : (errorMessage ?? 'Nhập khách hàng thất bại.'),
+          ),
+          backgroundColor: ok ? AppColors.success : AppColors.error,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi đọc file Excel/CSV: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Future<void> _showSaveSegmentDialog(CustomersNotifier notifier) async {

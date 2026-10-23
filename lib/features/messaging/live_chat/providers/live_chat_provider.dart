@@ -1381,7 +1381,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     if (selected == null) return;
     final after = selected.messages.isEmpty
         ? null
-        : selected.messages.last.timestamp.toIso8601String();
+        : selected.messages.last.timestamp.toUtc().toIso8601String();
     await loadMessages(selected.id, after: after);
   }
 
@@ -1395,7 +1395,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     }
     await loadMessages(
       selected.id,
-      before: selected.messages.first.timestamp.toIso8601String(),
+      before: selected.messages.first.timestamp.toUtc().toIso8601String(),
     );
   }
 

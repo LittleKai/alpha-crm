@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-09-17 · **Session:** 2
+**Last Updated:** 2026-10-23 · **Session:** 4
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -28,7 +28,7 @@
 - **i18n:** No formal app-string localization solution; Vietnamese UI strings are inline. `intl` is used for formatting. `flutter_localizations` is wired into `MaterialApp.router` with `locale: Locale('vi')` so built-in Material widgets (date/time pickers, default tooltips) render in Vietnamese with 24h time.
 - **State Management:** `flutter_riverpod` with `StateNotifierProvider`, `StateProvider`, and local widget state.
 - **Styling:** Central design tokens in `lib/app/theme/` plus reusable widgets in `lib/shared/widgets/`.
-- **Deployment:** Automated release is handled by `alpha-studio-backend/scripts/release-to-b2.js` for Android APK and Windows ZIP. The Windows ZIP includes the Flutter runner plus the local Zalo backend bundle required for production desktop use.
+- **Deployment:** Automated build & release skill in `.agents/skills/build-and-release/` (and `.claude/skills/build-and-release/`) wrapping `alpha-studio-backend/scripts/release-to-b2.js` + GitHub Release & Backblaze B2 upload for Android APK and Windows ZIP (with bundled local Zalo backend + pinned Node LTS runtime).
 - **Knowledge Graph:** `.understand-anything/` is not present. Recommend running `/understand` before large impact analysis work.
 
 ---
@@ -94,6 +94,7 @@ docs/
 | File | Purpose | Notes |
 |------|---------|-------|
 | `.github/workflows/guard.yml` | CI guard check | CI chay tren moi push/PR kiem tra cac symbol rao chan van con trong source. |
+| `.agents/skills/build-and-release/` | Build & Release skill | Skill + scripts (`build.ps1`, `release.ps1`, `upload-b2.ps1`) dong goi Windows/Android len GitHub Release va Backblaze B2. |
 | `pubspec.yaml` | Flutter package metadata and dependencies | Dart SDK ^3.10.7, Riverpod, GoRouter, fl_chart, FFI win32, window_manager, tray_manager. |
 | `integration/zalo-bot-service/package.json` | Local backend package metadata | Uses `zca-js@^2.1.2` and `proxy-agent@^6.5.0` for per-account HTTP/HTTPS/SOCKS proxy enforcement. |
 | `integration/zalo-bot-service/src/secure-store.ts` | Encryption-at-rest helper | AES-256-GCM qua Windows DPAPI trong dataRoot/.secure-key. Chi tiết xem CONVENTIONS.md. |
@@ -105,7 +106,8 @@ docs/
 | `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 27 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
-| `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, selected-contact actions, and a desktop/tablet detail panel. |
+| `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, real Excel/CSV import, and detail panel. |
+| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Parses `.csv`/`.tsv`/`.txt` & `.xlsx` (ZIP+XML) into `Contact` rows with custom field mapping. |
 | `lib/features/customers/providers/customers_provider.dart` | Customers state + offline cache | Customers state + cache SQLite 30 ngày qua LocalDb.putCache với offline fallback. |
 | `lib/shared/local_db/local_db.dart` | Local SQLite (sqflite/ffi) | Adds generic `putCache(key,value,{ttl})` / `getCache(key)` over the `cache_entries` table (expired rows purged on read) used by the Customers offline cache. |
 | `lib/features/dashboard/utils/dashboard_chart_data.dart` | Dashboard chart data helpers | Normalizes daily dashboard chart metrics, merges local chatbot daily stats into campaign performance data, and protects cumulative message series from rendering as per-day values. |
@@ -222,8 +224,8 @@ flowchart LR
 
 | Thứ | Nơi lưu | Ghi chú |
 |---|---|---|
-| JWT CRM (Alpha Studio) | `flutter_secure_storage` → Windows DPAPI / Android Keystore (`token_store_native.dart`) | Đã có migration một lần từ `crm_token.json` plaintext rồi **xoá** file cũ — đừng quay lại lưu plaintext |
-| Cookie/credential Zalo cá nhân | `dataRoot/credentials_*.json` — **AES-256-GCM**, khoá 32 byte niêm bằng DPAPI trong `.secure-key` (`secure-store.ts`) | 🔴 **Không re-serialize cookie jar** — byte giải mã phải giống hệt bản gốc để giữ `zpw_sek` bất biến, nếu không phiên Zalo hỏng |
+| JWT CRM (Alpha Studio) | `flutter_secure_storage` → Windows DPAPI / Android Keystore (`token_store_native.dart`); bản ghi agent `crm_token.json` & `device-secret.json` mã hoá qua `secure-store.ts` | Đã có migration một lần từ `crm_token.json` plaintext rồi **xoá** file cũ — đừng quay lại lưu plaintext |
+| Cookie/credential Zalo cá nhân | `dataRoot/credentials_*.json` — **AES-256-GCM**, khoá 32 byte niêm bằng DPAPI trong `.secure-key` (`secure-store.ts` ghi nguyên tử qua `.tmp` + `renameSync`) | 🔴 **Không re-serialize cookie jar** — byte giải mã phải giống hệt bản gốc để giữ `zpw_sek` bất biến, nếu không phiên Zalo hỏng |
 | Token các kênh (FB/IG/WhatsApp/TikTok/Telegram) | `dataRoot/integrations/*` mã hoá at-rest; API trả về dạng **đã che** | Không log token, không trả nguyên giá trị về UI |
 | `ZALO_BOT_TOKEN`, cấu hình n8n/proxy | `.env` của `zalo-bot-service` (gitignored) | Bản release **loại trừ** `.env` và `.data` |
 | `ALPHA_STUDIO_API_URL` | Biến build, có fallback production | Giá trị public, không phải secret |

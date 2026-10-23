@@ -76,16 +76,22 @@ class AutoApproveNotifier extends StateNotifier<AutoApproveState> {
     });
   }
 
-  void toggleAutoApprove(bool val) {
-    _ref.read(settingsProvider.notifier).updateAutoApproveFriend(val);
+  Future<void> toggleAutoApprove(bool val) async {
+    final notifier = _ref.read(settingsProvider.notifier);
+    notifier.updateAutoApproveFriend(val);
+    await notifier.saveSettings();
   }
 
-  void toggleSendWelcome(bool val) {
-    _ref.read(settingsProvider.notifier).updateAutoSendWelcomeMessage(val);
+  Future<void> toggleSendWelcome(bool val) async {
+    final notifier = _ref.read(settingsProvider.notifier);
+    notifier.updateAutoSendWelcomeMessage(val);
+    await notifier.saveSettings();
   }
 
-  void updateWelcomeMessage(String val) {
-    _ref.read(settingsProvider.notifier).updateWelcomeMessageText(val);
+  Future<void> updateWelcomeMessage(String val) async {
+    final notifier = _ref.read(settingsProvider.notifier);
+    notifier.updateWelcomeMessageText(val);
+    await notifier.saveSettings();
   }
 
   /// Toggles whether the AI chatbot may auto-reply to a contact that was just

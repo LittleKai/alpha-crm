@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +32,9 @@ class _BackendSplashOverlayState extends ConsumerState<BackendSplashOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    if (!Platform.isWindows) {
+      return widget.child;
+    }
     // Lắng nghe pha nạp tài khoản Zalo lần đầu để splash che TRỌN quá trình khởi
     // động (tiến trình backend + nạp tài khoản) — không để lọt sang giao diện
     // chính khi chưa sẵn sàng.

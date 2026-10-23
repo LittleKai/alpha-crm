@@ -232,7 +232,7 @@ class _HistoryEntryState extends State<_HistoryEntry> {
               child: Text(
                 '• $item',
                 style: AppTextStyles.body.copyWith(
-                  color: color != null ? color.withOpacity(0.9) : null,
+                  color: color?.withValues(alpha: 0.9),
                 ),
               ),
             ),

@@ -559,7 +559,7 @@ class ZaloBackendManager {
   /// Bảo đảm backend đang chạy & khỏe. Tự kill bản hỏng, áp dụng exponential
   /// backoff và circuit breaker rồi spawn lại + chờ sẵn sàng.
   static Future<void> _ensureRunning() async {
-    if (_ensuring) return;
+    if (_ensuring || _manualStop) return;
     _ensuring = true;
     try {
       final port = _activePort ?? _defaultPort;
@@ -595,6 +595,7 @@ class ZaloBackendManager {
 
       // Diệt bản cũ (nếu còn) rồi chờ backoff trước khi spawn lại.
       await _killProcess();
+      if (_manualStop) return;
       if (_restartCount > 1) {
         final backoff = _backoffFor(_restartCount);
         debugPrint(
@@ -603,6 +604,7 @@ class ZaloBackendManager {
         );
         await Future.delayed(backoff);
       }
+      if (_manualStop) return;
 
       final started = await startBackend();
       if (!started) {

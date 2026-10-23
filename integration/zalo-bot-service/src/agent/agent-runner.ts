@@ -14,6 +14,7 @@ import { executeCommand, getRunningCampaignCount, isCampaignRunning } from './co
 import { finishCampaign, listInterruptedCampaigns } from './campaign-progress.js';
 import { getSupervisorStats } from './supervisor-stats.js';
 import { getZaloStatus, getAccounts } from '../zalo.js';
+import { isRecentProgrammaticSend } from '../channels/personal-zca-channel.js';
 import { config } from '../config.js';
 import {
   setInboundMessageBatchHandler,
@@ -223,6 +224,15 @@ async function handleInboundMessageBatch(
       if (events.length === 0 || !running) {
         return;
       }
+      const existingProviderIds = new Set<string>();
+      for (const event of events) {
+        if (event.providerMessageId) {
+          const row = localStore.db
+            .prepare('SELECT 1 FROM messages WHERE accountId = ? AND providerMessageId = ?')
+            .get(event.accountId, event.providerMessageId);
+          if (row) existingProviderIds.add(`${event.accountId}:${event.providerMessageId}`);
+        }
+      }
       const ids = localStore.upsertInboundMessages(
         events.map((event) => ({
           accountId: event.accountId,
@@ -251,6 +261,9 @@ async function handleInboundMessageBatch(
         })),
       );
       events.forEach((event, index) => {
+        if (event.providerMessageId && existingProviderIds.has(`${event.accountId}:${event.providerMessageId}`)) {
+          return;
+        }
         localChatEvents.publish({
           type: 'message.created',
           accountId: event.accountId,
@@ -263,18 +276,23 @@ async function handleInboundMessageBatch(
           },
         });
       });
-      const reportable = events.filter(isManaged);
+      const newlyInsertedManaged = events.filter(
+        (event) =>
+          isManaged(event) &&
+          (!event.providerMessageId ||
+            !existingProviderIds.has(`${event.accountId}:${event.providerMessageId}`)),
+      );
       await Promise.all(
-        reportable.map((event) =>
+        newlyInsertedManaged.map((event) =>
           reportInboundMessageMetadata(
             credentials.deviceId,
             credentials.agentSecret,
-            event,
+            { ...event, unreadCountDelta: 0 },
           ),
         ),
       );
       await Promise.all(
-        reportable.map((event) =>
+        newlyInsertedManaged.map((event) =>
           dispatchN8nEvent('zalo.message.inbound', event),
         ),
       );
@@ -374,7 +392,12 @@ async function handleInboundMessageEvent(
                 status: 'sent',
               })
             : undefined;
-        alreadyReportedAtSendTime = Boolean(reconciledId || existingProviderMessage);
+        const programmaticSend =
+          event.senderId === event.accountId &&
+          isRecentProgrammaticSend(event.accountId, event.threadId);
+        alreadyReportedAtSendTime = Boolean(
+          reconciledId || existingProviderMessage || programmaticSend,
+        );
         const localMessageId =
           reconciledId ||
           localStore.upsertInboundMessage({
@@ -414,12 +437,13 @@ async function handleInboundMessageEvent(
           },
         });
         // Operator replied from their phone (a genuine self-sent message, NOT an
-        // echo of a CRM/chatbot send which would be reconciled) → pause the bot for
+        // echo of a CRM/chatbot/campaign send) → pause the bot for
         // the cooldown so AI doesn't talk over the human.
         if (
           event.senderId === event.accountId &&
           !reconciledId &&
-          !existingProviderMessage
+          !existingProviderMessage &&
+          !programmaticSend
         ) {
           pauseChatbotForOperatorReply(event.accountId, event.threadId);
         }
@@ -427,7 +451,7 @@ async function handleInboundMessageEvent(
         // account never auto-engages incoming messages — the operator replies
         // manually. Defaults on. Each branch logs WHY a message did/didn't reach
         // the chatbot so dropped auto-replies can be diagnosed.
-        if (reconciledId || existingProviderMessage) {
+        if (reconciledId || existingProviderMessage || programmaticSend || event.senderId === event.accountId) {
           // Echo of our own send or a duplicate — never a new inbound to answer.
         } else if (!isManaged) {
           console.log(

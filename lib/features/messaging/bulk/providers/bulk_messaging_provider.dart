@@ -106,6 +106,7 @@ class BulkMessagingState {
   final int minDelay;
   final int maxDelay;
   final String messageText;
+  final List<String> attachmentPaths;
   final ZaloAccount? selectedAccount;
   final List<ZaloAccount> accounts;
   final bool isSending;
@@ -135,6 +136,7 @@ class BulkMessagingState {
     required this.minDelay,
     required this.maxDelay,
     required this.messageText,
+    this.attachmentPaths = const [],
     this.selectedAccount,
     required this.accounts,
     required this.isSending,
@@ -189,6 +191,7 @@ class BulkMessagingState {
     int? minDelay,
     int? maxDelay,
     String? messageText,
+    List<String>? attachmentPaths,
     Object? selectedAccount = _unsetSelectedAccount,
     List<ZaloAccount>? accounts,
     bool? isSending,
@@ -215,6 +218,7 @@ class BulkMessagingState {
       minDelay: minDelay ?? this.minDelay,
       maxDelay: maxDelay ?? this.maxDelay,
       messageText: messageText ?? this.messageText,
+      attachmentPaths: attachmentPaths ?? this.attachmentPaths,
       selectedAccount: identical(selectedAccount, _unsetSelectedAccount)
           ? this.selectedAccount
           : selectedAccount as ZaloAccount?,
@@ -341,6 +345,25 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     _checkCompliance();
   }
 
+  void setAttachmentPaths(List<String> paths) {
+    final cleaned = paths
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toSet()
+        .toList();
+    state = state.copyWith(attachmentPaths: cleaned);
+  }
+
+  void removeAttachmentPath(String path) {
+    state = state.copyWith(
+      attachmentPaths: state.attachmentPaths.where((p) => p != path).toList(),
+    );
+  }
+
+  void clearAttachments() {
+    state = state.copyWith(attachmentPaths: const []);
+  }
+
   void selectAccount(ZaloAccount? account) {
     state = state.copyWith(selectedAccount: account);
     _checkCompliance();
@@ -434,7 +457,10 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     final at = state.scheduledAt;
     if (at == null) return null;
     final recipients = state.recipientIds;
-    if (recipients.isEmpty || state.messageText.trim().isEmpty) return null;
+    if (recipients.isEmpty ||
+        (state.messageText.trim().isEmpty && state.attachmentPaths.isEmpty)) {
+      return null;
+    }
 
     final settings = _ref.read(settingsProvider).settings;
     final decision = ZaloComplianceGuard.evaluateZaloAction(
@@ -465,6 +491,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
             ),
           )
           .toList(),
+      attachments: List<String>.from(state.attachmentPaths),
       accountId: state.selectedAccount?.id,
       minDelay: state.minDelay,
       maxDelay: state.maxDelay,
@@ -563,9 +590,9 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
         .toList();
 
     if (recipients.isEmpty) return;
-    if (state.messageText.trim().isEmpty) {
+    if (state.messageText.trim().isEmpty && state.attachmentPaths.isEmpty) {
       state = state.copyWith(
-        complianceError: 'Vui lòng nhập nội dung tin nhắn.',
+        complianceError: 'Vui lòng nhập nội dung tin nhắn hoặc chọn tệp đính kèm.',
       );
       return;
     }
@@ -620,6 +647,7 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
           recipientNames: {
             for (final r in recipients) r: state.recipientInfo[r]?.name ?? '',
           },
+          attachments: state.attachmentPaths,
           accountId: state.selectedAccount?.id,
           minDelay: state.minDelay,
           maxDelay: state.maxDelay,
@@ -784,6 +812,7 @@ class CampaignLaunchParams {
   final bool isGroupMessage;
   final List<String> recipientIds;
   final Map<String, String> recipientNames; // id -> display name
+  final List<String> attachments;
   final String? accountId;
   final int minDelay;
   final int maxDelay;
@@ -795,6 +824,7 @@ class CampaignLaunchParams {
     required this.isGroupMessage,
     required this.recipientIds,
     required this.recipientNames,
+    this.attachments = const [],
     required this.accountId,
     required this.minDelay,
     required this.maxDelay,
@@ -814,12 +844,15 @@ Future<String> launchCampaign(
     p.message.trim(),
   );
   final name = p.name.trim();
+  final templateBody = finalMessage.isNotEmpty
+      ? finalMessage
+      : (p.attachments.isNotEmpty ? '[Đính kèm]' : '');
 
   final templateResp = await repository.createTemplate({
     'name': name.isNotEmpty
         ? '$name - Nội dung gửi'
         : 'Bulk template ${DateTime.now().toIso8601String()}',
-    'body': finalMessage,
+    'body': templateBody,
     'type': 'zalo',
     'category': 'bulk',
     'isQuick': false,
@@ -852,6 +885,7 @@ Future<String> launchCampaign(
     'audienceType': p.isGroupMessage ? 'group' : 'manual',
     'manualRecipients': manualRecipients,
     if (targetGroupIds.isNotEmpty) 'targetGroupIds': targetGroupIds,
+    if (p.attachments.isNotEmpty) 'attachments': p.attachments,
     if (p.accountId != null && p.accountId!.isNotEmpty)
       'selectedAccountId': p.accountId,
     'rateLimit': {

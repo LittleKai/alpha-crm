@@ -278,6 +278,8 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                         enabled: !state.isRunning,
                         keyboardType: TextInputType.number,
                         style: AppTextStyles.body,
+                        onChanged: (val) =>
+                            notifier.setMinDelay(int.tryParse(val) ?? 5),
                         decoration: const InputDecoration(
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: AppSpacing.m,
@@ -302,6 +304,8 @@ class _LeaveGroupsScreenState extends ConsumerState<LeaveGroupsScreen> {
                         enabled: !state.isRunning,
                         keyboardType: TextInputType.number,
                         style: AppTextStyles.body,
+                        onChanged: (val) =>
+                            notifier.setMaxDelay(int.tryParse(val) ?? 15),
                         decoration: const InputDecoration(
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: AppSpacing.m,

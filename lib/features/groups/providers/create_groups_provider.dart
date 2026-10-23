@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../mock/mock_groups.dart';
@@ -313,13 +314,15 @@ class CreateGroupsNotifier extends StateNotifier<CreateGroupsState> {
         );
       }
 
+      if (!mounted || !state.isRunning) return;
+
       _currentGroupIndex++;
 
       if (_currentGroupIndex < _groupNames.length) {
         final delaySeconds =
             state.minDelay +
             (state.maxDelay > state.minDelay
-                ? (state.maxDelay - state.minDelay)
+                ? Random().nextInt(state.maxDelay - state.minDelay + 1)
                 : 0);
         final delayTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
         state = state.copyWith(

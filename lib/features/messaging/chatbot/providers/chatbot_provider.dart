@@ -499,7 +499,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           state.temperature,
       debounceSeconds: _normalizeDebounceSeconds(json['debounceSeconds']),
       aiHistoryLimit: _normalizeAiHistoryLimit(json['aiHistoryLimit']),
-      aiEnabled: json['aiEnabled'] != false,
+      aiEnabled: json['aiEnabled'] as bool? ?? false,
       keywordRulesEnabled: json['keywordRulesEnabled'] != false,
       personalAudience: (json['personalAudience'] ?? state.personalAudience)
           .toString(),

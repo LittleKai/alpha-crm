@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../../../shared/api/crm_cloud_api.dart';
 import '../../../../../shared/api/crm_sse_client.dart';
 import 'live_chat_cache.dart';
@@ -87,8 +89,8 @@ class LiveChatRepository {
           return {'success': true, 'data': rawList};
         }
       } catch (e, stack) {
-        print('[LiveChatRepository] Error getting local conversations: $e');
-        print(stack);
+        debugPrint('[LiveChatRepository] Error getting local conversations: $e');
+        debugPrint('$stack');
       }
 
       final cached = await cache.getAnyCachedConversations(cacheKey);
@@ -184,8 +186,8 @@ class LiveChatRepository {
           return {...bridgeData, 'data': messages};
         }
       } catch (e, stack) {
-        print('[LiveChatRepository] Error getting local messages: $e');
-        print(stack);
+        debugPrint('[LiveChatRepository] Error getting local messages: $e');
+        debugPrint('$stack');
       }
       final cached = await cache.getMessages(
         conversationId,
@@ -215,7 +217,7 @@ class LiveChatRepository {
     String conversationId,
   ) async {
     // Failed messages remain visible in local-first mode so users can retry.
-    if (localFirstEnabled) return {'success': true};
+    if (_preferLocalZaloActions || localFirstEnabled) return {'success': true};
     return CrmCloudApi.post(
       '/crm/conversations/$conversationId/messages/failed/clear',
       {},
@@ -226,7 +228,7 @@ class LiveChatRepository {
     String conversationId,
     String message,
   ) async {
-    if (localFirstEnabled) {
+    if (_preferLocalZaloActions || localFirstEnabled) {
       try {
         final response = await localApi.sendLocalMessage(
           conversationId,
@@ -248,6 +250,7 @@ class LiveChatRepository {
             'Phiên đăng nhập Zalo đã hết hạn hoặc bị đăng xuất từ điện thoại. Vui lòng quét mã QR để kết nối lại Alpha CRM.',
           );
         }
+        if (localFirstEnabled) rethrow;
       }
     }
 
@@ -429,13 +432,13 @@ class LiveChatRepository {
   }
 
   Future<String> getDraft(ConversationTarget target) async {
-    if (!localFirstEnabled) return '';
+    if (!_preferLocalZaloActions && !localFirstEnabled) return '';
     final response = await localApi.getDraft(target.accountId, target.threadId);
     return (response['content'] ?? '').toString();
   }
 
   Future<void> saveDraft(ConversationTarget target, String content) async {
-    if (!localFirstEnabled) return;
+    if (!_preferLocalZaloActions && !localFirstEnabled) return;
     await localApi.saveDraft(target.accountId, target.threadId, content);
   }
 

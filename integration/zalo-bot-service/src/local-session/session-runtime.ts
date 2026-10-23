@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { projectRoot } from '../config.js';
 import {
   deleteAgentCredentials,
   deleteCrmToken,
@@ -53,6 +56,21 @@ const listenerHealthMonitor = new ListenerHealthMonitor(
   recoverZaloListener,
 );
 
+function resolvePackageVersion(): string {
+  try {
+    const pkgPath = resolve(projectRoot, 'package.json');
+    const parsed = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    if (typeof parsed?.version === 'string' && parsed.version.trim()) {
+      return parsed.version.trim();
+    }
+  } catch {
+    // Fallback below
+  }
+  return '1.0.9';
+}
+
+const RUNTIME_VERSION = resolvePackageVersion();
+
 /// Thân khởi động runtime dùng chung cho cả luồng sync từ Flutter lẫn luồng tự
 /// khôi phục khi backend boot. Nạp pool tài khoản zca (initializeZalo →
 /// ensureLoginPool) rồi bật chatbot/agent/sync + giám sát listener.
@@ -75,8 +93,8 @@ export const sessionCoordinator = new SessionCoordinator({
   heartbeat: async (deviceId, agentSecret) => {
     await sendHeartbeat(deviceId, agentSecret, {
       status: getZaloStatus().connected ? 'online' : 'offline',
-      appVersion: '0.2.0',
-      agentVersion: '0.2.0',
+      appVersion: RUNTIME_VERSION,
+      agentVersion: RUNTIME_VERSION,
     });
   },
   disable: disableDevice,

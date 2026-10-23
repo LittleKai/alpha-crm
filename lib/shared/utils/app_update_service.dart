@@ -178,8 +178,20 @@ class AppUpdateService {
     void Function(double progress)? onProgress,
   }) async {
     try {
+      final uri = Uri.tryParse(asset.browserDownloadUrl);
+      if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+        debugPrint('[AppUpdateService] Invalid download URL: ${asset.browserDownloadUrl}');
+        return null;
+      }
+      final safeAssetName = asset.name
+          .split(RegExp(r'[/\\]'))
+          .last
+          .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
+      if (safeAssetName.isEmpty || safeAssetName == '.' || safeAssetName == '..') {
+        return null;
+      }
       final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}${Platform.pathSeparator}${asset.name}';
+      final filePath = '${dir.path}${Platform.pathSeparator}$safeAssetName';
       final file = File(filePath);
 
       // Nếu file đã tồn tại và cùng kích thước, bỏ qua tải lại
@@ -188,7 +200,7 @@ class AppUpdateService {
         return filePath;
       }
 
-      final request = http.Request('GET', Uri.parse(asset.browserDownloadUrl));
+      final request = http.Request('GET', uri);
       final streamedResponse = await request.send().timeout(
         const Duration(minutes: 10),
       );
@@ -203,16 +215,18 @@ class AppUpdateService {
       final totalBytes = streamedResponse.contentLength ?? asset.size;
       int receivedBytes = 0;
       final sink = file.openWrite();
-
-      await for (final chunk in streamedResponse.stream) {
-        sink.add(chunk);
-        receivedBytes += chunk.length;
-        if (totalBytes > 0) {
-          onProgress?.call(receivedBytes / totalBytes);
+      try {
+        await for (final chunk in streamedResponse.stream) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          if (totalBytes > 0) {
+            onProgress?.call(receivedBytes / totalBytes);
+          }
         }
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-
-      await sink.close();
       return filePath;
     } catch (e) {
       debugPrint('[AppUpdateService] Download error: $e');
@@ -286,6 +300,7 @@ class AppUpdateService {
       stagingDir: stagingDir,
       logPath: logPath,
       backendPid: ZaloBackendManager.backendPid,
+      appPid: pid,
     );
     await File(scriptPath).writeAsString(script, flush: true);
 
@@ -317,6 +332,7 @@ class AppUpdateService {
     required String stagingDir,
     required String logPath,
     int? backendPid,
+    int? appPid,
   }) {
     return '''
 @echo off
@@ -335,8 +351,19 @@ echo   Alpha CRM - Đang cập nhật phiên bản mới
 echo ===============================================
 echo.
 set "BPID=${backendPid ?? 0}"
-echo [%date% %time%] Alpha CRM update started (backend pid %BPID%) > "%LOG%"
+set "APID=${appPid ?? 0}"
+echo [%date% %time%] Alpha CRM update started (app pid %APID%, backend pid %BPID%) > "%LOG%"
 echo Chờ ứng dụng đóng... & timeout /t 3 /nobreak >nul
+
+if not "%APID%"=="0" (
+  for /l %%i in (1,1,15) do (
+    tasklist /FI "PID eq %APID%" 2>nul | find "%APID%" >nul
+    if errorlevel 1 goto app_gone
+    echo [%date% %time%] Waiting for app pid %APID% to exit... >> "%LOG%"
+    timeout /t 1 /nobreak >nul
+  )
+)
+:app_gone
 
 rem Cho dung robocopy khi node.exe cua backend con song: Windows khoa file dang
 rem chay nen viec ghi de se that bai. Cho dung PID da biet, toi da ~15 giay.
@@ -372,6 +399,8 @@ if not defined SRC (
   )
 )
 if not defined SRC goto error
+if "%SRC:~-1%"=="\\" set "SRC=%SRC:~0,-1%"
+if "%APP_DIR:~-1%"=="\\" set "APP_DIR=%APP_DIR:~0,-1%"
 
 echo Đang cập nhật các file ứng dụng...
 echo [%date% %time%] Copying from "%SRC%" to "%APP_DIR%" >> "%LOG%"
