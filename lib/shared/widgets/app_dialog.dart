@@ -40,7 +40,6 @@ class AppDialog extends StatelessWidget {
   });
 
   @override
-  @override
   Widget build(BuildContext context) {
     final dialogWidth = MediaQuery.sizeOf(context).width < width + 48
         ? MediaQuery.sizeOf(context).width - 32
@@ -282,4 +281,31 @@ class _AppDialogHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Hiển thị [AppDialog] chuẩn theo quy ước của dự án (`AGENTS.md` / `CONVENTIONS.md`).
+Future<T?> showStandardDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  Color? barrierColor,
+  String? barrierLabel,
+  bool useSafeArea = true,
+  bool useRootNavigator = true,
+  RouteSettings? routeSettings,
+  Offset? anchorPoint,
+  TraversalEdgeBehavior? traversalEdgeBehavior,
+}) {
+  return showDialog<T>(
+    context: context,
+    builder: builder,
+    barrierDismissible: barrierDismissible,
+    barrierColor: barrierColor,
+    barrierLabel: barrierLabel,
+    useSafeArea: useSafeArea,
+    useRootNavigator: useRootNavigator,
+    routeSettings: routeSettings,
+    anchorPoint: anchorPoint,
+    traversalEdgeBehavior: traversalEdgeBehavior,
+  );
 }

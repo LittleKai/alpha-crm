@@ -4,6 +4,8 @@ import {
   CloudApiError,
   isDeviceRevokedError,
   reportInboundMessageMetadata,
+  resolveAgentVersion,
+  resolveDesktopAppVersion,
   sendHeartbeat,
   fetchNextCommand,
 } from './cloud-api.js';
@@ -125,4 +127,23 @@ test('fetchNextCommand sends waitMs when long-polling and omits it otherwise', a
 
   assert.deepEqual(requestBodies[0], { waitMs: 25000 });
   assert.deepEqual(requestBodies[1], {});
+});
+
+test('resolveDesktopAppVersion and resolveAgentVersion report distinct app and agent versions', () => {
+  const prevEnv = process.env['ALPHA_CRM_APP_VERSION'];
+  try {
+    delete process.env['ALPHA_CRM_APP_VERSION'];
+    assert.equal(resolveAgentVersion(), '0.2.0');
+    assert.match(resolveDesktopAppVersion(), /^\d+\.\d+\.\d+$/);
+    assert.notEqual(resolveDesktopAppVersion(), '0.0.0');
+
+    process.env['ALPHA_CRM_APP_VERSION'] = '0.9.5+99';
+    assert.equal(resolveDesktopAppVersion(), '0.9.5');
+  } finally {
+    if (prevEnv === undefined) {
+      delete process.env['ALPHA_CRM_APP_VERSION'];
+    } else {
+      process.env['ALPHA_CRM_APP_VERSION'] = prevEnv;
+    }
+  }
 });

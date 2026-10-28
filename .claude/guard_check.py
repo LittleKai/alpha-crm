@@ -14,6 +14,7 @@ SOURCE_GLOBS = [
     "integration/zalo-bot-service/src/**/*.ts",
     "integration/zalo-bot-service/test/**/*.ts",
 ]
+EXCLUDE_DIRS = ("node_modules", ".next", "dist", "build", ".git", ".venv")
 BUGS = os.path.join(ROOT, ".claude", "IMPORTANT_FIXED_BUGS.md")
 ARCHIVE = os.path.join(ROOT, ".claude", "archive", "FIXED_BUGS_guarded.md")
 
@@ -66,6 +67,8 @@ def main():
     files = []
     for pattern in SOURCE_GLOBS:
         files.extend(glob.glob(os.path.join(ROOT, pattern), recursive=True))
+    files = [path for path in files
+             if not any(part in EXCLUDE_DIRS for part in path.replace("\\", "/").split("/"))]
     if not files:
         sys.exit("SOURCE_GLOBS khong khop file nao")
     blob = "\n".join(read(path) for path in sorted(set(files)))

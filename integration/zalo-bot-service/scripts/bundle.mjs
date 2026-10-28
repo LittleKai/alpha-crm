@@ -15,8 +15,19 @@ const external = ['better-sqlite3'];
 
 // The packaged release ships only dist/server.cjs (no package.json alongside
 // it), so the agent's appVersion/agentVersion heartbeat fields can't read it
-// at runtime. Inline it as a build-time constant instead.
+// at runtime. Inline both the service version and the Flutter desktop app
+// version (from ../../pubspec.yaml) as build-time constants.
 const pkg = JSON.parse(readFileSync(path.join(serviceRoot, 'package.json'), 'utf8'));
+let desktopAppVersion = pkg.version;
+try {
+  const pubspec = readFileSync(path.resolve(serviceRoot, '..', '..', 'pubspec.yaml'), 'utf8');
+  const match = pubspec.match(/^version:\s*([0-9]+\.[0-9]+\.[0-9]+)/m);
+  if (match && match[1]) {
+    desktopAppVersion = match[1];
+  }
+} catch {
+  // Fallback to pkg.version if pubspec.yaml is unavailable.
+}
 
 await build({
   entryPoints: [path.join(serviceRoot, 'dist', 'server.js')],
@@ -45,6 +56,7 @@ await build({
   define: {
     'import.meta.url': 'import_meta_url',
     'process.env.CRM_AGENT_VERSION': JSON.stringify(pkg.version),
+    'process.env.CRM_DESKTOP_APP_VERSION': JSON.stringify(desktopAppVersion),
   },
   logLevel: 'info',
   legalComments: 'none',

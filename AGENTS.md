@@ -2,6 +2,10 @@
 
 Flutter Android/Windows app kem local Zalo bot service va cloud integration.
 
+Text files are UTF-8 without BOM. In PowerShell read them with
+`Get-Content -Encoding UTF8`; plain `Get-Content` under `-NoProfile` garbles
+Vietnamese, and writing that text back corrupts the file.
+
 ## Doc theo viec
 
 Luon doc `.claude/PROJECT_SUMMARY.md`.

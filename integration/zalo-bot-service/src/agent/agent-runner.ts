@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type { AgentCredentials } from './agent-identity.js';
 import {
   fetchManagedGroups,
@@ -7,6 +6,8 @@ import {
   reportCommandResult,
   reportInboundMessage,
   reportInboundMessageMetadata,
+  resolveAgentVersion,
+  resolveDesktopAppVersion,
   sendHeartbeat,
   type HeartbeatZaloAccount,
 } from './cloud-api.js';
@@ -26,22 +27,9 @@ import { getLocalChatStore } from '../local-chat/index.js';
 import { localChatEvents } from '../local-chat/local-chat-events.js';
 import { handleChatbotInbound, pauseChatbotForOperatorReply } from '../chatbot/index.js';
 
-// The packaged release ships only dist/server.cjs (no package.json next to
-// it), so this can't just `require('../../package.json')` at runtime in that
-// context. scripts/bundle.mjs inlines CRM_AGENT_VERSION via esbuild `define`
-// for the bundled build; unbundled dev/tsc runs fall back to reading the
-// real package.json off disk, which is present in a full repo checkout.
-function resolveAppVersion(): string {
-  const injected = process.env.CRM_AGENT_VERSION;
-  if (injected) return injected;
-  try {
-    const require = createRequire(import.meta.url);
-    return (require('../../package.json') as { version: string }).version;
-  } catch {
-    return '0.0.0';
-  }
-}
-const PACKAGE_VERSION = resolveAppVersion();
+const AGENT_VERSION = resolveAgentVersion();
+const DESKTOP_APP_VERSION = resolveDesktopAppVersion();
+export { resolveAgentVersion, resolveDesktopAppVersion };
 
 type RevocationHandler = (reason: string) => void | Promise<void>;
 
@@ -552,8 +540,8 @@ async function runHeartbeat(credentials: AgentCredentials): Promise<void> {
     const zaloStatus = getZaloStatus();
     await sendHeartbeat(credentials.deviceId, credentials.agentSecret, {
       status: zaloStatus.connected ? 'online' : 'offline',
-      appVersion: PACKAGE_VERSION,
-      agentVersion: PACKAGE_VERSION,
+      appVersion: DESKTOP_APP_VERSION,
+      agentVersion: AGENT_VERSION,
       zaloAccounts: mapZaloAccountsForHeartbeat(),
       queueDepth: getRunningCampaignCount(),
       clientConnections: localChatEvents.listenerCount,

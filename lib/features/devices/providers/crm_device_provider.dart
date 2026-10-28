@@ -22,6 +22,7 @@ class PairedDevice {
 
 class CrmDeviceState {
   final bool isLoading;
+  final bool hasLoaded;
   final bool isPaired;
   final String? deviceId;
   final List<PairedDevice> pairedDevices;
@@ -31,6 +32,7 @@ class CrmDeviceState {
 
   const CrmDeviceState({
     this.isLoading = false,
+    this.hasLoaded = false,
     this.isPaired = false,
     this.deviceId,
     this.pairedDevices = const [],
@@ -41,6 +43,7 @@ class CrmDeviceState {
 
   CrmDeviceState copyWith({
     bool? isLoading,
+    bool? hasLoaded,
     bool? isPaired,
     String? deviceId,
     List<PairedDevice>? pairedDevices,
@@ -50,6 +53,7 @@ class CrmDeviceState {
   }) {
     return CrmDeviceState(
       isLoading: isLoading ?? this.isLoading,
+      hasLoaded: hasLoaded ?? this.hasLoaded,
       isPaired: isPaired ?? this.isPaired,
       deviceId: deviceId ?? this.deviceId,
       pairedDevices: pairedDevices ?? this.pairedDevices,
@@ -100,6 +104,7 @@ CrmDeviceState parseCrmDeviceList(List<dynamic> devices) {
   }).toList();
 
   return CrmDeviceState(
+    hasLoaded: true,
     isPaired: pairedDevices.isNotEmpty,
     deviceId: pcDevice == null
         ? null
@@ -108,27 +113,104 @@ CrmDeviceState parseCrmDeviceList(List<dynamic> devices) {
   );
 }
 
-Map<String, dynamic> buildPairingConfirmPayload(String input) {
-  final cleanInput = input.trim();
-  final cleanCode = cleanInput.replaceAll(' ', '');
-  if (cleanCode.length == 6 && int.tryParse(cleanCode) != null) {
-    return {'pairingCode': cleanCode};
+final RegExp _pairingSeparatorsPattern = RegExp(r'[\s\-.]');
+final RegExp _sixDigitsPattern = RegExp(r'^\d{6}$');
+final RegExp _whitespacePattern = RegExp(r'\s');
+const Set<String> _allowedPairingUrlSchemes = {'alphacrm', 'http', 'https'};
+
+String? _tryExtractSixDigitCode(String raw) {
+  final stripped = raw.trim().replaceAll(_pairingSeparatorsPattern, '');
+  if (_sixDigitsPattern.hasMatch(stripped)) {
+    return stripped;
+  }
+  return null;
+}
+
+Map<String, String>? _normalizeTokenOrCodeValue(String rawValue) {
+  final trimmed = rawValue.trim();
+  if (trimmed.isEmpty) return null;
+  final asCode = _tryExtractSixDigitCode(trimmed);
+  if (asCode != null) {
+    return {'pairingCode': asCode};
+  }
+  if (!_whitespacePattern.hasMatch(trimmed)) {
+    return {'qrToken': trimmed};
+  }
+  return null;
+}
+
+/// Normalizes a user-entered or QR-scanned pairing input into either
+/// `{'pairingCode': '<6 digits>'}` or `{'qrToken': '<token>'}`.
+/// Returns `null` when the input is malformed.
+Map<String, String>? normalizePairingInput(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed.length > 4096) return null;
+
+  // 1. 6-digit numeric code (allowing spaces, hyphens, or dots).
+  final directCode = _tryExtractSixDigitCode(trimmed);
+  if (directCode != null) {
+    return {'pairingCode': directCode};
   }
 
-  try {
-    final decoded = jsonDecode(cleanInput);
-    if (decoded is Map) {
-      final qrToken =
-          decoded['pairingToken']?.toString() ?? decoded['qrToken']?.toString();
-      if (qrToken != null && qrToken.isNotEmpty) {
-        return {'qrToken': qrToken};
+  // 2. JSON object payload from QR code.
+  if (trimmed.startsWith('{')) {
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map) {
+        final rawCode = decoded['pairingCode'] ?? decoded['code'];
+        if (rawCode != null) {
+          final parsedCode = _tryExtractSixDigitCode(rawCode.toString());
+          return parsedCode != null ? {'pairingCode': parsedCode} : null;
+        }
+        final rawToken =
+            decoded['pairingToken'] ?? decoded['qrToken'] ?? decoded['token'];
+        if (rawToken != null) {
+          return _normalizeTokenOrCodeValue(rawToken.toString());
+        }
       }
+    } catch (_) {
+      return null;
     }
-  } catch (_) {
-    // Raw QR token fallback.
+    return null;
   }
 
-  return {'qrToken': cleanInput};
+  // 3. Deep-link or HTTPS URL (`alphacrm://`, `http://`, `https://`).
+  if (trimmed.contains('://')) {
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return null;
+    if (!_allowedPairingUrlSchemes.contains(uri.scheme.toLowerCase())) {
+      return null;
+    }
+    final codeParam =
+        uri.queryParameters['pairingCode'] ?? uri.queryParameters['code'];
+    if (codeParam != null) {
+      final parsedCode = _tryExtractSixDigitCode(codeParam);
+      return parsedCode != null ? {'pairingCode': parsedCode} : null;
+    }
+    final tokenParam =
+        uri.queryParameters['qrToken'] ??
+        uri.queryParameters['pairingToken'] ??
+        uri.queryParameters['token'];
+    if (tokenParam != null) {
+      return _normalizeTokenOrCodeValue(tokenParam);
+    }
+    return null;
+  }
+
+  // 4. Raw token fallback: single-line, no spaces, 16+ characters.
+  if (trimmed.length >= 16 && !_whitespacePattern.hasMatch(trimmed)) {
+    return {'qrToken': trimmed};
+  }
+
+  return null;
+}
+
+Map<String, dynamic> buildPairingConfirmPayload(String input) {
+  final normalized = normalizePairingInput(input);
+  if (normalized != null) {
+    return Map<String, dynamic>.from(normalized);
+  }
+  return {'qrToken': input.trim()};
 }
 
 class RemoteDisconnectRequest {

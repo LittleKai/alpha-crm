@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-10-24 · **Session:** 8
+**Last Updated:** 2026-10-28 · **Session:** 9
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -81,6 +81,7 @@ docs/
     n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
     mobile-web-completion-plan.md                High-level plan for Mobile & Web realtime/pairing/offline completion
     mobile-web-completion-tasklist.md            Detailed gap analysis + task breakdown (BE/AG/FE) for the Mobile & Web completion plan
+    orca-mobile-adoption-plan.md                 Evaluation (/10) & implementation plan for Orca Mobile companion patterns in Alpha CRM
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
     zca-js-api-catalog.md                        API catalog for the zca-js library
@@ -149,7 +150,7 @@ docs/
 | `integration/zalo-bot-service/src/channels/instagram-channel.ts` | Instagram Direct Messaging channel adapter (Giai đoạn G) | ZaloChannel adapter Meta Graph API cho Instagram Direct Messaging. |
 | `integration/zalo-bot-service/src/channels/whatsapp-channel.ts` | WhatsApp Cloud API channel adapter (Giai đoạn H) | ZaloChannel adapter WhatsApp Cloud API qua phone_number_id messages. |
 | `integration/zalo-bot-service/src/channels/telegram-channel.ts` | Telegram Bot API channel adapter (Giai đoạn I) | ZaloChannel adapter Telegram Bot API qua bot token và webhook bí mật. |
-| `integration/zalo-bot-service/src/agent/agent-runner.ts` | Cloud command/heartbeat loop | Cloud heartbeat (10s), long-poll lệnh /next, báo inbound 1:1. Chi tiết xem CONVENTIONS.md. |
+| `integration/zalo-bot-service/src/agent/agent-runner.ts` | Cloud command/heartbeat loop | Cloud heartbeat (10s, tách rõ `appVersion` của Desktop Flutter app và `agentVersion` của bot service), long-poll lệnh /next, báo inbound 1:1. Chi tiết xem CONVENTIONS.md. |
 | `integration/zalo-bot-service/src/agent/outbound-reporter.ts` | Outbound message → cloud reporter | Báo tin gửi outbound lên cloud /crm/agent/events/message (tránh lặp qua senderId). |
 | `docs/specs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
 | `docs/specs/zalo-message-processing-gap-vs-deplao.md` | Phân tích phần xử lý tin nhắn Zalo còn thiếu | Đối chiếu Live Chat của Alpha CRM với pipeline Zalo của Deplao; ghi rõ các phần realtime, lưu trữ, gửi tin, media và UI còn thiếu hoặc mới triển khai một phần. Không bao gồm Facebook. |
@@ -161,10 +162,12 @@ docs/
 | `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 | `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
 | `lib/features/messaging/live_chat/data/live_chat_transport.dart` | Live Chat transport mode | resolveLiveChatTransportMode: localBridge (Windows) vs cloudRemote (Android/iOS). |
-| `lib/shared/api/crm_sse_client.dart` | Cloud SSE client | Singleton GET /crm/events/subscribe kết nối SSE chung với exponential backoff. |
+| `lib/shared/api/crm_sse_client.dart` | Cloud SSE client | Singleton GET /crm/events/subscribe với connect/idle watchdog (20s/65s), generation guard, reconnectNow và log 100 dòng đã che secret. |
 | `lib/features/messaging/live_chat/data/live_chat_cloud_event_mapper.dart` | Cloud SSE → Live Chat event mapper | Map cloud SSE vocabulary sang bridge vocabulary cho LiveChatNotifier xử lý. |
-| `lib/features/messaging/live_chat/providers/agent_status_provider.dart` | Desktop Agent health (remote mode) | Theo dõi agent health từ cloud SSE ở remote mode để khoá composer khi offline. |
-| `test/crm_sse_client_test.dart`, `test/live_chat_cloud_event_mapper_test.dart` | Sprint 3 unit tests | Cover the SSE line-decoder (multi-line data, keep-alive comments, malformed JSON) and the cloud→local event-vocabulary mapper (account filtering, type mapping). |
+| `lib/features/messaging/live_chat/providers/agent_status_provider.dart` | Desktop Agent health (remote mode) | Theo dõi agent health + `appVersion`/`agentVersion` + CalmStatusReveal (chống nháy banner <5s) từ cloud SSE ở remote mode. |
+| `lib/features/messaging/live_chat/utils/mobile_connection_diagnostics.dart` | Mobile connection diagnostics & calm status | CalmStatusReveal state machine, `evaluateAgentVersionCompat`, bộ phân tích chẩn đoán kết nối 9 mức ưu tiên và xuất báo cáo đã che secret. |
+| `lib/features/messaging/live_chat/presentation/widgets/mobile_connection_diagnostics_dialog.dart` | Mobile connection diagnostics dialog | `showStandardDialog` + `AppDialog` hiển thị chẩn đoán kết nối, tương thích phiên bản PC/Mobile, 4 mục kiểm tra, log SSE đã che secret, nút Kết nối lại ngay & Sao chép báo cáo. |
+| `test/crm_sse_client_test.dart`, `test/live_chat_cloud_event_mapper_test.dart`, `test/mobile_connection_diagnostics_test.dart`, `test/agent_status_provider_test.dart`, `test/mobile_connection_diagnostics_dialog_test.dart` | Cloud SSE & mobile companion tests | Kiểm thử SSE decoder/watchdog/generation/redaction, CalmStatusReveal, chẩn đoán kết nối và hộp thoại chẩn đoán di động. |
 | `lib/features/groups/manage/` | Managed groups + AI summary | Tóm tắt AI nhóm (local-first, gộp định danh, gửi transient không lưu nội dung trên server). |
 
 ---

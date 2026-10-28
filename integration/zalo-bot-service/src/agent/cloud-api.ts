@@ -1,5 +1,43 @@
 import { config } from '../config.js';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { SupervisorStats } from './supervisor-stats.js';
+
+export function resolveAgentVersion(): string {
+  const injected = process.env.CRM_AGENT_VERSION;
+  if (injected) return injected;
+  try {
+    const require = createRequire(import.meta.url);
+    return (require('../../package.json') as { version: string }).version;
+  } catch {
+    return '0.0.0';
+  }
+}
+
+export function resolveDesktopAppVersion(): string {
+  const runtimeEnv = process.env['ALPHA_CRM_APP_VERSION']?.trim();
+  if (runtimeEnv) {
+    return runtimeEnv.split('+')[0];
+  }
+  const bundledDesktopVersion = process.env.CRM_DESKTOP_APP_VERSION;
+  if (bundledDesktopVersion) {
+    return bundledDesktopVersion.split('+')[0];
+  }
+  try {
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const pubspecPath = path.resolve(thisDir, '..', '..', '..', '..', 'pubspec.yaml');
+    const pubspec = readFileSync(pubspecPath, 'utf8');
+    const match = pubspec.match(/^version:\s*([0-9]+\.[0-9]+\.[0-9]+)/m);
+    if (match?.[1]) {
+      return match[1];
+    }
+  } catch {
+    // Fall through to agent package version.
+  }
+  return resolveAgentVersion();
+}
 
 export interface CommandResponse {
   _id: string;
@@ -104,7 +142,8 @@ export async function registerDevice(
       machineFingerprint,
       displayName,
       platform: 'windows',
-      agentVersion: '0.2.0',
+      appVersion: resolveDesktopAppVersion(),
+      agentVersion: resolveAgentVersion(),
     }),
   });
 }
@@ -124,7 +163,8 @@ export async function forceReplaceDevice(
       machineFingerprint,
       displayName,
       platform: 'windows',
-      agentVersion: '0.2.0',
+      appVersion: resolveDesktopAppVersion(),
+      agentVersion: resolveAgentVersion(),
     }),
   });
 }

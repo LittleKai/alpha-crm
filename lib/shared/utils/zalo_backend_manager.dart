@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'app_logger.dart';
 import 'windows_job_object.dart';
 import 'string_helper.dart';
@@ -190,6 +191,7 @@ class ZaloBackendManager {
 
       if (nodeExePath != null && serverJsPath != null && serviceDir != null) {
         final backendPort = await _resolveManagedBackendPort();
+        final appVersion = await _resolveDesktopAppVersion();
         _activePort = backendPort;
 
         // 3a. Chế độ trực tiếp — một tiến trình node duy nhất, kill sạch, không nháy console.
@@ -204,6 +206,7 @@ class ZaloBackendManager {
           environment: {
             'PORT': '$backendPort',
             'LOCAL_BIND_PORT': '$backendPort',
+            'ALPHA_CRM_APP_VERSION': ?appVersion,
           },
           mode: ProcessStartMode.normal,
         );
@@ -274,6 +277,7 @@ class ZaloBackendManager {
         }
 
         final backendPort = await _resolveManagedBackendPort();
+        final appVersion = await _resolveDesktopAppVersion();
         _activePort = backendPort;
 
         // 3d. Trong bản đóng gói, thư mục service nằm cạnh launcher: <launcherDir>/zalo-bot-service
@@ -290,6 +294,7 @@ class ZaloBackendManager {
           environment: {
             'PORT': '$backendPort',
             'LOCAL_BIND_PORT': '$backendPort',
+            'ALPHA_CRM_APP_VERSION': ?appVersion,
           },
         );
         _afterSpawn();
@@ -745,6 +750,16 @@ class ZaloBackendManager {
         'ZaloBackendManager: backend chậm — event loop trễ ${delay.round()}ms'
         '${rss is num ? ", RSS ${rss.round()}MB" : ""}.',
       );
+    }
+  }
+
+  static Future<String?> _resolveDesktopAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final v = info.version.trim();
+      return v.isEmpty ? null : v;
+    } catch (_) {
+      return null;
     }
   }
 

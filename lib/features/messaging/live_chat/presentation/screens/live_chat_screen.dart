@@ -38,6 +38,7 @@ import '../../utils/live_chat_local_image_stub.dart'
     if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
 import '../widgets/live_chat_settings_dialog.dart';
+import '../widgets/mobile_connection_diagnostics_dialog.dart';
 
 class LiveChatScreen extends ConsumerStatefulWidget {
   const LiveChatScreen({super.key});
@@ -1564,8 +1565,10 @@ class _ConversationPanel extends ConsumerWidget {
       } else if (agentOffline) {
         remoteBlockedReason =
             'Không kết nối được với máy tính chủ (Desktop Agent). Tin nhắn có thể bị trễ.';
-      } else if (!agentStatus.sseConnected) {
-        remoteBlockedReason = 'Đang kết nối lại...';
+      } else if (agentStatus.showReconnectBanner) {
+        remoteBlockedReason = agentStatus.hasSnapshot
+            ? 'Đang kết nối lại...'
+            : 'Đang kết nối tới máy chủ...';
       }
     } else {
       isAccountConnected =
@@ -1848,6 +1851,18 @@ class _ConversationPanel extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  if (transportMode == LiveChatTransportMode.cloudRemote) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: AppColors.warningText,
+                      ),
+                      onPressed: () =>
+                          showMobileConnectionDiagnosticsDialog(context),
+                      child: const Text('Chẩn đoán'),
+                    ),
+                  ],
                 ],
               ),
             )
@@ -1884,6 +1899,16 @@ class _ConversationPanel extends ConsumerWidget {
                         color: AppColors.info,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: AppColors.info,
+                    ),
+                    onPressed: () =>
+                        showMobileConnectionDiagnosticsDialog(context),
+                    child: const Text('Chẩn đoán'),
                   ),
                 ],
               ),

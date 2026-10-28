@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../app/routing/app_routes.dart';
@@ -11,6 +13,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_dialog.dart';
+import '../../../messaging/live_chat/data/live_chat_transport.dart';
+import '../../../messaging/live_chat/presentation/widgets/mobile_connection_diagnostics_dialog.dart';
+import '../../../messaging/live_chat/providers/agent_status_provider.dart';
 import '../../../messaging/live_chat/providers/live_chat_provider.dart';
 import '../../providers/crm_device_provider.dart';
 
@@ -35,10 +40,10 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   Future<void> _submitPairingCode() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final cleanCode = _codeController.text.replaceAll(' ', '').trim();
+    final rawInput = _codeController.text;
     final success = await ref
         .read(crmDeviceProvider.notifier)
-        .confirmPairing(cleanCode);
+        .confirmPairing(rawInput);
 
     if (success && mounted) {
       _codeController.clear();
@@ -66,8 +71,26 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     }
   }
 
+  Future<void> _pastePairingCodeFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bộ nhớ tạm không có mã ghép đôi.'),
+        ),
+      );
+      return;
+    }
+    _codeController.text = text;
+    _codeController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _codeController.text.length),
+    );
+  }
+
   Future<void> _confirmUnpairDevice(PairedDevice dev) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showStandardDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: 'Ngắt kết nối Remote',
@@ -98,7 +121,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
   void _openQrScanner() {
     var didScan = false;
-    showDialog(
+    showStandardDialog(
       context: context,
       builder: (context) {
         return AppDialog(
@@ -142,10 +165,10 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
   }
 
   void simulateQrScanner() {
-    showDialog(
+    final tokenController = TextEditingController();
+    showStandardDialog<void>(
       context: context,
       builder: (context) {
-        final tokenController = TextEditingController();
         return AppDialog(
           title: 'Mô phỏng Quét QR Code',
           icon: Icons.qr_code_rounded,
@@ -188,7 +211,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           ),
         );
       },
-    );
+    ).whenComplete(tokenController.dispose);
   }
 
   @override
@@ -363,19 +386,127 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border),
             ),
-            child: Column(
-              children: [
-                _buildInfoRow(
-                  'Thiết bị di động của bạn:',
-                  'Đã liên kết thành công',
-                ),
-                const SizedBox(height: 12),
-                _buildInfoRow(
-                  'Trạng thái kết nối:',
-                  'Sẵn sàng hoạt động',
-                  isStatus: true,
-                ),
-              ],
+            child: Consumer(
+              builder: (context, ref, _) {
+                final mode = ref.watch(liveChatTransportModeProvider);
+                if (mode != LiveChatTransportMode.cloudRemote) {
+                  return Column(
+                    children: [
+                      _buildInfoRow(
+                        'Thiết bị di động của bạn:',
+                        'Đã liên kết thành công',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildInfoRow(
+                        'Trạng thái kết nối:',
+                        'Sẵn sàng hoạt động',
+                        isStatus: true,
+                      ),
+                    ],
+                  );
+                }
+
+                final agentStatus = ref.watch(agentStatusProvider);
+                final matchedDevice = state.deviceId != null
+                    ? agentStatus.devicesById[state.deviceId!]
+                    : null;
+                final isOnline = matchedDevice != null
+                    ? matchedDevice.online
+                    : agentStatus.anyDeviceOnline;
+                final hasZaloIssue = matchedDevice != null
+                    ? (matchedDevice.online &&
+                          (matchedDevice.worstZaloHealth ==
+                                  ZaloAccountHealth.expired ||
+                              matchedDevice.worstZaloHealth ==
+                                  ZaloAccountHealth.loggedOut))
+                    : agentStatus.anyOnlineDeviceHasZaloIssue;
+                final lastHeartbeat =
+                    matchedDevice?.lastHeartbeatAt ??
+                    agentStatus.latestHeartbeatAt;
+                final desktopAppVersion =
+                    matchedDevice?.appVersion ??
+                    agentStatus.primaryDesktopAppVersion;
+                final agentVersion =
+                    matchedDevice?.agentVersion ??
+                    agentStatus.primaryDesktopAgentVersion;
+
+                String statusLabel;
+                Color dotColor;
+                Color textColor;
+                if (agentStatus.showReconnectBanner) {
+                  statusLabel = 'Đang kết nối lại máy chủ...';
+                  dotColor = AppColors.warning;
+                  textColor = AppColors.warningText;
+                } else if (!agentStatus.hasSnapshot) {
+                  statusLabel = 'Đang kiểm tra...';
+                  dotColor = AppColors.info;
+                  textColor = AppColors.info;
+                } else if (hasZaloIssue) {
+                  statusLabel = 'Phiên Zalo trên máy tính đã hết hạn';
+                  dotColor = AppColors.warning;
+                  textColor = AppColors.warningText;
+                } else if (!isOnline) {
+                  statusLabel = 'Máy tính đang ngoại tuyến';
+                  dotColor = AppColors.warning;
+                  textColor = AppColors.warningText;
+                } else {
+                  statusLabel = 'Máy tính đang trực tuyến';
+                  dotColor = AppColors.success;
+                  textColor = AppColors.successText;
+                }
+
+                return Column(
+                  children: [
+                    _buildInfoRow(
+                      'Thiết bị di động của bạn:',
+                      'Đã liên kết thành công',
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Trạng thái máy tính chủ:',
+                      statusLabel,
+                      isStatus: true,
+                      statusDotColor: dotColor,
+                      statusTextColor: textColor,
+                    ),
+                    if (!isOnline &&
+                        agentStatus.hasSnapshot &&
+                        !agentStatus.showReconnectBanner &&
+                        lastHeartbeat != null) ...[
+                      const SizedBox(height: 8),
+                      _buildInfoRow(
+                        'Lần cuối trực tuyến:',
+                        'Lần cuối: ${DateFormat('HH:mm dd/MM').format(lastHeartbeat.toLocal())}',
+                      ),
+                    ],
+                    if (desktopAppVersion != null &&
+                        desktopAppVersion.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _buildInfoRow(
+                        'Phiên bản Alpha CRM trên PC:',
+                        'v$desktopAppVersion',
+                      ),
+                    ],
+                    if (agentVersion != null && agentVersion.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _buildInfoRow(
+                        'Phiên bản Desktop Agent:',
+                        'v$agentVersion',
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            showMobileConnectionDiagnosticsDialog(context),
+                        icon: const Icon(Icons.troubleshoot_rounded, size: 18),
+                        label: const Text('Chẩn đoán kết nối'),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 32),
@@ -383,7 +514,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             onPressed: state.isLoading
                 ? null
                 : () {
-                    showDialog(
+                    showStandardDialog(
                       context: context,
                       builder: (context) => AppDialog(
                         title: 'Ngắt kết nối Remote',
@@ -532,7 +663,13 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {bool isStatus = false}) {
+  Widget _buildInfoRow(
+    String label,
+    String value, {
+    bool isStatus = false,
+    Color? statusDotColor,
+    Color? statusTextColor,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -540,35 +677,42 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           label,
           style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
         ),
-        if (isStatus)
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.success,
-                  shape: BoxShape.circle,
+        const SizedBox(width: 8),
+        Flexible(
+          child: isStatus
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: statusDotColor ?? AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        value,
+                        textAlign: TextAlign.end,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: statusTextColor ?? AppColors.successText,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  value,
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                value,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.successText,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          )
-        else
-          Text(
-            value,
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-            ),
-          ),
+        ),
       ],
     );
   }
@@ -587,7 +731,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           const SizedBox(height: 12),
           TextFormField(
             controller: _codeController,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.text,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 24,
@@ -606,20 +750,27 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               if (value == null || value.trim().isEmpty) {
                 return 'Vui lòng điền mã ghép đôi.';
               }
-              final clean = value.replaceAll(' ', '');
-              if (clean.length == 6 && int.tryParse(clean) != null) {
-                return null;
-              }
-              if (value.trim().startsWith('{') || value.trim().length >= 16) {
-                return null;
-              }
-              if (clean.length != 6 || int.tryParse(clean) == null) {
-                return 'Mã ghép đôi phải gồm đúng 6 chữ số.';
+              if (normalizePairingInput(value) == null) {
+                return 'Mã ghép đôi gồm 6 chữ số, hoặc dán mã QR / đường dẫn ghép đôi.';
               }
               return null;
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: state.isLoading ? null : _pastePairingCodeFromClipboard,
+            icon: const Icon(Icons.content_paste_rounded, size: 18),
+            label: const Text('Dán mã'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: BorderSide(color: AppColors.border),
+              foregroundColor: AppColors.textPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           ElevatedButton(
             onPressed: state.isLoading ? null : _submitPairingCode,
             style: ElevatedButton.styleFrom(
@@ -661,6 +812,25 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final mode = ref.watch(liveChatTransportModeProvider);
+              if (mode != LiveChatTransportMode.cloudRemote) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: () =>
+                        showMobileConnectionDiagnosticsDialog(context),
+                    icon: const Icon(Icons.troubleshoot_rounded, size: 18),
+                    label: const Text('Chẩn đoán kết nối'),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 20),
           Container(

@@ -1,12 +1,30 @@
 # Important Fixed Bugs
 
-**Last Updated:** 2026-10-24 +07:00
+**Last Updated:** 2026-10-28 +07:00
 
 ---
 
 ## CỬA RA — file này không chỉ được dài thêm
 
 Chỉ chuyển văn xuôi xuống `archive/FIXED_BUGS_guarded.md` khi rào chắn đã chạy xanh và cố ý phá thì phép kiểm đỏ. Chưa đủ hai chiều thì giữ lại. Bài học mang tính phán đoán chuyển sang `CONVENTIONS.md`; bảng này chỉ chấm phần cơ học kiểm được.
+
+## 🚫 KHÔNG ĐƯỢC GHI VÀO ĐÂY
+
+Một dòng sai ở đây được đọc lại ở mọi session và có thể đóng băng thành lý do
+để từ chối một cách làm đúng.
+
+| Không ghi | Ghi ở đâu thay thế |
+|---|---|
+| **Lỗi môi trường** — app chưa mở, cổng bận, timeout tạm thời, sai đường dẫn venv/conda | `README.md` / `SMOKE_TEST_CHECKLIST.md` — ghi **cách sửa**, không ghi triệu chứng |
+| **Khẳng định phủ định về công cụ** — "tool X không chạy được Y", "API Z hỏng" (đóng băng thành lời từ chối) | Không ghi. Giới hạn thật thì ghi **điều kiện chính xác** + cách thay thế **đã chạy được** |
+| **Lỗi tạm thời tự hết** khi chạy lại trong cùng phiên | Không ghi, trừ khi tìm ra điều kiện tái hiện |
+| **Chuỗi thử thất bại viết thành "cách làm khuyến nghị"** | Chỉ ghi cách đã chạy và có bằng chứng kiểm chứng, không kể ngõ cụt |
+| **Nhật ký một task; số đo, tên riêng của một dự án/module** | `PROJECT_SUMMARY.md` |
+| **Thứ tài liệu khác đã dạy** — đặt tên, quy ước code, checklist bàn giao | `CONVENTIONS.md` · `SMOKE_TEST_CHECKLIST.md` |
+
+**Phép thử một dòng trước khi thêm entry:** bỏ tên dự án, ngày, lời người dùng —
+câu luật còn cứu được dự án khác không? Không ⇒ không thuộc file này. Bài học
+lặp lại là một luật: sửa câu cũ, không nối `CẬP NHẬT: thực ra...`.
 
 ## Bảng bẫy
 
@@ -57,8 +75,16 @@ Chỉ chuyển văn xuôi xuống `archive/FIXED_BUGS_guarded.md` khi rào chắ
 | 43 | Outbound sync xoá tác vụ của tin đã delivered/seen | 🔶 `sync-worker.ts::processSyncQueue`; SQLite regression test, chưa smoke Zalo thật | review 2026-10-23 bên dưới |
 | 44 | Echo guard theo thread nuốt phản hồi thật từ điện thoại | 🔶 `personal-zca-channel.ts::isRecentProgrammaticSend`; exact-ID test, rich-send race còn giới hạn | review 2026-10-23 bên dưới |
 | 45 | Kiểm tra redirect sau fetch đã gửi request vào mạng nội bộ | 🔶 `external-media.ts::downloadExternalMedia`; DNS/redirect/size/deadline fixture | review 2026-10-23 bên dưới |
+| 46 | `CrmSseClient.resume()` mở trùng stream khi Android `inactive -> resumed` | 🔶 `crm_sse_client.dart::resume`; unit test `crm_sse_client_test.dart` | review 2026-10-28 bên dưới |
+| 47 | QR pairing fallback 6 số bị gửi nhầm thành `qrToken` làm `/crm/pairing/confirm` luôn fail | 🔶 `crm_device_provider.dart::normalizePairingInput`; unit test `crm_device_provider_test.dart` | review 2026-10-28 bên dưới |
 
 Mục ✅ mới được rút xuống archive; mục 🔶/❌ vẫn ở file này.
+
+### Review 2026-10-28 — SSE idempotent resume, watchdog và QR pairing fallback
+
+Trên Android, `AppLifecycleState.inactive -> resumed` (mở hộp thoại quyền camera khi quét QR hoặc kéo thanh thông báo) gọi `_CrmSseLifecycleObserver.didChangeAppLifecycleState(resumed)` mà không đi qua `paused`. Trước đây `CrmSseClient.resume()` gọi thẳng `_connect()` ngay cả khi đã có kết nối, ghi đè `_httpClient` mà không đóng client cũ và làm tràn giới hạn 5 kết nối SSE/user trên `crmEventHub.js` (đuổi kết nối của thiết bị khác). Đã sửa bằng guard idempotent (`!_paused && (_httpClient != null || _connecting)`), bộ đếm `_generation`, và watchdog đơn cho cả pha connect (20s) lẫn idle stream (65s, reset trên từng dòng thô kể cả `: ping`).
+
+Khi máy tính tạo QR ghép đôi nhưng backend không trả `qrToken`, payload QR fallback về `{"type":"alpha_crm_pairing","pairingToken":"<6 chữ số>"}`. Trước đây `buildPairingConfirmPayload` gửi giá trị này dưới khóa `qrToken`, khiến backend băm SHA-256 như QR token và không bao giờ khớp `pairingCode`. `normalizePairingInput` nay kiểm tra chuỗi 6 chữ số (`^\d{6}$`) cho cả `pairingToken`/`token` và ánh xạ đúng về `{'pairingCode': code}`.
 
 ### Review 2026-10-23 — outbound sync, echo và media (sửa 2026-10-24)
 
