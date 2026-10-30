@@ -101,7 +101,9 @@ if (-not $Title) {
     $Title = "Alpha CRM $TagVersion"
 }
 
+$NotesFile = ""
 if ($Notes -and (Test-Path -LiteralPath $Notes -PathType Leaf)) {
+    $NotesFile = (Resolve-Path -LiteralPath $Notes).Path
     $Notes = Get-Content -LiteralPath $Notes -Raw -Encoding UTF8
 } elseif (-not $Notes) {
     $Notes = "Bản phát hành tự động Alpha CRM $TagVersion"
@@ -135,6 +137,7 @@ $env:CRM_B2_BUILD        = $BuildNum
 $env:CRM_B2_TAG          = $TagVersion
 $env:CRM_B2_TITLE        = $Title
 $env:CRM_B2_NOTES        = $Notes
+$env:CRM_B2_NOTES_FILE   = $NotesFile
 $env:CRM_B2_RELEASE_URL  = $ReleaseUrl
 $env:CRM_B2_PUBLISHED_AT = $PublishedAt
 $env:CRM_B2_ZIP_PATH     = if ($WindowsArtifact) { $WindowsArtifact.FullName } else { '' }
@@ -177,7 +180,9 @@ const cdnBase = CDN_BASE_URL.replace(/\/+$/, '');
 const semver = process.env.CRM_B2_SEMVER;
 const tag = process.env.CRM_B2_TAG;
 const title = process.env.CRM_B2_TITLE;
-const notes = process.env.CRM_B2_NOTES || '';
+const notes = (process.env.CRM_B2_NOTES_FILE && fs.existsSync(process.env.CRM_B2_NOTES_FILE))
+  ? fs.readFileSync(process.env.CRM_B2_NOTES_FILE, 'utf8')
+  : (process.env.CRM_B2_NOTES || '');
 const releaseUrl = process.env.CRM_B2_RELEASE_URL || '';
 const publishedAt = process.env.CRM_B2_PUBLISHED_AT || new Date().toISOString();
 const zipPath = process.env.CRM_B2_ZIP_PATH;

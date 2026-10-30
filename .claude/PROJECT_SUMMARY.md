@@ -253,7 +253,7 @@ flowchart LR
 - [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
 - [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
 
-Kiểm tra lần sửa: analyze sạch; Flutter 217/217, backend 173/173; release 0.2.4+32 đã phát hành đồng thời lên GitHub Release và Backblaze B2 (ZIP Windows 71.42 MB, APK Android 149.49 MB) kèm manifest version.json cập nhật thành công. Backend từ ZIP với Node 22.23.2 mở SQLite và vượt qua smoke-test /health và /local/health.
+Kiểm tra lần sửa: analyze sạch; Flutter 217/217, backend 173/173; release 0.2.5+33 đã phát hành đồng thời lên GitHub Release và Backblaze B2 (ZIP Windows 71.42 MB, APK Android 149.51 MB) kèm manifest version.json cập nhật thành công. Backend từ ZIP với Node 22.23.2 mở SQLite và vượt qua smoke-test /health và /local/health.
 
 Chưa smoke giao diện/phiên Zalo thật và APK trên máy Android (không có thiết bị kết nối); chưa phát hành/commit. Echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
 
