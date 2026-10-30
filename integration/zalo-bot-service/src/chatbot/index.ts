@@ -200,10 +200,6 @@ export function pauseChatbotForOperatorReply(
   });
 }
 
-export function getLocalChatbotRuntime(): LocalChatbotRuntime | null {
-  return runtime;
-}
-
 export function getChatbotStore(): ChatbotStore | null {
   return chatbotStore;
 }

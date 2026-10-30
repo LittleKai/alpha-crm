@@ -408,7 +408,7 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Root cause: Zalo remote image URLs expire quickly. Although the Node.js background media worker (`LocalChatMediaWorker`) successfully downloaded a local copy of each image to `.data/local-chat-media/`, the Flutter client only checked if the attachment had a remote URL (`image.hasRemoteUrl`), and unconditionally attempted to load it using `CachedNetworkImage`, ignoring the cached local path when the remote load failed.
 - Fix summary: Introduced `liveChatLocalFileExists` helper in the platform-specific local image stubs/implementations to verify file presence on disk. Updated `_buildMessageContent` in `live_chat_screen.dart` to check if a valid local copy exists (`useLocal = image.hasLocalPath && liveChatLocalFileExists(image.localPath)`) and render the local image using `buildLiveChatLocalImage`, falling back to `CachedNetworkImage` only if the local file is not found. Fixed string encoding typos from `'KhĂ´ng thá»ƒ...'` to `'Không thể...'` in the error widgets.
 - Rule: Always check and prioritize loading media from `image.localPath` if it exists on the local filesystem before falling back to remote URLs, as Zalo CDN URLs are short-lived.
-- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/utils/live_chat_local_image_io.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/utils/live_chat_local_image_stub.dart`.
+- Related files: `tools/alpha-crm/lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`, `tools/alpha-crm/lib/features/messaging/live_chat/utils/live_chat_local_image_io.dart`.
 
 ### 2026-06-06 - Dart AOT Compilation Bypasses Overridden Getters on Custom Color Subclasses
 
@@ -456,7 +456,7 @@ Record only high-impact, hard-to-detect, or likely-to-recur bugs. Do not record 
 - Root cause: The local Node.js server binds to `127.0.0.1` (IPv4 loopback), but the Flutter app was configured with `http://localhost:8787` by default. On Windows, `localhost` resolves to `::1` (IPv6 loopback) first. Since the Node.js server was not listening on `::1`, the connection was refused.
 - Fix summary: Changed default Zalo Backend Base URL from `http://localhost:8787` to `http://127.0.0.1:8787` in settings config schema, mock defaults, UI fallbacks, and the existing `zalo_settings.json` file.
 - Rule: Always use explicit IPv4 `127.0.0.1` instead of `localhost` for local/loopback backend server connections on Windows to avoid IPv6 name resolution issues.
-- Related files: `tools/alpha-crm/zalo_settings.json`, `tools/alpha-crm/lib/mock/mock_accounts.dart`, `tools/alpha-crm/lib/features/zalo_integration/data/zalo_integration_api.dart`, `tools/alpha-crm/lib/features/settings/presentation/screens/settings_screen.dart`, `tools/alpha-crm/docs/zalo-integration-installation-and-usage.md`.
+- Related files: `tools/alpha-crm/zalo_settings.json`, `tools/alpha-crm/lib/mock/mock_accounts.dart`, `tools/alpha-crm/lib/features/zalo_integration/data/zalo_integration_api.dart`, `tools/alpha-crm/lib/features/settings/presentation/screens/settings_screen.dart`, `tools/alpha-crm/docs/guides/zalo-integration-installation-and-usage.md`.
 
 ### 2026-06-03 - Live Chat Must Preserve Plain Text Inbound Payloads
 

@@ -822,10 +822,25 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       isRefreshingConversations: silent,
       errorMessage: null,
     );
-    final response = await _repository.getConversations(
-      accountId: state.selectedAccount?.id,
-      search: state.searchQuery,
-    );
+    final Map<String, dynamic> response;
+    try {
+      response = await _repository.getConversations(
+        accountId: state.selectedAccount?.id,
+        search: state.searchQuery,
+      );
+    } catch (e, stack) {
+      AppLogger().error(
+        '[LiveChatProvider] Error fetching conversations: $e',
+        e,
+        stack,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        isRefreshingConversations: false,
+        errorMessage: 'Không thể tải hội thoại: $e',
+      );
+      return;
+    }
 
     if (response['success'] == true && response['data'] is List) {
       try {
@@ -878,6 +893,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         );
         state = state.copyWith(
           isLoading: false,
+          isRefreshingConversations: false,
           errorMessage: 'Lỗi parse dữ liệu hội thoại: $e',
         );
       }
@@ -887,6 +903,7 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       );
       state = state.copyWith(
         isLoading: false,
+        isRefreshingConversations: false,
         errorMessage: (response['message'] ?? 'Không thể tải hội thoại.')
             .toString(),
       );
@@ -1321,12 +1338,26 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       isLoadingMessages: !isOlderLoad && after == null,
       isLoadingOlderMessages: isOlderLoad,
     );
-    final response = await _repository.getMessages(
-      conversationId,
-      limit: limit,
-      before: before,
-      after: after,
-    );
+    final Map<String, dynamic> response;
+    try {
+      response = await _repository.getMessages(
+        conversationId,
+        limit: limit,
+        before: before,
+        after: after,
+      );
+    } catch (e, stack) {
+      AppLogger().error(
+        '[LiveChatProvider] Error fetching messages: $e',
+        e,
+        stack,
+      );
+      state = state.copyWith(
+        isLoadingMessages: false,
+        isLoadingOlderMessages: false,
+      );
+      return;
+    }
 
     final isBridgeOffline =
         response['code'] == 'LOCAL_BRIDGE_OFFLINE' ||
@@ -1881,27 +1912,6 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
   }
 
-  // ignore: unused_element
-  Future<void> _sendMessageLegacy(String text) async {
-    final conversation = state.selectedConversation;
-    if (conversation == null || text.trim().isEmpty) return;
-    state = state.copyWith(isSending: true, errorMessage: null);
-    final response = await _repository.sendMessage(
-      conversation.id,
-      text.trim(),
-    );
-    if (response['success'] == true) {
-      await loadMessages(conversation.id);
-      state = state.copyWith(isSending: false);
-    } else {
-      state = state.copyWith(
-        isSending: false,
-        errorMessage: (response['message'] ?? 'Gửi tin nhắn thất bại.')
-            .toString(),
-      );
-    }
-  }
-
   Future<void> updateNotes(String notes) async {
     final conversation = state.selectedConversation;
     if (conversation == null) return;
@@ -2031,15 +2041,22 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     _replaceSelected(
       conversation.copyWith(chatbotEnabled: true, chatbotPausedUntilSet: null),
     );
-    await _repository.updateChatbotState(
-      ConversationTarget(
-        id: conversation.id,
-        accountId: conversation.accountId,
-        threadId: conversation.threadId,
-        threadType: conversation.threadType,
-      ),
-      enabled: true,
-    );
+    try {
+      final response = await _repository.updateChatbotState(
+        ConversationTarget(
+          id: conversation.id,
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          threadType: conversation.threadType,
+        ),
+        enabled: true,
+      );
+      if (response['success'] != true) {
+        _replaceSelected(conversation);
+      }
+    } catch (_) {
+      _replaceSelected(conversation);
+    }
   }
 
   void _markOperatorTakeover(Conversation conversation) {

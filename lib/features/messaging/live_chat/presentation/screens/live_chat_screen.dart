@@ -34,8 +34,7 @@ import '../../data/live_chat_transport.dart';
 import '../../providers/agent_status_provider.dart';
 import '../../providers/live_chat_provider.dart';
 import '../../utils/live_chat_attachment_view.dart';
-import '../../utils/live_chat_local_image_stub.dart'
-    if (dart.library.io) '../../utils/live_chat_local_image_io.dart';
+import '../../utils/live_chat_local_image_io.dart';
 import '../../utils/quick_reply_shortcuts.dart';
 import '../widgets/live_chat_settings_dialog.dart';
 import '../widgets/mobile_connection_diagnostics_dialog.dart';
@@ -221,6 +220,7 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen>
                 notifier.loadAccounts();
                 notifier.loadConversations();
                 ref.read(zaloIntegrationProvider.notifier).checkConnection();
+                ref.read(workflowAutomationProvider.notifier).loadChannelAccounts();
               },
               onAccountChanged: notifier.selectAccount,
             ),
@@ -2033,7 +2033,7 @@ class _ConversationPanel extends ConsumerWidget {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (statefulContext, setDialogState) {
             final filtered = templates.where((template) {
               final haystack =
                   '${template.title} ${template.content} ${template.shortcut}'
@@ -2421,8 +2421,8 @@ class _ConversationPanel extends ConsumerWidget {
   void _showMessageSearch(BuildContext context, WidgetRef ref) {
     showDialog<void>(
       context: context,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) {
+      builder: (dialogContext) => Consumer(
+        builder: (consumerContext, ref, _) {
           final results = ref.watch(
             liveChatProvider.select((value) => value.messageSearchResults),
           );
@@ -2460,7 +2460,7 @@ class _ConversationPanel extends ConsumerWidget {
                           padding: EdgeInsets.zero,
                           itemCount: results.length,
                           separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
+                          itemBuilder: (itemContext, index) {
                             final message = results[index];
                             return ListTile(
                               dense: true,
@@ -2495,8 +2495,8 @@ class _ConversationPanel extends ConsumerWidget {
                                     curve: Curves.easeOut,
                                   );
                                 }
-                                if (context.mounted) {
-                                  Navigator.of(context).pop();
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
                                 }
                               },
                             );

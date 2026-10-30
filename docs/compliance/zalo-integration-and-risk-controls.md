@@ -166,7 +166,7 @@ const SAFE_DEFAULTS = {
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 1. TẦNG CẢNH BÁO SỚM (Client UI)                                        │
-│    - File: settings_screen.dart & zalo_compliance_help_panel.dart      │
+│    - File: settings_screen.dart & compliance_warnings_popup.dart       │
 │    - Nhiệm vụ: Hiển thị các thông số rủi ro, cảnh báo trực quan cho     │
 │      operator bằng các thẻ chỉ báo màu sắc (Đỏ, Vàng, Xanh).            │
 └──────────────────────────────────┬─────────────────────────────────────┘

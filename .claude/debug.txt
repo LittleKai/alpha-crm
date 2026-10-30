@@ -1,6 +1,0 @@
-lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart:2656:11: Error: 'trimmed' is already declared in this scope.
-    final trimmed = message.message.trim();
-          ^^^^^^^
-lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart:2561:11: Context: Previous declaration of 'trimmed'.
-    final trimmed = message.message.trim();
-          ^^^^^^^

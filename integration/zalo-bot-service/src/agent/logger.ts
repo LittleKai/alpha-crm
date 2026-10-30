@@ -172,10 +172,6 @@ export function logInfo(message: string, ...optionalParams: any[]): void {
   writeLog('INFO', message, ...optionalParams);
 }
 
-export function logWarn(message: string, ...optionalParams: any[]): void {
-  writeLog('WARN', message, ...optionalParams);
-}
-
 export function logError(message: string, ...optionalParams: any[]): void {
   writeLog('ERROR', message, ...optionalParams);
 }

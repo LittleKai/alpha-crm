@@ -507,7 +507,7 @@ Mọi migration phải idempotent và không làm mất liên kết giữa local
 - `lib/features/messaging/live_chat/data/live_chat_repository.dart`
 - `lib/features/messaging/live_chat/providers/live_chat_provider.dart`
 - `lib/features/messaging/live_chat/presentation/screens/live_chat_screen.dart`
-- `lib/shared/database/local_db.dart`
+- `lib/shared/local_db/local_db.dart`
 
 ## 8. Các file Deplao dùng để tham chiếu
 

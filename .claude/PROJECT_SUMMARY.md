@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-10-28 · **Session:** 9
+**Last Updated:** 2026-10-30 · **Session:** 10
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -54,7 +54,7 @@ windows/                      Native Windows runner and CMake config
 integration/
   zalo-bot-service/            Node.js/TypeScript backend bridge — personal-first via zca-js
     src/channels/              Channel adapter pattern (PersonalZca, OfficialOa, Mock)
-    src/agent/                 Production outbound agent layer (runner, command executor, machine fingerprinting, cloud-api)
+    src/agent/                 Production outbound agent layer (runner, command executor, agent-identity, cloud-api)
     src/integrations/           n8n settings/client/template builder, n8n event dispatcher, and proxy helper tests/utilities
     src/compliance.ts          Channel-aware backend compliance guard
     src/risk-control-store.ts  Persists client risk-control settings (dataRoot/integrations/risk-control.json) and overlays them onto live config (quiet hours, limits, automation gates)
@@ -79,9 +79,12 @@ docs/
     zalo-message-processing-gap-vs-deplao.md     Zalo Live Chat handling parity audit against Deplao
     sqlite-encryption-at-rest-proposal.md        Proposal for encrypting the message SQLite DBs (SQLCipher vs field-level)
     n8n-facebook-integration-contract.md         Meta Page and n8n webhook routing strategy
-    mobile-web-completion-plan.md                High-level plan for Mobile & Web realtime/pairing/offline completion
-    mobile-web-completion-tasklist.md            Detailed gap analysis + task breakdown (BE/AG/FE) for the Mobile & Web completion plan
+    multi-account-channels-plan.md               Multi-account omnichannel integration plan
+    chatbotx-feature-analysis.md                 Feature analysis against ChatbotX
+    mobile-web-completion-tasklist.md            Detailed gap analysis + task breakdown (BE/AG/FE) for Mobile & Web completion
+    mobile-web-completion-qa-checklist.md        QA checklist for Mobile & Web completion
     orca-mobile-adoption-plan.md                 Evaluation (/10) & implementation plan for Orca Mobile companion patterns in Alpha CRM
+  feature-research-chatwoot-tooljet.md           Feature research from Chatwoot and ToolJet
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
     zca-js-api-catalog.md                        API catalog for the zca-js library
@@ -120,7 +123,7 @@ docs/
 | `lib/features/messaging/live_chat/` | Live Chat multi-account | Live Chat multi-account dropdown gộp Zalo + kênh workflow. Chi tiết xem CONVENTIONS.md. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
 | `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer lưu bảng scheduled_campaigns (re-arm lúc boot). |
-| `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `docs/01-design-system.md`. |
+| `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `DESIGN.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
 | `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, tables, logs, compliance warnings popup, update dialog. |
@@ -159,7 +162,6 @@ docs/
 | `test/customers_screen_test.dart` | Customers screen regression test | Verifies the new pipeline summary and customer detail panel interaction. |
 | `test/workflow_automation_provider_test.dart` | Workflow automation regression test | Verifies Email/Facebook settings serialization, mock API payloads, automation rule state transitions, and omnichannel template filtering. |
 | `test/widget_test.dart` | Smoke test | Verifies app shell and initial dashboard route. |
-| `SPEC.md` | Current integration specification | Defines personal-Zalo-first `zca-js` backend adapter plan, while keeping OA as optional secondary channel. |
 | `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
 | `lib/features/messaging/live_chat/data/live_chat_transport.dart` | Live Chat transport mode | resolveLiveChatTransportMode: localBridge (Windows) vs cloudRemote (Android/iOS). |
 | `lib/shared/api/crm_sse_client.dart` | Cloud SSE client | Singleton GET /crm/events/subscribe với connect/idle watchdog (20s/65s), generation guard, reconnectNow và log 100 dòng đã che secret. |

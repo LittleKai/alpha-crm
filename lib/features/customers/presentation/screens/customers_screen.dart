@@ -1331,7 +1331,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (statefulContext, setState) {
             return AppDialog(
               title: 'Thêm khách hàng mới',
               subtitle:

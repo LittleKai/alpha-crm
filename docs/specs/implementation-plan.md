@@ -11,7 +11,7 @@
 - Use existing design tokens: `AppColors`, `AppSpacing`, `AppTextStyles`.
 - Use existing shared widgets first.
 - Keep high-risk Zalo actions covered by the existing compliance warning pattern.
-- Create `docs/reference-analysis.md` and this file before code changes.
+- Create `docs/specs/reference-analysis.md` and this file before code changes.
 
 ## Phase 0 - Analysis And Documentation
 
@@ -19,8 +19,8 @@
 
 - Analyze current Alpha CRM architecture, screens, components, state management, routing, CRM features, UI/UX weaknesses, and safe refactor areas.
 - Analyze `deplao-builder` and `ZaloCRM` reference projects.
-- Create `docs/reference-analysis.md`.
-- Create `docs/implementation-plan.md`.
+- Create `docs/specs/reference-analysis.md`.
+- Create `docs/specs/implementation-plan.md`.
 
 ### Verification
 
@@ -73,8 +73,8 @@ No backend/API contract change in this phase. Function changes are local UI stat
 
 - Modify: `lib/features/customers/presentation/screens/customers_screen.dart`
 - Modify: `.claude/PROJECT_SUMMARY.md`
-- Create: `docs/reference-analysis.md`
-- Create: `docs/implementation-plan.md`
+- Create: `docs/specs/reference-analysis.md`
+- Create: `docs/specs/implementation-plan.md`
 - Test/possibly modify: `test/widget_test.dart` or add `test/customers_screen_test.dart` only if existing smoke tests do not cover the new UI reliably.
 
 ### Risks

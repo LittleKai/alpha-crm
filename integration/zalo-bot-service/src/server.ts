@@ -1400,7 +1400,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const params = new URLSearchParams(query);
       const fileName = params.get('file');
 
-      if (!fileName || !fileName.startsWith('qr_') || !fileName.endsWith('.png')) {
+      if (!fileName || !/^qr_[A-Za-z0-9_-]+\.png$/.test(fileName)) {
         json(res, 400, { error: 'Invalid or missing file parameter.' });
         return;
       }

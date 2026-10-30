@@ -518,7 +518,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (statefulContext, setDialogState) {
             return AppDialog(
               title: 'Xóa dữ liệu hệ thống',
               subtitle: 'Lựa chọn các loại dữ liệu cần xóa. Thao tác này không thể khôi phục.',
@@ -694,7 +694,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (statefulContext, setDialogState) {
             TextStyle previewTitleStyle = GoogleFonts.getFont(
               currentFamily,
             ).copyWith(
@@ -829,7 +829,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (statefulContext, setDialogState) {
             return AppDialog(
               title: 'Cấu hình ${account.label}',
               subtitle:

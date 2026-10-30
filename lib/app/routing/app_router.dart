@@ -5,9 +5,9 @@ import '../shell/app_shell.dart';
 import 'app_routes.dart';
 
 // Import Screens
-import '../../features/dashboard/presentation/screens/dashboard_screen_placeholder.dart';
-import '../../features/customers/presentation/screens/customers_screen_placeholder.dart';
-import '../../features/content/presentation/screens/content_templates_screen_placeholder.dart';
+import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../../features/customers/presentation/screens/customers_screen.dart';
+import '../../features/content/presentation/screens/content_templates_screen.dart';
 import '../../features/workflows/presentation/screens/workflow_automation_screen.dart';
 import '../../features/workflows/presentation/screens/email_settings_screen.dart';
 import '../../features/workflows/presentation/screens/facebook_settings_screen.dart';
@@ -16,18 +16,18 @@ import '../../features/workflows/presentation/screens/instagram_settings_screen.
 import '../../features/workflows/presentation/screens/whatsapp_settings_screen.dart';
 import '../../features/workflows/presentation/screens/telegram_settings_screen.dart';
 import '../../features/workflows/presentation/screens/webchat_settings_screen.dart';
-import '../../features/messaging/bulk/presentation/screens/bulk_messaging_screen_placeholder.dart';
-import '../../features/messaging/live_chat/presentation/screens/live_chat_screen_placeholder.dart';
-import '../../features/messaging/chatbot/presentation/screens/chatbot_screen_placeholder.dart';
-import '../../features/messaging/history/presentation/screens/send_history_screen_placeholder.dart';
-import '../../features/friends/by_phone/presentation/screens/friend_by_phone_screen_placeholder.dart';
-import '../../features/friends/by_group/presentation/screens/friend_by_group_screen_placeholder.dart';
-import '../../features/friends/auto_approve/presentation/screens/auto_approve_screen_placeholder.dart';
-import '../../features/friends/history/presentation/screens/friend_history_screen_placeholder.dart';
-import '../../features/groups/presentation/screens/join_groups_screen_placeholder.dart';
-import '../../features/groups/presentation/screens/invite_to_group_screen_placeholder.dart';
-import '../../features/groups/presentation/screens/create_groups_screen_placeholder.dart';
-import '../../features/groups/presentation/screens/leave_groups_screen_placeholder.dart';
+import '../../features/messaging/bulk/presentation/screens/bulk_messaging_screen.dart';
+import '../../features/messaging/live_chat/presentation/screens/live_chat_screen.dart';
+import '../../features/messaging/chatbot/presentation/screens/chatbot_screen.dart';
+import '../../features/messaging/history/presentation/screens/send_history_screen.dart';
+import '../../features/friends/by_phone/presentation/screens/friend_by_phone_screen.dart';
+import '../../features/friends/by_group/presentation/screens/friend_by_group_screen.dart';
+import '../../features/friends/auto_approve/presentation/screens/auto_approve_screen.dart';
+import '../../features/friends/history/presentation/screens/friend_history_screen.dart';
+import '../../features/groups/presentation/screens/join_groups_screen.dart';
+import '../../features/groups/presentation/screens/invite_to_group_screen.dart';
+import '../../features/groups/presentation/screens/create_groups_screen.dart';
+import '../../features/groups/presentation/screens/leave_groups_screen.dart';
 import '../../features/groups/manage/presentation/screens/managed_groups_screen.dart';
 import '../../features/tasks/presentation/screens/crm_tasks_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
@@ -93,16 +93,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: AppRoutes.dashboard,
-            builder: (context, state) => const DashboardScreenPlaceholder(),
+            builder: (context, state) => const DashboardScreen(),
           ),
           GoRoute(
             path: AppRoutes.customers,
-            builder: (context, state) => const CustomersScreenPlaceholder(),
+            builder: (context, state) => const CustomersScreen(),
           ),
           GoRoute(
             path: AppRoutes.contentTemplates,
-            builder: (context, state) =>
-                const ContentTemplatesScreenPlaceholder(),
+            builder: (context, state) => const ContentTemplatesScreen(),
           ),
           GoRoute(
             path: AppRoutes.workflows,
@@ -138,51 +137,51 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.messagingBulk,
-            builder: (context, state) => const BulkMessagingScreenPlaceholder(),
+            builder: (context, state) => const BulkMessagingScreen(),
           ),
           GoRoute(
             path: AppRoutes.messagingLiveChat,
-            builder: (context, state) => const LiveChatScreenPlaceholder(),
+            builder: (context, state) => const LiveChatScreen(),
           ),
           GoRoute(
             path: AppRoutes.messagingChatbot,
-            builder: (context, state) => const ChatbotScreenPlaceholder(),
+            builder: (context, state) => const ChatbotScreen(),
           ),
           GoRoute(
             path: AppRoutes.messagingHistory,
-            builder: (context, state) => const SendHistoryScreenPlaceholder(),
+            builder: (context, state) => const SendHistoryScreen(),
           ),
           GoRoute(
             path: AppRoutes.friendsByPhone,
-            builder: (context, state) => const FriendByPhoneScreenPlaceholder(),
+            builder: (context, state) => const FriendByPhoneScreen(),
           ),
           GoRoute(
             path: AppRoutes.friendsByGroup,
-            builder: (context, state) => const FriendByGroupScreenPlaceholder(),
+            builder: (context, state) => const FriendByGroupScreen(),
           ),
           GoRoute(
             path: AppRoutes.friendsAutoApprove,
-            builder: (context, state) => const AutoApproveScreenPlaceholder(),
+            builder: (context, state) => const AutoApproveScreen(),
           ),
           GoRoute(
             path: AppRoutes.friendsHistory,
-            builder: (context, state) => const FriendHistoryScreenPlaceholder(),
+            builder: (context, state) => const FriendHistoryScreen(),
           ),
           GoRoute(
             path: AppRoutes.groupsJoin,
-            builder: (context, state) => const JoinGroupsScreenPlaceholder(),
+            builder: (context, state) => const JoinGroupsScreen(),
           ),
           GoRoute(
             path: AppRoutes.groupsInvite,
-            builder: (context, state) => const InviteToGroupScreenPlaceholder(),
+            builder: (context, state) => const InviteToGroupScreen(),
           ),
           GoRoute(
             path: AppRoutes.groupsCreate,
-            builder: (context, state) => const CreateGroupsScreenPlaceholder(),
+            builder: (context, state) => const CreateGroupsScreen(),
           ),
           GoRoute(
             path: AppRoutes.groupsLeave,
-            builder: (context, state) => const LeaveGroupsScreenPlaceholder(),
+            builder: (context, state) => const LeaveGroupsScreen(),
           ),
           GoRoute(
             path: AppRoutes.groupsManage,
@@ -220,22 +219,3 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return router;
 });
-
-// Fallback legacy global appRouter instance to prevent compilation failures
-final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.dashboard,
-  routes: [
-    GoRoute(path: '/', redirect: (context, state) => AppRoutes.dashboard),
-    ShellRoute(
-      builder: (context, state, child) {
-        return AppShell(state: state, child: child);
-      },
-      routes: [
-        GoRoute(
-          path: AppRoutes.dashboard,
-          builder: (context, state) => const DashboardScreenPlaceholder(),
-        ),
-      ],
-    ),
-  ],
-);

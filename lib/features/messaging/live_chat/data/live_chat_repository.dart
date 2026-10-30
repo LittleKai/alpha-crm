@@ -379,12 +379,16 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> retryMessage(String messageId) {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.retryMessage(messageId);
   }
 
   Future<Map<String, dynamic>> getAccountChatSettings() {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.getAccountChatSettings();
   }
 
@@ -392,7 +396,9 @@ class LiveChatRepository {
     String accountId,
     bool enabled,
   ) {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.setAccountAiAutoReply(
       accountId: accountId,
       enabled: enabled,
@@ -400,12 +406,16 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> getAppSettings() {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.getAppSettings();
   }
 
   Future<Map<String, dynamic>> setOperatorPauseCooldownMinutes(int minutes) {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.setOperatorPauseCooldownMinutes(minutes);
   }
 
@@ -423,7 +433,9 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> sendTyping(ConversationTarget target) {
-    if (!_preferLocalZaloActions) return Future.value(_kNotSupportedRemote);
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return Future.value(_kNotSupportedRemote);
+    }
     return localApi.sendTyping(
       accountId: target.accountId,
       threadId: target.threadId,
@@ -447,7 +459,7 @@ class LiveChatRepository {
     String? accountId,
     String? threadId,
   }) {
-    if (!_preferLocalZaloActions) {
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
       return Future.value({..._kNotSupportedRemote, 'data': const []});
     }
     return localApi.searchMessages(
@@ -458,7 +470,7 @@ class LiveChatRepository {
   }
 
   Future<Map<String, dynamic>> messagesAround(String messageId) {
-    if (!_preferLocalZaloActions) {
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
       return Future.value({..._kNotSupportedRemote, 'data': const []});
     }
     return localApi.messagesAround(messageId);

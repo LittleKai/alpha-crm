@@ -495,23 +495,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   void resetSavedState() {
     state = state.copyWith(isSaved: false);
   }
-
-  void addMockAccount() {
-    final newAccount = ZaloAccount(
-      id: (state.accounts.length + 1).toString(),
-      name: 'Zalo Cá nhân - Tài khoản mới ${state.accounts.length + 1}',
-      phone: '09${10000000 + state.accounts.length}',
-      type: 'Cá nhân',
-      isConnected: true,
-    );
-    state = state.copyWith(accounts: [...state.accounts, newAccount]);
-  }
-
-  void removeAccount(String id) {
-    state = state.copyWith(
-      accounts: state.accounts.where((acc) => acc.id != id).toList(),
-    );
-  }
 }
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(

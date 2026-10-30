@@ -341,62 +341,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
-  // ignore: unused_element
-  Future<void> _showLegacyCreateRuleDialog(BuildContext context) async {
-    final keywordController = TextEditingController();
-    final responseController = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Tạo kịch bản chatbot'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: keywordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Từ khóa',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.m),
-                TextField(
-                  controller: responseController,
-                  minLines: 3,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: 'Nội dung phản hồi',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Hủy'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                await ref
-                    .read(chatbotProvider.notifier)
-                    .addRule(keywordController.text, responseController.text);
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        );
-      },
-    );
-    keywordController.dispose();
-    responseController.dispose();
-  }
-
   Future<void> _showKnowledgeDialog(
     BuildContext context,
     ChatbotNotifier notifier, {
@@ -827,58 +771,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     }
   }
 
-  // ignore: unused_element
-  Future<void> _showLegacyAddKnowledgeDialog(
-    BuildContext context,
-    ChatbotNotifier notifier,
-  ) async {
-    final docController = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Thêm tài liệu/kiến thức mới'),
-          content: SizedBox(
-            width: 400,
-            child: TextField(
-              controller: docController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Nhập nội dung kiến thức hoặc tên tài liệu',
-                hintText:
-                    'VD: Chính sách bảo hành: 1 đổi 1 trong vòng 30 ngày...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Hủy'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final text = docController.text.trim();
-                if (text.isNotEmpty) {
-                  await notifier.addKnowledgeDocument(text);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Đã thêm kiến thức: $text')),
-                    );
-                  }
-                }
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Thêm'),
-            ),
-          ],
-        );
-      },
-    );
-    docController.dispose();
-  }
-
   Future<void> _showKeywordHelpDialog(BuildContext context) {
     return _showKeywordGuideDialog(context);
   }
@@ -927,31 +819,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     );
   }
 
-  // ignore: unused_element
-  Future<void> _showLegacyKeywordHelpDialog(BuildContext context) {
-    return showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Hướng dẫn kịch bản từ khóa'),
-        content: const SizedBox(
-          width: 520,
-          child: Text(
-            'Dùng kịch bản từ khóa cho các câu hỏi lặp lại như giá, bảo hành, địa chỉ hoặc giờ làm việc. '
-            'Mỗi kịch bản nên có từ khóa ngắn, dễ xuất hiện trong tin nhắn khách. '
-            'Nếu khách nhắn trùng từ khóa, bot trả lời bằng nội dung cố định trước; nếu không khớp và AI đang bật, backend mới gọi GCLI để AI trả lời. '
-            'Các tình huống nhạy cảm như khiếu nại, hoàn tiền hoặc yêu cầu gặp người thật nên được ghi rõ trong prompt để bot chuyển nhân viên.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Đã hiểu'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showKnowledgeHelpDialog(BuildContext context) {
     return _showKnowledgeGuideDialog(context);
   }
@@ -996,31 +863,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ignore: unused_element
-  Future<void> _showLegacyKnowledgeHelpDialog(BuildContext context) {
-    return showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Hướng dẫn tài liệu kiến thức'),
-        content: const SizedBox(
-          width: 560,
-          child: Text(
-            'Kho kiến thức lưu các đoạn tri thức ngắn vào backend theo từng tài khoản CRM. '
-            'Hãy nhập nội dung mà AI cần dùng trực tiếp: chính sách, bảng giá, quy trình, FAQ, đường dẫn file hoặc ảnh cần gửi khách. '
-            'Với file/ảnh, hãy upload lên kho lưu trữ của hệ thống hoặc B2/resource trước, sau đó dán URL kèm hướng dẫn rõ như: "khi khách hỏi catalogue, gửi link này". '
-            'AI đọc phần này như ngữ cảnh nội bộ khi không có kịch bản từ khóa khớp. Không đưa mật khẩu, token, cookie hoặc dữ liệu khách hàng nhạy cảm vào kho kiến thức.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Đã hiểu'),
-          ),
-        ],
       ),
     );
   }

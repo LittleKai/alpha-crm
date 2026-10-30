@@ -1,5 +1,4 @@
 import os from 'os';
-import crypto from 'crypto';
 import fs from 'fs';
 import { resolve } from 'path';
 import { config, projectRoot } from '../config.js';
@@ -18,24 +17,6 @@ interface CrmTokenFile {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-/**
- * Generates a stable machine fingerprint SHA-256 hash from Windows-safe platform properties.
- * Does not send raw hardware IDs to the cloud.
- */
-export function getMachineFingerprint(): string {
-  const parts = [
-    os.hostname(),
-    os.platform(),
-    os.arch(),
-    os.release(),
-    os.homedir(),
-    process.env.COMPUTERNAME || '',
-    process.env.PROCESSOR_IDENTIFIER || ''
-  ];
-  const raw = parts.filter(Boolean).join('|');
-  return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
 /**
@@ -128,28 +109,6 @@ export function resolveCrmTokenPath(): string {
   }
 
   return resolve(home, '.config', 'com.alphastudio.crm', 'alpha_crm', 'crm_token.json');
-}
-
-export function getCrmTokenPath(): string | null {
-  const tokenPath = resolveCrmTokenPath();
-  return fs.existsSync(tokenPath) ? tokenPath : null;
-}
-
-/**
- * Reads and returns the active JWT token from the local Flutter desktop app.
- */
-export function getCrmToken(): string | null {
-  const tokenPath = getCrmTokenPath();
-  if (!tokenPath) return null;
-  try {
-    const raw = readSecure(tokenPath);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed.token || null;
-  } catch (err) {
-    console.error('[agent-identity] Failed to load crm_token.json:', err);
-    return null;
-  }
 }
 
 export function saveCrmToken(token: string, userId: string): void {

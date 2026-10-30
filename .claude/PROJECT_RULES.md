@@ -5,7 +5,7 @@
 ## Core Principle
 
 Read `.claude/PROJECT_SUMMARY.md` first, not the entire codebase.
-Use the skill in `C:\Users\XEON\.gemini\skills\Mini-max-skills\flutter-dev`.
+Use the skill in `~/.agents/skills/flutter-dev`.
 
 ---
 
@@ -95,7 +95,7 @@ flutter run -d windows # Run Windows desktop app
 
 **Release & Packaging:**
 
-- The CRM production release (build app + bundle backend + zip + upload to B2) is driven by the **backend** script `alpha-studio-backend/scripts/release-to-b2.js`, NOT by a script inside `tools/alpha-crm`. Flow is documented in `.claude/skills/CRM_AUTOMATED_RELEASE_SKILL.md` (ở gốc monorepo).
+- The CRM production release (build app + bundle backend + zip + upload to B2) is driven by the **backend** script `alpha-studio-backend/scripts/release-to-b2.js`, NOT by a script inside `tools/alpha-crm`. Flow is documented in `.agents/skills/build-and-release/SKILL.md` (and `.claude/skills/build-and-release/SKILL.md`).
   - `node scripts/release-to-b2.js [patch|minor|major|x.y.z]` → full release to B2.
   - Platform flags: `--android` (APK only), `--windows` (Windows app + backend only). With **no platform flag the script builds both**. APK is built with `flutter build apk --release` → `crm-app/releases/alpha-crm-v<version>.apk`; Windows zip → fixed key `crm-app/releases/alpha-crm-windows.zip`.
   - `node scripts/release-to-b2.js --no-upload` (alias `--local`) → build + stage + zip locally, no B2 upload. Combine with `--android`/`--windows` to limit platforms.

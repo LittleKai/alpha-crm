@@ -59,10 +59,6 @@ export function setAgentRevocationHandler(handler: RevocationHandler | null): vo
   revocationHandler = handler;
 }
 
-export function isAgentRunnerRunning(): boolean {
-  return running;
-}
-
 export function startAgentRunner(credentials: AgentCredentials): void {
   if (config.crmAgentMode !== 'enabled') {
     console.log('[agent-runner] Agent runner mode is disabled in config.');

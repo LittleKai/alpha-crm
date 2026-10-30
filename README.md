@@ -1,10 +1,10 @@
 # Alpha CRM - Multi-Channel Zalo & Omnichannel Marketing CRM System
 
-Alpha CRM is a premium, full-stack customer relationship management and marketing automation system. It is designed to empower operators and business owners to manage customer relations, run bulk marketing campaigns, and automate customer engagement across multiple messaging channels—with a particular focus on the **Zalo platform** (both Personal Zalo accounts and Zalo Official Accounts) as well as **Facebook Messenger** and **TikTok Business Messaging**.
+Alpha CRM is a premium, full-stack customer relationship management and marketing automation system. It is designed to empower operators and business owners to manage customer relations, run bulk marketing campaigns, and automate customer engagement across multiple messaging channels—with a particular focus on the **Zalo platform** (both Personal Zalo accounts and Zalo Official Accounts) as well as **Facebook Messenger**, **TikTok Business Messaging**, **Instagram Direct**, **WhatsApp Cloud API**, **Telegram Bot**, **Webchat**, and **Email**.
 
 The system is built as a hybrid local-cloud application consisting of:
-1. **Frontend**: A high-fidelity, responsive client application built with **Flutter** supporting Windows Desktop, Android, and Web viewports.
-2. **Local Backend Bridge**: A **Node.js/TypeScript** background service ([zalo-bot-service](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/)) that communicates with personal Zalo (via `zca-js`), Facebook Messenger APIs, and TikTok Messaging stubs, acting as the local-first execution engine.
+1. **Frontend**: A high-fidelity, responsive client application built with **Flutter** supporting Windows Desktop and Android devices.
+2. **Local Backend Bridge**: A **Node.js/TypeScript** background service ([zalo-bot-service](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/integration/zalo-bot-service/)) that communicates with personal Zalo (via `zca-js`), Zalo OA, and omnichannel adapters (Facebook, TikTok, Instagram, WhatsApp, Telegram), acting as the local-first execution engine.
 
 ---
 
@@ -33,8 +33,8 @@ When running as a Windows Desktop application, the Flutter UI acts as a supervis
 [ Native Process Lifecycle ]                               [ Alpha Studio Cloud ] ──> [ n8n Automation Engine ]
 ```
 
-### B. Remote Cloud-Remote Mode (Web & Android)
-When running on Web or Android (where running a local Node process is impossible), the Flutter client communicates directly with Alpha Studio's cloud relay APIs.
+### B. Remote Cloud-Remote Mode (Android)
+When running on Android (where running a local Node process is impossible), the Flutter client communicates directly with Alpha Studio's cloud relay APIs.
 *   **Unified Streaming**: Connects via a pooled [CrmSseClient](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/shared/api/crm_sse_client.dart) to stream real-time events (`hello`, `message.new`, etc.).
 *   **Vocabulary Mapping**: [LiveChatCloudEventMapper](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/features/messaging/live_chat/data/live_chat_cloud_event_mapper.dart) maps cloud events back to local bridge events, keeping notifier logic identical.
 *   **Agent Health Banner**: [AgentStatusProvider](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/features/messaging/live_chat/providers/agent_status_provider.dart) monitors the remote agent's heartbeat and locks/unlocks the composer based on the agent's connection state.
@@ -44,7 +44,7 @@ When running on Web or Android (where running a local Node process is impossible
 ## ✨ Core Features & Integration Modules
 
 ### 1. Multi-Channel Live Chat
-*   **Channels Supported**: Zalo Personal (ZCA), Zalo Official Account (OA), Facebook Page Messenger, and TikTok Business Messaging (structural placeholder).
+*   **Channels Supported**: Zalo Personal (ZCA), Zalo Official Account (OA), Facebook Page Messenger, TikTok Business Messaging (structural placeholder), Instagram Direct, WhatsApp Cloud API, Telegram Bot, and Webchat.
 *   **Local-First Database**: Message bodies, conversations, and metadata are saved to a local `better-sqlite3` database. Only high-level metadata is synced to the cloud, preserving chat privacy and bypassing cloud payload limitations.
 *   **Local Caching**: Flutter uses [LocalDb](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/shared/local_db/local_db.dart) (`sqflite`) to store offline message snapshots for instant loading and offline recovery.
 *   **Quick Replies**: Live Chat features a quick-reply bar supporting both numbered (`/1`, `/2`) and named (`/hello`, `/chao`) shortcuts resolved by [quick_reply_shortcuts.dart](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart).
@@ -78,7 +78,7 @@ When running on Web or Android (where running a local Node process is impossible
 ### Frontend (Flutter Client)
 *   **Framework**: Flutter 3 (Dart SDK `^3.10.7`)
 *   **State Management**: `flutter_riverpod` (combining `StateNotifierProvider` and `StateProvider`)
-*   **Routing**: `go_router` (17 routes declared in [AppRoutes](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/app/routing/app_routes.dart))
+*   **Routing**: `go_router` (27 routes declared in [AppRoutes](file:///D:/Dev/NodeJS/alpha-studio/tools/alpha-crm/lib/app/routing/app_routes.dart))
 *   **UI Components**: Material 3, `data_table_2` (advanced tables), `fl_chart` (dashboard statistics), `google_fonts` (Inter / Be Vietnam Pro)
 *   **Local Storage**: `sqflite` / `sqflite_common_ffi` for local cache entries
 
@@ -120,7 +120,7 @@ alpha-crm/
 └── integration/
     └── zalo-bot-service/           # Local Node.js backend bridge
         ├── src/
-        │   ├── channels/           # Adapters: PersonalZca, OfficialOa, Facebook, Tiktok
+        │   ├── channels/           # Adapters: PersonalZca, OfficialOa, FB, TikTok, IG, WhatsApp, Telegram
         │   ├── agent/              # Cloud polling command loops & reporters
         │   ├── integrations/       # n8n templates & proxy tests
         │   ├── compliance.ts       # Backend compliance guard
@@ -177,10 +177,6 @@ flutter pub get
     flutter run -d windows
     ```
     *(Note: On Windows, the client will automatically start and manage the backend bridge subprocess via `ZaloBackendManager`)*
-*   **Web Client**:
-    ```bash
-    flutter run -d chrome
-    ```
 *   **Android Devices**:
     Ensure an emulator or physical device is connected, then run:
     ```bash

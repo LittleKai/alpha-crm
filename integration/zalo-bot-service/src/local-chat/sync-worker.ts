@@ -44,10 +44,6 @@ export function setSyncRevocationHandler(
   _revocationHandler = handler;
 }
 
-export function isBackgroundSyncRunning(): boolean {
-  return _timer !== null;
-}
-
 export function startBackgroundSync(): void {
   if (_timer) return;
   _enabled = true;
