@@ -109,7 +109,7 @@ flutter run -d windows # Run Windows desktop app
 
 ```text
 project-root/
-  claude.md                         # Instructions for Claude
+  CLAUDE.md                         # Instructions for Claude
   .claude/
     PROJECT_SUMMARY.md              # Current project state and architecture
     CONVENTIONS.md                  # Coding standards and patterns

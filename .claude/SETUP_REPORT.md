@@ -8,7 +8,7 @@
 
 ### Files Created/Updated
 
-- [x] `claude.md` updated with comprehensive project instructions.
+- [x] `CLAUDE.md` updated with comprehensive project instructions.
 - [x] `.claude/PROJECT_SUMMARY.md` created with current project state.
 - [x] `.claude/CONVENTIONS.md` created from existing code patterns.
 - [x] `.claude/IMPORTANT_FIXED_BUGS.md` created for important fixed bug records.
@@ -172,7 +172,7 @@ From now on, every Claude Code session should:
 
 ```text
 project-root/
-  claude.md                         # Main instructions
+  CLAUDE.md                         # Main instructions
   .claude/
     PROJECT_SUMMARY.md              # Current state and architecture
     CONVENTIONS.md                  # Coding standards
