@@ -16,6 +16,7 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/png': '.png',
   'image/gif': '.gif',
   'image/webp': '.webp',
+  'image/bmp': '.bmp',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
   'audio/mpeg': '.mp3',
@@ -36,6 +37,67 @@ const MIME_TO_EXT: Record<string, string> = {
   'text/html': '.html',
   'application/json': '.json',
 };
+
+// Adapted from https://github.com/luonghaianh1208/2anh-zalo-bot@9ab55105c83487588e66b55f0ef66894224250a7 (MIT License)
+export function sniffMediaMimeType(
+  buffer: Buffer,
+  declaredContentType?: string,
+): string {
+  const rawType = String(declaredContentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const normalized = rawType === 'image/jpg' ? 'image/jpeg' : rawType;
+
+  if (
+    normalized &&
+    normalized !== 'application/octet-stream' &&
+    normalized !== 'binary/octet-stream'
+  ) {
+    return normalized;
+  }
+
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 6 &&
+    (buffer.toString('ascii', 0, 6) === 'GIF87a' ||
+      buffer.toString('ascii', 0, 6) === 'GIF89a')
+  ) {
+    return 'image/gif';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 26 && buffer.readUInt16BE(0) === 0x424d) {
+    return 'image/bmp';
+  }
+
+  return normalized;
+}
 
 export class LocalChatMediaWorker {
   private timer: NodeJS.Timeout | null = null;
@@ -89,10 +151,13 @@ export class LocalChatMediaWorker {
     let temporary: string | null = null;
     try {
       const { buffer, contentType } = await downloadExternalMedia(attachment.url, controller.signal);
+      const effectiveMimeType = sniffMediaMimeType(
+        buffer,
+        contentType || attachment.mimeType,
+      );
 
       if (!extension) {
-        const typeOnly = contentType.split(';')[0].trim();
-        extension = MIME_TO_EXT[typeOnly] || '';
+        extension = MIME_TO_EXT[effectiveMimeType] || '';
       }
 
       const kind = (attachment.kind || '').toLowerCase();
@@ -101,10 +166,10 @@ export class LocalChatMediaWorker {
       const isMedia = kind === 'image' ||
         kind === 'video' ||
         kind === 'audio' ||
-        contentType.startsWith('image/') ||
-        contentType.startsWith('video/') ||
-        contentType.startsWith('audio/') ||
-        ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.ogg', '.m4a'].includes(ext);
+        effectiveMimeType.startsWith('image/') ||
+        effectiveMimeType.startsWith('video/') ||
+        effectiveMimeType.startsWith('audio/') ||
+        ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.ogg', '.m4a'].includes(ext);
 
       const subfolder = isMedia ? 'Media' : 'Files';
       const targetDir = resolve(this.mediaDirectory, subfolder);
@@ -122,6 +187,7 @@ export class LocalChatMediaWorker {
         checksum,
         downloadedAt: new Date().toISOString(),
         sizeBytes: buffer.byteLength,
+        ...(effectiveMimeType ? { mimeType: effectiveMimeType } : {}),
       });
       this.publish(attachment, 'media.ready', { localPath: target, checksum });
     } catch (error) {

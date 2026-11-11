@@ -492,6 +492,239 @@ class ConversationSavedFilter {
   }
 }
 
+class GroupMentionCandidate {
+  final String id;
+  final String displayName;
+  final String avatarUrl;
+  final bool isAll;
+
+  const GroupMentionCandidate({
+    required this.id,
+    required this.displayName,
+    this.avatarUrl = '',
+    this.isAll = false,
+  });
+
+  String get insertToken => isAll ? '@All' : '@$displayName';
+
+  factory GroupMentionCandidate.fromJson(Map<dynamic, dynamic> json) {
+    final name = (json['displayName'] ?? json['zaloName'] ?? json['name'] ?? '')
+        .toString()
+        .trim();
+    return GroupMentionCandidate(
+      id: (json['id'] ?? '').toString().trim(),
+      displayName: name,
+      avatarUrl: sanitizeImageUrl((json['avatar'] ?? json['avatarUrl'] ?? '').toString()),
+    );
+  }
+}
+
+String _foldVietnameseDiacritics(String input) {
+  const from =
+      'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ'
+      'ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ';
+  const to =
+      'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd'
+      'AAAAAAAAAAAAAAAAAEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYYD';
+  final buf = StringBuffer();
+  for (var i = 0; i < input.length; i++) {
+    final ch = input[i];
+    final idx = from.indexOf(ch);
+    buf.write(idx >= 0 ? to[idx] : ch);
+  }
+  return buf.toString().toLowerCase();
+}
+
+bool _isValidMentionBoundaryBefore(String text, int index) {
+  if (index <= 0) return true;
+  final prev = text[index - 1];
+  return prev == ' ' ||
+      prev == '\n' ||
+      prev == '\t' ||
+      prev == '(' ||
+      prev == '[' ||
+      prev == '<' ||
+      prev == '{' ||
+      prev == ',' ||
+      prev == ';';
+}
+
+int _findActiveMentionStart(String text, int cursorOffset) {
+  final end = cursorOffset < 0
+      ? 0
+      : (cursorOffset > text.length ? text.length : cursorOffset);
+  if (end == 0) return -1;
+  var atIndex = -1;
+  for (var i = end - 1; i >= 0; i--) {
+    final ch = text[i];
+    if (ch == '\n' || ch == '\r') return -1;
+    if (ch == '@') {
+      if (_isValidMentionBoundaryBefore(text, i)) {
+        atIndex = i;
+      }
+      break;
+    }
+  }
+  if (atIndex < 0) return -1;
+  final rawQuery = text.substring(atIndex + 1, end);
+  // Allow up to 3 words while typing a Vietnamese full name (e.g. "@Nguyễn Văn A")
+  if (' '.allMatches(rawQuery).length > 3) return -1;
+  return atIndex;
+}
+
+List<GroupMentionCandidate> matchGroupMentionCandidates(
+  String text,
+  int cursorOffset,
+  List<GroupMentionCandidate> members, {
+  bool canMentionAll = false,
+  int limit = 8,
+}) {
+  final end = cursorOffset < 0
+      ? 0
+      : (cursorOffset > text.length ? text.length : cursorOffset);
+  final atIndex = _findActiveMentionStart(text, end);
+  if (atIndex < 0) return const [];
+
+  final query = _foldVietnameseDiacritics(text.substring(atIndex + 1, end).trim());
+  final results = <GroupMentionCandidate>[];
+
+  if (canMentionAll &&
+      (query.isEmpty ||
+          'all'.startsWith(query) ||
+          'tat ca'.contains(query))) {
+    results.add(
+      const GroupMentionCandidate(
+        id: '-1',
+        displayName: 'All (Tất cả thành viên)',
+        isAll: true,
+      ),
+    );
+  }
+
+  final prefixMatches = <GroupMentionCandidate>[];
+  final substringMatches = <GroupMentionCandidate>[];
+  final seenIds = <String>{};
+  for (final member in members) {
+    if (member.id.isEmpty ||
+        member.displayName.isEmpty ||
+        !seenIds.add(member.id)) {
+      continue;
+    }
+    final folded = _foldVietnameseDiacritics(member.displayName);
+    if (query.isEmpty || folded.startsWith(query)) {
+      prefixMatches.add(member);
+    } else if (folded.contains(query)) {
+      substringMatches.add(member);
+    }
+  }
+  results.addAll(prefixMatches);
+  results.addAll(substringMatches);
+  return results.length > limit ? results.sublist(0, limit) : results;
+}
+
+({String text, int selectionOffset}) applyGroupMentionCandidate(
+  String text,
+  int cursorOffset,
+  GroupMentionCandidate candidate,
+) {
+  final end = cursorOffset < 0
+      ? 0
+      : (cursorOffset > text.length ? text.length : cursorOffset);
+  final atIndex = _findActiveMentionStart(text, end);
+  final replacement = '${candidate.insertToken} ';
+  if (atIndex < 0) {
+    final appended = '$text$replacement';
+    return (text: appended, selectionOffset: appended.length);
+  }
+  final prefix = text.substring(0, atIndex);
+  final suffix = text.substring(end);
+  final cleanSuffix = suffix.startsWith(' ') ? suffix.substring(1) : suffix;
+  final nextText = '$prefix$replacement$cleanSuffix';
+  return (
+    text: nextText,
+    selectionOffset: prefix.length + replacement.length,
+  );
+}
+
+final _mentionNameCharRe = RegExp(r'[\p{L}\p{N}_]', unicode: true);
+final _mentionNameContinuesRe = RegExp(r'^ \p{Lu}', unicode: true);
+
+List<Map<String, dynamic>> resolveExplicitGroupMentions(
+  String text,
+  List<GroupMentionCandidate> members, {
+  bool canMentionAll = false,
+}) {
+  if (text.isEmpty || !text.contains('@')) return const [];
+
+  final byLower = <String, ({String raw, Set<String> uids})>{};
+  for (final m in members) {
+    final uid = m.id.trim();
+    final raw = m.displayName.trim();
+    if (uid.isEmpty || raw.isEmpty) continue;
+    final lower = raw.toLowerCase();
+    final slot = byLower[lower];
+    if (slot == null) {
+      byLower[lower] = (raw: raw, uids: <String>{uid});
+    } else {
+      slot.uids.add(uid);
+    }
+  }
+
+  final uniqueNames = <({String lower, String raw, String uid})>[];
+  for (final entry in byLower.entries) {
+    if (entry.value.uids.length == 1) {
+      uniqueNames.add((
+        lower: entry.key,
+        raw: entry.value.raw,
+        uid: entry.value.uids.first,
+      ));
+    }
+  }
+  uniqueNames.sort((a, b) => b.lower.length.compareTo(a.lower.length));
+  if (uniqueNames.isEmpty && !canMentionAll) return const [];
+
+  final mentions = <Map<String, dynamic>>[];
+  final lowerText = text.toLowerCase();
+  var i = 0;
+  while (i < text.length) {
+    if (text[i] == '@' &&
+        _isValidMentionBoundaryBefore(text, i) &&
+        !(i > 0 && _mentionNameCharRe.hasMatch(text[i - 1]))) {
+      final rest = text.substring(i + 1);
+      if (canMentionAll &&
+          rest.length >= 3 &&
+          rest.substring(0, 3).toLowerCase() == 'all' &&
+          (rest.length == 3 || !_mentionNameCharRe.hasMatch(rest[3]))) {
+        mentions.add({'pos': i, 'len': 4, 'uid': '-1'});
+        i += 4;
+        continue;
+      }
+      final restLower = lowerText.substring(i + 1);
+      var matchedLen = 0;
+      for (final m in uniqueNames) {
+        if (!restLower.startsWith(m.lower)) continue;
+        final boundaryIdx = m.lower.length;
+        final after = rest.substring(boundaryIdx);
+        if (after.isNotEmpty && _mentionNameCharRe.hasMatch(after[0])) {
+          continue;
+        }
+        if (!m.raw.contains(' ') && _mentionNameContinuesRe.hasMatch(after)) {
+          continue;
+        }
+        mentions.add({'pos': i, 'len': m.lower.length + 1, 'uid': m.uid});
+        matchedLen = m.lower.length + 1;
+        break;
+      }
+      if (matchedLen > 0) {
+        i += matchedLen;
+        continue;
+      }
+    }
+    i++;
+  }
+  return mentions;
+}
+
 class LiveChatState {
   final LiveChatAccount? selectedAccount;
   final List<LiveChatAccount> accounts;
@@ -527,6 +760,8 @@ class LiveChatState {
   // absent default to ON. When OFF, the per-conversation Bot toggle is forced
   // off and non-interactive.
   final Map<String, bool> accountAiAutoReply;
+  final List<GroupMentionCandidate> groupMembers;
+  final bool canMentionAll;
 
   bool isAccountAiAutoReplyEnabled(String accountId) =>
       accountAiAutoReply[accountId] ?? true;
@@ -618,6 +853,8 @@ class LiveChatState {
     this.selectedSavedFilterId = '',
     this.savedFilters = const [],
     this.accountAiAutoReply = const {},
+    this.groupMembers = const [],
+    this.canMentionAll = false,
   });
 
   factory LiveChatState.initial() {
@@ -686,6 +923,8 @@ class LiveChatState {
     String? selectedSavedFilterId,
     List<ConversationSavedFilter>? savedFilters,
     Map<String, bool>? accountAiAutoReply,
+    List<GroupMentionCandidate>? groupMembers,
+    bool? canMentionAll,
   }) {
     return LiveChatState(
       selectedAccount: selectedAccount == _unset
@@ -730,6 +969,8 @@ class LiveChatState {
           selectedSavedFilterId ?? this.selectedSavedFilterId,
       savedFilters: savedFilters ?? this.savedFilters,
       accountAiAutoReply: accountAiAutoReply ?? this.accountAiAutoReply,
+      groupMembers: groupMembers ?? this.groupMembers,
+      canMentionAll: canMentionAll ?? this.canMentionAll,
     );
   }
 }
@@ -1119,6 +1360,8 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       isLoadingMessages: true,
       replyingTo: null,
       typingUserIds: <String>{},
+      groupMembers: const [],
+      canMentionAll: false,
     );
     _subscribeToEvents(conversation);
 
@@ -1147,7 +1390,47 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
       loadMessages(conversation.id),
       _repository.markRead(conversation.id),
       fetchCrmCustomerForConversation(conversation),
+      if (conversation.threadType == 'group') loadGroupMembers(conversation),
     ]);
+  }
+
+  Future<void> loadGroupMembers(Conversation conversation) async {
+    if (conversation.threadType != 'group') return;
+    try {
+      final resp = await _repository.getConversationMembers(conversation.id);
+      if (state.selectedConversation?.id != conversation.id) return;
+      final byId = <String, GroupMentionCandidate>{};
+      if (resp['success'] == true && resp['data'] is List) {
+        for (final item in resp['data'] as List) {
+          if (item is Map) {
+            final cand = GroupMentionCandidate.fromJson(item);
+            if (cand.id.isNotEmpty &&
+                cand.id != conversation.accountId &&
+                cand.displayName.isNotEmpty) {
+              byId[cand.id] = cand;
+            }
+          }
+        }
+      }
+      final currentMessages =
+          state.selectedConversation?.messages ?? conversation.messages;
+      for (final msg in currentMessages) {
+        if (msg.senderId.isNotEmpty &&
+            msg.senderId != conversation.accountId &&
+            msg.senderName.isNotEmpty &&
+            !byId.containsKey(msg.senderId)) {
+          byId[msg.senderId] = GroupMentionCandidate(
+            id: msg.senderId,
+            displayName: msg.senderName,
+            avatarUrl: msg.senderAvatarUrl ?? '',
+          );
+        }
+      }
+      state = state.copyWith(
+        groupMembers: byId.values.toList(),
+        canMentionAll: resp['canMentionAll'] == true,
+      );
+    } catch (_) {}
   }
 
   Future<void> _loadDraft(Conversation conversation) async {
@@ -1503,11 +1786,19 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
     );
     state = state.copyWith(isSending: true, errorMessage: null);
     try {
+      final explicitMentions = conversation.threadType == 'group'
+          ? resolveExplicitGroupMentions(
+              text.trim(),
+              state.groupMembers,
+              canMentionAll: state.canMentionAll,
+            )
+          : const <Map<String, dynamic>>[];
       final response = await _repository.sendRichMessage(
         conversation.id,
         text.trim(),
         clientMessageId: clientMessageId,
         quote: optimistic.quote,
+        mentions: explicitMentions.isNotEmpty ? explicitMentions : null,
       );
       if (response['success'] == true) {
         if (_repository.isCloudRemote) {
@@ -1533,14 +1824,28 @@ class LiveChatNotifier extends StateNotifier<LiveChatState> {
         await updateDraft('');
         return;
       }
+      final rawError =
+          (response['error'] ?? response['message'] ?? 'Gửi tin nhắn thất bại.')
+              .toString();
+      final formattedError =
+          response['errorCode'] == 'rate_limited' ||
+              rawError.contains('rate_limited') ||
+              rawError.contains('Zalo rate limit wait exceeded')
+          ? 'Tài khoản Zalo đang chạm ngưỡng giới hạn tốc độ gửi. Vui lòng thử lại sau ít giây.'
+          : rawError;
       _setOptimisticFailed(
         clientMessageId,
-        (response['error'] ?? response['message'] ?? 'Gửi tin nhắn thất bại.')
-            .toString(),
+        formattedError,
         localMessageId: response['localMessageId']?.toString(),
       );
     } catch (error) {
-      _setOptimisticFailed(clientMessageId, error.toString());
+      final errStr = error.toString();
+      final formattedError =
+          errStr.contains('rate_limited') ||
+              errStr.contains('Zalo rate limit wait exceeded')
+          ? 'Tài khoản Zalo đang chạm ngưỡng giới hạn tốc độ gửi. Vui lòng thử lại sau ít giây.'
+          : errStr;
+      _setOptimisticFailed(clientMessageId, formattedError);
     }
   }
 

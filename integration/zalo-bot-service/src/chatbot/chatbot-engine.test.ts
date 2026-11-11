@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FloodGuard,
   LocalChatbotEngine,
   type ChatbotEvaluationInput,
   type ChatbotRule,
@@ -330,5 +331,18 @@ test('AI failure enters failed handoff without fallback', async () => {
     enterHandoff: true,
     sourceMessageIds: ['message-1'],
   });
+});
+
+test('FloodGuard allows up to threshold (6) hits in 15s, returns just_muted on 7th, muted during 90s, and recovers after expiry', () => {
+  const guard = new FloodGuard(6, 15, 90);
+  const t0 = 1_000_000;
+  for (let i = 0; i < 6; i++) {
+    assert.equal(guard.check('acct-1:user-1', t0 + i * 1000), 'ok');
+  }
+  assert.equal(guard.check('acct-1:user-1', t0 + 6000), 'just_muted');
+  assert.equal(guard.check('acct-1:user-1', t0 + 7000), 'muted');
+  assert.equal(guard.check('acct-1:user-2', t0 + 7000), 'ok');
+  // After 90s mute expires (t0 + 6000 + 90_001)
+  assert.equal(guard.check('acct-1:user-1', t0 + 96_001), 'ok');
 });
 

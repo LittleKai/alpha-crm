@@ -1913,6 +1913,75 @@ class _ConversationPanel extends ConsumerWidget {
                 ],
               ),
             ),
+          if (conversation.threadType == 'group')
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: messageController,
+              builder: (context, editingValue, _) {
+                final cursorOffset = editingValue.selection.baseOffset >= 0
+                    ? editingValue.selection.baseOffset
+                    : editingValue.text.length;
+                final candidates = matchGroupMentionCandidates(
+                  editingValue.text,
+                  cursorOffset,
+                  state.groupMembers,
+                  canMentionAll: state.canMentionAll,
+                );
+                if (candidates.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.m,
+                    AppSpacing.xs,
+                    AppSpacing.m,
+                    0,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final candidate in candidates)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              right: AppSpacing.xs,
+                            ),
+                            child: ActionChip(
+                              avatar: Icon(
+                                candidate.isAll
+                                    ? Icons.campaign_outlined
+                                    : Icons.alternate_email,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                              label: Text(
+                                candidate.isAll
+                                    ? '@All (Tất cả)'
+                                    : '@${candidate.displayName}',
+                                style: AppTextStyles.caption,
+                              ),
+                              onPressed: () {
+                                final applied = applyGroupMentionCandidate(
+                                  messageController.text,
+                                  cursorOffset,
+                                  candidate,
+                                );
+                                messageController.value = TextEditingValue(
+                                  text: applied.text,
+                                  selection: TextSelection.collapsed(
+                                    offset: applied.selectionOffset,
+                                  ),
+                                );
+                                notifier.updateDraft(applied.text);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.m),
             child: Row(
@@ -1964,6 +2033,8 @@ class _ConversationPanel extends ConsumerWidget {
                                   'Không thể gửi tin do mất kết nối')
                             : state.isBridgeOffline
                             ? 'Không thể gửi tin khi Bridge offline'
+                            : conversation.threadType == 'group'
+                            ? 'Nhập tin nhắn, gõ @ để nhắc tên hoặc /1, /hello...'
                             : 'Nhập tin nhắn hoặc /1, /hello...',
                         border: const OutlineInputBorder(),
                       ),

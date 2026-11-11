@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync, renameSync } from 'fs';
 import { dirname } from 'path';
 import { config } from '../config.js';
+import { foldVietnamese } from './vietnamese-fold.js';
 import type {
   LocalConversation,
   LocalConversationTimelineItem,
@@ -246,6 +247,9 @@ export class LocalChatStore {
     // WAL + NORMAL là cặp chuẩn: vẫn an toàn khi tiến trình bị kill, bỏ được
     // fsync mỗi commit mà FULL bắt buộc.
     this._db.pragma('synchronous = NORMAL');
+    this._db.function('zd_fold', { deterministic: true }, (value: unknown) =>
+      foldVietnamese(value),
+    );
     this._migrate();
     // Dọn WAL tồn dư của lần chạy trước (tiến trình luôn bị taskkill /F trên
     // Windows nên không có lần đóng sạch nào để checkpoint).
@@ -526,6 +530,22 @@ export class LocalChatStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS message_chunk_aliases (
+        accountId TEXT NOT NULL,
+        messageId TEXT NOT NULL,
+        providerMessageId TEXT NOT NULL DEFAULT '',
+        clientMessageId TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (messageId) REFERENCES messages(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chunk_alias_provider
+        ON message_chunk_aliases(accountId, providerMessageId)
+        WHERE providerMessageId != '';
+
+      CREATE INDEX IF NOT EXISTS idx_chunk_alias_client
+        ON message_chunk_aliases(accountId, clientMessageId)
+        WHERE clientMessageId != '';
     `);
 
     // ── Incremental migrations (idempotent) ──
@@ -743,6 +763,14 @@ export class LocalChatStore {
         return existing.id;
       }
     }
+    const chunkAliasMessageId = this.findMessageIdByChunkAlias(
+      input.accountId,
+      input.providerMessageId,
+      input.clientMessageId,
+    );
+    if (chunkAliasMessageId) {
+      return chunkAliasMessageId;
+    }
 
     // Self-sent history (operator typed on their phone) arrives through the same
     // listener as inbound. Persist it as outbound so it renders on the right side.
@@ -959,6 +987,102 @@ export class LocalChatStore {
   }
 
   /**
+   * Register secondary chunk provider/client IDs for a multi-chunk outbound message
+   * so listener echoes of chunks 2..n resolve to the parent messageId.
+   */
+  registerMessageChunkAliases(
+    accountId: string,
+    messageId: string,
+    chunkProviderIds?: string[],
+    chunkClientIds?: string[],
+  ): void {
+    const providerList = chunkProviderIds ?? [];
+    const clientList = chunkClientIds ?? [];
+    const maxLen = Math.max(providerList.length, clientList.length);
+    if (maxLen === 0 || !messageId) return;
+
+    let resolvedAccountId = accountId;
+    if (!resolvedAccountId) {
+      const msgRow = this.db
+        .prepare('SELECT accountId FROM messages WHERE id = ?')
+        .get(messageId) as { accountId: string } | undefined;
+      resolvedAccountId = msgRow?.accountId ?? '';
+    }
+    if (!resolvedAccountId) return;
+
+    const deleteExisting = this.db.prepare(
+      `DELETE FROM message_chunk_aliases
+       WHERE accountId = ? AND messageId = ?
+         AND ((? != '' AND providerMessageId = ?) OR (? != '' AND clientMessageId = ?))`,
+    );
+    const insertAlias = this.db.prepare(
+      `INSERT INTO message_chunk_aliases
+       (accountId, messageId, providerMessageId, clientMessageId)
+       VALUES (?, ?, ?, ?)`,
+    );
+
+    for (let i = 0; i < maxLen; i++) {
+      const providerId = String(providerList[i] ?? '').trim();
+      const clientId = String(clientList[i] ?? '').trim();
+      if (!providerId && !clientId) continue;
+      deleteExisting.run(
+        resolvedAccountId,
+        messageId,
+        providerId,
+        providerId,
+        clientId,
+        clientId,
+      );
+      insertAlias.run(resolvedAccountId, messageId, providerId, clientId);
+    }
+  }
+
+  /**
+   * Resolve a parent messageId from a multi-chunk alias (by providerMessageId or clientMessageId).
+   */
+  findMessageIdByChunkAlias(
+    accountId: string,
+    providerMessageId?: string,
+    clientMessageId?: string,
+  ): string | undefined {
+    if (!accountId) return undefined;
+    const provId = String(providerMessageId ?? '').trim();
+    const cliId = String(clientMessageId ?? '').trim();
+    if (provId) {
+      const byProvider = this.db
+        .prepare(
+          `SELECT messageId FROM message_chunk_aliases
+           WHERE accountId = ? AND providerMessageId = ? AND providerMessageId != ''
+           LIMIT 1`,
+        )
+        .get(accountId, provId) as { messageId: string } | undefined;
+      if (byProvider) return byProvider.messageId;
+    }
+    if (cliId) {
+      const byClient = this.db
+        .prepare(
+          `SELECT messageId FROM message_chunk_aliases
+           WHERE accountId = ? AND clientMessageId = ? AND clientMessageId != ''
+           LIMIT 1`,
+        )
+        .get(accountId, cliId) as { messageId: string } | undefined;
+      if (byClient) {
+        if (provId) {
+          this.db
+            .prepare(
+              `UPDATE message_chunk_aliases
+               SET providerMessageId = ?
+               WHERE accountId = ? AND clientMessageId = ? AND providerMessageId = ''`,
+            )
+            .run(provId, accountId, cliId);
+        }
+        return byClient.messageId;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Update outbound message status after send attempt.
    */
   updateMessageStatus(
@@ -967,6 +1091,10 @@ export class LocalChatStore {
     providerMessageId?: string,
     errorText = '',
     clientMessageId?: string,
+    chunkAliases?: {
+      chunkMessageIds?: string[];
+      chunkClientMessageIds?: string[];
+    },
   ): void {
     const now = new Date().toISOString();
     if (providerMessageId && clientMessageId) {
@@ -1004,6 +1132,18 @@ export class LocalChatStore {
         .prepare('UPDATE messages SET status = ?, errorText = ?, updatedAt = ? WHERE id = ?')
         .run(status, errorText, now, messageId);
     }
+    if (
+      chunkAliases &&
+      ((chunkAliases.chunkMessageIds?.length ?? 0) > 0 ||
+        (chunkAliases.chunkClientMessageIds?.length ?? 0) > 0)
+    ) {
+      this.registerMessageChunkAliases(
+        '',
+        messageId,
+        chunkAliases.chunkMessageIds,
+        chunkAliases.chunkClientMessageIds,
+      );
+    }
     if (status === 'sent') {
       this.enqueueSyncAction('sync_message', { messageId });
     }
@@ -1039,7 +1179,17 @@ export class LocalChatStore {
          WHERE accountId = ? AND clientMessageId = ? AND direction = 'outbound'`,
       )
       .get(input.accountId, input.clientMessageId) as { id: string } | undefined;
-    if (!row) return undefined;
+    if (!row) {
+      const aliasMessageId = this.findMessageIdByChunkAlias(
+        input.accountId,
+        input.providerMessageId,
+        input.clientMessageId,
+      );
+      if (aliasMessageId) {
+        return aliasMessageId;
+      }
+      return undefined;
+    }
     this.updateMessageStatus(
       row.id,
       input.status || 'sent',
@@ -1152,10 +1302,10 @@ export class LocalChatStore {
       limit?: number;
     } = {},
   ): LocalMessage[] {
-    const trimmed = query.trim();
-    if (!trimmed) return [];
-    const where = ['content LIKE ?', 'isDeleted = 0'];
-    const params: unknown[] = [`%${trimmed}%`];
+    const folded = foldVietnamese(query).trim();
+    if (!folded) return [];
+    const where: string[] = ['isDeleted = 0'];
+    const params: unknown[] = [];
     if (options.accountId) {
       where.push('accountId = ?');
       params.push(options.accountId);
@@ -1164,6 +1314,10 @@ export class LocalChatStore {
       where.push('threadId = ?');
       params.push(options.threadId);
     }
+    // Note: instr(zd_fold(content), ?) evaluates the deterministic UDF per candidate row;
+    // accountId and threadId filters are kept ahead of it to bound the scan set.
+    where.push('instr(zd_fold(content), ?) > 0');
+    params.push(folded);
     const limit = Math.min(options.limit || 50, 200);
     const rows = this.db
       .prepare(
@@ -1475,6 +1629,8 @@ export class LocalChatStore {
     this.db.prepare('DELETE FROM attachments WHERE messageId = ?').run(messageId);
     // Delete message receipt if any
     this.db.prepare('DELETE FROM message_receipts WHERE messageId = ?').run(messageId);
+    // Delete multi-chunk aliases if any
+    this.db.prepare('DELETE FROM message_chunk_aliases WHERE messageId = ?').run(messageId);
     // Delete message
     const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
     return result.changes > 0;
@@ -1527,16 +1683,16 @@ export class LocalChatStore {
       params.push(options.accountId);
     }
 
-    if (options.search) {
+    const foldedSearch = options.search ? foldVietnamese(options.search).trim() : '';
+    if (foldedSearch) {
       whereClause +=
-        ' AND (displayName LIKE ? OR threadId LIKE ? OR tagsJson LIKE ? OR notes LIKE ? OR customAttributesJson LIKE ?)';
-      const searchPattern = `%${options.search}%`;
+        ' AND (instr(zd_fold(displayName), ?) > 0 OR instr(zd_fold(threadId), ?) > 0 OR instr(zd_fold(tagsJson), ?) > 0 OR instr(zd_fold(notes), ?) > 0 OR instr(zd_fold(customAttributesJson), ?) > 0)';
       params.push(
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
+        foldedSearch,
+        foldedSearch,
+        foldedSearch,
+        foldedSearch,
+        foldedSearch,
       );
     }
 
@@ -1848,6 +2004,7 @@ export class LocalChatStore {
       errorText?: string;
       downloadedAt?: string;
       sizeBytes?: number;
+      mimeType?: string;
     },
   ): void {
     this.db
@@ -1858,7 +2015,8 @@ export class LocalChatStore {
            checksum = COALESCE(?, checksum),
            errorText = ?,
            downloadedAt = COALESCE(?, downloadedAt),
-           sizeBytes = COALESCE(?, sizeBytes)
+           sizeBytes = COALESCE(?, sizeBytes),
+           mimeType = COALESCE(?, mimeType)
          WHERE id = ?`,
       )
       .run(
@@ -1868,6 +2026,7 @@ export class LocalChatStore {
         update.errorText || '',
         update.downloadedAt ?? null,
         update.sizeBytes ?? null,
+        update.mimeType ?? null,
         attachmentId,
       );
   }

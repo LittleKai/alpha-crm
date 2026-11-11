@@ -1,6 +1,10 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalChatStore } from './local-chat-store.js';
+import { setLocalChatStoreForTest } from './index.js';
+import { handleLocalRoute } from './local-chat-api.js';
+import { config } from '../config.js';
+import { foldVietnamese } from './vietnamese-fold.js';
 import { mkdtempSync, rmSync, statSync, existsSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -667,6 +671,120 @@ describe('LocalChatStore', () => {
     assert.equal(around.messages[1].id, results[0].id);
   });
 
+  it('folds Vietnamese diacritics and đ/Đ in searchMessages and listConversations and treats %/_ literally', () => {
+    assert.equal(foldVietnamese('Đặng Quốc Huy'), 'dang quoc huy');
+
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-vn-1',
+      threadType: 'user',
+      senderId: 'cust-vn-1',
+      senderName: 'Đặng Quốc Huy',
+      content: 'Đơn hàng #123 giảm 100% phí vận chuyển mã a_b',
+      messageType: 'text',
+      providerMessageId: 'vn-msg-1',
+      timestamp: '2026-06-06T10:00:00.000Z',
+    });
+    store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-vn-2',
+      threadType: 'user',
+      senderId: 'cust-vn-2',
+      senderName: 'Nguyen Van B',
+      content: 'Gia 1000 dong ma axb',
+      messageType: 'text',
+      providerMessageId: 'vn-msg-2',
+      timestamp: '2026-06-06T10:01:00.000Z',
+    });
+
+    const msgHits = store.searchMessages('don hang', { accountId: 'acc1' });
+    assert.equal(msgHits.length, 1);
+    assert.equal(msgHits[0].providerMessageId, 'vn-msg-1');
+
+    const convHits = store.listConversations({ accountId: 'acc1', search: 'dang quoc' });
+    assert.equal(convHits.total, 1);
+    assert.equal(convHits.conversations[0].displayName, 'Đặng Quốc Huy');
+
+    // Literal % and _ must not act as SQLite LIKE wildcards
+    const pctHits = store.searchMessages('100%', { accountId: 'acc1' });
+    assert.equal(pctHits.length, 1);
+    assert.equal(pctHits[0].providerMessageId, 'vn-msg-1');
+
+    const underscoreHits = store.searchMessages('a_b', { accountId: 'acc1' });
+    assert.equal(underscoreHits.length, 1);
+    assert.equal(underscoreHits[0].providerMessageId, 'vn-msg-1');
+  });
+
+  it('deduplicates multi-chunk outbound echoes via message_chunk_aliases without creating duplicate rows', () => {
+    const localMsgId = store.insertOutboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-chunk-1',
+      threadType: 'user',
+      content: 'Phần 1 rất dài\n\nPhần 2 rất dài\n\nPhần 3 kết thúc',
+      messageType: 'text',
+      clientMessageId: 'cli-chunk-1',
+      metadata: { source: 'chatbot' },
+    });
+
+    store.updateMessageStatus(
+      localMsgId,
+      'sent',
+      'prov-chunk-1',
+      '',
+      'cli-chunk-1',
+      {
+        chunkMessageIds: ['prov-chunk-1', 'prov-chunk-2', 'prov-chunk-3'],
+        chunkClientMessageIds: ['cli-chunk-1', 'cli-chunk-2', 'cli-chunk-3'],
+      },
+    );
+
+    // Reconciling chunk 2 by clientMessageId returns the parent message id
+    const reconciledChunk2 = store.reconcileOutboundMessage({
+      accountId: 'acc1',
+      clientMessageId: 'cli-chunk-2',
+      providerMessageId: 'prov-chunk-2',
+      status: 'sent',
+    });
+    assert.equal(reconciledChunk2, localMsgId);
+
+    // Upserting inbound/self echo for chunk 2 (by providerMessageId) and chunk 3 (by clientMessageId)
+    // must resolve to the existing parent message and never insert extra rows.
+    const upsertedChunk2 = store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-chunk-1',
+      threadType: 'user',
+      direction: 'outbound',
+      senderId: 'acc1',
+      senderName: 'Bot',
+      content: 'Phần 2 rất dài',
+      messageType: 'text',
+      providerMessageId: 'prov-chunk-2',
+      clientMessageId: 'cli-chunk-2',
+      timestamp: '2026-06-06T10:05:00.000Z',
+    });
+    assert.equal(upsertedChunk2, localMsgId);
+
+    const upsertedChunk3 = store.upsertInboundMessage({
+      accountId: 'acc1',
+      threadId: 'thread-chunk-1',
+      threadType: 'user',
+      direction: 'outbound',
+      senderId: 'acc1',
+      senderName: 'Bot',
+      content: 'Phần 3 kết thúc',
+      messageType: 'text',
+      providerMessageId: 'prov-chunk-3',
+      clientMessageId: 'cli-chunk-3',
+      timestamp: '2026-06-06T10:05:01.000Z',
+    });
+    assert.equal(upsertedChunk3, localMsgId);
+
+    const page = store.getMessagesByThread('acc1', 'thread-chunk-1');
+    assert.equal(page?.messages.length, 1);
+    assert.equal(page?.messages[0].id, localMsgId);
+    assert.equal(page?.messages[0].providerMessageId, 'prov-chunk-1');
+  });
+
   it('stores history batches in one transaction', () => {
     const ids = store.upsertInboundMessages([
       {
@@ -760,5 +878,105 @@ describe('LocalChatStore durability', () => {
 
     const quarantined = readdirSync(dir).filter((f) => f.includes('.corrupt-'));
     assert.equal(quarantined.length, 1);
+  });
+
+  it('handleLocalRoute serves GET /local/conversations/:id/members (newest senderName wins + 500 on closed DB) and GET /local/campaigns/in-flight', async () => {
+    const dbPath = join(dir, 'api-members.sqlite');
+    const s = new LocalChatStore(dbPath);
+    const prevLocalFirst = config.localFirstLiveChat;
+    config.localFirstLiveChat = true;
+    setLocalChatStoreForTest(s);
+    try {
+      s.upsertInboundMessage({
+        accountId: 'acc1',
+        threadId: 'grp1',
+        threadType: 'group',
+        senderId: 'u-rename',
+        senderName: 'Z-OldName',
+        providerMessageId: 'pm-old',
+        content: 'older message',
+        messageType: 'text',
+        timestamp: '2026-11-01T00:00:00.000Z',
+      });
+      s.upsertInboundMessage({
+        accountId: 'acc1',
+        threadId: 'grp1',
+        threadType: 'group',
+        senderId: 'u-rename',
+        senderName: 'A-NewName',
+        providerMessageId: 'pm-new',
+        content: 'newer message',
+        messageType: 'text',
+        timestamp: '2026-11-02T00:00:00.000Z',
+      });
+
+      const conv = s.getConversationByThread('acc1', 'grp1');
+      assert.ok(conv);
+
+      const responses: Array<{ status: number; body: any }> = [];
+      let resolveMembers!: () => void;
+      const doneMembers = new Promise<void>((r) => {
+        resolveMembers = r;
+      });
+      const handled = handleLocalRoute(
+        'GET',
+        `/local/conversations/${conv!.id}/members`,
+        {} as any,
+        {} as any,
+        (_res, status, data) => {
+          responses.push({ status, body: data });
+          resolveMembers();
+        },
+        async () => '',
+      );
+      assert.equal(handled, true);
+      await doneMembers;
+      assert.equal(responses[0]?.status, 200);
+      assert.equal(responses[0]?.body?.success, true);
+      assert.equal(responses[0]?.body?.canMentionAll, false);
+      assert.equal(responses[0]?.body?.data?.[0]?.displayName, 'A-NewName');
+
+      // GET /local/campaigns/in-flight returns 200
+      const campRes: Array<{ status: number; body: any }> = [];
+      const campHandled = handleLocalRoute(
+        'GET',
+        '/local/campaigns/in-flight?campaignId=none',
+        {} as any,
+        {} as any,
+        (_res, status, data) => {
+          campRes.push({ status, body: data });
+        },
+        async () => '',
+      );
+      assert.equal(campHandled, true);
+      assert.equal(campRes[0]?.status, 200);
+      assert.equal(campRes[0]?.body?.success, true);
+
+      // Closing SQLite DB triggers 500 JSON response instead of hanging
+      s.close();
+      let resolveErr!: () => void;
+      const doneErr = new Promise<void>((r) => {
+        resolveErr = r;
+      });
+      const errRes: Array<{ status: number; body: any }> = [];
+      handleLocalRoute(
+        'GET',
+        `/local/conversations/${conv!.id}/members`,
+        {} as any,
+        {} as any,
+        (_res, status, data) => {
+          errRes.push({ status, body: data });
+          resolveErr();
+        },
+        async () => '',
+      );
+      await doneErr;
+      assert.equal(errRes[0]?.status, 500);
+      assert.equal(errRes[0]?.body?.success, false);
+    } finally {
+      setLocalChatStoreForTest(null);
+      config.localFirstLiveChat = prevLocalFirst;
+      s.close();
+    }
   });
 });

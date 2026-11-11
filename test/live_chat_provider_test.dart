@@ -1,9 +1,16 @@
+import 'dart:convert';
+import 'package:alpha_crm/features/messaging/bulk/data/bulk_campaign_repository.dart';
+import 'package:alpha_crm/features/messaging/bulk/providers/bulk_messaging_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_repository.dart';
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_cache.dart';
 import 'package:alpha_crm/features/messaging/live_chat/data/live_chat_local_bridge_api.dart';
 import 'package:alpha_crm/features/messaging/live_chat/providers/live_chat_provider.dart';
 import 'package:alpha_crm/features/messaging/live_chat/utils/live_chat_attachment_view.dart';
+import 'package:alpha_crm/features/zalo_integration/data/zalo_integration_api.dart';
 import 'package:alpha_crm/mock/mock_accounts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -504,6 +511,226 @@ void main() {
     expect(notifier.state.selectedConversation?.id, 'conv-1');
     expect(notifier.state.selectedConversation?.messages, isNotEmpty);
   });
+
+  test('group @mention autocomplete matches diacritic-insensitively and computes explicit UTF-16 offsets', () {
+    const members = <GroupMentionCandidate>[
+      GroupMentionCandidate(id: 'u-1', displayName: 'Nguyễn Văn A'),
+      GroupMentionCandidate(id: 'u-2', displayName: 'Trần Thị B'),
+    ];
+
+    final allSuggestions = matchGroupMentionCandidates(
+      'Xin chào @',
+      10,
+      members,
+      canMentionAll: true,
+    );
+    expect(allSuggestions.length, 3);
+    expect(allSuggestions.first.isAll, isTrue);
+
+    final filtered = matchGroupMentionCandidates(
+      'Xin chào @nguyen van',
+      20,
+      members,
+      canMentionAll: true,
+    );
+    expect(filtered.length, 1);
+    expect(filtered.first.id, 'u-1');
+
+    final applied = applyGroupMentionCandidate(
+      'Xin chào @nguyen van',
+      20,
+      filtered.first,
+    );
+    expect(applied.text, 'Xin chào @Nguyễn Văn A ');
+    expect(applied.selectionOffset, applied.text.length);
+
+    final explicit = resolveExplicitGroupMentions(
+      'Chào @Nguyễn Văn A và @All nhé',
+      members,
+      canMentionAll: true,
+    );
+    expect(explicit, [
+      {'pos': 5, 'len': 13, 'uid': 'u-1'},
+      {'pos': 22, 'len': 4, 'uid': '-1'},
+    ]);
+
+    // Ambiguous duplicate displayNames are skipped rather than tagging an arbitrary member
+    final dupMembers = <GroupMentionCandidate>[
+      const GroupMentionCandidate(id: 'u-1', displayName: 'Minh'),
+      const GroupMentionCandidate(id: 'u-2', displayName: 'Minh'),
+      const GroupMentionCandidate(id: 'u-3', displayName: 'Trang'),
+    ];
+    expect(
+      resolveExplicitGroupMentions('Chào @Minh nhé', dupMembers),
+      isEmpty,
+    );
+
+    // Single-word name followed by capitalized surname continuation is skipped
+    expect(
+      resolveExplicitGroupMentions('Chào @Trang Nguyễn nhé', dupMembers),
+      isEmpty,
+    );
+    expect(
+      resolveExplicitGroupMentions('Chào @Trang nhé', dupMembers),
+      [
+        {'pos': 5, 'len': 6, 'uid': 'u-3'},
+      ],
+    );
+  });
+
+  test('BulkMessagingNotifier.applyCampaignPollSnapshot tracks unknownCount, inFlightRecipient, and aborted_fail_streak', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(bulkMessagingProvider.notifier);
+
+    final doneRunning = notifier.applyCampaignPollSnapshot(
+      {
+        'statusCounts': {'success': 2, 'failed': 1, 'cancelled': 0},
+        'campaign': {'status': 'running'},
+        'commandStatus': 'running',
+      },
+      localInFlight: {
+        'unknownCount': 1,
+        'inFlightRecipient': {
+          'index': 3,
+          'recipientId': '0901234567',
+          'startedAt': '2026-11-10T00:00:00.000Z',
+        },
+      },
+    );
+    expect(doneRunning, isFalse);
+    expect(container.read(bulkMessagingProvider).unknownCount, 1);
+    expect(
+      container.read(bulkMessagingProvider).inFlightRecipient,
+      '0901234567',
+    );
+
+    // Intermediate progress poll right after circuit breaker triggers (commandStatus still 'running'):
+    // displays abortedReason immediately, but keeps polling until terminal cloud state arrives.
+    final doneAbortedProgress = notifier.applyCampaignPollSnapshot(
+      {
+        'statusCounts': {
+          'success': 2,
+          'failed': 5,
+          'queued': 3,
+          'cancelled': 0,
+        },
+        'campaign': {'status': 'running'},
+        'commandStatus': 'running',
+        'commandResult': {
+          'status': 'running',
+          'unknownCount': 1,
+          'abortedReason': 'aborted_fail_streak',
+          'cancelledCount': 3,
+        },
+      },
+    );
+    expect(doneAbortedProgress, isFalse);
+    expect(
+      container.read(bulkMessagingProvider).abortedReason,
+      'aborted_fail_streak',
+    );
+    expect(
+      container.read(bulkMessagingProvider).complianceError,
+      ZaloIntegrationApi.translateToVietnamese('aborted_fail_streak'),
+    );
+
+    // Terminal cloud poll where CrmExecutionLog mapped 'unknown' -> 'queued' -> 'cancelled'
+    // and finishCampaign already deleted local in-flight.json, but commandResult carries unknownCount
+    final doneAborted = notifier.applyCampaignPollSnapshot(
+      {
+        'statusCounts': {
+          'success': 2,
+          'failed': 5,
+          'cancelled': 4, // 3 truly cancelled + 1 timed-out mapped to cancelled by cloud
+        },
+        'campaign': {'status': 'cancelled'},
+        'commandStatus': 'failed',
+        'commandResult': {
+          'unknownCount': 1,
+          'abortedReason': 'aborted_fail_streak',
+        },
+        'commandError': 'Chiến dịch bị hủy do lỗi lệnh gửi.',
+      },
+    );
+    expect(doneAborted, isTrue);
+    final finalState = container.read(bulkMessagingProvider);
+    expect(finalState.isSending, isFalse);
+    expect(finalState.unknownCount, 1);
+    expect(finalState.cancelledCount, 3);
+    expect(finalState.inFlightRecipient, isNull);
+    expect(finalState.abortedReason, 'aborted_fail_streak');
+    expect(
+      finalState.complianceError,
+      ZaloIntegrationApi.translateToVietnamese('aborted_fail_streak'),
+    );
+    expect(
+      ZaloIntegrationApi.translateToVietnamese('SEND_TIMEOUT'),
+      contains('Quá thời gian phản hồi'),
+    );
+    expect(
+      ZaloIntegrationApi.translateToVietnamese('rate_limited'),
+      contains('giới hạn tốc độ gửi'),
+    );
+  });
+
+  test('BulkCampaignRepository.getLocalInFlightCampaign parses response without leaking injected client', () async {
+    var closedCount = 0;
+    final mockClient = _TrackingClient(
+      MockClient((request) async {
+        expect(request.url.path, '/local/campaigns/in-flight');
+        expect(request.url.queryParameters['campaignId'], 'camp-99');
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'data': [
+              {
+                'campaignId': 'camp-99',
+                'unknownCount': 2,
+                'inFlightRecipient': {
+                  'index': 4,
+                  'recipientId': '0988776655',
+                  'startedAt': '2026-11-10T00:00:00.000Z',
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      }),
+      onClose: () => closedCount++,
+    );
+    final repo = BulkCampaignRepository(httpClient: mockClient);
+    final record = await repo.getLocalInFlightCampaign('camp-99');
+    expect(record?['campaignId'], 'camp-99');
+    expect(record?['unknownCount'], 2);
+    expect(closedCount, 0); // Injected client is not closed by repository
+
+    // Default owned client branch (no injected client) returns null cleanly on unreachable port and closes its client
+    final defaultRepo = BulkCampaignRepository();
+    final unreachable = await defaultRepo.getLocalInFlightCampaign(
+      'camp-99',
+      bridgeBaseUrl: 'http://127.0.0.1:1',
+    );
+    expect(unreachable, isNull);
+  });
+}
+
+class _TrackingClient extends http.BaseClient {
+  final http.Client _inner;
+  final void Function() onClose;
+
+  _TrackingClient(this._inner, {required this.onClose});
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      _inner.send(request);
+
+  @override
+  void close() {
+    onClose();
+    _inner.close();
+  }
 }
 
 Conversation _conversation({

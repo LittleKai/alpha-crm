@@ -4,6 +4,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync, copyFileSync, rmdirSync } from 'fs';
+import { performance } from 'node:perf_hooks';
 import { resolve, dirname, basename } from 'path';
 import { config, projectRoot } from '../config.js';
 import { readSecure, writeSecure } from '../secure-store.js';
@@ -21,6 +22,26 @@ import type {
 import { emitInboundMessage, emitInboundMessages } from './types.js';
 import { createProxyAgent, redactProxyUrl } from '../integrations/proxy-helper.js';
 import { markAutoApproved } from '../recent-friend-approvals.js';
+import {
+  createStickerDescriber,
+  extensionOf,
+  hasRealMedia,
+  isAlreadyFriendErrorCode,
+  isFileMessage,
+  preferReadableImageFormats,
+  resolveAttachmentMimeType,
+} from './zalo-media-enricher.js';
+import {
+  findMentions,
+  formatAndChunkZaloMarkdown,
+  isZaloNumericErrorCode,
+} from './zalo-markdown-formatter.js';
+import {
+  RateLimitedError,
+  createZaloRateLimiter,
+  type RateLimitPriority,
+  type ZaloRateLimiter,
+} from './zalo-rate-limiter.js';
 
 // zca-js imports
 import { Zalo, ThreadType, FriendEventType } from 'zca-js';
@@ -44,6 +65,211 @@ interface ZaloAccountInstance {
   disconnectCode?: number;
   disconnectReason?: string;
   disconnectedAt?: string;
+  rateLimiter?: ZaloRateLimiter;
+}
+
+let rateLimiterConfigOverride: {
+  capacity?: number;
+  refillMs?: number;
+  maxWaitMs?: number;
+} | null = null;
+
+export function setAccountRateLimiterConfigForTest(
+  opts: { capacity?: number; refillMs?: number; maxWaitMs?: number } | null,
+): void {
+  rateLimiterConfigOverride = opts;
+  for (const inst of accountPool.values()) {
+    inst.rateLimiter?.dispose();
+    inst.rateLimiter = undefined;
+  }
+}
+
+function getAccountRateLimiter(instance: ZaloAccountInstance): ZaloRateLimiter {
+  if (!instance.rateLimiter) {
+    instance.rateLimiter = createZaloRateLimiter(
+      rateLimiterConfigOverride ?? {
+        capacity: 5,
+        refillMs: 3000,
+        maxWaitMs: 20_000,
+      },
+    );
+  }
+  return instance.rateLimiter;
+}
+
+const GROUP_MENTION_CACHE_TTL_MS = 10 * 60_000;
+const GROUP_MENTION_LOOKUP_TIMEOUT_MS = 4000;
+const groupMentionCache = new Map<
+  string,
+  {
+    timestamp: number;
+    members: ZaloGroupMember[];
+    canMentionAll: boolean;
+  }
+>();
+
+const MENTION_TRIGGER_RE = /(?:^|[\s([<{,;])@\S/;
+
+function hasMentionTrigger(text: string): boolean {
+  return Boolean(text && MENTION_TRIGGER_RE.test(text));
+}
+
+function sanitizeExplicitGroupMentions(
+  rawMentions: Array<Record<string, unknown>> | undefined,
+  text: string,
+  selfUid: string,
+): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(rawMentions) || rawMentions.length === 0) return undefined;
+  const cleaned: Array<Record<string, unknown>> = [];
+  for (const item of rawMentions) {
+    if (!item || typeof item !== 'object') continue;
+    const pos = Number(item.pos);
+    const len = Number(item.len);
+    const uid = String(item.uid ?? '').trim();
+    if (
+      !Number.isInteger(pos) ||
+      !Number.isInteger(len) ||
+      pos < 0 ||
+      len <= 1 ||
+      pos + len > text.length ||
+      !uid ||
+      uid === selfUid ||
+      text[pos] !== '@'
+    ) {
+      continue;
+    }
+    cleaned.push({ pos, len, uid });
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+export function clearGroupMentionCacheForTest(): void {
+  groupMentionCache.clear();
+}
+
+async function resolveGroupMentionDirectory(
+  instance: ZaloAccountInstance,
+  groupId: string,
+): Promise<{ members: ZaloGroupMember[]; canMentionAll: boolean }> {
+  const cacheKey = `${instance.uId}:${groupId}`;
+  const now = performance.now();
+  const cached = groupMentionCache.get(cacheKey);
+  if (cached && now - cached.timestamp < GROUP_MENTION_CACHE_TTL_MS) {
+    return {
+      members: cached.members,
+      canMentionAll: cached.canMentionAll,
+    };
+  }
+  if (typeof instance.api?.getGroupInfo !== 'function') {
+    return cached
+      ? { members: cached.members, canMentionAll: cached.canMentionAll }
+      : { members: [], canMentionAll: false };
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const infoData: any = await Promise.race([
+      Promise.resolve(instance.api.getGroupInfo(groupId)),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('getGroupInfo timeout')),
+          GROUP_MENTION_LOOKUP_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    const info = infoData?.gridInfoMap?.[groupId];
+    if (!info) {
+      return cached
+        ? { members: cached.members, canMentionAll: cached.canMentionAll }
+        : { members: [], canMentionAll: false };
+    }
+    const currentMems: any[] = Array.isArray(info.currentMems)
+      ? info.currentMems
+      : [];
+    const creatorId = String(info.creatorId ?? '');
+    const adminIds: string[] = Array.isArray(info.adminIds)
+      ? info.adminIds.map(String)
+      : [];
+    const members: ZaloGroupMember[] = currentMems
+      .map((m: any) => {
+        const id = String(m?.id ?? '').trim();
+        let role: 'owner' | 'admin' | 'member' = 'member';
+        if (id === creatorId) role = 'owner';
+        else if (adminIds.includes(id)) role = 'admin';
+        return {
+          id,
+          displayName: String(m?.dName ?? m?.zaloName ?? '').trim(),
+          zaloName: String(m?.zaloName ?? '').trim(),
+          avatar: String(m?.avatar ?? ''),
+          role,
+        };
+      })
+      .filter((m) => m.id && (m.displayName || m.zaloName));
+
+    const canMentionAll =
+      creatorId === instance.uId ||
+      adminIds.includes(instance.uId);
+    const complete =
+      members.length > 0 &&
+      (!info.totalMember || members.length >= Number(info.totalMember));
+    if (complete) {
+      groupMentionCache.set(cacheKey, {
+        timestamp: now,
+        members,
+        canMentionAll,
+      });
+    } else if (members.length > 0) {
+      // Cache partial large-group results for 60s to avoid hammering getGroupInfo
+      groupMentionCache.set(cacheKey, {
+        timestamp: now - GROUP_MENTION_CACHE_TTL_MS + 60_000,
+        members,
+        canMentionAll,
+      });
+    } else if (cached) {
+      return { members: cached.members, canMentionAll: cached.canMentionAll };
+    }
+    return { members, canMentionAll };
+  } catch {
+    return cached
+      ? { members: cached.members, canMentionAll: cached.canMentionAll }
+      : { members: [], canMentionAll: false };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export async function getGroupMentionDirectory(
+  accountId: string,
+  groupId: string,
+  fallbackMembers: ZaloGroupMember[] = [],
+): Promise<{ members: ZaloGroupMember[]; canMentionAll: boolean }> {
+  const instance =
+    (accountId ? accountPool.get(accountId) : undefined) ??
+    getDefaultActiveInstance();
+  let resolved = instance
+    ? await resolveGroupMentionDirectory(instance, groupId)
+    : { members: [] as ZaloGroupMember[], canMentionAll: false };
+
+  if (fallbackMembers.length > 0) {
+    const byId = new Map<string, ZaloGroupMember>();
+    for (const m of resolved.members) {
+      if (m.id) byId.set(m.id, m);
+    }
+    for (const fb of fallbackMembers) {
+      if (!fb.id) continue;
+      const existing = byId.get(fb.id);
+      if (!existing) {
+        byId.set(fb.id, fb);
+      } else if (!existing.displayName && fb.displayName) {
+        byId.set(fb.id, { ...existing, displayName: fb.displayName });
+      }
+    }
+    resolved = {
+      members: Array.from(byId.values()),
+      canMentionAll: resolved.canMentionAll,
+    };
+  }
+  return resolved;
 }
 
 // Human-readable explanation for a websocket close code from zca-js.
@@ -340,6 +566,18 @@ function readWebpMetadata(data: Buffer): { width: number; height: number } | nul
   return null;
 }
 
+function readBmpMetadata(data: Buffer): { width: number; height: number } | null {
+  // Upstream 2anh-zalo-bot/image-metadata.js::bmpSize used readUInt16LE(0) !== 0x424d (bug);
+  // "BM" in ASCII is 0x42 0x4d, which is 0x424d in big-endian.
+  if (data.length < 26 || data.readUInt16BE(0) !== 0x424d) return null;
+  const width = data.readInt32LE(18);
+  const rawHeight = data.readInt32LE(22);
+  if (rawHeight === -2147483648) return null;
+  const height = Math.abs(rawHeight);
+  if (width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
 async function readImageMetadata(filePath: string): Promise<{
   width: number;
   height: number;
@@ -350,7 +588,8 @@ async function readImageMetadata(filePath: string): Promise<{
     readPngMetadata(data) ||
     readGifMetadata(data) ||
     readJpegMetadata(data) ||
-    readWebpMetadata(data);
+    readWebpMetadata(data) ||
+    readBmpMetadata(data);
   if (!dimensions || !dimensions.width || !dimensions.height) {
     throw new Error(`Unsupported image metadata format: ${filePath}`);
   }
@@ -556,23 +795,7 @@ function parseRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function extensionMimeType(fileExt: string, kind: string): string {
-  const ext = fileExt.toLowerCase().replace(/^\./, '');
-  const map: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls: 'application/vnd.ms-excel',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    zip: 'application/zip',
-    mp4: 'video/mp4',
-    mp3: 'audio/mpeg',
-  };
-  return map[ext] || (kind === 'image' ? 'image/jpeg' : '');
+  return resolveAttachmentMimeType(fileExt, kind);
 }
 
 function numericSize(value: unknown): number {
@@ -606,11 +829,16 @@ function attachmentKindFromMessageType(
 function extractAttachmentFromRecord(
   value: unknown,
   messageType: ZaloInboundMessageEvent['messageType'],
+  rawMsgType?: unknown,
 ): InboundAttachment | null {
   const record = parseRecord(value);
   if (!record) return null;
   const params = parseRecord(record.params) || {};
   const kind = attachmentKindFromMessageType(messageType, record);
+  const fileMode = isFileMessage(
+    rawMsgType ?? record.msgType ?? record.type,
+    messageType,
+  );
   const fileName = firstNonEmptyString(
     record.fileName,
     record.name,
@@ -618,13 +846,7 @@ function extractAttachmentFromRecord(
     params.fileName,
     params.name,
   );
-  const fileExt = firstNonEmptyString(
-    record.fileExt,
-    record.ext,
-    params.fileExt,
-    params.ext,
-  );
-  const url = normalizeImageUrl(
+  const rawUrl = normalizeImageUrl(
     record.href ??
       record.url ??
       record.fileUrl ??
@@ -632,20 +854,32 @@ function extractAttachmentFromRecord(
       record.originUrl ??
       record.downloadUrl ??
       record.hdUrl ??
-      record.thumb ??
-      record.thumbnail,
+      (fileMode ? undefined : record.thumb ?? record.thumbnail),
   );
-  const thumbnailUrl = normalizeImageUrl(
-    record.thumb ?? record.thumbnail ?? record.previewUrl ?? params.thumb,
-  );
-  if (!url && !thumbnailUrl && !fileName) return null;
+  const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : '';
+  const rawThumb = fileMode
+    ? ''
+    : normalizeImageUrl(
+        record.thumb ?? record.thumbnail ?? record.previewUrl ?? params.thumb,
+      );
+  const thumbnailUrl = /^https?:\/\//i.test(rawThumb) ? rawThumb : '';
+  if (!url && !thumbnailUrl) return null;
+  const rawExt =
+    firstNonEmptyString(
+      record.fileExt,
+      record.ext,
+      params.fileExt,
+      params.ext,
+    ) ||
+    extensionOf(fileName) ||
+    extensionOf(url);
+  const fileExt = rawExt.replace(/^\./, '').toLowerCase();
+  const mimeType = extensionMimeType(fileExt || fileName || url, kind);
   return {
     kind,
     ...(fileName ? { name: fileName } : {}),
-    ...(url || thumbnailUrl ? { url: url || thumbnailUrl } : {}),
-    ...(extensionMimeType(fileExt, kind)
-      ? { mimeType: extensionMimeType(fileExt, kind) }
-      : {}),
+    url: url || thumbnailUrl,
+    ...(mimeType ? { mimeType } : {}),
     ...(numericSize(record.fileSize ?? record.size ?? params.fileSize ?? params.size)
       ? {
           sizeBytes: numericSize(
@@ -660,10 +894,16 @@ function extractAttachmentFromRecord(
   };
 }
 
+const stickerDescriber = createStickerDescriber();
+
 function extractInboundAttachments(
   data: Record<string, any>,
   messageType: ZaloInboundMessageEvent['messageType'],
 ): InboundAttachment[] {
+  const rawMsgType = data?.msgType ?? data?.type;
+  if (!hasRealMedia(rawMsgType, messageType)) {
+    return [];
+  }
   const candidates = [
     data.attachments,
     data.attach,
@@ -675,7 +915,11 @@ function extractInboundAttachments(
     if (!candidate) continue;
     const values = Array.isArray(candidate) ? candidate : [candidate];
     for (const value of values) {
-      const attachment = extractAttachmentFromRecord(value, messageType);
+      const attachment = extractAttachmentFromRecord(
+        value,
+        messageType,
+        rawMsgType,
+      );
       if (!attachment) continue;
       const key = `${attachment.kind}:${attachment.url || ''}:${attachment.name || ''}`;
       if (
@@ -687,7 +931,7 @@ function extractInboundAttachments(
       }
     }
   }
-  return attachments;
+  return preferReadableImageFormats(attachments);
 }
 
 function extractStringFromRecord(value: unknown, keys: string[]): string {
@@ -1331,11 +1575,16 @@ async function reloginAccountFromDisk(
     const uId = activeApi.getOwnId ? activeApi.getOwnId() : instance.uId;
     // addAccountInstance tears down the previous (dead) session, restarts the listener
     // and resets status to 'connected'.
+    const prevLimiter = instance.rateLimiter;
     await addAccountInstance(uId, activeApi, filePath);
+    const refreshed = accountPool.get(uId) ?? null;
+    if (refreshed && prevLimiter) {
+      refreshed.rateLimiter = prevLimiter;
+    }
     console.log(
       `[PersonalZcaChannel - ${instance.label}] Re-login from saved credentials succeeded.`,
     );
-    return accountPool.get(uId) ?? null;
+    return refreshed;
   } catch (err) {
     console.error(
       `[PersonalZcaChannel - ${instance.label}] Re-login from disk failed:`,
@@ -1557,6 +1806,25 @@ async function startListenerForInstance(instance: ZaloAccountInstance): Promise<
         instance.lastEventAt = new Date().toISOString();
         const inbound = normalizeInboundMessage(instance, event);
         if (!inbound) return;
+
+        if (inbound.messageType === 'sticker') {
+          const enrichedSticker = await stickerDescriber.describe(
+            instance.api,
+            event,
+          );
+          if (enrichedSticker) {
+            inbound.content = enrichedSticker.label;
+            if (enrichedSticker.attachment) {
+              const existing = inbound.attachments ?? [];
+              const alreadyHasUrl = existing.some(
+                (item) => item.url === enrichedSticker.attachment!.url,
+              );
+              if (!alreadyHasUrl) {
+                inbound.attachments = [...existing, enrichedSticker.attachment];
+              }
+            }
+          }
+        }
 
         // Fetch missing sender avatar or display name from API
         if (inbound.senderId && (!inbound.avatarUrl || !inbound.senderName)) {
@@ -1831,10 +2099,240 @@ export class PersonalZcaChannel implements ZaloChannel {
       const zcaClientMessageId = createZaloClientMessageId(
         req.clientMessageId,
       );
+      const ratePriority: RateLimitPriority =
+        req.metadata?.source === 'campaign' ? 'normal' : 'high';
+
+      const shouldFormatMarkdown =
+        (req.metadata?.source === 'chatbot' ||
+          req.metadata?.format === 'markdown') &&
+        (!req.styles || req.styles.length === 0) &&
+        !hasAttachments &&
+        (!req.messageType || req.messageType === 'text') &&
+        messageText.length > 0;
+
+      if (shouldFormatMarkdown) {
+        const chunks = formatAndChunkZaloMarkdown(messageText);
+        const effectiveChunks =
+          chunks.length > 0 ? chunks : [{ text: messageText, styles: [] }];
+        const chunkMessageIds: string[] = [];
+        const chunkClientMessageIds: string[] = [];
+        const baseClientIdNum = Number(zcaClientMessageId);
+        const groupMentionDir =
+          threadType === ThreadType.Group &&
+          effectiveChunks.some((c) => hasMentionTrigger(c.text))
+            ? await resolveGroupMentionDirectory(selectedInstance, recipientId)
+            : null;
+
+        for (let chunkIndex = 0; chunkIndex < effectiveChunks.length; chunkIndex++) {
+          const chunk = effectiveChunks[chunkIndex];
+          const chunkClientId =
+            chunkIndex === 0
+              ? zcaClientMessageId
+              : createZaloClientMessageId(
+                  Number.isFinite(baseClientIdNum)
+                    ? String(baseClientIdNum + chunkIndex)
+                    : undefined,
+                );
+          let chunkMentions: Array<Record<string, unknown>> | undefined =
+            chunkIndex === 0 &&
+            effectiveChunks.length === 1 &&
+            chunk.text === messageText
+              ? sanitizeExplicitGroupMentions(
+                  req.mentions,
+                  chunk.text,
+                  selectedInstance.uId,
+                )
+              : undefined;
+          if (
+            !chunkMentions &&
+            threadType === ThreadType.Group &&
+            hasMentionTrigger(chunk.text) &&
+            groupMentionDir
+          ) {
+            const resolved = findMentions(chunk.text, groupMentionDir.members, {
+              selfUid: selectedInstance.uId,
+              continuesInNextChunk: chunkIndex < effectiveChunks.length - 1,
+              canMentionAll: groupMentionDir.canMentionAll,
+            });
+            if (resolved.length > 0) {
+              chunkMentions = resolved as unknown as Array<
+                Record<string, unknown>
+              >;
+            }
+          }
+          const chunkStyles = chunk.styles.length > 0 ? chunk.styles : undefined;
+          const chunkPayload: any = {
+            msg: chunk.text,
+            ...(chunkIndex === 0 && quote ? { quote } : {}),
+            ...(chunkMentions ? { mentions: chunkMentions } : {}),
+            ...(chunkStyles ? { styles: chunkStyles } : {}),
+          };
+
+          let chunkPendingCleanup: (() => void) | undefined;
+          const sendChunkPayload = (apiInst: any, payload: any): Promise<any> =>
+            runWithFixedDateNow(chunkClientId, () => {
+              chunkPendingCleanup?.();
+              if (String(Date.now()) === chunkClientId) {
+                chunkPendingCleanup = markProgrammaticSend(
+                  selectedInstance!.uId,
+                  recipientId,
+                  undefined,
+                  chunkClientId,
+                );
+                removePendingEcho = chunkPendingCleanup;
+              }
+              return apiInst.sendMessage(payload, recipientId, threadType);
+            });
+
+          const dispatchChunkWithPlainFallback = async (apiInst: any): Promise<any> => {
+            try {
+              return await sendChunkPayload(apiInst, chunkPayload);
+            } catch (chunkErr) {
+              const hasRichFormatting = Boolean(chunkStyles || chunkMentions);
+              if (
+                hasRichFormatting &&
+                isZaloNumericErrorCode(chunkErr) &&
+                !isDeadSessionError(chunkErr)
+              ) {
+                const plainPayload: any = {
+                  msg: chunk.text,
+                  ...(chunkIndex === 0 && quote ? { quote } : {}),
+                };
+                return await sendChunkPayload(apiInst, plainPayload);
+              }
+              throw chunkErr;
+            }
+          };
+
+          let chunkResult: any;
+          try {
+            await getAccountRateLimiter(selectedInstance).acquire(ratePriority);
+            try {
+              chunkResult = await dispatchChunkWithPlainFallback(
+                selectedInstance.api as any,
+              );
+            } catch (sendErr) {
+              if (!isDeadSessionError(sendErr)) throw sendErr;
+              const attempts = recordReloginAttempt(selectedInstance.uId);
+              if (attempts > RELOGIN_MAX_IN_WINDOW) {
+                console.error(
+                  `[PersonalZcaChannel - ${selectedInstance.label}] Circuit breaker open: ${attempts - 1} re-logins already failed within ${RELOGIN_WINDOW_MS / 60000} min. Not retrying.`,
+                );
+                throw sendErr;
+              }
+              console.warn(
+                `[PersonalZcaChannel - ${selectedInstance.label}] Send hit zpw_sek; re-logging in from saved credentials (attempt ${attempts}/${RELOGIN_MAX_IN_WINDOW}) and retrying once...`,
+              );
+              const refreshed = await reloginAccountFromDiskOnce(selectedInstance);
+              if (!refreshed) throw sendErr;
+              selectedInstance = refreshed;
+              chunkResult = await dispatchChunkWithPlainFallback(
+                selectedInstance.api as any,
+              );
+            }
+          } catch (chunkFatalErr) {
+            chunkPendingCleanup?.();
+            if (chunkMessageIds.length === 0) {
+              throw chunkFatalErr;
+            }
+            const fatalAny = chunkFatalErr as any;
+            const fatalCode =
+              fatalAny?.code ?? fatalAny?.data?.code ?? fatalAny?.details?.code;
+            const fatalMsg =
+              chunkFatalErr instanceof Error
+                ? chunkFatalErr.message
+                : String(chunkFatalErr);
+            if (
+              (fatalCode === 600 || /zpw_sek/i.test(fatalMsg) || isDeadSessionError(chunkFatalErr)) &&
+              selectedInstance &&
+              selectedInstance.status !== 'disconnected_expired'
+            ) {
+              console.error(
+                `[PersonalZcaChannel - ${selectedInstance.label}] Dead session (zpw_sek) on chunk ${chunkIndex + 1}. Marking as disconnected_expired.`,
+              );
+              await stopListenerForInstance(selectedInstance);
+              selectedInstance.status = 'disconnected_expired';
+              selectedInstance.disconnectReason =
+                'Phiên đăng nhập đã hết hạn (zpw_sek). Vui lòng đăng nhập lại.';
+              selectedInstance.disconnectedAt = new Date().toISOString();
+            }
+            const errSummary = fatalCode ? `${fatalMsg} (code: ${fatalCode})` : fatalMsg;
+            return {
+              success: true,
+              messageId: chunkMessageIds[0],
+              clientMessageId: zcaClientMessageId,
+              chunkMessageIds,
+              chunkClientMessageIds,
+              attachmentMessageIds: [],
+              error: `partial: ${chunkMessageIds.length}/${effectiveChunks.length} chunks sent (${errSummary})`,
+            };
+          }
+
+          clearReloginHistory(selectedInstance.uId);
+          const chunkMsgResult = (chunkResult as any)?.message ?? chunkResult;
+          const sentMsgId = toStringValue(
+            chunkMsgResult?.msgId ?? (chunkResult as any)?.msgId,
+          );
+          const sentCliId = toStringValue(
+            chunkMsgResult?.cliMsgId ?? chunkMsgResult?.clientId ?? chunkClientId,
+          );
+          markProgrammaticSend(
+            selectedInstance.uId,
+            recipientId,
+            sentMsgId || undefined,
+            sentCliId || undefined,
+          );
+          chunkMessageIds.push(sentMsgId || `personal_${Date.now()}_${chunkIndex}`);
+          chunkClientMessageIds.push(sentCliId || chunkClientId);
+        }
+
+        return {
+          success: true,
+          messageId: chunkMessageIds[0] ?? `personal_${Date.now()}`,
+          clientMessageId: zcaClientMessageId,
+          chunkMessageIds,
+          chunkClientMessageIds,
+          attachmentMessageIds: [],
+        };
+      }
+
+      let effectiveMentions: Array<Record<string, unknown>> | undefined =
+        threadType === ThreadType.Group
+          ? sanitizeExplicitGroupMentions(
+              req.mentions,
+              messageText,
+              selectedInstance.uId,
+            )
+          : req.mentions && req.mentions.length > 0
+            ? req.mentions
+            : undefined;
+      if (
+        !effectiveMentions &&
+        threadType === ThreadType.Group &&
+        hasMentionTrigger(messageText)
+      ) {
+        const groupMentionDir = await resolveGroupMentionDirectory(
+          selectedInstance,
+          recipientId,
+        );
+        if (groupMentionDir) {
+          const resolved = findMentions(messageText, groupMentionDir.members, {
+            selfUid: selectedInstance.uId,
+            continuesInNextChunk: false,
+            canMentionAll: groupMentionDir.canMentionAll,
+          });
+          if (resolved.length > 0) {
+            effectiveMentions = resolved as unknown as Array<
+              Record<string, unknown>
+            >;
+          }
+        }
+      }
+
       const messageContent: any = {
         msg: messageText,
         ...(quote ? { quote } : {}),
-        ...(req.mentions ? { mentions: req.mentions } : {}),
+        ...(effectiveMentions ? { mentions: effectiveMentions } : {}),
         ...(req.styles ? { styles: req.styles } : {}),
       };
       if (hasAttachments) {
@@ -1870,8 +2368,10 @@ export class PersonalZcaChannel implements ZaloChannel {
 
       let result: any;
       try {
+        await getAccountRateLimiter(selectedInstance).acquire(ratePriority);
         result = await dispatchSend(selectedInstance.api as any);
       } catch (sendErr) {
+        if (sendErr instanceof RateLimitedError) throw sendErr;
         // A dead-session (zpw_sek / code 600) error can mean the session was truly
         // revoked, OR just that the in-RAM cookie jar went stale. Recover the way the
         // reference ZaloCRM does: RE-LOGIN from the immutable credentials file (Zalo
@@ -1932,6 +2432,14 @@ export class PersonalZcaChannel implements ZaloChannel {
       };
     } catch (err) {
       removePendingEcho?.();
+      if (err instanceof RateLimitedError) {
+        return {
+          success: false,
+          error: err.message,
+          errorCode: 'RATE_LIMITED',
+          retryAfterMs: err.waitMs,
+        };
+      }
       console.error(`[PersonalZcaChannel] sendMessage error:`, err);
       const errAny = err as any;
       const code = errAny?.code ?? errAny?.data?.code ?? errAny?.details?.code;
@@ -2311,6 +2819,7 @@ export class PersonalZcaChannel implements ZaloChannel {
 
     try {
       await stopListenerForInstance(instance);
+      instance.rateLimiter?.dispose();
       accountPool.delete(accountId);
       clearReloginHistory(accountId);
       reloginInFlight.delete(accountId);
@@ -2319,6 +2828,11 @@ export class PersonalZcaChannel implements ZaloChannel {
       friendsCache.delete(accountId);
       groupsCache.delete(accountId);
       userProfileCache.delete(accountId);
+      for (const key of groupMentionCache.keys()) {
+        if (key.startsWith(`${accountId}:`)) {
+          groupMentionCache.delete(key);
+        }
+      }
 
       const credPath = resolve(projectRoot, config.personalCredentialsPath);
       const credDir = dirname(credPath);
@@ -2414,12 +2928,20 @@ export class PersonalZcaChannel implements ZaloChannel {
     }
   }
 
-  async getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {
+  async getGroupMembers(groupId: string, accountId?: string): Promise<ZaloGroupMember[]> {
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) return [];
 
-      for (const instance of accountPool.values()) {
+      const orderedInstances =
+        accountId && accountPool.has(accountId)
+          ? [
+              accountPool.get(accountId)!,
+              ...Array.from(accountPool.values()).filter((i) => i.uId !== accountId),
+            ]
+          : Array.from(accountPool.values());
+
+      for (const instance of orderedInstances) {
         try {
           console.log(`[PersonalZcaChannel - ${instance.label}] Fetching members for group ${groupId}...`);
           const infoData = await instance.api.getGroupInfo(groupId);
@@ -2547,6 +3069,7 @@ export class PersonalZcaChannel implements ZaloChannel {
       }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to create group "${name}"`);
+      await getAccountRateLimiter(selectedInstance).acquire('normal');
       const result = await selectedInstance.api.createGroup({
         name,
         members,
@@ -2629,6 +3152,7 @@ export class PersonalZcaChannel implements ZaloChannel {
       }
 
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to invite user ${userId} to group ${groupId}`);
+      await getAccountRateLimiter(selectedInstance).acquire('normal');
       await selectedInstance.api.inviteUserToGroups(userId, groupId);
 
       return {
@@ -2666,12 +3190,13 @@ export class PersonalZcaChannel implements ZaloChannel {
   }
 
   async sendFriendRequest(userId: string, message: string, accountId?: string): Promise<{ success: boolean; error?: string }> {
+    let selectedInstance: ZaloAccountInstance | undefined;
     try {
       await ensureLoginPool();
       if (accountPool.size === 0) {
         throw new Error('No active connected Zalo accounts in the pool.');
       }
-      let selectedInstance = accountId ? accountPool.get(accountId) : undefined;
+      selectedInstance = accountId ? accountPool.get(accountId) : undefined;
       if (!selectedInstance && accountId) {
         throw new Error(`Requested Zalo account ${accountId} is not connected.`);
       }
@@ -2679,9 +3204,16 @@ export class PersonalZcaChannel implements ZaloChannel {
         selectedInstance = getDefaultActiveInstance()!;
       }
       console.log(`[PersonalZcaChannel] Using account ${selectedInstance.label} to send friend request to ${userId}`);
+      await getAccountRateLimiter(selectedInstance).acquire('normal');
       await selectedInstance.api.sendFriendRequest(message, userId);
       return { success: true };
     } catch (err) {
+      if (isAlreadyFriendErrorCode(err)) {
+        if (selectedInstance) {
+          friendsCache.delete(selectedInstance.uId);
+        }
+        return { success: true };
+      }
       console.error(`[PersonalZcaChannel] Failed to send friend request to ${userId}:`, err);
       return {
         success: false,

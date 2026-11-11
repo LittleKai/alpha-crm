@@ -127,9 +127,9 @@ export async function getAllFriends(accountId?: string): Promise<ZaloFriend[]> {
   return channel.getAllFriends(accountId);
 }
 
-export async function getGroupMembers(groupId: string): Promise<ZaloGroupMember[]> {
+export async function getGroupMembers(groupId: string, accountId?: string): Promise<ZaloGroupMember[]> {
   if (!channel.getGroupMembers) return [];
-  return channel.getGroupMembers(groupId);
+  return channel.getGroupMembers(groupId, accountId);
 }
 
 export async function getGroupLinkMembers(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }> {

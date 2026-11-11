@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-11-03 · **Session:** 11 · **Setup baseline:** 2026-11-03
+**Last Updated:** 2026-11-10 · **Session:** 13 · **Setup baseline:** 2026-11-03
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -84,6 +84,7 @@ docs/
     mobile-web-completion-tasklist.md            Detailed gap analysis + task breakdown (BE/AG/FE) for Mobile & Web completion
     mobile-web-completion-qa-checklist.md        QA checklist for Mobile & Web completion
     orca-mobile-adoption-plan.md                 Evaluation (/10) & implementation plan for Orca Mobile companion patterns in Alpha CRM
+    2anh-zalo-bot-integration-plan.md            Scout-and-integrate spec for P1/P2/P4/P5 and P6..P10 Zalo personal capabilities from 2anh-zalo-bot
   feature-research-chatwoot-tooljet.md           Feature research from Chatwoot and ToolJet
   api-catalog/
     zalo-reference-sources.md                    Local repo references (zca-js, zalo-bot-js, Deplao)
@@ -120,9 +121,9 @@ docs/
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
 | `lib/features/workflows/` | Workflow automation feature | Omnichannel workflows (/workflows, FB, TikTok, IG, WhatsApp, Tele, Webchat). Chi tiết xem CONVENTIONS.md. |
 | `lib/shared/models/crm_channel.dart` | `CrmChannel` enum (shared) | CrmChannel enum discriminator (zaloPersonal/OA/FB/TikTok/IG/WA/Tele/Webchat/Email). |
-| `lib/features/messaging/live_chat/` | Live Chat multi-account | Live Chat multi-account dropdown gộp Zalo + kênh workflow. Chi tiết xem CONVENTIONS.md. |
+| `lib/features/messaging/live_chat/` | Live Chat multi-account | Live Chat multi-account dropdown gộp Zalo + kênh workflow + gợi ý `@Tên`/`@All` cho nhóm. Chi tiết xem CONVENTIONS.md. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
-| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer lưu bảng scheduled_campaigns (re-arm lúc boot). |
+| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer + thẻ "Không rõ" (`unknownCount`), `inFlightRecipient` và `aborted_fail_streak`. |
 | `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `DESIGN.md`. |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
 | `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
@@ -155,6 +156,11 @@ docs/
 | `integration/zalo-bot-service/src/channels/telegram-channel.ts` | Telegram Bot API channel adapter (Giai đoạn I) | ZaloChannel adapter Telegram Bot API qua bot token và webhook bí mật. |
 | `integration/zalo-bot-service/src/agent/agent-runner.ts` | Cloud command/heartbeat loop | Cloud heartbeat (10s, tách rõ `appVersion` của Desktop Flutter app và `agentVersion` của bot service), long-poll lệnh /next, báo inbound 1:1. Chi tiết xem CONVENTIONS.md. |
 | `integration/zalo-bot-service/src/agent/outbound-reporter.ts` | Outbound message → cloud reporter | Báo tin gửi outbound lên cloud /crm/agent/events/message (tránh lặp qua senderId). |
+| `integration/zalo-bot-service/src/channels/zalo-markdown-formatter.ts` | Zalo Markdown → TextStyle[] + chunker + `@mention` | Parse Markdown sang zca-js TextStyle[], chia chunk UTF-16/UTF-8, parse `@Name`/`@All` (`findMentions`). |
+| `integration/zalo-bot-service/src/channels/zalo-media-enricher.ts` | Inbound Zalo media enricher + MIME map | Rút trích metadata media, chặn false-positive `hasRealMedia`/`share.file`, chuẩn hoá 31 đuôi MIME (`resolveAttachmentMimeType`). |
+| `integration/zalo-bot-service/src/channels/zalo-rate-limiter.ts` | Per-account priority token-bucket rate limiter | Token-bucket 2 làn (`high` cho Live Chat/Chatbot, `normal` cho campaign/friend/group) dùng `performance.now()`. |
+| `integration/zalo-bot-service/src/local-chat/vietnamese-fold.ts` | Vietnamese diacritic folder | Chuẩn hoá NFD + đ/Đ cho UDF `zd_fold` trong SQLite (`searchMessages`/`listConversations`) và escape `%`/`_`. |
+| `docs/specs/2anh-zalo-bot-integration-plan.md` | 2anh-zalo-bot integration spec | Kế hoạch & hợp đồng tích hợp P1/P2/P4/P5 (Phase 1) và P6/P7/P8/P9/P10 (Phase 2) từ `2anh-zalo-bot`. |
 | `docs/specs/deplao-feature-integration-spec.md` | Deplao integration review spec | Records implemented features, review checklist, known limits, and verification commands. |
 | `docs/specs/zalo-message-processing-gap-vs-deplao.md` | Phân tích phần xử lý tin nhắn Zalo còn thiếu | Đối chiếu Live Chat của Alpha CRM với pipeline Zalo của Deplao; ghi rõ các phần realtime, lưu trữ, gửi tin, media và UI còn thiếu hoặc mới triển khai một phần. Không bao gồm Facebook. |
 | `docs/specs/reference-analysis.md` | Reference analysis | Compares current Alpha CRM against Deplao Builder and ZaloCRM and identifies reusable UX/domain patterns. |
@@ -236,9 +242,12 @@ flowchart LR
 - [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
 - [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
 
-Kiểm tra lần sửa: analyze sạch; Flutter 217/217, backend 173/173; release 0.2.5+33 đã phát hành đồng thời lên GitHub Release và Backblaze B2 (ZIP Windows 71.42 MB, APK Android 149.51 MB) kèm manifest version.json cập nhật thành công. Backend từ ZIP với Node 22.23.2 mở SQLite và vượt qua smoke-test /health và /local/health.
+Kiểm tra lần sửa hiện tại (chưa commit/phát hành): `flutter analyze` sạch; `flutter test` 220/220; `guard_check.py` 47/47 bẫy; backend `zalo-bot-service` 204/204 (tích hợp P1/P2/P4/P5 và P6/P7/P8/P9/P10 từ `2anh-zalo-bot` nối suốt sang Flutter UI & Local Bridge: `message_chunk_aliases`, media enricher + 31-ext MIME + giữ phân biệt hoa/thường leaf ID ảnh `/gr/jxl/` + idempotent friend request 222/225, per-account 2-lane `createZaloRateLimiter` + thông báo `rate_limited`, atomic campaign progress + `/local/campaigns/in-flight` đóng `http.Client` trong `finally` + thẻ `unknownCount`/`inFlightRecipient`/`aborted_fail_streak` đọc `commandResult` trên Bulk Messaging UI, pre-debouncer group `FloodGuard` dùng `performance.now()`, và `@mention` parser `findMentions` + `sanitizeExplicitGroupMentions` + `/local/conversations/:id/members` + gợi ý chip `@Tên`/`@All` trên Live Chat nhóm; đã qua review độc lập Codex `9.1/10`). Bản phát hành gần nhất trước đó là 0.2.5+33 trên GitHub Release & Backblaze B2 (ZIP Windows 71.42 MB, APK Android 149.51 MB; backend từ ZIP với Node 22.23.2 đã qua smoke-test `/health` và `/local/health`).
 
-Chưa smoke giao diện/phiên Zalo thật và APK trên máy Android (không có thiết bị kết nối); chưa phát hành/commit. Echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
+Giới hạn đã biết & TODO:
+- [ ] Cloud consumer (`alpha-studio-backend/server/routes/crm.js` & `CrmExecutionLog.status`) hiện chỉ có enum `['queued','running','success','failed','cancelled']` nên `status: 'unknown'` do agent gửi khi `SEND_TIMEOUT` bị map về `queued` rồi chuyển sang `cancelled`, và các trường mới (`unknownCount`, `abortedReason`, `inFlightRecipient`) chưa được cloud lưu/hiển thị. Cần bổ sung enum `'unknown'` và hiển thị `abortedReason` ở repo `alpha-studio-backend` trước khi cam kết chống gửi trùng phía cloud cho lượt gửi timeout.
+- [ ] Các dòng SQLite `attachments` cũ đã lỡ tạo từ tin nhắn `link` trước bản vá `hasRealMedia` (P6) không tự xoá hồi tố; chỉ các tin nhắn mới được chặn.
+- [ ] Chưa build/smoke artifact release mới cho thay đổi P1–P10 và chưa smoke giao diện/phiên Zalo thật hoặc APK trên thiết bị Android vật lý; echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
 
 ---
 

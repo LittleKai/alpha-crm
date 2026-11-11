@@ -15,10 +15,11 @@ import {
   sendMessage,
   sendTyping,
 } from '../zalo.js';
-import type { ZaloSendMessageRequest } from '../channels/types.js';
+import type { ZaloGroupMember, ZaloSendMessageRequest } from '../channels/types.js';
 import { getChannel } from '../channels/channel-registry.js';
 import { localChatEvents, type LocalChatEvent } from './local-chat-events.js';
 import { reportOutboundMessageEvent } from '../agent/outbound-reporter.js';
+import { listInterruptedCampaigns } from '../agent/campaign-progress.js';
 import type { LocalMessage } from './local-chat-types.js';
 import {
   getChatbotConfigSync,
@@ -245,6 +246,20 @@ export function handleLocalRoute(
     const conversationId = safeDecodeURIComponent(msgMatch[1]);
     const queryStr = msgMatch[2] ? msgMatch[2].slice(1) : '';
     handleLocalMessages(conversationId, queryStr, req, res, json);
+    return true;
+  }
+
+  // GET /local/conversations/:id/members
+  const membersMatch = url.match(/^\/local\/conversations\/([^/?]+)\/members(\?.*)?$/);
+  if (method === 'GET' && membersMatch) {
+    const conversationId = safeDecodeURIComponent(membersMatch[1]);
+    void handleLocalConversationMembers(conversationId, req, res, json);
+    return true;
+  }
+
+  // GET /local/campaigns/in-flight?campaignId=&commandId=
+  if (method === 'GET' && /^\/local\/campaigns\/in-flight(\?.*)?$/.test(url)) {
+    handleLocalInFlightCampaigns(url, req, res, json);
     return true;
   }
 
@@ -1309,6 +1324,128 @@ async function handleLocalMessages(
 }
 
 // ---------------------------------------------------------------------------
+// GET /local/conversations/:id/members
+// ---------------------------------------------------------------------------
+async function handleLocalConversationMembers(
+  conversationId: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): Promise<void> {
+  const store = getLocalChatStore();
+  if (!store) {
+    json(res, 503, {
+      success: false,
+      reason: 'localOnlyUnavailable',
+      error: 'Local-first mode is not enabled.',
+    }, req);
+    return;
+  }
+
+  try {
+    const conv =
+      store.getConversation(conversationId) ||
+      (store.db
+        .prepare('SELECT * FROM conversations WHERE cloudConversationId = ?')
+        .get(conversationId) as any);
+    if (!conv) {
+      json(res, 404, { success: false, error: 'Conversation not found.' }, req);
+      return;
+    }
+    if (conv.threadType !== 'group') {
+      json(res, 200, { success: true, data: [], canMentionAll: false }, req);
+      return;
+    }
+
+    const recentRows = store.db
+      .prepare(
+        `SELECT senderId, senderName
+         FROM messages
+         WHERE conversationId = ? AND senderId != '' AND senderName != ''
+         ORDER BY createdAt DESC, rowid DESC
+         LIMIT 200`,
+      )
+      .all(conv.id) as Array<{ senderId: string; senderName: string }>;
+
+    const fallbackById = new Map<string, ZaloGroupMember>();
+    for (const r of recentRows) {
+      if (!r.senderId || r.senderId === conv.accountId || !r.senderName) continue;
+      if (!fallbackById.has(r.senderId)) {
+        fallbackById.set(r.senderId, {
+          id: String(r.senderId),
+          displayName: String(r.senderName),
+          zaloName: String(r.senderName),
+          avatar: '',
+          role: 'member' as const,
+        });
+      }
+    }
+    const fallbackMembers = Array.from(fallbackById.values());
+
+    try {
+      const { getGroupMentionDirectory } = await import('../channels/personal-zca-channel.js');
+      const directory = await getGroupMentionDirectory(
+        String(conv.accountId || ''),
+        String(conv.threadId || ''),
+        fallbackMembers,
+      );
+      const filtered = directory.members.filter(
+        (m) => m.id && m.id !== conv.accountId && (m.displayName || m.zaloName),
+      );
+      json(res, 200, {
+        success: true,
+        data: filtered,
+        canMentionAll: directory.canMentionAll,
+      }, req);
+    } catch {
+      json(res, 200, {
+        success: true,
+        data: fallbackMembers,
+        canMentionAll: false,
+      }, req);
+    }
+  } catch (err: any) {
+    json(res, 500, {
+      success: false,
+      error: err?.message ?? 'Failed to load conversation members.',
+    }, req);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /local/campaigns/in-flight?campaignId=&commandId=
+// ---------------------------------------------------------------------------
+function handleLocalInFlightCampaigns(
+  url: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  json: JsonFn,
+): void {
+  try {
+    const queryStr = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+    const params = new URLSearchParams(queryStr);
+    const campaignId = (params.get('campaignId') || '').trim();
+    const commandId = (params.get('commandId') || '').trim();
+    let items = listInterruptedCampaigns();
+    if (campaignId) {
+      items = items.filter((item) => item.campaignId === campaignId);
+    }
+    if (commandId) {
+      items = items.filter((item) => item.commandId === commandId);
+    }
+    json(res, 200, {
+      success: true,
+      data: items,
+    }, req);
+  } catch (err: any) {
+    json(res, 500, {
+      success: false,
+      error: err?.message ?? 'Failed to read in-flight campaigns.',
+    }, req);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /local/messages/send
 // ---------------------------------------------------------------------------
 async function handleLocalSend(
@@ -1448,8 +1585,14 @@ async function handleLocalSend(
         localMsgId,
         'sent',
         result.messageId,
-        '',
+        result.error || '',
         result.clientMessageId,
+        result.chunkMessageIds || result.chunkClientMessageIds
+          ? {
+              chunkMessageIds: result.chunkMessageIds,
+              chunkClientMessageIds: result.chunkClientMessageIds,
+            }
+          : undefined,
       );
       localChatEvents.publish({
         type: 'message.updated',
@@ -1499,12 +1642,14 @@ async function handleLocalSend(
           messageId: localMsgId,
           clientMessageId,
           error: result.error || 'Send failed.',
+          ...(result.errorCode ? { errorCode: result.errorCode, retryAfterMs: result.retryAfterMs } : {}),
         },
       });
       json(res, 500, {
         success: false,
         localMessageId: localMsgId,
         error: result.error || 'Send failed.',
+        ...(result.errorCode ? { errorCode: result.errorCode, retryAfterMs: result.retryAfterMs } : {}),
       }, req);
     }
   } catch (err: any) {
@@ -1645,8 +1790,14 @@ async function handleLocalSendAttachment(
         localMsgId,
         'sent',
         result.messageId,
-        '',
+        result.error || '',
         result.clientMessageId,
+        result.chunkMessageIds || result.chunkClientMessageIds
+          ? {
+              chunkMessageIds: result.chunkMessageIds,
+              chunkClientMessageIds: result.chunkClientMessageIds,
+            }
+          : undefined,
       );
       localChatEvents.publish({
         type: 'message.updated',
@@ -1696,12 +1847,14 @@ async function handleLocalSendAttachment(
           messageId: localMsgId,
           clientMessageId,
           error: result.error || 'Attachment send failed.',
+          ...(result.errorCode ? { errorCode: result.errorCode, retryAfterMs: result.retryAfterMs } : {}),
         },
       });
       json(res, 500, {
         success: false,
         localMessageId: localMsgId,
         error: result.error || 'Attachment send failed.',
+        ...(result.errorCode ? { errorCode: result.errorCode, retryAfterMs: result.retryAfterMs } : {}),
         data: serializeLocalMessageWithAttachments(store, localMsgId),
       }, req);
     }
@@ -1903,8 +2056,14 @@ async function handleLocalRetry(
       messageId,
       'sent',
       result.messageId,
-      '',
+      result.error || '',
       result.clientMessageId,
+      result.chunkMessageIds || result.chunkClientMessageIds
+        ? {
+            chunkMessageIds: result.chunkMessageIds,
+            chunkClientMessageIds: result.chunkClientMessageIds,
+          }
+        : undefined,
     );
   } else {
     store.updateMessageStatus(
@@ -1933,6 +2092,7 @@ async function handleLocalRetry(
     clientMessageId: result.clientMessageId,
     attachmentMessageIds: result.attachmentMessageIds,
     error: result.error,
+    ...(result.errorCode ? { errorCode: result.errorCode, retryAfterMs: result.retryAfterMs } : {}),
   }, req);
 }
 

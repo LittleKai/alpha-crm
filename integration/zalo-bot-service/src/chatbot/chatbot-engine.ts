@@ -1,3 +1,6 @@
+// Adapted from https://github.com/luonghaianh1208/2anh-zalo-bot@9ab55105c83487588e66b55f0ef66894224250a7 (MIT License)
+
+import { performance } from 'node:perf_hooks';
 import { normalizeVietnamese } from './chatbot-text.js';
 
 export type ChatbotConversationMode =
@@ -115,6 +118,88 @@ export type ChatbotDecision =
 function toTokenCount(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
+
+export type FloodVerdict = 'ok' | 'just_muted' | 'muted';
+
+export interface FloodGuardOptions {
+  threshold?: number;
+  windowSeconds?: number;
+  muteSeconds?: number;
+  now?: () => number;
+}
+
+export class FloodGuard {
+  private readonly buckets = new Map<string, number[]>();
+  private readonly mutedUntil = new Map<string, number>();
+  private readonly threshold: number;
+  private readonly windowSeconds: number;
+  private readonly muteSeconds: number;
+  private readonly nowFn: () => number;
+
+  constructor(
+    thresholdOrOpts: number | FloodGuardOptions = 6,
+    windowSeconds = 15,
+    muteSeconds = 90,
+  ) {
+    if (typeof thresholdOrOpts === 'object' && thresholdOrOpts !== null) {
+      this.threshold = thresholdOrOpts.threshold ?? 6;
+      this.windowSeconds = thresholdOrOpts.windowSeconds ?? 15;
+      this.muteSeconds = thresholdOrOpts.muteSeconds ?? 90;
+      this.nowFn = thresholdOrOpts.now ?? (() => performance.now());
+    } else {
+      this.threshold = thresholdOrOpts;
+      this.windowSeconds = windowSeconds;
+      this.muteSeconds = muteSeconds;
+      this.nowFn = () => performance.now();
+    }
+  }
+
+  check(senderKey: string, nowMs: number = this.nowFn()): FloodVerdict {
+    if (!senderKey) return 'ok';
+    const nowSec = nowMs / 1000;
+    const muteDeadline = this.mutedUntil.get(senderKey);
+    if (muteDeadline !== undefined) {
+      if (nowSec < muteDeadline) return 'muted';
+      this.mutedUntil.delete(senderKey);
+    }
+    const cutoff = nowSec - this.windowSeconds;
+    const hits = (this.buckets.get(senderKey) ?? []).filter((ts) => ts > cutoff);
+    hits.push(nowSec);
+    if (hits.length > this.threshold) {
+      this.mutedUntil.set(senderKey, nowSec + this.muteSeconds);
+      this.buckets.delete(senderKey);
+      return 'just_muted';
+    }
+    this.buckets.set(senderKey, hits);
+    if (this.buckets.size + this.mutedUntil.size >= 256) {
+      this.prune(nowMs);
+    }
+    return 'ok';
+  }
+
+  reset(senderKey?: string): void {
+    if (senderKey) {
+      this.buckets.delete(senderKey);
+      this.mutedUntil.delete(senderKey);
+    } else {
+      this.buckets.clear();
+      this.mutedUntil.clear();
+    }
+  }
+
+  prune(nowMs: number = this.nowFn()): void {
+    const nowSec = nowMs / 1000;
+    const cutoff = nowSec - this.windowSeconds;
+    for (const [k, exp] of this.mutedUntil.entries()) {
+      if (exp <= nowSec) this.mutedUntil.delete(k);
+    }
+    for (const [k, hits] of this.buckets.entries()) {
+      const kept = hits.filter((ts) => ts > cutoff);
+      if (kept.length === 0) this.buckets.delete(k);
+      else this.buckets.set(k, kept);
+    }
+  }
 }
 
 export class LocalChatbotEngine {

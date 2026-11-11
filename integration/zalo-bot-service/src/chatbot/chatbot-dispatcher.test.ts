@@ -309,3 +309,32 @@ test('send failure does not persist a successful outbound, enters handoff, audit
     false,
   );
 });
+
+test('rate-limited send failure records rate_limited audit without entering permanent human handoff', async () => {
+  const fixture = createDependencies({
+    sendMessage: async () => ({
+      success: false,
+      error: 'Zalo đang bận (3s) / Zalo rate limit busy (3s)',
+      errorCode: 'RATE_LIMITED',
+      retryAfterMs: 3000,
+    }),
+  });
+  const dispatcher = new ChatbotDispatcher(fixture.dependencies);
+
+  const result = await dispatcher.dispatch({
+    accountId: 'account-1',
+    threadId: 'user-1',
+    threadType: 'user',
+    conversationKey: 'account-1:user-1',
+    decision: {
+      kind: 'reply',
+      mode: 'ai',
+      text: 'AI reply',
+      sourceMessageIds: ['source-1'],
+    },
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(fixture.calls.includes('state:handoff'), false);
+  assert.equal(fixture.audits[0]?.reason, 'rate_limited');
+});

@@ -366,6 +366,15 @@ class LiveChatRepository {
     return CrmCloudApi.post('/crm/conversations/$conversationId/read', {});
   }
 
+  Future<Map<String, dynamic>> getConversationMembers(
+    String conversationId,
+  ) async {
+    if (!_preferLocalZaloActions && !localFirstEnabled) {
+      return _kNotSupportedRemote;
+    }
+    return localApi.getLocalConversationMembers(conversationId);
+  }
+
   Stream<LiveChatEvent> watchEvents({String? accountId, String? threadId}) {
     if (mode == LiveChatTransportMode.cloudRemote) {
       final client = sseClient;

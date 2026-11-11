@@ -115,6 +115,9 @@ async function reportInterruptedCampaigns(
           successCount: record.successCount,
           failedCount: record.failedCount,
           cancelledCount: record.cancelledCount,
+          ...(record.unknownCount ? { unknownCount: record.unknownCount } : {}),
+          ...(record.inFlightRecipient ? { inFlightRecipient: record.inFlightRecipient } : {}),
+          ...(record.abortedReason ? { abortedReason: record.abortedReason } : {}),
         },
         `Chiến dịch bị gián đoạn do backend dừng đột ngột (đã xử lý ${record.processed}/${record.total}). Không tự gửi tiếp để tránh gửi trùng.`,
       );
@@ -359,6 +362,11 @@ async function handleInboundMessageEvent(
       // providerMessageId dedupe and could double the message.
       let alreadyReportedAtSendTime = false;
       try {
+        const chunkAliasId = localStore.findMessageIdByChunkAlias(
+          event.accountId,
+          event.providerMessageId,
+          event.clientMessageId,
+        );
         const existingProviderMessage = event.providerMessageId
           ? localStore.db
               .prepare(
@@ -368,14 +376,14 @@ async function handleInboundMessageEvent(
               .get(event.accountId, event.providerMessageId)
           : undefined;
         const reconciledId =
-          event.senderId === event.accountId && event.clientMessageId
+          (event.senderId === event.accountId && event.clientMessageId
             ? localStore.reconcileOutboundMessage({
                 accountId: event.accountId,
                 clientMessageId: event.clientMessageId,
                 providerMessageId: event.providerMessageId,
                 status: 'sent',
               })
-            : undefined;
+            : undefined) || chunkAliasId;
         const programmaticSend =
           event.senderId === event.accountId &&
           isRecentProgrammaticSend(event.accountId, event.threadId, event.providerMessageId, event.clientMessageId);

@@ -5,11 +5,12 @@ import {
   ConversationDebouncer,
   type DebounceScheduler,
 } from './chatbot-debounce.js';
-import type {
-  ChatbotDecision,
-  ChatbotEvaluationInput,
-  ChatbotRule as EngineChatbotRule,
-  ChatbotSettings as EngineChatbotSettings,
+import {
+  FloodGuard,
+  type ChatbotDecision,
+  type ChatbotEvaluationInput,
+  type ChatbotRule as EngineChatbotRule,
+  type ChatbotSettings as EngineChatbotSettings,
 } from './chatbot-engine.js';
 import type { ChatbotDispatchResult } from './chatbot-dispatcher.js';
 import { isChatbotPaused } from './chatbot-store.js';
@@ -30,6 +31,7 @@ interface BufferedInbound {
 
 export interface ChatbotRuntimeDependencies {
   scheduler?: DebounceScheduler;
+  floodGuard?: FloodGuard;
   getConfigSnapshot(): ChatbotConfigSnapshot | undefined;
   getEffectiveConversationState(
     conversationKey: string,
@@ -62,9 +64,11 @@ export interface ChatbotRuntimeDependencies {
 
 export class LocalChatbotRuntime {
   private readonly debouncer: ConversationDebouncer<BufferedInbound>;
+  private readonly floodGuard: FloodGuard;
   private running = false;
 
   constructor(private readonly dependencies: ChatbotRuntimeDependencies) {
+    this.floodGuard = dependencies.floodGuard ?? new FloodGuard();
     this.debouncer = new ConversationDebouncer({
       delayMs: () => resolveDebounceMs(
         dependencies.getConfigSnapshot()?.settings.debounceSeconds,
@@ -134,6 +138,25 @@ export class LocalChatbotRuntime {
         `[chatbot-flow] runtime skip pmid=${event.providerMessageId}: already processed`,
       );
       return;
+    }
+    // Pre-debouncer anti-flood guard for group threads (ported from 2anh-zalo-bot flood.py):
+    // 1:1 user DMs are coalesced by ConversationDebouncer so multi-line customer bursts
+    // retain full context, whereas a group member sending >6 messages in 15s is muted for 90s.
+    if (event.threadType === 'group') {
+      const senderKey = `${event.accountId}:${event.senderId}`;
+      const floodVerdict = this.floodGuard.check(senderKey);
+      if (floodVerdict !== 'ok') {
+        if (floodVerdict === 'just_muted') {
+          console.warn(
+            `[chatbot-flow] flood-guard muted sender=${senderKey} pmid=${event.providerMessageId} for 90s`,
+          );
+        } else {
+          console.log(
+            `[chatbot-flow] runtime skip pmid=${event.providerMessageId}: sender flood-muted (${senderKey})`,
+          );
+        }
+        return;
+      }
     }
     console.log(
       `[chatbot-flow] debounce push key=${conversationKey} pmid=${event.providerMessageId} ` +

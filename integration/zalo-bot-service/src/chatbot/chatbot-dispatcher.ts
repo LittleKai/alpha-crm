@@ -35,6 +35,10 @@ export interface ChatbotDispatcherDependencies {
     providerMessageId?: string,
     errorText?: string,
     clientMessageId?: string,
+    chunkAliases?: {
+      chunkMessageIds?: string[];
+      chunkClientMessageIds?: string[];
+    },
   ): void;
   publish(event: LocalChatEventInput): void;
   setConversationState(
@@ -223,12 +227,14 @@ export class ChatbotDispatcher {
             messageId: localMessageId,
             clientMessageId,
             error: errorText,
+            ...(sendResult.errorCode ? { errorCode: sendResult.errorCode } : {}),
             status: 'failed',
           },
         });
         return this.handleSendFailure(
           input,
           new Error(errorText),
+          sendResult.errorCode,
         );
       }
 
@@ -238,8 +244,14 @@ export class ChatbotDispatcher {
         localMessageId,
         'sent',
         providerMessageId || undefined,
-        '',
+        sendResult.error || '',
         finalClientMessageId,
+        sendResult.chunkMessageIds || sendResult.chunkClientMessageIds
+          ? {
+              chunkMessageIds: sendResult.chunkMessageIds,
+              chunkClientMessageIds: sendResult.chunkClientMessageIds,
+            }
+          : undefined,
       );
       this.dependencies.publish({
         type: 'message.updated',
@@ -408,8 +420,14 @@ export class ChatbotDispatcher {
         localMessageId,
         'sent',
         providerMessageId || undefined,
-        '',
+        sendResult.error || '',
         finalClientMessageId,
+        sendResult.chunkMessageIds || sendResult.chunkClientMessageIds
+          ? {
+              chunkMessageIds: sendResult.chunkMessageIds,
+              chunkClientMessageIds: sendResult.chunkClientMessageIds,
+            }
+          : undefined,
       );
       this.dependencies.publish({
         type: 'message.updated',
@@ -465,8 +483,16 @@ export class ChatbotDispatcher {
   private async handleSendFailure(
     input: ChatbotDispatchInput,
     error: unknown,
+    errorCode?: string,
   ): Promise<ChatbotDispatchResult> {
     const message = error instanceof Error ? error.message : String(error);
+    if (errorCode === 'RATE_LIMITED') {
+      await this.recordAudit(input, 'failed', {
+        reason: 'rate_limited',
+        error: message,
+      });
+      return { status: 'failed', error: message };
+    }
     this.enterHandoff(input.conversationKey, 'send_failed');
     await this.recordAudit(input, 'failed', {
       reason: 'send_failed',

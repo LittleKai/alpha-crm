@@ -142,6 +142,10 @@ export function configureLocalChatMediaCache(
   _mediaWorker?.configure(maxGb, maxAgeDays);
 }
 
+export function setLocalChatStoreForTest(store: LocalChatStore | null): void {
+  _store = store;
+}
+
 /**
  * Close the store (for graceful shutdown).
  */

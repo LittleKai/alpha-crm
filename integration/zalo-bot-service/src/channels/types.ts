@@ -45,8 +45,14 @@ export interface ZaloSendMessageResult {
   messageId?: string;
   /** Zalo client message id (cliMsgId/clientId) required by undo/reaction APIs */
   clientMessageId?: string;
+  /** Provider message IDs for all text chunks when a long/styled message is split */
+  chunkMessageIds?: string[];
+  /** Client message IDs for all text chunks when a long/styled message is split */
+  chunkClientMessageIds?: string[];
   attachmentMessageIds?: string[];
   error?: string;
+  errorCode?: 'RATE_LIMITED';
+  retryAfterMs?: number;
 }
 
 export interface ZaloRecallMessageRequest {
@@ -206,7 +212,7 @@ export interface ZaloChannel {
   updateAccountSettings?(accountId: string, settings: Record<string, unknown>): Promise<boolean>;
   deleteAccount?(accountId: string): Promise<boolean>;
   getAllFriends?(accountId?: string): Promise<ZaloFriend[]>;
-  getGroupMembers?(groupId: string): Promise<ZaloGroupMember[]>;
+  getGroupMembers?(groupId: string, accountId?: string): Promise<ZaloGroupMember[]>;
   getGroupLinkMembers?(link: string): Promise<{ groupId: string; groupName: string; totalMember: number; members: ZaloGroupMember[]; avatar?: string }>;
   createGroup?(name: string, members: string[], accountId?: string): Promise<{ success: boolean; groupId?: string; error?: string }>;
   joinGroup?(link: string, accountId?: string): Promise<{ success: boolean; error?: string }>;

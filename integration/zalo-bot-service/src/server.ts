@@ -1651,8 +1651,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         return;
       }
 
-      console.log(`[server] Fetching members for group ${groupId}`);
-      const members = await getGroupMembers(groupId);
+      const accountId = typeof payload.accountId === 'string' && payload.accountId.trim() ? payload.accountId.trim() : undefined;
+      console.log(`[server] Fetching members for group ${groupId}${accountId ? ` (account: ${accountId})` : ''}`);
+      const members = await getGroupMembers(groupId, accountId);
       json(res, 200, { success: true, members });
     } catch (err) {
       json(res, 500, { success: false, error: err instanceof Error ? err.message : String(err) });

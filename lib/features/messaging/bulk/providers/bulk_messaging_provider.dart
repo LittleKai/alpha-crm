@@ -114,7 +114,10 @@ class BulkMessagingState {
   final int successCount;
   final int failureCount;
   final int cancelledCount;
+  final int unknownCount;
   final int totalCount;
+  final String? inFlightRecipient;
+  final String? abortedReason;
   final String? complianceError;
   final String? complianceWarning;
   final String? activeCampaignId;
@@ -144,7 +147,10 @@ class BulkMessagingState {
     required this.successCount,
     required this.failureCount,
     required this.cancelledCount,
+    this.unknownCount = 0,
     required this.totalCount,
+    this.inFlightRecipient,
+    this.abortedReason,
     this.complianceError,
     this.complianceWarning,
     this.activeCampaignId,
@@ -170,6 +176,7 @@ class BulkMessagingState {
       successCount: 0,
       failureCount: 0,
       cancelledCount: 0,
+      unknownCount: 0,
       totalCount: 0,
     );
   }
@@ -199,7 +206,12 @@ class BulkMessagingState {
     int? successCount,
     int? failureCount,
     int? cancelledCount,
+    int? unknownCount,
     int? totalCount,
+    String? inFlightRecipient,
+    bool clearInFlightRecipient = false,
+    String? abortedReason,
+    bool clearAbortedReason = false,
     String? complianceError,
     String? complianceWarning,
     bool clearComplianceError = false,
@@ -228,7 +240,14 @@ class BulkMessagingState {
       successCount: successCount ?? this.successCount,
       failureCount: failureCount ?? this.failureCount,
       cancelledCount: cancelledCount ?? this.cancelledCount,
+      unknownCount: unknownCount ?? this.unknownCount,
       totalCount: totalCount ?? this.totalCount,
+      inFlightRecipient: clearInFlightRecipient
+          ? null
+          : (inFlightRecipient ?? this.inFlightRecipient),
+      abortedReason: clearAbortedReason
+          ? null
+          : (abortedReason ?? this.abortedReason),
       complianceError: clearComplianceError
           ? null
           : (complianceError ?? this.complianceError),
@@ -549,7 +568,10 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       successCount: 0,
       failureCount: 0,
       cancelledCount: 0,
+      unknownCount: 0,
       totalCount: 0,
+      clearInFlightRecipient: true,
+      clearAbortedReason: true,
     );
   }
 
@@ -618,7 +640,10 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
       successCount: 0,
       failureCount: 0,
       cancelledCount: 0,
+      unknownCount: 0,
       totalCount: recipients.length,
+      clearInFlightRecipient: true,
+      clearAbortedReason: true,
       clearComplianceError: true,
       logs: [
         LogItem(
@@ -689,77 +714,154 @@ class BulkMessagingNotifier extends StateNotifier<BulkMessagingState> {
     }
   }
 
+  bool applyCampaignPollSnapshot(
+    Map<String, dynamic> data, {
+    Map<String, dynamic>? localInFlight,
+  }) {
+    final statusCounts = data['statusCounts'] is Map
+        ? Map<String, dynamic>.from(data['statusCounts'] as Map)
+        : <String, dynamic>{};
+    final campaignMap = data['campaign'] is Map
+        ? Map<String, dynamic>.from(data['campaign'] as Map)
+        : <String, dynamic>{};
+    final commandResultMap = data['commandResult'] is Map
+        ? Map<String, dynamic>.from(data['commandResult'] as Map)
+        : <String, dynamic>{};
+    final campaignStatus = campaignMap['status']?.toString() ?? 'running';
+    final commandStatus = data['commandStatus']?.toString();
+    final commandError = data['commandError']?.toString();
+
+    final unknownRaw =
+        statusCounts['unknown'] ??
+        data['unknownCount'] ??
+        commandResultMap['unknownCount'] ??
+        localInFlight?['unknownCount'] ??
+        state.unknownCount;
+    final unknownCount = unknownRaw is int
+        ? unknownRaw
+        : int.tryParse(unknownRaw.toString()) ?? 0;
+
+    final success =
+        (statusCounts['success'] ?? localInFlight?['successCount'] ?? 0) as int;
+    final failed =
+        (statusCounts['failed'] ?? localInFlight?['failedCount'] ?? 0) as int;
+    final rawCancelled = (statusCounts['cancelled'] ?? 0) as int;
+    final hasExplicitUnknownBucket = statusCounts.containsKey('unknown');
+    final cancelled = (!hasExplicitUnknownBucket &&
+            unknownCount > 0 &&
+            rawCancelled >= unknownCount)
+        ? rawCancelled - unknownCount
+        : rawCancelled;
+
+    String? abortedReason =
+        (data['abortedReason'] ??
+                commandResultMap['abortedReason'] ??
+                localInFlight?['abortedReason'])
+            ?.toString();
+    if ((abortedReason == null || abortedReason.isEmpty) &&
+        commandError != null &&
+        commandError.contains('aborted_fail_streak')) {
+      abortedReason = 'aborted_fail_streak';
+    }
+
+    String? inFlightRecipient;
+    final rawInFlight =
+        data['inFlightRecipient'] ?? localInFlight?['inFlightRecipient'];
+    if (rawInFlight is Map) {
+      inFlightRecipient = rawInFlight['recipientId']?.toString();
+    } else if (rawInFlight is String && rawInFlight.trim().isNotEmpty) {
+      inFlightRecipient = rawInFlight.trim();
+    }
+
+    String? displayError;
+    if (abortedReason == 'aborted_fail_streak') {
+      displayError = ZaloIntegrationApi.translateToVietnamese(
+        'aborted_fail_streak',
+      );
+    } else if (commandStatus == 'failed' &&
+        commandError != null &&
+        commandError.isNotEmpty) {
+      displayError = ZaloIntegrationApi.translateToVietnamese(commandError);
+    }
+
+    final isFinished =
+        campaignStatus == 'completed' ||
+        campaignStatus == 'cancelled' ||
+        commandStatus == 'failed' ||
+        commandStatus == 'succeeded';
+
+    state = state.copyWith(
+      successCount: success,
+      failureCount: failed,
+      cancelledCount: cancelled,
+      unknownCount: unknownCount,
+      inFlightRecipient: inFlightRecipient,
+      clearInFlightRecipient: isFinished || inFlightRecipient == null,
+      abortedReason: abortedReason,
+      clearAbortedReason: abortedReason == null || abortedReason.isEmpty,
+      complianceError: displayError,
+    );
+
+    if (isFinished) {
+      final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
+      final displayErrorText = displayError ?? 'Lỗi không rõ';
+      String statusText = campaignStatus;
+      if (campaignStatus == 'completed') statusText = 'hoàn thành';
+      if (campaignStatus == 'cancelled') statusText = 'bị hủy';
+      final unknownSuffix = unknownCount > 0 ? ', Không rõ: $unknownCount' : '';
+
+      state = state.copyWith(
+        isSending: false,
+        isPolling: false,
+        activeCampaignId: null,
+        clearInFlightRecipient: true,
+        complianceError: displayError,
+        logs: [
+          ...state.logs,
+          if ((commandStatus == 'failed' ||
+                  abortedReason == 'aborted_fail_streak') &&
+              displayError != null)
+            LogItem(
+              timestamp: nowTimeStr,
+              message:
+                  '[Hệ thống] Chiến dịch tạm dừng/thất bại: $displayErrorText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled$unknownSuffix',
+              type: LogType.error,
+            )
+          else
+            LogItem(
+              timestamp: nowTimeStr,
+              message:
+                  '[Hệ thống] Chiến dịch $statusText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled$unknownSuffix',
+              type: campaignStatus == 'completed'
+                  ? LogType.success
+                  : LogType.warning,
+            ),
+        ],
+      );
+    }
+    return isFinished;
+  }
+
   void _startPolling(String campaignId) {
     _pollingTimer?.cancel();
     state = state.copyWith(isPolling: true);
 
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       try {
+        final bridgeBaseUrl =
+            _ref.read(settingsProvider).settings.zaloBackendBaseUrl;
+        final localInFlight = await _repository.getLocalInFlightCampaign(
+          campaignId,
+          bridgeBaseUrl: bridgeBaseUrl,
+        );
         final resp = await _repository.getCampaignStatus(campaignId);
-        if (resp['success']) {
-          final data = resp['data'];
-          final statusCounts = data['statusCounts'] ?? {};
-          final campaignStatus = data['campaign']['status'];
-          final commandStatus = data['commandStatus']?.toString();
-          final commandError = data['commandError']?.toString();
-
-          final success = statusCounts['success'] ?? 0;
-          final failed = statusCounts['failed'] ?? 0;
-          final cancelled = statusCounts['cancelled'] ?? 0;
-
-          String? displayError;
-          if (commandStatus == 'failed' &&
-              commandError != null &&
-              commandError.isNotEmpty) {
-            displayError = ZaloIntegrationApi.translateToVietnamese(
-              commandError,
-            );
-          }
-
-          state = state.copyWith(
-            successCount: success,
-            failureCount: failed,
-            cancelledCount: cancelled,
-            complianceError: displayError,
+        if (resp['success'] == true && resp['data'] is Map) {
+          final done = applyCampaignPollSnapshot(
+            Map<String, dynamic>.from(resp['data'] as Map),
+            localInFlight: localInFlight,
           );
-
-          // If campaign is done or cancelled or command failed
-          if (campaignStatus == 'completed' ||
-              campaignStatus == 'cancelled' ||
-              commandStatus == 'failed') {
+          if (done) {
             timer.cancel();
-
-            final nowTimeStr = DateFormat('HH:mm:ss').format(DateTime.now());
-            final displayErrorText = displayError ?? 'Lỗi không rõ';
-            String statusText = campaignStatus;
-            if (campaignStatus == 'completed') statusText = 'hoàn thành';
-            if (campaignStatus == 'cancelled') statusText = 'bị hủy';
-
-            state = state.copyWith(
-              isSending: false,
-              isPolling: false,
-              activeCampaignId: null,
-              complianceError: displayError,
-              logs: [
-                ...state.logs,
-                if (commandStatus == 'failed' && displayError != null)
-                  LogItem(
-                    timestamp: nowTimeStr,
-                    message:
-                        '[Hệ thống] Chiến dịch thất bại: $displayErrorText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
-                    type: LogType.error,
-                  )
-                else
-                  LogItem(
-                    timestamp: nowTimeStr,
-                    message:
-                        '[Hệ thống] Chiến dịch $statusText. Thành công: $success, Thất bại: $failed, Đã hủy: $cancelled',
-                    type: campaignStatus == 'completed'
-                        ? LogType.success
-                        : LogType.warning,
-                  ),
-              ],
-            );
           }
         }
       } catch (e) {

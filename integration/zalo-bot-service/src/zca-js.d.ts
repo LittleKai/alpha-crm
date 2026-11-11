@@ -157,6 +157,7 @@ declare module 'zca-js' {
     findUser(phoneNumber: string): Promise<any>;
     sendFriendRequest(message: string, userId: string): Promise<any>;
     getUserInfo(userId: string | string[], avatarSize?: any): Promise<any>;
+    getStickersDetail(stickerIds: number | number[]): Promise<any>;
   }
 
   export enum LoginQRCallbackEventType {

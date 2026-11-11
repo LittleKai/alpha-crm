@@ -238,11 +238,80 @@ function personalizeMessage(template: string, recipient: any): string {
   return text;
 }
 
+export const CAMPAIGN_SEND_TIMEOUT_MS = 5 * 60 * 1000;
+export const CAMPAIGN_MAX_FAIL_STREAK = 5;
+
+function withSendTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): { promise: Promise<T>; isDead: () => boolean } {
+  let dead = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const wrapped = new Promise<T>((resolve, reject) => {
+    timer = setTimeout(() => {
+      dead = true;
+      const err: Error & { code?: string } = new Error(
+        `Timed out after ${timeoutMs}ms: ${label}`,
+      );
+      err.code = 'SEND_TIMEOUT';
+      reject(err);
+    }, timeoutMs);
+    promise.then(
+      (val) => {
+        if (timer) clearTimeout(timer);
+        if (!dead) resolve(val);
+      },
+      (err) => {
+        if (timer) clearTimeout(timer);
+        if (!dead) reject(err);
+      },
+    );
+  });
+  return { promise: wrapped, isDead: () => dead };
+}
+
+export function withSendTimeoutForTest<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): { promise: Promise<T>; isDead: () => boolean } {
+  return withSendTimeout(promise, timeoutMs, label);
+}
+
+export interface CampaignExecutorDeps {
+  sendMessage?: typeof sendMessage;
+  evaluateCompliance?: (input: any) => { allowed: boolean; reason?: string };
+  reportCommandProgress?: (
+    deviceId: string,
+    agentSecret: string,
+    commandId: string,
+    progress: any,
+  ) => Promise<void>;
+  reportCommandResult?: (
+    deviceId: string,
+    agentSecret: string,
+    commandId: string,
+    success: boolean,
+    result?: any,
+    error?: string,
+  ) => Promise<void>;
+  progressDir?: string;
+  sendTimeoutMs?: number;
+  maxFailStreak?: number;
+  sleepMs?: (ms: number) => Promise<void>;
+}
+
 /**
  * Runs a campaign execution loop asynchronously in the background.
  * Reports the final outcome of all sends back to the Cloud Backend when finished.
  */
-async function runCampaignInBackground(command: Command, deviceId: string, agentSecret: string): Promise<void> {
+async function runCampaignInBackground(
+  command: Command,
+  deviceId: string,
+  agentSecret: string,
+  deps?: CampaignExecutorDeps,
+): Promise<void> {
   const { payload } = command;
   const campaignId = payload.campaignId;
   const recipients = payload.recipients || [];
@@ -259,6 +328,12 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   const actionType = payload.channel === 'email' ? 'bulk_message_by_phone' : 'bulk_message_to_friends';
   const minDelaySeconds = Math.max(1, Number(payload.rateLimit?.minDelaySeconds) || 3);
   const maxDelaySeconds = Math.max(minDelaySeconds, Number(payload.rateLimit?.maxDelaySeconds) || minDelaySeconds);
+  const sendFn = deps?.sendMessage ?? sendMessage;
+  const progressDir = deps?.progressDir;
+  const sendTimeoutMs = deps?.sendTimeoutMs ?? CAMPAIGN_SEND_TIMEOUT_MS;
+  const maxFailStreak = deps?.maxFailStreak ?? CAMPAIGN_MAX_FAIL_STREAK;
+  const sleepFn =
+    deps?.sleepMs ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
   // Map to stable target list of { phone, name, customerId }
   const targetList = recipients.length > 0 
@@ -267,7 +342,8 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
 
   // Run local compliance guard for safety (fail-closed)
   try {
-    const { evaluateCompliance } = await import('../compliance.js');
+    const evaluateCompliance =
+      deps?.evaluateCompliance ?? (await import('../compliance.js')).evaluateCompliance;
     const decision = evaluateCompliance({
       actionType: actionType as any,
       targetCount: targetList.length,
@@ -278,7 +354,8 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
 
     if (!decision.allowed) {
       console.log(`[command-executor] [Background] Chiến dịch ${campaignId} bị chặn bởi compliance: ${decision.reason}`);
-      const { reportCommandResult } = await import('./cloud-api.js');
+      const reportCommandResult =
+        deps?.reportCommandResult ?? (await import('./cloud-api.js')).reportCommandResult;
       await reportCommandResult(deviceId, agentSecret, command._id, false, null, decision.reason);
       return;
     }
@@ -290,7 +367,19 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   cancelledCampaigns.delete(campaignId);
   // Ghi xuống đĩa TRƯỚC lần gửi đầu tiên: nếu tiến trình chết giữa chừng, bản
   // ghi này là thứ duy nhất cho biết chiến dịch từng chạy và dừng ở đâu.
-  beginCampaign({ campaignId, commandId: command._id, total: targetList.length });
+  if (!beginCampaign({ campaignId, commandId: command._id, total: targetList.length }, progressDir)) {
+    runningCampaigns.delete(campaignId);
+    const reason = 'Không khởi tạo được file tiến độ chiến dịch trên đĩa (huỷ chiến dịch để tránh gửi trùng).';
+    console.error(`[command-executor] [Background] ${reason}`);
+    try {
+      const reportCommandResult =
+        deps?.reportCommandResult ?? (await import('./cloud-api.js')).reportCommandResult;
+      await reportCommandResult(deviceId, agentSecret, command._id, false, null, reason);
+    } catch (err: any) {
+      console.error('[command-executor] Failed to report beginCampaign failure:', err.message);
+    }
+    return;
+  }
 
   console.log(`[command-executor] [Background] Bắt đầu chạy chiến dịch ${campaignId} với ${targetList.length} khách hàng...`);
 
@@ -299,6 +388,9 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   let successCount = 0;
   let failedCount = 0;
   let cancelledCount = 0;
+  let unknownCount = 0;
+  let failStreak = 0;
+  let abortedReason: string | undefined;
 
   for (let i = 0; i < targetList.length; i++) {
     const recipient = targetList[i];
@@ -319,62 +411,176 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
       continue;
     }
 
-    try {
-      console.log(`[command-executor] [Background] [Campaign ${campaignId}] Gửi tin tới ${recipient.name} (${recipientId}) [${i + 1}/${targetList.length}]...`);
-      
-      // Personalize placeholders ({{tên}}/{{sdt}}/{{nhóm}}/{{name}}) and resolve
-      // spintax ({A|B|C}) per recipient.
-      const personalizedText = personalizeMessage(templateText, recipient);
+    // Ghi nhận người nhận đang gửi TRƯỚC khi gọi sendMessage để nếu crash giữa
+    // lúc gửi thì lần khởi động lại biết chính xác người nào đang in-flight.
+    const checkpointOk = updateCampaign(
+      campaignId,
+      {
+        inFlightRecipient: {
+          index: i,
+          recipientId: String(recipientId),
+          startedAt: new Date().toISOString(),
+        },
+      },
+      progressDir,
+    );
 
-      const sendResult = await sendMessage({
-        accountId,
-        recipientId,
-        message: personalizedText,
-        threadType: recipient.threadType || 'user',
-        messageType: attachments.length > 0 ? 'file' : 'text',
-        ...(attachments.length > 0 ? { attachments } : {}),
-      }, payload.isTestMode || false);
-
-      latestResult = {
-        customerId: recipient.customerId,
-        phone: recipient.phone,
-        status: sendResult.success ? 'succeeded' : 'failed',
-        messageId: sendResult.messageId,
-        error: sendResult.error
-      };
-      results.push(latestResult);
-
-      if (sendResult.success) {
-        successCount++;
-      } else {
-        failedCount++;
-        anyFailed = true;
-      }
-    } catch (err: any) {
-      console.error(`[command-executor] [Background] Gửi tin tới ${recipientId} thất bại:`, err.message);
+    if (!checkpointOk) {
       latestResult = {
         customerId: recipient.customerId,
         phone: recipient.phone,
         status: 'failed',
-        error: err.message
+        error: 'Không ghi được checkpoint tiến độ trước khi gửi.',
       };
       results.push(latestResult);
       failedCount++;
+      failStreak++;
       anyFailed = true;
+    } else {
+      try {
+        console.log(`[command-executor] [Background] [Campaign ${campaignId}] Gửi tin tới ${recipient.name} (${recipientId}) [${i + 1}/${targetList.length}]...`);
+
+        // Personalize placeholders ({{tên}}/{{sdt}}/{{nhóm}}/{{name}}) and resolve
+        // spintax ({A|B|C}) per recipient.
+        const personalizedText = personalizeMessage(templateText, recipient);
+        const invokeSend = () =>
+          sendFn(
+            {
+              accountId,
+              recipientId,
+              message: personalizedText,
+              threadType: recipient.threadType || 'user',
+              messageType: attachments.length > 0 ? 'file' : 'text',
+              ...(attachments.length > 0 ? { attachments } : {}),
+              metadata: { source: 'campaign', campaignId },
+            },
+            payload.isTestMode || false,
+          );
+
+        // Note: a timed-out zca-js send promise cannot be cancelled mid-flight and may
+        // still deliver later; we record status: 'unknown' so it is never treated as a clean failure.
+        let { promise: sendPromise } = withSendTimeout(
+          invokeSend(),
+          sendTimeoutMs,
+          `campaign=${campaignId} recipient=${recipientId}`,
+        );
+        let sendResult = await sendPromise;
+
+        if (!sendResult.success && sendResult.errorCode === 'RATE_LIMITED') {
+          const waitMs = Math.min(Math.max(50, sendResult.retryAfterMs ?? 3000), 20_000);
+          await sleepFn(waitMs);
+          ({ promise: sendPromise } = withSendTimeout(
+            invokeSend(),
+            sendTimeoutMs,
+            `campaign=${campaignId} recipient=${recipientId} retry=1`,
+          ));
+          sendResult = await sendPromise;
+        }
+
+        latestResult = {
+          customerId: recipient.customerId,
+          phone: recipient.phone,
+          status: sendResult.success ? 'succeeded' : 'failed',
+          messageId: sendResult.messageId,
+          error: sendResult.error
+        };
+        results.push(latestResult);
+
+        if (sendResult.success) {
+          successCount++;
+          failStreak = 0;
+        } else {
+          failedCount++;
+          failStreak++;
+          anyFailed = true;
+        }
+      } catch (err: any) {
+        const isTimeout = err?.code === 'SEND_TIMEOUT';
+        console.error(
+          `[command-executor] [Background] Gửi tin tới ${recipientId} ${isTimeout ? 'quá thời gian chờ' : 'thất bại'}:`,
+          err.message,
+        );
+        latestResult = {
+          customerId: recipient.customerId,
+          phone: recipient.phone,
+          status: isTimeout ? 'unknown' : 'failed',
+          error: err.message
+        };
+        results.push(latestResult);
+        if (isTimeout) {
+          unknownCount++;
+        } else {
+          failedCount++;
+        }
+        failStreak++;
+        anyFailed = true;
+      }
+    }
+
+    if (failStreak >= maxFailStreak && i < targetList.length - 1) {
+      abortedReason = 'aborted_fail_streak';
+      for (let j = i + 1; j < targetList.length; j++) {
+        const rem = targetList[j];
+        results.push({
+          customerId: rem.customerId,
+          phone: rem.phone,
+          status: 'cancelled',
+          message: 'Chiến dịch tự dừng do lỗi liên tiếp (circuit breaker).',
+        });
+        cancelledCount++;
+      }
+      updateCampaign(
+        campaignId,
+        {
+          processed: targetList.length,
+          successCount,
+          failedCount,
+          cancelledCount,
+          unknownCount,
+          inFlightRecipient: null,
+          abortedReason,
+        },
+        progressDir,
+      );
+      try {
+        const reportCommandProgress =
+          deps?.reportCommandProgress ?? (await import('./cloud-api.js')).reportCommandProgress;
+        await reportCommandProgress(deviceId, agentSecret, command._id, {
+          campaignId,
+          processed: targetList.length,
+          total: targetList.length,
+          successCount,
+          failedCount,
+          cancelledCount,
+          ...(unknownCount > 0 ? { unknownCount } : {}),
+          abortedReason,
+          latestResult,
+        });
+      } catch (err: any) {
+        console.error(`[command-executor] [Background] Lỗi báo cáo tiến độ:`, err.message);
+      }
+      break;
     }
 
     // Chốt tiến độ xuống đĩa trước khi báo lên cloud — các lần gửi cách nhau ít
     // nhất vài giây nên một lần ghi file nhỏ ở đây không đáng kể.
-    updateCampaign(campaignId, {
-      processed: i + 1,
-      successCount,
-      failedCount,
-      cancelledCount,
-    });
+    updateCampaign(
+      campaignId,
+      {
+        processed: i + 1,
+        successCount,
+        failedCount,
+        cancelledCount,
+        unknownCount,
+        inFlightRecipient: null,
+      },
+      progressDir,
+    );
 
     // Report intermediate progress
     try {
-      const { reportCommandProgress } = await import('./cloud-api.js');
+      const reportCommandProgress =
+        deps?.reportCommandProgress ?? (await import('./cloud-api.js')).reportCommandProgress;
       await reportCommandProgress(deviceId, agentSecret, command._id, {
         campaignId,
         processed: i + 1,
@@ -382,6 +588,7 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
         successCount,
         failedCount,
         cancelledCount,
+        ...(unknownCount > 0 ? { unknownCount } : {}),
         latestResult
       });
     } catch (err: any) {
@@ -391,7 +598,7 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
     // Delay between sends to comply with Zalo anti-spam limits (3 seconds)
     if (i < targetList.length - 1) {
       const delaySeconds = minDelaySeconds + Math.random() * (maxDelaySeconds - minDelaySeconds);
-      await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+      await sleepFn(delaySeconds * 1000);
     }
   }
 
@@ -401,23 +608,35 @@ async function runCampaignInBackground(command: Command, deviceId: string, agent
   // Vòng gửi đã chạy hết → bản ghi trên đĩa không còn là "dở dang" nữa. Xoá
   // trước khi báo cáo: nếu báo cáo lỗi mạng, lần boot sau cũng không được báo
   // lại thành "gián đoạn" cho một chiến dịch đã chạy xong.
-  finishCampaign(campaignId);
+  finishCampaign(campaignId, progressDir);
 
   // Report final detailed execution results back to the Cloud Backend crmAgentCommand result endpoint
   try {
     const finalResult = {
       campaignId,
       totalProcessed: targetList.length,
+      ...(unknownCount > 0 ? { unknownCount } : {}),
+      ...(abortedReason ? { abortedReason } : {}),
       results
     };
     
     const successState = !anyFailed && !wasCancelled;
 
     console.log(`[command-executor] [Background] Báo cáo kết quả chiến dịch ${campaignId} về Cloud...`);
-    const { reportCommandResult } = await import('./cloud-api.js');
+    const reportCommandResult =
+      deps?.reportCommandResult ?? (await import('./cloud-api.js')).reportCommandResult;
     await reportCommandResult(deviceId, agentSecret, command._id, successState, finalResult);
     console.log(`[command-executor] [Background] Hoàn thành báo cáo chiến dịch ${campaignId}.`);
   } catch (err: any) {
     console.error(`[command-executor] [Background] Thất bại khi gửi báo cáo kết quả về Cloud:`, err.message);
   }
+}
+
+export async function runCampaignInBackgroundForTest(
+  command: Command,
+  deviceId: string,
+  agentSecret: string,
+  deps?: CampaignExecutorDeps,
+): Promise<void> {
+  return runCampaignInBackground(command, deviceId, agentSecret, deps);
 }

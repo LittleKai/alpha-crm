@@ -131,6 +131,18 @@ class ZaloIntegrationApi {
     }
     if (t == 'Internal Server Error') return 'Lỗi máy chủ nội bộ';
 
+    if (t == 'aborted_fail_streak' || t.contains('aborted_fail_streak')) {
+      return 'Đã tự động tạm dừng chiến dịch do liên tiếp gửi lỗi/timeout để bảo vệ tài khoản Zalo.';
+    }
+    if (t == 'SEND_TIMEOUT' || t.contains('SEND_TIMEOUT')) {
+      return 'Quá thời gian phản hồi từ Zalo (không rõ trạng thái gửi — đã dừng gửi lại để tránh trùng tin).';
+    }
+    if (t == 'rate_limited' ||
+        t.contains('rate_limited') ||
+        t.contains('Zalo rate limit wait exceeded')) {
+      return 'Tài khoản Zalo đang chạm ngưỡng giới hạn tốc độ gửi. Vui lòng thử lại sau ít giây.';
+    }
+
     return text;
   }
 

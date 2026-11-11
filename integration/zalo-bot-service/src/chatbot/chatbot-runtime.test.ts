@@ -201,3 +201,45 @@ test('ignores history and self events and does not infer group triggers from amb
   assert.equal(fixture.evaluations[0]?.mentionsBot, false);
   assert.equal(fixture.evaluations[0]?.quotesBot, false);
 });
+
+test('FloodGuard in handlePersistedInbound mutes group sender on 7th message within 15s before debouncer push while leaving 1:1 user DMs unmuted', async () => {
+  const scheduler = new FakeScheduler();
+  const fixture = createDependencies(scheduler, () => snapshot('v1'));
+  const runtime = new LocalChatbotRuntime(fixture.dependencies);
+  runtime.start();
+
+  for (let i = 1; i <= 8; i++) {
+    runtime.handlePersistedInbound(
+      event({
+        providerMessageId: `pmid-${i}`,
+        senderId: 'flood-user-1',
+        content: `tin nhan ${i}`,
+      }),
+      { managedGroup: true },
+    );
+  }
+
+  // Only the first 6 group messages should have been pushed to the debouncer
+  assert.equal(scheduler.delays.length, 6);
+  await runtime.flushConversation('account-1:group-1');
+  assert.equal(fixture.evaluations.length, 1);
+  assert.equal(fixture.evaluations[0]?.messages.length, 6);
+
+  // 1:1 user DM with 8 rapid lines is not dropped by group FloodGuard
+  for (let i = 1; i <= 8; i++) {
+    runtime.handlePersistedInbound(
+      event({
+        threadId: 'dm-user-1',
+        threadType: 'user',
+        providerMessageId: `dm-pmid-${i}`,
+        senderId: 'dm-user-1',
+        content: `dong ${i}`,
+      }),
+    );
+  }
+  assert.equal(scheduler.delays.length, 6 + 8);
+  await runtime.flushConversation('account-1:dm-user-1');
+  assert.equal(fixture.evaluations.length, 2);
+  assert.equal(fixture.evaluations[1]?.messages.length, 8);
+  runtime.stop();
+});

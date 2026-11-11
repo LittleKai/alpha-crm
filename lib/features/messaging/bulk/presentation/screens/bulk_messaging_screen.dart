@@ -2039,6 +2039,7 @@ class _ConfigPanel extends StatelessWidget {
                       if (state.totalCount > 0 ||
                           state.successCount > 0 ||
                           state.failureCount > 0 ||
+                          state.unknownCount > 0 ||
                           state.logs.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.m),
                         Row(
@@ -2069,6 +2070,15 @@ class _ConfigPanel extends StatelessWidget {
                                 icon: Icons.cancel,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _MetricCard(
+                                title: 'Không rõ',
+                                value: '${state.unknownCount}',
+                                color: Colors.blueGrey,
+                                icon: Icons.help_outline,
+                              ),
+                            ),
                           ],
                         ),
                         if (state.totalCount > 0)
@@ -2076,10 +2086,22 @@ class _ConfigPanel extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 8.0),
                             child: LinearProgressIndicator(
                               value:
-                                  (state.successCount +
-                                      state.failureCount +
-                                      state.cancelledCount) /
-                                  state.totalCount,
+                                  ((state.successCount +
+                                          state.failureCount +
+                                          state.cancelledCount +
+                                          state.unknownCount) /
+                                      state.totalCount)
+                                  .clamp(0.0, 1.0),
+                            ),
+                          ),
+                        if (state.isSending &&
+                            state.inFlightRecipient != null &&
+                            state.inFlightRecipient!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6.0),
+                            child: Text(
+                              'Đang gửi tới: ${state.inFlightRecipient}',
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
                         if (state.logs.isNotEmpty) ...[

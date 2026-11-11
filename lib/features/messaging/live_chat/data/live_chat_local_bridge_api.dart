@@ -76,6 +76,23 @@ class LiveChatLocalBridgeApi {
     }
   }
 
+  Future<Map<String, dynamic>> getLocalConversationMembers(
+    String conversationId,
+  ) async {
+    final encodedId = Uri.encodeComponent(conversationId);
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/local/conversations/$encodedId/members'))
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      }
+      return {'success': false, 'data': const []};
+    } catch (_) {
+      return {'success': false, 'data': const []};
+    }
+  }
+
   Future<Map<String, dynamic>> sendLocalMessage(
     String conversationId,
     String content, {

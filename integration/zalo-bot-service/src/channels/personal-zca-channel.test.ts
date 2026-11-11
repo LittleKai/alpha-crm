@@ -20,6 +20,8 @@ import {
   RELOGIN_MAX_IN_WINDOW_FOR_TEST,
   setLoginPoolInitializedForTest,
   isRecentProgrammaticSend as isProgrammatic,
+  getGroupMentionDirectory,
+  clearGroupMentionCacheForTest,
 } from './personal-zca-channel.js';
 
 test('programmatic sends match their own echoes but not manual replies in the same thread', async (t) => {
@@ -467,4 +469,249 @@ test('reactMessage maps UI heart reaction to zca-js HEART reaction destination',
   assert.equal(normalizeZcaReactionForTest('❤️'), '/-heart');
   accountPool.clear();
   setLoginPoolInitializedForTest(false);
+});
+
+test('normalizeInboundMessage skips bogus attachments on link messages and excludes blurry thumb on share.file', () => {
+  const linkMsg = normalizeInboundMessageForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    {
+      type: ThreadType.User,
+      threadId: 'cust-1',
+      data: {
+        uidFrom: 'cust-1',
+        msgId: 'msg-link-1',
+        msgType: 'chat.recommended',
+        content: {
+          title: 'Trang chủ Zalo',
+          href: 'https://zalo.me',
+          thumb: 'https://photo-zadn.zdn.vn/thumb.jpg',
+        },
+      },
+    },
+  );
+  assert.equal(linkMsg?.messageType, 'link');
+  assert.deepEqual(linkMsg?.attachments, []);
+
+  const fileMsg = normalizeInboundMessageForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    {
+      type: ThreadType.User,
+      threadId: 'cust-1',
+      data: {
+        uidFrom: 'cust-1',
+        msgId: 'msg-file-1',
+        msgType: 'share.file',
+        content: {
+          title: 'hop-dong-2026.docx',
+          href: 'https://cdn.zalo.me/files/hop-dong-2026.docx?token=1',
+          thumb: 'https://photo-zadn.zdn.vn/blurry-preview.jpg',
+          params: JSON.stringify({ fileSize: 4096 }),
+        },
+      },
+    },
+  );
+  assert.equal(fileMsg?.messageType, 'file');
+  assert.equal(fileMsg?.attachments?.length, 1);
+  assert.equal(
+    fileMsg?.attachments?.[0]?.url,
+    'https://cdn.zalo.me/files/hop-dong-2026.docx?token=1',
+  );
+  assert.equal(
+    fileMsg?.attachments?.[0]?.mimeType,
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+  assert.equal(fileMsg?.attachments?.[0]?.metadata?.thumbnailUrl, undefined);
+
+  // Non-http(s) URL (e.g. zalo:// scheme) is rejected by extractAttachmentFromRecord
+  const nonHttpFile = normalizeInboundMessageForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    {
+      type: ThreadType.User,
+      threadId: 'cust-1',
+      data: {
+        uidFrom: 'cust-1',
+        msgId: 'msg-file-nonhttp',
+        msgType: 'share.file',
+        content: {
+          title: 'deeplink.docx',
+          href: 'zalo://open/file/123',
+        },
+      },
+    },
+  );
+  assert.deepEqual(nonHttpFile?.attachments, []);
+
+  // Sticker regression (A8/R10): normalizeInboundMessage skips generic file/image attachment
+  // extraction on chat.sticker so enrichStickerAttachment can populate the sticker attachment cleanly
+  const stickerMsg = normalizeInboundMessageForTest(
+    { uId: 'operator-1', label: 'Operator' },
+    {
+      type: ThreadType.User,
+      threadId: 'cust-1',
+      data: {
+        uidFrom: 'cust-1',
+        msgId: 'msg-sticker-1',
+        msgType: 'chat.sticker',
+        content: {
+          id: 9988,
+          catId: 101,
+          type: 7,
+        },
+      },
+    },
+  );
+  assert.equal(stickerMsg?.messageType, 'sticker');
+  assert.deepEqual(stickerMsg?.attachments, []);
+});
+
+test('sendFriendRequest treats Zalo error codes 222 and 225 as idempotent success', async () => {
+  accountPool.clear();
+  setLoginPoolInitializedForTest(true);
+  let nextCode = 222;
+  accountPool.set('operator-1', {
+    api: {
+      sendFriendRequest: async () => {
+        const err: any = new Error('Already friends or pending request');
+        err.code = nextCode;
+        throw err;
+      },
+    } as any,
+    uId: 'operator-1',
+    label: 'Operator',
+    listenerRunning: false,
+    lastEventAt: null,
+  });
+
+  try {
+    const res222 = await new PersonalZcaChannel().sendFriendRequest(
+      'user-1',
+      'Xin chào',
+      'operator-1',
+    );
+    assert.deepEqual(res222, { success: true });
+
+    nextCode = 225;
+    const res225 = await new PersonalZcaChannel().sendFriendRequest(
+      'user-1',
+      'Xin chào',
+      'operator-1',
+    );
+    assert.deepEqual(res225, { success: true });
+
+    nextCode = 112;
+    const res112 = await new PersonalZcaChannel().sendFriendRequest(
+      'user-1',
+      'Xin chào',
+      'operator-1',
+    );
+    assert.equal(res112.success, false);
+  } finally {
+    accountPool.clear();
+    setLoginPoolInitializedForTest(false);
+  }
+});
+
+test('getGroupMentionDirectory merges fallback members without poisoning cache and resolves plain-text group @mentions', async () => {
+  accountPool.clear();
+  clearGroupMentionCacheForTest();
+  setLoginPoolInitializedForTest(true);
+  const sentPayloads: any[] = [];
+  let shouldFailGroupInfo = false;
+
+  accountPool.set('operator-1', {
+    api: {
+      getGroupInfo: async () => {
+        if (shouldFailGroupInfo) {
+          throw new Error('getGroupInfo timeout');
+        }
+        return {
+          gridInfoMap: {
+            'group-99': {
+              creatorId: 'operator-1',
+              totalMember: 1,
+              currentMems: [
+                { id: 'u-1', dName: 'Nguyễn Văn A', zaloName: 'A' },
+              ],
+            },
+          },
+        };
+      },
+      sendMessage: async (msg: any) => {
+        sentPayloads.push(msg);
+        return { message: { msgId: 'm-1' } };
+      },
+    } as any,
+    uId: 'operator-1',
+    label: 'Operator',
+    listenerRunning: false,
+    lastEventAt: null,
+  });
+
+  try {
+    // 1. When getGroupInfo fails, fallback members are returned with canMentionAll=false and NOT cached
+    shouldFailGroupInfo = true;
+    const failedDir = await getGroupMentionDirectory('operator-1', 'group-99', [
+      {
+        id: 'u-2',
+        displayName: 'Trần Thị B',
+        zaloName: 'B',
+        avatar: '',
+        role: 'member',
+      },
+    ]);
+    assert.equal(failedDir.canMentionAll, false);
+    assert.equal(failedDir.members.length, 1);
+    assert.equal(failedDir.members[0]?.id, 'u-2');
+
+    // 2. Subsequent call when getGroupInfo recovers must NOT be stuck on the uncached failure state
+    shouldFailGroupInfo = false;
+    const dir = await getGroupMentionDirectory('operator-1', 'group-99', [
+      {
+        id: 'u-2',
+        displayName: 'Trần Thị B',
+        zaloName: 'B',
+        avatar: '',
+        role: 'member',
+      },
+    ]);
+    assert.equal(dir.canMentionAll, true);
+    assert.equal(dir.members.length, 2);
+
+    // 3. Authoritative cache holds only u-1 (not fallback u-2), and plain-text group send resolves @Nguyễn Văn A and @All
+    const res = await new PersonalZcaChannel().sendMessage({
+      accountId: 'operator-1',
+      recipientId: 'group-99',
+      threadType: 'group',
+      message: 'Chào @Nguyễn Văn A, @Trần Thị B và @All nhé',
+    });
+    assert.equal(res.success, true);
+    assert.equal(sentPayloads.length, 1);
+    assert.deepEqual(sentPayloads[0].mentions, [
+      { pos: 5, len: 13, uid: 'u-1' },
+      { pos: 35, len: 4, uid: '-1' },
+    ]);
+
+    // 4. Out-of-bounds or selfUid explicit mentions are sanitized at the bridge boundary
+    sentPayloads.length = 0;
+    const explicitRes = await new PersonalZcaChannel().sendMessage({
+      accountId: 'operator-1',
+      recipientId: 'group-99',
+      threadType: 'group',
+      message: 'Xin chào @Nguyễn Văn A',
+      mentions: [
+        { pos: 9, len: 13, uid: 'u-1' },
+        { pos: 9, len: 13, uid: 'operator-1' }, // selfUid rejected
+        { pos: 0, len: 5, uid: 'u-1' }, // text[0] !== '@' rejected
+        { pos: 9, len: 99, uid: 'u-1' }, // out of bounds rejected
+      ],
+    });
+    assert.equal(explicitRes.success, true);
+    assert.deepEqual(sentPayloads[0].mentions, [
+      { pos: 9, len: 13, uid: 'u-1' },
+    ]);
+  } finally {
+    clearGroupMentionCacheForTest();
+    accountPool.clear();
+    setLoginPoolInitializedForTest(false);
+  }
 });
