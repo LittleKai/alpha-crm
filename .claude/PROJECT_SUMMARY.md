@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-11-10 · **Session:** 13 · **Setup baseline:** 2026-11-03
+**Last Updated:** 2026-11-11 · **Session:** 14 · **Setup baseline:** 2026-11-03
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -242,12 +242,12 @@ flowchart LR
 - [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
 - [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
 
-Kiểm tra lần sửa hiện tại (chưa commit/phát hành): `flutter analyze` sạch; `flutter test` 220/220; `guard_check.py` 47/47 bẫy; backend `zalo-bot-service` 204/204 (tích hợp P1/P2/P4/P5 và P6/P7/P8/P9/P10 từ `2anh-zalo-bot` nối suốt sang Flutter UI & Local Bridge: `message_chunk_aliases`, media enricher + 31-ext MIME + giữ phân biệt hoa/thường leaf ID ảnh `/gr/jxl/` + idempotent friend request 222/225, per-account 2-lane `createZaloRateLimiter` + thông báo `rate_limited`, atomic campaign progress + `/local/campaigns/in-flight` đóng `http.Client` trong `finally` + thẻ `unknownCount`/`inFlightRecipient`/`aborted_fail_streak` đọc `commandResult` trên Bulk Messaging UI, pre-debouncer group `FloodGuard` dùng `performance.now()`, và `@mention` parser `findMentions` + `sanitizeExplicitGroupMentions` + `/local/conversations/:id/members` + gợi ý chip `@Tên`/`@All` trên Live Chat nhóm; đã qua review độc lập Codex `9.1/10`). Bản phát hành gần nhất trước đó là 0.2.5+33 trên GitHub Release & Backblaze B2 (ZIP Windows 71.42 MB, APK Android 149.51 MB; backend từ ZIP với Node 22.23.2 đã qua smoke-test `/health` và `/local/health`).
+Bản phát hành hiện tại: **v0.3.0+34** đã được xuất bản đồng thời lên **GitHub Release** và **Backblaze B2** (ZIP Windows 71.45 MB kèm Zalo backend bundle + Node LTS v22.23.2 runtime đã qua smoke-test `/health` và `/local/health`; APK Android 149.58 MB; manifest `version.json` trên CDN `download.giaiphapsangtao.com` đã cập nhật). Tích hợp trọn vẹn P1–P10 từ `2anh-zalo-bot` (Zalo rate limiter, Vietnamese diacritic fold, media enricher, crash-safe campaign runner, group mentions @Tên/@All, Flood Guard).
 
 Giới hạn đã biết & TODO:
 - [ ] Cloud consumer (`alpha-studio-backend/server/routes/crm.js` & `CrmExecutionLog.status`) hiện chỉ có enum `['queued','running','success','failed','cancelled']` nên `status: 'unknown'` do agent gửi khi `SEND_TIMEOUT` bị map về `queued` rồi chuyển sang `cancelled`, và các trường mới (`unknownCount`, `abortedReason`, `inFlightRecipient`) chưa được cloud lưu/hiển thị. Cần bổ sung enum `'unknown'` và hiển thị `abortedReason` ở repo `alpha-studio-backend` trước khi cam kết chống gửi trùng phía cloud cho lượt gửi timeout.
 - [ ] Các dòng SQLite `attachments` cũ đã lỡ tạo từ tin nhắn `link` trước bản vá `hasRealMedia` (P6) không tự xoá hồi tố; chỉ các tin nhắn mới được chặn.
-- [ ] Chưa build/smoke artifact release mới cho thay đổi P1–P10 và chưa smoke giao diện/phiên Zalo thật hoặc APK trên thiết bị Android vật lý; echo rich-send tới trước khi API trả ID chưa thể phân loại chắc chắn.
+- [ ] Smoke giao diện/phiên Zalo thật hoặc APK trên thiết bị Android vật lý khi có thiết bị kiểm thử.
 
 ---
 
