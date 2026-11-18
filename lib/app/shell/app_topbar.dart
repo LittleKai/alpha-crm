@@ -5,16 +5,18 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_text_styles.dart';
+import '../theme/app_theme_tokens.dart';
 import '../routing/app_routes.dart';
+import 'app_shell_providers.dart';
+import 'command_palette_dialog.dart';
 import '../../shared/widgets/compliance_warnings_popup.dart';
 import '../../shared/widgets/app_dialog.dart';
 
-import '../../features/customers/providers/customers_provider.dart';
+import '../../features/auth/providers/crm_auth_provider.dart';
+import '../../features/messaging/bulk/providers/bulk_messaging_provider.dart';
 import '../../features/messaging/live_chat/providers/live_chat_provider.dart';
 import '../../features/tasks/providers/crm_tasks_provider.dart';
 import '../../features/zalo_integration/providers/zalo_integration_provider.dart';
-import '../../features/auth/providers/crm_auth_provider.dart';
-import '../../features/messaging/bulk/providers/bulk_messaging_provider.dart';
 
 class AppTopbar extends ConsumerStatefulWidget {
   final String currentRoute;
@@ -47,16 +49,16 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
         subscriptionStatus != 'active';
     if (hasKnownSubscriptionWarning) notifCount++;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FF); // Xanh lam nhạt hoặc dark
-    final dividerColor = isDark ? const Color(0xFF334155) : const Color(0xFFBFD2FF); // Viền xanh lam nhạt hoặc dark
-    final textSecondary = isDark ? Colors.white : const Color(0xFF475569); // Text màu đậm để dễ đọc
-    final textPrimary = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textMuted = isDark ? Colors.white70 : const Color(0xFF718096);
-    final disabledColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final tokens = AppThemeTokens.of(context);
+    final surfaceColor = tokens.surfacePrimary;
+    final dividerColor = tokens.borderMedium;
+    final textSecondary = tokens.textSecondary;
+    final textPrimary = tokens.textPrimary;
+    final textMuted = tokens.textTertiary;
+    final disabledColor = tokens.textLight;
 
     return Container(
-      height: 64,
+      height: kAppFrameHeaderHeight,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
       decoration: BoxDecoration(
         color: surfaceColor,
@@ -80,7 +82,7 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
                   Icon(
                     _getRouteIcon(widget.currentRoute),
                     size: 16,
-                    color: AppColors.primary,
+                    color: tokens.textSecondary,
                   ),
                   const SizedBox(width: AppSpacing.s),
                   ...List.generate(breadcrumbs.length, (index) {
@@ -113,16 +115,53 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
             ),
           ),
           const SizedBox(width: AppSpacing.s),
-          IconButton(
-            key: const ValueKey('global_search_button'),
-            tooltip: 'Tìm kiếm toàn cầu',
-            icon: Icon(Icons.search, color: textSecondary),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const _GlobalSearchDialog(),
-              );
-            },
+          Tooltip(
+            message: 'Tìm kiếm & Command Palette (Ctrl+K)',
+            child: InkWell(
+              key: const ValueKey('global_search_button'),
+              borderRadius: BorderRadius.circular(8),
+              hoverColor: tokens.transparentLighter,
+              onTap: () => showCommandPaletteDialog(context),
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: tokens.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: tokens.borderMedium, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.search, size: 15, color: textMuted),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Tìm kiếm...',
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.surfaceQuaternary,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Ctrl K',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: AppSpacing.s),
           Stack(
@@ -274,247 +313,6 @@ class _AppTopbarState extends ConsumerState<AppTopbar> {
     }
     return ['Alpha CRM'];
   }
-}
-
-class _GlobalSearchDialog extends ConsumerStatefulWidget {
-  const _GlobalSearchDialog();
-
-  @override
-  ConsumerState<_GlobalSearchDialog> createState() =>
-      _GlobalSearchDialogState();
-}
-
-class _GlobalSearchDialogState extends ConsumerState<_GlobalSearchDialog> {
-  final _searchController = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  String _normalize(String input) {
-    var str = input.toLowerCase().trim();
-    const vietnamese =
-        'aáàảãạâấầẩẫậăắằẳẵặeéèẻẽẹêếềểễệiíìỉĩịoóòỏõọôốồổỗộơớờởỡợuúùủũụưứừửữựyýỳỷỹỵdđ';
-    const english =
-        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeeiiiiiiioooooooooooooooooouuuuuuuuuuuuyyyyyydd';
-
-    for (int i = 0; i < vietnamese.length; i++) {
-      str = str.replaceAll(vietnamese[i], english[i]);
-    }
-    return str;
-  }
-
-  String _digitsOnly(String input) => input.replaceAll(RegExp(r'\D'), '');
-
-  @override
-  Widget build(BuildContext context) {
-    final customersState = ref.watch(customersProvider);
-    final liveChatState = ref.watch(liveChatProvider);
-    final tasksState = ref.watch(crmTasksProvider);
-
-    final normalizedQuery = _normalize(_query);
-    final List<_SearchResult> results = [];
-
-    if (normalizedQuery.isNotEmpty) {
-      final queryDigits = _digitsOnly(_query);
-      // Search contacts
-      for (final contact in customersState.contacts) {
-        if (_normalize(contact.name).contains(normalizedQuery) ||
-            (queryDigits.isNotEmpty &&
-                _digitsOnly(contact.phone).contains(queryDigits)) ||
-            _normalize(contact.group).contains(normalizedQuery) ||
-            _normalize(contact.tag).contains(normalizedQuery) ||
-            _normalize(contact.source).contains(normalizedQuery) ||
-            _normalize(contact.status).contains(normalizedQuery)) {
-          results.add(
-            _SearchResult(
-              title: contact.name,
-              subtitle: 'Khách hàng • ${contact.phone} • ${contact.status}',
-              route: AppRoutes.customers,
-              icon: Icons.person_outline,
-              extra: contact.group,
-            ),
-          );
-        }
-      }
-
-      // Search live chat threads
-      for (final conv in liveChatState.conversations) {
-        if (_normalize(conv.customerName).contains(normalizedQuery) ||
-            conv.threadId.contains(normalizedQuery) ||
-            _normalize(conv.lastMessage).contains(normalizedQuery) ||
-            _normalize(conv.tag).contains(normalizedQuery)) {
-          results.add(
-            _SearchResult(
-              title: conv.customerName,
-              subtitle: 'Live Chat • ${conv.lastMessage}',
-              route: AppRoutes.messagingLiveChat,
-              icon: Icons.chat_bubble_outline,
-              extra: conv.tag.isNotEmpty ? conv.tag : null,
-            ),
-          );
-        }
-      }
-
-      // Search tasks
-      for (final task in tasksState.tasks) {
-        if (_normalize(task.title).contains(normalizedQuery) ||
-            _normalize(task.description).contains(normalizedQuery) ||
-            _normalize(task.priority).contains(normalizedQuery) ||
-            _normalize(task.status).contains(normalizedQuery)) {
-          results.add(
-            _SearchResult(
-              title: task.title,
-              subtitle: 'Công việc • ${task.description}',
-              route: AppRoutes.tasks,
-              icon: Icons.task_alt_outlined,
-              extra: 'Ưu tiên: ${task.priority.toUpperCase()}',
-            ),
-          );
-        }
-      }
-    }
-
-    return AppDialog(
-      key: const ValueKey('global_search_panel'),
-      title: 'Tìm kiếm toàn cầu',
-      icon: Icons.search,
-      width: 600,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _searchController,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: 'Tìm kiếm khách hàng, hội thoại, công việc...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {
-                          _query = '';
-                        });
-                      },
-                    )
-                  : null,
-            ),
-            onChanged: (val) {
-              setState(() {
-                _query = val;
-              });
-            },
-          ),
-          const SizedBox(height: AppSpacing.m),
-          const Divider(height: 1),
-          const SizedBox(height: AppSpacing.m),
-          SizedBox(
-            height: 350,
-            child: _query.isEmpty
-                ? Center(
-                    child: Text(
-                      'Nhập từ khóa để bắt đầu tìm kiếm...',
-                      style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white70
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  )
-                : results.isEmpty
-                ? Center(
-                    child: Text(
-                      'Không tìm thấy kết quả phù hợp.',
-                      style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white70
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: results.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = results[index];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(item.icon, color: AppColors.primary),
-                        title: Text(
-                          item.title,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          item.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: item.extra != null
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.s,
-                                  vertical: AppSpacing.xs,
-                                ),
-                                decoration: BoxDecoration(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const Color(0xFF1E293B)
-                                          : AppColors.primarySoft,
-                                  borderRadius: BorderRadius.circular(
-                                    AppSpacing.radiusS,
-                                  ),
-                                ),
-                                child: Text(
-                                  item.extra!,
-                                  style: AppTextStyles.caption.copyWith(
-                                    color:
-                                        Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? const Color(0xFF60A5FA)
-                                            : AppColors.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              )
-                            : null,
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.go(item.route);
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SearchResult {
-  final String title;
-  final String subtitle;
-  final String route;
-  final IconData icon;
-  final String? extra;
-
-  const _SearchResult({
-    required this.title,
-    required this.subtitle,
-    required this.route,
-    required this.icon,
-    this.extra,
-  });
 }
 
 class _NotificationMenuDialog extends ConsumerWidget {

@@ -19,9 +19,12 @@ import '../../../../shared/widgets/app_empty_state.dart';
 import '../../../../shared/widgets/app_metric_card.dart';
 import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../shared/widgets/app_select_field.dart';
+import '../../../../shared/widgets/app_side_panel.dart';
 import '../../../../shared/widgets/app_table.dart';
+import '../../../../shared/widgets/view_chip_bar.dart';
 import '../../providers/customers_provider.dart';
 import '../../utils/customer_file_parser.dart';
+import '../widgets/customer_import_wizard.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -208,6 +211,9 @@ class _ContactDetailPanel extends StatelessWidget {
   final VoidCallback onStartMessaging;
   final void Function(String contactId, String key, String value)
   onAttributeChanged;
+  final double width;
+  final ValueChanged<double>? onWidthChanged;
+  final bool allowResize;
 
   const _ContactDetailPanel({
     required this.contact,
@@ -215,166 +221,181 @@ class _ContactDetailPanel extends StatelessWidget {
     required this.onClose,
     required this.onStartMessaging,
     required this.onAttributeChanged,
+    this.width = AppSidePanel.defaultWidth,
+    this.onWidthChanged,
+    this.allowResize = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      key: const ValueKey('customer_detail_panel'),
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.m),
-            child: Row(
-              children: [
-                _ContactAvatar(name: contact.name, size: 48),
-                const SizedBox(width: AppSpacing.s),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        contact.name,
-                        style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        contact.phone,
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Đóng',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close_rounded, size: 18),
+    final header = Row(
+      children: [
+        _ContactAvatar(name: contact.name, size: 42),
+        const SizedBox(width: AppSpacing.s),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                contact.name,
+                style: AppTextStyles.cardTitle.copyWith(fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                contact.phone,
+                style: AppTextStyles.caption.copyWith(
                   color: AppColors.textSecondary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Divider(height: 1, color: AppColors.borderSoft),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.m),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Chi tiết khách hàng', style: AppTextStyles.sectionTitle),
-                const SizedBox(height: AppSpacing.m),
-                _DetailRow(
-                  icon: Icons.business_center_outlined,
-                  label: 'Nhóm',
-                  value: contact.group,
-                ),
-                _DetailRow(
-                  icon: Icons.local_offer_outlined,
-                  label: 'Nhãn / lĩnh vực',
-                  value: contact.tag,
-                ),
-                _DetailRow(
-                  icon: Icons.source_outlined,
-                  label: 'Nguồn',
-                  value: contact.source,
-                ),
-                _DetailRow(
-                  icon: Icons.verified_outlined,
-                  label: 'Trạng thái',
-                  value: contact.status,
-                ),
-                _DetailRow(
-                  icon: Icons.calendar_today_outlined,
-                  label: 'Ngày tạo',
-                  value: DateFormat('dd/MM/yyyy').format(contact.createdAt),
-                ),
-                const SizedBox(height: AppSpacing.m),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.tune_outlined,
-                      color: AppColors.iconMuted,
-                      size: 17,
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Expanded(
-                      child: Text(
-                        'Thuộc tính tùy biến',
-                        style: AppTextStyles.sectionTitle,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.s),
-                if (attributeDefinitions.isEmpty)
-                  Text('Chưa có trường tùy biến.', style: AppTextStyles.caption)
-                else
-                  ...attributeDefinitions.map(
-                    (definition) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.s),
-                      child: TextFormField(
-                        key: ValueKey('${contact.id}-${definition.key}'),
-                        initialValue:
-                            contact.customAttributes[definition.key] ?? '',
-                        decoration: InputDecoration(
-                          labelText: definition.name,
-                          helperText: definition.type.label,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: (value) => onAttributeChanged(
-                          contact.id,
-                          definition.key,
-                          value,
-                        ),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: AppSpacing.m),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.m),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceMuted,
-                    borderRadius: AppSpacing.borderRadiusM,
-                    border: Border.all(color: AppColors.borderSoft),
-                  ),
-                  child: Text(
-                    'Gợi ý: kiểm tra nhãn, trạng thái và lịch sử tương tác trước khi đưa khách hàng vào chiến dịch mới.',
-                    style: AppTextStyles.caption.copyWith(height: 1.4),
-                  ),
-                ),
-              ],
-            ),
+        ),
+        IconButton(
+          tooltip: 'Đóng (Esc)',
+          onPressed: onClose,
+          icon: const Icon(Icons.close_rounded, size: 18),
+          color: AppColors.textSecondary,
+        ),
+      ],
+    );
+
+    final body = Padding(
+      padding: const EdgeInsets.all(AppSpacing.m),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Chi tiết khách hàng', style: AppTextStyles.sectionTitle),
+          const SizedBox(height: AppSpacing.m),
+          _DetailRow(
+            icon: Icons.business_center_outlined,
+            label: 'Nhóm',
+            value: contact.group,
           ),
-          Divider(height: 1, color: AppColors.borderSoft),
-          Padding(
+          _DetailRow(
+            icon: Icons.local_offer_outlined,
+            label: 'Nhãn / lĩnh vực',
+            value: contact.tag,
+          ),
+          _DetailRow(
+            icon: Icons.source_outlined,
+            label: 'Nguồn',
+            value: contact.source,
+          ),
+          _DetailRow(
+            icon: Icons.verified_outlined,
+            label: 'Trạng thái',
+            value: contact.status,
+          ),
+          _DetailRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Ngày tạo',
+            value: DateFormat('dd/MM/yyyy').format(contact.createdAt),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Row(
+            children: [
+              Icon(
+                Icons.tune_outlined,
+                color: AppColors.iconMuted,
+                size: 17,
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  'Thuộc tính tùy biến',
+                  style: AppTextStyles.sectionTitle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s),
+          if (attributeDefinitions.isEmpty)
+            Text('Chưa có trường tùy biến.', style: AppTextStyles.caption)
+          else
+            ...attributeDefinitions.map(
+              (definition) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                child: TextFormField(
+                  key: ValueKey('${contact.id}-${definition.key}'),
+                  initialValue: contact.customAttributes[definition.key] ?? '',
+                  decoration: InputDecoration(
+                    labelText: definition.name,
+                    helperText: definition.type.label,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => onAttributeChanged(
+                    contact.id,
+                    definition.key,
+                    value,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.m),
+          Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.m),
-            child: Wrap(
-              spacing: AppSpacing.s,
-              runSpacing: AppSpacing.s,
-              children: [
-                AppButton(
-                  text: 'Mở live chat',
-                  icon: Icons.chat_bubble_outline,
-                  onPressed: onStartMessaging,
-                ),
-                AppButton(
-                  text: 'Tạo segment',
-                  icon: Icons.bookmark_add_outlined,
-                  variant: AppButtonVariant.outline,
-                  onPressed: null,
-                ),
-              ],
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: AppSpacing.borderRadiusM,
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: Text(
+              'Gợi ý: kiểm tra nhãn, trạng thái và lịch sử tương tác trước khi đưa khách hàng vào chiến dịch mới.',
+              style: AppTextStyles.caption.copyWith(height: 1.4),
             ),
           ),
         ],
       ),
+    );
+
+    final footer = Wrap(
+      spacing: AppSpacing.s,
+      runSpacing: AppSpacing.s,
+      children: [
+        AppButton(
+          text: 'Mở live chat',
+          icon: Icons.chat_bubble_outline,
+          onPressed: onStartMessaging,
+        ),
+        const AppButton(
+          text: 'Tạo segment',
+          icon: Icons.bookmark_add_outlined,
+          variant: AppButtonVariant.outline,
+          onPressed: null,
+        ),
+      ],
+    );
+
+    if (!allowResize) {
+      return AppCard(
+        key: const ValueKey('customer_detail_panel'),
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(padding: const EdgeInsets.all(AppSpacing.m), child: header),
+            Divider(height: 1, color: AppColors.borderSoft),
+            body,
+            Divider(height: 1, color: AppColors.borderSoft),
+            Padding(padding: const EdgeInsets.all(AppSpacing.m), child: footer),
+          ],
+        ),
+      );
+    }
+
+    return AppSidePanel(
+      panelKey: const ValueKey('customer_detail_panel'),
+      width: width,
+      onWidthChanged: onWidthChanged ?? (_) {},
+      onClose: onClose,
+      allowResize: true,
+      header: header,
+      footer: footer,
+      child: body,
     );
   }
 }
@@ -456,6 +477,7 @@ class _ContactAvatar extends StatelessWidget {
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String? _activeContactId;
+  double _detailPanelWidth = AppSidePanel.defaultWidth;
 
   @override
   void initState() {
@@ -871,6 +893,70 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             ? 170.0
             : 220.0;
 
+        final activeChips = <ViewFilterChipItem>[];
+        if (state.selectedSegmentId.isNotEmpty) {
+          final segName = state.segments
+              .where((s) => s.id == state.selectedSegmentId)
+              .map((s) => s.name)
+              .firstOrNull;
+          activeChips.add(
+            ViewFilterChipItem(
+              id: 'segment',
+              label: 'Segment',
+              value: segName ?? state.selectedSegmentId,
+              icon: Icons.bookmark_outline,
+              onRemove: () => notifier.setSelectedSegment(''),
+            ),
+          );
+        }
+        if (state.selectedGroup != 'Tất cả') {
+          activeChips.add(
+            ViewFilterChipItem(
+              id: 'group',
+              label: 'Nhóm',
+              value: state.selectedGroup,
+              icon: Icons.group_outlined,
+              onRemove: () => notifier.setSelectedGroup('Tất cả'),
+            ),
+          );
+        }
+        if (state.selectedTag != 'Tất cả') {
+          activeChips.add(
+            ViewFilterChipItem(
+              id: 'tag',
+              label: 'Lĩnh vực',
+              value: state.selectedTag,
+              icon: Icons.local_offer_outlined,
+              onRemove: () => notifier.setSelectedTag('Tất cả'),
+            ),
+          );
+        }
+        if (state.selectedStatus != 'Tất cả') {
+          activeChips.add(
+            ViewFilterChipItem(
+              id: 'status',
+              label: 'Trạng thái',
+              value: state.selectedStatus,
+              icon: Icons.verified_outlined,
+              onRemove: () => notifier.setSelectedStatus('Tất cả'),
+            ),
+          );
+        }
+        if (state.searchQuery.trim().isNotEmpty) {
+          activeChips.add(
+            ViewFilterChipItem(
+              id: 'search',
+              label: 'Tìm',
+              value: state.searchQuery.trim(),
+              icon: Icons.search,
+              onRemove: () {
+                _searchController.clear();
+                notifier.setSearchQuery('');
+              },
+            ),
+          );
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -887,6 +973,21 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 ...actions,
               ],
             ),
+            if (activeChips.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.s),
+              ViewChipBar(
+                chips: activeChips,
+                onReset: () {
+                  _searchController.clear();
+                  notifier.setSearchQuery('');
+                  notifier.setSelectedSegment('');
+                  notifier.setSelectedGroup('Tất cả');
+                  notifier.setSelectedTag('Tất cả');
+                  notifier.setSelectedStatus('Tất cả');
+                },
+                onSaveSegment: () => _showSaveSegmentDialog(notifier),
+              ),
+            ],
           ],
         );
       },
@@ -944,16 +1045,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             Expanded(
               child: _buildMainContent(state, filteredContacts, isEmpty),
             ),
-            const SizedBox(width: AppSpacing.m),
-            SizedBox(
-              width: 340,
-              child: _ContactDetailPanel(
-                contact: activeContact,
-                attributeDefinitions: state.customAttributeDefinitions,
-                onClose: () => setState(() => _activeContactId = null),
-                onStartMessaging: () => context.go(AppRoutes.messagingLiveChat),
-                onAttributeChanged: notifier.updateContactCustomAttribute,
-              ),
+            const SizedBox(width: AppSpacing.s),
+            _ContactDetailPanel(
+              contact: activeContact,
+              attributeDefinitions: state.customAttributeDefinitions,
+              onClose: () => setState(() => _activeContactId = null),
+              onStartMessaging: () => context.go(AppRoutes.messagingLiveChat),
+              onAttributeChanged: notifier.updateContactCustomAttribute,
+              width: _detailPanelWidth,
+              onWidthChanged: (next) =>
+                  setState(() => _detailPanelWidth = next),
+              allowResize: true,
             ),
           ],
         );
@@ -992,9 +1094,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               text: 'Nhập từ tệp',
               icon: Icons.description_outlined,
               variant: AppButtonVariant.outline,
-              onPressed: () => _showPlaceholder(
-                'Chức năng import sẽ được triển khai khi có flow file picker.',
-              ),
+              onPressed: () =>
+                  _importContactsFromFile(ref.read(customersProvider.notifier)),
             ),
             AppButton(
               text: 'Thêm thủ công',
@@ -1143,14 +1244,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         return;
       }
 
-      final contacts = await parseCustomerImportFile(
+      final rawRows = await parseCustomerRawRowsFile(
         path: picked.path,
         bytes: picked.bytes,
         fileName: picked.name,
       );
       if (!mounted) return;
-      if (contacts.isEmpty) {
-        if (!mounted) return;
+      if (rawRows.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -1160,6 +1260,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         );
         return;
       }
+
+      final contacts = await showCustomerImportWizardDialog(
+        context,
+        fileName: picked.name,
+        rawRows: rawRows,
+        customAttributes: ref.read(customersProvider).customAttributeDefinitions,
+      );
+      if (!mounted || contacts == null || contacts.isEmpty) return;
 
       final ok = await notifier.importContacts(contacts);
       if (!mounted) return;
@@ -1563,11 +1671,5 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     );
     nameController.dispose();
     phoneController.dispose();
-  }
-
-  void _showPlaceholder(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

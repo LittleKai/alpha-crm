@@ -59,6 +59,21 @@ class SystemSettings {
   final double fontSizeMultiplier;
   final String fontFamily;
 
+  // Navigation sidebar preferences (persisted in zalo_settings.json)
+  final bool sidebarCollapsed;
+  final double sidebarWidth;
+
+  static const double minSidebarWidth = 180.0;
+  static const double maxSidebarWidth = 350.0;
+  static const double defaultSidebarWidth = 220.0;
+
+  static double clampSidebarWidth(num? value) {
+    if (value == null || value.isNaN || value.isInfinite) {
+      return defaultSidebarWidth;
+    }
+    return value.toDouble().clamp(minSidebarWidth, maxSidebarWidth);
+  }
+
   const SystemSettings({
     required this.proxy,
     required this.minDelay,
@@ -103,6 +118,8 @@ class SystemSettings {
     this.summaryAiModel = 'gemini-3.1-pro',
     this.fontSizeMultiplier = 1.0,
     this.fontFamily = 'Be Vietnam Pro',
+    this.sidebarCollapsed = false,
+    this.sidebarWidth = defaultSidebarWidth,
   });
 
   SystemSettings copyWith({
@@ -149,6 +166,8 @@ class SystemSettings {
     String? summaryAiModel,
     double? fontSizeMultiplier,
     String? fontFamily,
+    bool? sidebarCollapsed,
+    double? sidebarWidth,
   }) {
     return SystemSettings(
       proxy: proxy ?? this.proxy,
@@ -209,6 +228,10 @@ class SystemSettings {
       summaryAiModel: summaryAiModel ?? this.summaryAiModel,
       fontSizeMultiplier: fontSizeMultiplier ?? this.fontSizeMultiplier,
       fontFamily: fontFamily ?? this.fontFamily,
+      sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
+      sidebarWidth: sidebarWidth != null
+          ? clampSidebarWidth(sidebarWidth)
+          : this.sidebarWidth,
     );
   }
 
@@ -263,6 +286,8 @@ class SystemSettings {
       'summaryAiModel': summaryAiModel,
       'fontSizeMultiplier': fontSizeMultiplier,
       'fontFamily': fontFamily,
+      'sidebarCollapsed': sidebarCollapsed,
+      'sidebarWidth': sidebarWidth,
     };
   }
 
@@ -332,6 +357,10 @@ class SystemSettings {
       summaryAiModel: (json['summaryAiModel'] ?? 'gemini-3.1-pro').toString(),
       fontSizeMultiplier: json['fontSizeMultiplier']?.toDouble() ?? 1.0,
       fontFamily: json['fontFamily'] ?? 'Be Vietnam Pro',
+      sidebarCollapsed: json['sidebarCollapsed'] == true,
+      sidebarWidth: clampSidebarWidth(
+        json['sidebarWidth'] is num ? json['sidebarWidth'] as num : null,
+      ),
     );
   }
 }

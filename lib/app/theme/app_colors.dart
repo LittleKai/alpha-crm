@@ -5,17 +5,16 @@ class AppColors {
 
   // Primary colors
   static Color get primary =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF2563EB);
+      isDarkMode ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
   static Color get primaryHover =>
-      isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1D4ED8);
+      isDarkMode ? const Color(0xFF3B82F6) : const Color(0xFF1D4ED8);
   static Color get primarySoft =>
       isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFEAF1FF);
   static Color get primaryBorder =>
       isDarkMode ? const Color(0xFF334155) : const Color(0xFFBFD2FF);
   static Color get zaloBlue =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0068FF);
-  static Color get textOnPrimary =>
-      isDarkMode ? const Color(0xFF3B82F6) : const Color(0xFFFFFFFF);
+      isDarkMode ? const Color(0xFF38BDF8) : const Color(0xFF0068FF);
+  static Color get textOnPrimary => const Color(0xFFFFFFFF);
 
   // Soft secondary colors
   static Color get purpleSoft =>
@@ -41,15 +40,15 @@ class AppColors {
   static Color get borderSoft =>
       isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFE7EDF5);
 
-  // All standard texts must be white in dark mode
+  // Multi-tier dark text scale aligned with Twenty neutral hierarchy
   static Color get textPrimary =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A);
+      isDarkMode ? const Color(0xFFEBEBEB) : const Color(0xFF333333);
   static Color get textSecondary =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF475569);
+      isDarkMode ? const Color(0xFFB3B3B3) : const Color(0xFF666666);
   static Color get textMuted =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF718096);
+      isDarkMode ? const Color(0xFF818181) : const Color(0xFF999999);
   static Color get iconMuted =>
-      isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF64748B);
+      isDarkMode ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
 
   // Status colors
   static const Color success = Color(0xFF10B981);

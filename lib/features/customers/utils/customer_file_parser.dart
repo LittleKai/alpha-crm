@@ -17,6 +17,135 @@ const _limitMessage =
     'File vượt giới hạn nhập khách hàng / Customer import limit exceeded.';
 const _invalidZip = 'File Excel không hợp lệ / Invalid Excel archive.';
 
+enum ImportTargetField {
+  ignore('Không nhập'),
+  name('Họ và tên'),
+  phone('Số điện thoại'),
+  group('Nhóm khách hàng'),
+  tag('Lĩnh vực / Nhãn'),
+  status('Trạng thái'),
+  custom('Thuộc tính tùy chỉnh');
+
+  final String label;
+  const ImportTargetField(this.label);
+}
+
+class ImportColumnMapping {
+  final int sourceIndex;
+  final String headerText;
+  final String sampleValue;
+  final ImportTargetField targetField;
+  final String? customKey;
+
+  const ImportColumnMapping({
+    required this.sourceIndex,
+    required this.headerText,
+    required this.sampleValue,
+    required this.targetField,
+    this.customKey,
+  });
+
+  ImportColumnMapping copyWith({
+    ImportTargetField? targetField,
+    String? customKey,
+    bool clearCustomKey = false,
+  }) {
+    return ImportColumnMapping(
+      sourceIndex: sourceIndex,
+      headerText: headerText,
+      sampleValue: sampleValue,
+      targetField: targetField ?? this.targetField,
+      customKey: clearCustomKey ? null : (customKey ?? this.customKey),
+    );
+  }
+}
+
+class ImportedRowValidation {
+  final int rowIndex;
+  final Contact contact;
+  final String? errorReason;
+  final bool selected;
+
+  const ImportedRowValidation({
+    required this.rowIndex,
+    required this.contact,
+    this.errorReason,
+    this.selected = true,
+  });
+
+  bool get hasError => errorReason != null;
+
+  ImportedRowValidation copyWith({Contact? contact, bool? selected}) {
+    final nextContact = contact ?? this.contact;
+    return ImportedRowValidation(
+      rowIndex: rowIndex,
+      contact: nextContact,
+      errorReason: validateImportedContact(nextContact),
+      selected: selected ?? this.selected,
+    );
+  }
+}
+
+String? validateImportedContact(Contact contact) {
+  if (contact.name.trim().isEmpty && contact.phone.trim().isEmpty) {
+    return 'Thiếu cả họ tên và số điện thoại';
+  }
+  if (contact.phone.trim().isEmpty) {
+    return 'Thiếu số điện thoại';
+  }
+  final digits = contact.phone.replaceAll(RegExp(r'\D'), '');
+  if (digits.length < 8) {
+    return 'Số điện thoại không hợp lệ (< 8 số)';
+  }
+  return null;
+}
+
+/// Parses `.csv`, `.tsv`, `.txt`, or `.xlsx` raw cell rows off the UI isolate
+/// for interactive column mapping in [CustomerImportWizardDialog].
+Future<List<List<String>>> parseCustomerRawRowsFile({
+  String? path,
+  Uint8List? bytes,
+  required String fileName,
+}) async {
+  if (bytes != null && bytes.length > _maxInputBytes) {
+    throw const FormatException(_limitMessage);
+  }
+  return Isolate.run(() async {
+    final resolvedBytes = await _loadBoundedImportBytes(path: path, bytes: bytes);
+    return parseCustomerRawRowsBytes(resolvedBytes, fileName);
+  });
+}
+
+Future<Uint8List> _loadBoundedImportBytes({
+  String? path,
+  Uint8List? bytes,
+}) async {
+  if (path == null) {
+    if (bytes == null) {
+      throw const FormatException('Không đọc được file / Cannot read file.');
+    }
+    return bytes;
+  }
+  final file = await File(path).open();
+  try {
+    if (await file.length() > _maxInputBytes) {
+      throw const FormatException(_limitMessage);
+    }
+    final content = BytesBuilder(copy: false);
+    while (true) {
+      final chunk = await file.read(64 * 1024);
+      if (chunk.isEmpty) break;
+      if (content.length + chunk.length > _maxInputBytes) {
+        throw const FormatException(_limitMessage);
+      }
+      content.add(chunk);
+    }
+    return content.takeBytes();
+  } finally {
+    await file.close();
+  }
+}
+
 /// Keeps file IO, decompression and parsing off the Flutter UI isolate.
 Future<List<Contact>> parseCustomerImportFile({
   String? path,
@@ -27,41 +156,213 @@ Future<List<Contact>> parseCustomerImportFile({
     throw const FormatException(_limitMessage);
   }
   return Isolate.run(() async {
-    if (path == null) {
-      if (bytes == null) {
-        throw const FormatException('Không đọc được file / Cannot read file.');
-      }
-      return parseCustomerImportBytes(bytes, fileName);
-    }
-    final file = await File(path).open();
-    try {
-      if (await file.length() > _maxInputBytes) {
-        throw const FormatException(_limitMessage);
-      }
-      final content = BytesBuilder(copy: false);
-      while (true) {
-        final chunk = await file.read(64 * 1024);
-        if (chunk.isEmpty) break;
-        if (content.length + chunk.length > _maxInputBytes) {
-          throw const FormatException(_limitMessage);
-        }
-        content.add(chunk);
-      }
-      return parseCustomerImportBytes(content.takeBytes(), fileName);
-    } finally {
-      await file.close();
-    }
+    final resolvedBytes = await _loadBoundedImportBytes(path: path, bytes: bytes);
+    return parseCustomerImportBytes(resolvedBytes, fileName);
   });
+}
+
+/// Parses raw rows from CSV/TSV/XLSX bytes without mapping into [Contact].
+List<List<String>> parseCustomerRawRowsBytes(Uint8List bytes, String fileName) {
+  if (bytes.length > _maxInputBytes) throw const FormatException(_limitMessage);
+  final ext = fileName.toLowerCase().split('.').last;
+  return ext == 'xlsx'
+      ? _parseXlsxRows(bytes)
+      : _parseDelimitedRows(_decodeText(bytes));
 }
 
 /// Parses `.csv`, `.tsv`, `.txt`, or `.xlsx` bytes into [Contact] records.
 List<Contact> parseCustomerImportBytes(Uint8List bytes, String fileName) {
-  if (bytes.length > _maxInputBytes) throw const FormatException(_limitMessage);
-  final ext = fileName.toLowerCase().split('.').last;
-  final rows = ext == 'xlsx'
-      ? _parseXlsxRows(bytes)
-      : _parseDelimitedRows(_decodeText(bytes));
+  final rows = parseCustomerRawRowsBytes(bytes, fileName);
   return _rowsToContacts(rows);
+}
+
+/// Auto-detects the most likely header row index among the first 10 rows,
+/// or returns -1 when data begins immediately without headers.
+int detectHeaderRowIndex(List<List<String>> rows) {
+  if (rows.isEmpty) return -1;
+  final limit = rows.length < 10 ? rows.length : 10;
+  for (var r = 0; r < limit; r++) {
+    final row = rows[r];
+    for (final cell in row) {
+      final norm = _normalizeHeader(cell);
+      if (_nameHeaders.contains(norm) || _phoneHeaders.contains(norm)) {
+        return r;
+      }
+    }
+  }
+  return -1;
+}
+
+/// Builds suggested column mappings for a chosen [headerRowIndex] (`-1` means
+/// headerless table starting at row 0).
+List<ImportColumnMapping> suggestImportMappings(
+  List<List<String>> rows, {
+  required int headerRowIndex,
+}) {
+  if (rows.isEmpty) return const [];
+  final sampleRowIdx = headerRowIndex >= 0 ? headerRowIndex : 0;
+  final maxCols = rows.fold<int>(0, (m, r) => r.length > m ? r.length : m);
+  if (maxCols == 0) return const [];
+
+  final assigned = <ImportTargetField>{};
+  final result = <ImportColumnMapping>[];
+
+  // Find first non-empty cell below header as preview sample per column
+  String findSample(int col) {
+    final start = headerRowIndex >= 0 ? headerRowIndex + 1 : 0;
+    for (var r = start; r < rows.length && r < start + 15; r++) {
+      if (col < rows[r].length && rows[r][col].trim().isNotEmpty) {
+        return rows[r][col].trim();
+      }
+    }
+    return '';
+  }
+
+  for (var col = 0; col < maxCols; col++) {
+    final headerText = headerRowIndex >= 0 &&
+            headerRowIndex < rows.length &&
+            col < rows[headerRowIndex].length
+        ? rows[headerRowIndex][col].trim()
+        : 'Cột ${col + 1}';
+    final sample = findSample(col);
+    final norm = _normalizeHeader(headerText);
+
+    ImportTargetField target = ImportTargetField.ignore;
+    String? customKey;
+
+    if (headerRowIndex >= 0) {
+      if (!assigned.contains(ImportTargetField.name) &&
+          _nameHeaders.contains(norm)) {
+        target = ImportTargetField.name;
+        assigned.add(target);
+      } else if (!assigned.contains(ImportTargetField.phone) &&
+          _phoneHeaders.contains(norm)) {
+        target = ImportTargetField.phone;
+        assigned.add(target);
+      } else if (!assigned.contains(ImportTargetField.group) &&
+          _groupHeaders.contains(norm)) {
+        target = ImportTargetField.group;
+        assigned.add(target);
+      } else if (!assigned.contains(ImportTargetField.tag) &&
+          _tagHeaders.contains(norm)) {
+        target = ImportTargetField.tag;
+        assigned.add(target);
+      } else if (!assigned.contains(ImportTargetField.status) &&
+          _statusHeaders.contains(norm)) {
+        target = ImportTargetField.status;
+        assigned.add(target);
+      } else if (norm.isNotEmpty) {
+        target = ImportTargetField.custom;
+        customKey = norm;
+      }
+    } else if (sampleRowIdx < rows.length) {
+      final firstRow = rows[sampleRowIdx];
+      if (maxCols == 1 && col == 0) {
+        target = ImportTargetField.phone;
+      } else {
+        final firstLooksLikePhone =
+            firstRow.isNotEmpty && _looksLikePhone(firstRow[0]);
+        if (col == 0) {
+          target = firstLooksLikePhone
+              ? ImportTargetField.phone
+              : ImportTargetField.name;
+        } else if (col == 1) {
+          target = firstLooksLikePhone
+              ? ImportTargetField.name
+              : ImportTargetField.phone;
+        } else if (col == 2) {
+          target = ImportTargetField.group;
+        } else if (col == 3) {
+          target = ImportTargetField.tag;
+        }
+      }
+    }
+
+    result.add(
+      ImportColumnMapping(
+        sourceIndex: col,
+        headerText: headerText.isEmpty ? 'Cột ${col + 1}' : headerText,
+        sampleValue: sample,
+        targetField: target,
+        customKey: customKey,
+      ),
+    );
+  }
+  return result;
+}
+
+/// Converts raw rows into validated preview items according to user [mappings].
+List<ImportedRowValidation> buildValidatedImportRows(
+  List<List<String>> rows, {
+  required int headerRowIndex,
+  required List<ImportColumnMapping> mappings,
+}) {
+  if (rows.isEmpty) return const [];
+  final startRow = headerRowIndex >= 0 ? headerRowIndex + 1 : 0;
+  final now = DateTime.now();
+
+  int? findIdx(ImportTargetField f) {
+    for (final m in mappings) {
+      if (m.targetField == f) return m.sourceIndex;
+    }
+    return null;
+  }
+
+  final nameIdx = findIdx(ImportTargetField.name);
+  final phoneIdx = findIdx(ImportTargetField.phone);
+  final groupIdx = findIdx(ImportTargetField.group);
+  final tagIdx = findIdx(ImportTargetField.tag);
+  final statusIdx = findIdx(ImportTargetField.status);
+  final customMappings = mappings
+      .where(
+        (m) =>
+            m.targetField == ImportTargetField.custom &&
+            (m.customKey?.trim().isNotEmpty ?? false),
+      )
+      .toList();
+
+  final results = <ImportedRowValidation>[];
+  for (var r = startRow; r < rows.length; r++) {
+    final row = rows[r];
+    String cellAt(int? idx) =>
+        (idx != null && idx >= 0 && idx < row.length) ? row[idx].trim() : '';
+
+    final phone = cellAt(phoneIdx);
+    var name = cellAt(nameIdx);
+    if (phone.isEmpty && name.isEmpty) continue;
+    if (name.isEmpty) name = phone;
+
+    final group = cellAt(groupIdx);
+    final tag = cellAt(tagIdx);
+    final status = cellAt(statusIdx);
+    final customAttrs = <String, String>{};
+    for (final m in customMappings) {
+      final val = cellAt(m.sourceIndex);
+      if (val.isNotEmpty) customAttrs[m.customKey!] = val;
+    }
+
+    final contact = Contact(
+      id: '',
+      name: name,
+      phone: phone,
+      group: group.isEmpty ? 'Mặc định' : group,
+      tag: tag.isEmpty ? 'Mặc định' : tag,
+      source: 'Import File',
+      status: status.isEmpty ? 'Chưa gửi' : status,
+      createdAt: now,
+      customAttributes: customAttrs,
+    );
+    final err = validateImportedContact(contact);
+    results.add(
+      ImportedRowValidation(
+        rowIndex: r,
+        contact: contact,
+        errorReason: err,
+        selected: err == null,
+      ),
+    );
+  }
+  return results;
 }
 
 String _decodeText(Uint8List bytes) {
@@ -531,6 +832,7 @@ const _nameHeaders = {
   'customer',
   'customer_name',
   'ten',
+  'ten_khach',
   'ho_ten',
   'ho_va_ten',
   'ten_khach_hang',
@@ -564,4 +866,10 @@ const _tagHeaders = {
   'nhan',
   'linh_vuc',
   'phan_loai',
+};
+
+const _statusHeaders = {
+  'status',
+  'trang_thai',
+  'state',
 };

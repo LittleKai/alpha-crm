@@ -2,30 +2,33 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
+import 'app_theme_tokens.dart';
 
 class AppTheme {
   static ThemeData get lightTheme {
+    const tokens = AppThemeTokens.light;
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: const Color(0xFF2563EB),
         primary: const Color(0xFF2563EB),
         secondary: const Color(0xFF0068FF),
-        surface: const Color(0xFFFFFFFF),
+        surface: tokens.surfacePrimary,
         error: const Color(0xFFEF4444),
       ),
-      scaffoldBackgroundColor: const Color(0xFFF6F9FD),
+      scaffoldBackgroundColor: tokens.canvasBackground,
+      extensions: const <ThemeExtension<dynamic>>[tokens],
       cardTheme: CardThemeData(
-        color: const Color(0xFFFFFFFF),
+        color: tokens.surfacePrimary,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppSpacing.borderRadiusM,
-          side: const BorderSide(color: Color(0xFFDBE3EF), width: 1),
+          side: BorderSide(color: tokens.borderMedium, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
-      dividerTheme: const DividerThemeData(
-        color: Color(0xFFE7EDF5),
+      dividerTheme: DividerThemeData(
+        color: tokens.borderMedium,
         thickness: 1,
         space: 1,
       ),
@@ -69,12 +72,13 @@ class AppTheme {
   }
 
   static ThemeData get darkTheme {
+    const tokens = AppThemeTokens.dark;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
+      seedColor: tokens.accentBlue,
       brightness: Brightness.dark,
-      primary: const Color(0xFF60A5FA),
+      primary: tokens.accentBlue,
       secondary: const Color(0xFF38BDF8),
-      surface: const Color(0xFF111827),
+      surface: tokens.surfacePrimary,
       error: const Color(0xFFF87171),
     );
 
@@ -82,35 +86,36 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF0B1120),
+      scaffoldBackgroundColor: tokens.canvasBackground,
+      extensions: const <ThemeExtension<dynamic>>[tokens],
       cardTheme: CardThemeData(
-        color: const Color(0xFF111827),
+        color: tokens.surfacePrimary,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppSpacing.borderRadiusM,
-          side: const BorderSide(color: Color(0xFF253247), width: 1),
+          side: BorderSide(color: tokens.borderMedium, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
-      dividerTheme: const DividerThemeData(
-        color: Color(0xFF253247),
+      dividerTheme: DividerThemeData(
+        color: tokens.borderMedium,
         thickness: 1,
         space: 1,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF0F172A), // Matches our recent standard
+        fillColor: tokens.surfaceSecondary,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.m,
           vertical: AppSpacing.sm,
         ),
         border: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
+          borderSide: BorderSide(color: tokens.borderMedium, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,
-          borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
+          borderSide: BorderSide(color: tokens.borderMedium, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppSpacing.borderRadiusS,

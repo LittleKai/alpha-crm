@@ -2,12 +2,16 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/settings/providers/settings_provider.dart';
+import '../../features/settings/providers/update_provider.dart';
+import '../../mock/mock_accounts.dart';
 import '../../shared/utils/responsive_breakpoints.dart';
 import '../../shared/widgets/update_dialog.dart';
-import '../../features/settings/providers/update_provider.dart';
+import '../theme/app_theme_tokens.dart';
+import 'app_shell_providers.dart';
 import 'app_sidebar.dart';
 import 'app_topbar.dart';
-import 'app_shell_providers.dart';
 
 class ResponsiveScaffold extends ConsumerStatefulWidget {
   final Widget child;
@@ -50,7 +54,22 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    // Lắng nghe kết quả kiểm tra cập nhật và hiện dialog khi có bản mới
+    final tokens = AppThemeTokens.of(context);
+
+    // Sync sidebar persisted settings once loaded from zalo_settings.json
+    ref.listen<SystemSettings>(
+      settingsProvider.select((s) => s.settings),
+      (previous, next) {
+        if (previous?.sidebarCollapsed != next.sidebarCollapsed) {
+          ref.read(sidebarCollapsedProvider.notifier).state =
+              next.sidebarCollapsed;
+        }
+        if (previous?.sidebarWidth != next.sidebarWidth) {
+          ref.read(sidebarWidthProvider.notifier).state = next.sidebarWidth;
+        }
+      },
+    );
+
     if (Platform.isWindows || Platform.isAndroid) {
       ref.listen<UpdateState>(updateProvider, (previous, next) {
         if (previous?.status != UpdateStatus.available &&
@@ -59,14 +78,16 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
         }
       });
     }
+
     final isMobile = ResponsiveBreakpoints.isMobile(context);
     final isTablet = ResponsiveBreakpoints.isTablet(context);
 
     if (isMobile) {
       return Scaffold(
         key: _scaffoldKey,
+        backgroundColor: tokens.surfacePrimary,
         drawer: Drawer(
-          width: 250,
+          width: 260,
           child: AppSidebar(currentRoute: widget.currentRoute),
         ),
         body: SafeArea(
@@ -74,13 +95,11 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
             children: [
               AppTopbar(
                 currentRoute: widget.currentRoute,
-                onMenuPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
+                onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
               ),
               Expanded(
                 child: Container(
-                  color: Theme.of(context).scaffoldBackgroundColor,
+                  color: tokens.surfacePrimary,
                   child: widget.child,
                 ),
               ),
@@ -90,41 +109,32 @@ class _ResponsiveScaffoldState extends ConsumerState<ResponsiveScaffold> {
       );
     }
 
-    final bool isCollapsed = isTablet || ref.watch(sidebarCollapsedProvider);
-    final double sidebarWidth = isCollapsed ? 72 : 250;
-
-    // Tablet or Desktop
+    // Twenty PageCardLayout: calm neutral frame cradling an elevated rounded workspace card
     return Scaffold(
-      body: Stack(
+      backgroundColor: tokens.canvasBackground,
+      body: Row(
         children: [
-          Row(
-            children: [
-              // Spacer to occupy the space of the sidebar
-              SizedBox(width: sidebarWidth),
-              // Content Area
-              Expanded(
+          AppSidebar(
+            currentRoute: widget.currentRoute,
+            forceCollapsed: isTablet ? true : null,
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: tokens.surfacePrimary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: tokens.borderMedium, width: 1),
+                ),
+                clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     AppTopbar(currentRoute: widget.currentRoute),
-                    Expanded(
-                      child: Container(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        child: widget.child,
-                      ),
-                    ),
+                    Expanded(child: widget.child),
                   ],
                 ),
               ),
-            ],
-          ),
-          // Sidebar rendered on top of the content area so its collapse button isn't overlapped
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: AppSidebar(
-              currentRoute: widget.currentRoute,
-              forceCollapsed: isTablet ? true : null,
             ),
           ),
         ],

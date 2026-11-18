@@ -44,6 +44,13 @@ class AppTextStyles {
           height: height,
           color: color,
         );
+      case 'System':
+        return TextStyle(
+          fontSize: adjustedFontSize,
+          fontWeight: fontWeight,
+          height: height,
+          color: color,
+        );
       case 'Be Vietnam Pro':
       default:
         return GoogleFonts.beVietnamPro(

@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-11-11 · **Session:** 14 · **Setup baseline:** 2026-11-03
+**Last Updated:** 2026-11-18 · **Session:** 15 · **Setup baseline:** 2026-11-03
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -111,23 +111,27 @@ docs/
 | `lib/features/auth/providers/crm_auth_provider.dart` | Alpha Studio auth state | Restores/login/logout JWT, fetches `/api/auth/me`, CRM subscription, and quota. |
 | `lib/app/routing/app_routes.dart` | Route constants | Defines 27 CRM routes. |
 | `lib/app/routing/app_router.dart` | GoRouter tree | Root redirects to `/dashboard`; `ShellRoute` wraps CRM screens. |
-| `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Shows customer stats, saved segments, status pipeline summary, responsive table, real Excel/CSV import, and detail panel. |
-| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Native isolate import; bounded file/XML/rows/cells; inflates only selected sheet and shared strings. |
+| `lib/features/customers/presentation/screens/customers_screen.dart` | Customers workspace | Stats, ViewChipBar, saved segments, pipeline summary, responsive table, 3-step import wizard, and AppSidePanel. |
+| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Isolate raw-row + typed import parser; header auto-detect, column suggest, row validation (`ImportTargetField`). |
+| `lib/features/customers/presentation/widgets/customer_import_wizard.dart` | Interactive import wizard | 3-step CSV/XLSX import dialog (file/header -> column mapping -> row validation preview & confirm). |
 | `lib/features/customers/providers/customers_provider.dart` | Customers state + offline cache | Customers state + cache SQLite 30 ngày qua LocalDb.putCache với offline fallback. |
 | `lib/shared/local_db/local_db.dart` | Local SQLite (sqflite/ffi) | Adds generic `putCache(key,value,{ttl})` / `getCache(key)` over the `cache_entries` table (expired rows purged on read) used by the Customers offline cache. |
 | `lib/features/dashboard/utils/dashboard_chart_data.dart` | Dashboard chart data helpers | Normalizes daily dashboard chart metrics, merges local chatbot daily stats into campaign performance data, and protects cumulative message series from rendering as per-day values. |
-| `lib/app/shell/responsive_scaffold.dart` | Layout switching | Mobile drawer, tablet collapsed sidebar, desktop sidebar. Auto-checks for updates on startup (Windows/Android) and shows update dialog. |
-| `lib/app/shell/app_sidebar.dart` | Main navigation | Uses grouped nav items, active state, collapsed mode. |
+| `lib/app/shell/responsive_scaffold.dart` | Layout switching | Syncs persisted sidebar width/collapse; frames desktop content card in Calm Neutral canvas on mobile/tablet/desktop. |
+| `lib/app/shell/app_sidebar.dart` | Main navigation | Preset A calm neutral rail (#F1F1F1/#1D1D1D), monochrome icons, 56px collapse, drag resize (180-350px) persisted. |
+| `lib/app/shell/app_topbar.dart` | Top frame bar | Unified 48px header with breadcrumbs, Ctrl+K/Cmd+K CommandPalette trigger, account status, and theme toggle. |
+| `lib/app/shell/command_palette_dialog.dart` | Global command palette | Keyboard-first Ctrl+K/Cmd+K modal with quick actions, routes, diacritic-folded CRM record search, arrow/Enter nav. |
 | `lib/features/security/` | Local app lock feature | Provides app-level lock overlay, local password hash persistence, and sidebar lock trigger. |
 | `lib/features/workflows/` | Workflow automation feature | Omnichannel workflows (/workflows, FB, TikTok, IG, WhatsApp, Tele, Webchat). Chi tiết xem CONVENTIONS.md. |
 | `lib/shared/models/crm_channel.dart` | `CrmChannel` enum (shared) | CrmChannel enum discriminator (zaloPersonal/OA/FB/TikTok/IG/WA/Tele/Webchat/Email). |
 | `lib/features/messaging/live_chat/` | Live Chat multi-account | Live Chat multi-account dropdown gộp Zalo + kênh workflow + gợi ý `@Tên`/`@All` cho nhóm. Chi tiết xem CONVENTIONS.md. |
 | `lib/features/messaging/live_chat/utils/quick_reply_shortcuts.dart` | Quick reply resolver | Resolves `/1`, `/2`, and named quick template shortcuts for Live Chat sends. |
 | `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer + thẻ "Không rõ" (`unknownCount`), `inFlightRecipient` và `aborted_fail_streak`. |
-| `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system colors from `DESIGN.md`. |
+| `lib/app/theme/app_colors.dart` | Color tokens | Implements design-system palette and improved dark-mode WCAG contrast tokens. |
+| `lib/app/theme/app_theme_tokens.dart` | Semantic theme extension | `AppThemeTokens` ThemeExtension (Preset A surfaces, 4-step ink hierarchy, 3-step borders, status/tag tints). |
 | `lib/app/theme/app_spacing.dart` | Spacing and radius tokens | 4/8/12/16/20/24/32/40/48 scale and radius tokens. |
-| `lib/app/theme/app_text_styles.dart` | Typography tokens | Inter font via `google_fonts`. |
-| `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, tables, logs, compliance warnings popup, update dialog. |
+| `lib/app/theme/app_text_styles.dart` | Typography tokens | Be Vietnam Pro typography tokens via `google_fonts` with System test fallback. |
+| `lib/shared/widgets/` | Shared UI primitives | Buttons, cards, inputs, tabs, alerts, badges, ViewChipBar, resizable AppSidePanel (320-600px), update/compliance dialogs. |
 | `lib/shared/utils/zalo_backend_manager.dart` | Desktop local backend **supervisor** | Desktop backend supervisor (5s watchdog, Job Object, shutdown gracefully). Chi tiết xem CONVENTIONS.md. |
 | `lib/shared/utils/app_logger.dart` | App logger + báo lỗi về backend | Ring buffer 300 dòng + file log phiên, giữ 20 file gần nhất, reportToBackend rate-limited. |
 | `lib/shared/utils/windows_job_object.dart` | Windows Job Object helper (raw FFI) | KILL_ON_JOB_CLOSE Job Object helper để node.exe chết theo tiến trình app. |

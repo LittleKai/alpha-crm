@@ -359,6 +359,20 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await _saveSettingsToFile(updated);
   }
 
+  Future<void> setSidebarPreferences({
+    bool? collapsed,
+    double? width,
+  }) async {
+    final updated = state.settings.copyWith(
+      sidebarCollapsed: collapsed ?? state.settings.sidebarCollapsed,
+      sidebarWidth: width != null
+          ? SystemSettings.clampSidebarWidth(width)
+          : state.settings.sidebarWidth,
+    );
+    state = state.copyWith(settings: updated);
+    await _saveSettingsToFile(updated);
+  }
+
   Future<void> saveAccountNickname(String accountId, String nickname) async {
     final trimmedId = accountId.trim();
     if (trimmedId.isEmpty) return;

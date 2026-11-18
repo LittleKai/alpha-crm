@@ -6,10 +6,10 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_windows
   local_notifier
   media_kit_libs_windows_video
-  media_kit_video
   screen_retriever_windows
   tray_manager
   url_launcher_windows
+  media_kit_video
   window_manager
 )
 
