@@ -89,8 +89,8 @@ const crmMonthlyPlan = CrmSubscriptionProduct(
   productId: 'crm_monthly',
   name: 'Gói Alpha CRM hàng tháng',
   priceVnd: 100000,
-  priceCredits: 1050,
-  aiRequests: 100,
+  priceCredits: 1000,
+  aiRequests: 200,
   badge: 'Gói chính',
   isPlan: true,
 );
@@ -98,29 +98,29 @@ const crmMonthlyPlan = CrmSubscriptionProduct(
 const crmAiTopUpPacks = [
   CrmSubscriptionProduct(
     productId: 'crm_ai_pack_100',
-    name: 'Gói AI Top-up 200',
+    name: 'Gói AI Top-up 500 Credit',
     priceVnd: 50000,
     priceCredits: 500,
-    aiRequests: 200,
-    badge: 'Tiết kiệm',
+    aiRequests: 500,
+    badge: 'Cơ bản',
     isPlan: false,
   ),
   CrmSubscriptionProduct(
     productId: 'crm_ai_pack_500',
-    name: 'Gói AI Top-up 1000',
+    name: 'Gói AI Top-up 2.200 Credit',
     priceVnd: 200000,
     priceCredits: 2000,
-    aiRequests: 1000,
-    badge: 'Phổ biến',
+    aiRequests: 2200,
+    badge: 'Phổ biến · +10%',
     isPlan: false,
   ),
   CrmSubscriptionProduct(
     productId: 'crm_ai_pack_1000',
-    name: 'Gói AI Top-up 2000',
+    name: 'Gói AI Top-up 4.000 Credit',
     priceVnd: 350000,
     priceCredits: 3500,
-    aiRequests: 2000,
-    badge: 'Ưu đãi lớn',
+    aiRequests: 4000,
+    badge: 'Ưu đãi lớn · +14%',
     isPlan: false,
   ),
 ];
@@ -136,11 +136,22 @@ RenewalDetails buildRenewalDetails({required int balanceCredits}) {
     missingCredits: missingCredits,
     rows: const [
       ('Gói gia hạn', 'Alpha CRM 1 tháng'),
-      ('Chi phí', '1050 Credits hoặc 100.000 VND'),
-      ('Hạn mức AI mới', '100 yêu cầu AI'),
-      ('Hiệu lực', 'Gia hạn thêm 30 ngày và đặt lại quota gói chính'),
+      ('Chi phí', '1.000 Credits hoặc 100.000 VND'),
+      ('Hạn mức AI mới', '200 AI Credits'),
+      ('Hiệu lực', 'Gia hạn thêm 30 ngày và đặt lại hạn mức gói chính'),
     ],
   );
+}
+
+String formatCreditAmount(num amount) {
+  final value = amount.toDouble();
+  if ((value - value.roundToDouble()).abs() < 0.0001) {
+    return value.round().toString();
+  }
+  final decimals = value.abs() >= 1 ? 2 : 4;
+  return value
+      .toStringAsFixed(decimals)
+      .replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 String formatVnd(int amount) {

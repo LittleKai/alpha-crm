@@ -81,8 +81,8 @@ class CrmAuthState {
   final CrmUserState? user;
   final String? subscriptionStatus;
   final String? subscriptionPlan;
-  final int includedAiRemaining;
-  final int extraAiRemaining;
+  final double includedAiRemaining;
+  final double extraAiRemaining;
   final int creditBalance;
   final String? errorText;
 
@@ -103,8 +103,8 @@ class CrmAuthState {
     this.user,
     this.subscriptionStatus,
     this.subscriptionPlan,
-    this.includedAiRemaining = 0,
-    this.extraAiRemaining = 0,
+    this.includedAiRemaining = 0.0,
+    this.extraAiRemaining = 0.0,
     this.creditBalance = 0,
     this.errorText,
     this.deviceRevokedReason,
@@ -118,8 +118,8 @@ class CrmAuthState {
     CrmUserState? user,
     String? subscriptionStatus,
     String? subscriptionPlan,
-    int? includedAiRemaining,
-    int? extraAiRemaining,
+    double? includedAiRemaining,
+    double? extraAiRemaining,
     int? creditBalance,
     String? errorText,
     String? deviceRevokedReason,
@@ -372,10 +372,11 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
       return null;
     }
     final creditBalance =
-        int.tryParse(
-          (meData['balance'] ?? rawUser['balance'])?.toString() ?? '0',
-        ) ??
-        0;
+        (double.tryParse(
+                  (meData['balance'] ?? rawUser['balance'])?.toString() ?? '0',
+                ) ??
+                0.0)
+            .floor();
 
     final subResult = await _cloudApi.get('/crm/subscription/me');
     var subscriptionStatus = 'none';
@@ -394,16 +395,17 @@ class CrmAuthNotifier extends StateNotifier<CrmAuthState> {
     }
 
     final quotaResult = await _cloudApi.get('/crm/quota');
-    var includedRemaining = 0;
-    var extraRemaining = 0;
+    var includedRemaining = 0.0;
+    var extraRemaining = 0.0;
     if (quotaResult['success'] == true && quotaResult['data'] is Map) {
       final data = quotaResult['data'] as Map;
       final limit =
-          int.tryParse(data['includedAiLimit']?.toString() ?? '0') ?? 0;
-      final used = int.tryParse(data['includedAiUsed']?.toString() ?? '0') ?? 0;
-      includedRemaining = (limit - used).clamp(0, limit);
+          double.tryParse(data['includedAiLimit']?.toString() ?? '0') ?? 0.0;
+      final used =
+          double.tryParse(data['includedAiUsed']?.toString() ?? '0') ?? 0.0;
+      includedRemaining = (limit - used).clamp(0.0, limit).toDouble();
       extraRemaining =
-          int.tryParse(data['extraAiRemaining']?.toString() ?? '0') ?? 0;
+          double.tryParse(data['extraAiRemaining']?.toString() ?? '0') ?? 0.0;
     }
 
     return _CloudProfile(
@@ -554,8 +556,8 @@ class _CloudProfile {
   final CrmUserState user;
   final String subscriptionStatus;
   final String? subscriptionPlan;
-  final int includedAiRemaining;
-  final int extraAiRemaining;
+  final double includedAiRemaining;
+  final double extraAiRemaining;
   final int creditBalance;
 
   const _CloudProfile({

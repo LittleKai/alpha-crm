@@ -115,7 +115,7 @@ class SystemSettings {
     this.liveChatMediaCacheMaxGb = 20,
     this.liveChatNotifications = true,
     this.showTokenAnalytics = true,
-    this.summaryAiModel = 'gemini-3.1-pro',
+    this.summaryAiModel = 'gemini-3.8-flash',
     this.fontSizeMultiplier = 1.0,
     this.fontFamily = 'Be Vietnam Pro',
     this.sidebarCollapsed = false,
@@ -354,7 +354,7 @@ class SystemSettings {
       liveChatMediaCacheMaxGb: json['liveChatMediaCacheMaxGb'] ?? 20,
       liveChatNotifications: json['liveChatNotifications'] != false,
       showTokenAnalytics: json['showTokenAnalytics'] != false,
-      summaryAiModel: (json['summaryAiModel'] ?? 'gemini-3.1-pro').toString(),
+      summaryAiModel: _normalizeSummaryAiModel(json['summaryAiModel']),
       fontSizeMultiplier: json['fontSizeMultiplier']?.toDouble() ?? 1.0,
       fontFamily: json['fontFamily'] ?? 'Be Vietnam Pro',
       sidebarCollapsed: json['sidebarCollapsed'] == true,
@@ -405,4 +405,12 @@ class MockAccounts {
     fontSizeMultiplier: 1.0,
     fontFamily: 'Be Vietnam Pro',
   );
+}
+
+String _normalizeSummaryAiModel(Object? raw) {
+  final value = (raw ?? '').toString().trim();
+  if (value == 'gemini-3.1-flash-lite' || value == 'gemini-3.5-flash' || value == 'gemini-3-flash') {
+    return value == 'gemini-3.5-flash' ? 'gemini-3.8-flash' : 'gemini-3.1-flash-lite';
+  }
+  return 'gemini-3.8-flash';
 }

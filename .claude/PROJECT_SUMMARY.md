@@ -1,6 +1,6 @@
 # Project Summary
 
-**Last Updated:** 2026-11-18 · **Session:** 15 · **Setup baseline:** 2026-11-03
+**Last Updated:** 2026-11-19 · **Session:** 16 · **Setup baseline:** 2026-11-03
 
 > Trang thai hien tai, khong phai changelog. Sau moi task: cap nhat ngay/session, feature status, TODO va file/dependency neu doi. Bug quan trong vao `IMPORTANT_FIXED_BUGS.md`. Archive chi de biet vi sao.
 
@@ -246,7 +246,7 @@ flowchart LR
 - [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
 - [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
 
-Bản phát hành hiện tại: **v0.3.0+34** đã được xuất bản đồng thời lên **GitHub Release** và **Backblaze B2** (ZIP Windows 71.45 MB kèm Zalo backend bundle + Node LTS v22.23.2 runtime đã qua smoke-test `/health` và `/local/health`; APK Android 149.58 MB; manifest `version.json` trên CDN `download.giaiphapsangtao.com` đã cập nhật). Tích hợp trọn vẹn P1–P10 từ `2anh-zalo-bot` (Zalo rate limiter, Vietnamese diacritic fold, media enricher, crash-safe campaign runner, group mentions @Tên/@All, Flood Guard).
+Bản phát hành hiện tại: **v0.3.0+34** đã được xuất bản đồng thời lên **GitHub Release** và **Backblaze B2** (ZIP Windows 71.45 MB kèm Zalo backend bundle + Node LTS v22.23.2 runtime đã qua smoke-test `/health` và `/local/health`; APK Android 149.58 MB; manifest `version.json` trên CDN `download.giaiphapsangtao.com` đã cập nhật). Tích hợp trọn vẹn P1–P10 từ `2anh-zalo-bot`. Workspace local đã nâng cấp `zca-js` lên `^2.3.0` (`better-sqlite3` ABI 127 cho Node `v22.23.2`, bundle `dist/server.cjs`, 204/204 tests), chuẩn hoá AI models về `gemini-3.1-flash-lite` & `gemini-3.8-flash` và đồng bộ AI Credit tính theo token (1/2 giá Gemini gốc, Trial 100 Cr, Monthly 1000 Cr = 200 AI Cr, Top-up 500/2200/4000 Cr).
 
 Giới hạn đã biết & TODO:
 - [ ] Cloud consumer (`alpha-studio-backend/server/routes/crm.js` & `CrmExecutionLog.status`) hiện chỉ có enum `['queued','running','success','failed','cancelled']` nên `status: 'unknown'` do agent gửi khi `SEND_TIMEOUT` bị map về `queued` rồi chuyển sang `cancelled`, và các trường mới (`unknownCount`, `abortedReason`, `inFlightRecipient`) chưa được cloud lưu/hiển thị. Cần bổ sung enum `'unknown'` và hiển thị `abortedReason` ở repo `alpha-studio-backend` trước khi cam kết chống gửi trùng phía cloud cho lượt gửi timeout.

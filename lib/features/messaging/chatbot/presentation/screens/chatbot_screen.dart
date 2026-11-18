@@ -8,7 +8,6 @@ import '../../../../../app/theme/app_colors.dart';
 import '../../../../../app/theme/app_spacing.dart';
 import '../../../../../app/theme/app_text_styles.dart';
 import '../../../../../shared/utils/responsive_breakpoints.dart';
-import '../../../../../shared/widgets/app_alert.dart';
 import '../../../../../shared/widgets/app_badge.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_card.dart';
@@ -24,6 +23,7 @@ import '../../../../zalo_integration/providers/zalo_integration_provider.dart';
 import '../../../../../shared/widgets/account_avatar_stack.dart';
 import '../../../../auth/providers/crm_auth_provider.dart';
 import '../../../../groups/manage/providers/managed_groups_provider.dart';
+import '../../../../subscription/models/subscription_catalog.dart';
 import '../../../../../shared/api/crm_cloud_api.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
@@ -800,7 +800,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 'Dùng cho các câu hỏi lặp lại như giá, bảo hành, địa chỉ, giờ làm việc hoặc quy trình mua hàng.',
                 'Mỗi kịch bản nên có từ khóa ngắn, tự nhiên và dễ xuất hiện trong tin nhắn khách.',
                 'Bot luôn kiểm tra kịch bản từ khóa trước; chỉ khi không khớp và AI đang bật, hệ thống mới dùng AI để tạo câu trả lời.',
-                'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn lượt AI; chỉ câu trả lời do AI tạo (ở tab Trí tuệ nhân tạo) mới tính lượt.',
+                'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn Credit AI; chỉ câu trả lời do AI tạo (ở tab Trí tuệ nhân tạo) mới trừ Credit theo token.',
               ],
             ),
             SizedBox(height: AppSpacing.m),
@@ -879,7 +879,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       _soulController.text = state.soulPrompt;
       _rulesController.text = state.responseRules;
       _tempValue = state.temperature;
-      _selectedModel = normalizeChatbotAiModel(state.aiModel);
+      _selectedModel = normalizeChatbotAiModel(
+        state.aiModel,
+        provider: state.aiProvider,
+      );
     }
 
     final header = Row(
@@ -1102,8 +1105,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 const SizedBox(width: AppSpacing.s),
                 Expanded(
                   child: Text(
-                    'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn lượt AI. '
-                    'Chỉ câu trả lời do AI tạo (tab Trí tuệ nhân tạo) mới tính lượt.',
+                    'Kịch bản từ khóa là so khớp cố định nên KHÔNG tốn Credit AI. '
+                    'Chỉ câu trả lời do AI tạo (tab Trí tuệ nhân tạo) mới trừ Credit theo token.',
                     style: AppTextStyles.caption.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -1354,7 +1357,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         .then((_) {
                           if (mounted) {
                             setState(() {
-                              _selectedModel = selectedModel;
+                              _selectedModel = normalizeChatbotAiModel(
+                                selectedModel,
+                                provider: selectedProvider,
+                              );
                               _promptController.text = promptController.text;
                               _soulController.text = soulController.text;
                               _rulesController.text = rulesController.text;
@@ -1423,10 +1429,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                                   return AppDropdownItem(
                                     value: m,
                                     label: m,
-                                    subtitle: m == 'gemini-3-flash'
-                                        ? 'Nhanh, tiết kiệm quota'
-                                        : m == 'gemini-2.5-pro'
-                                            ? 'Thông minh, chính xác hơn'
+                                    subtitle: m == 'gemini-3.1-flash-lite'
+                                        ? 'Nhanh, tiết kiệm · 13 In / 51 Out Cr/1M token'
+                                        : m == 'gemini-3.8-flash'
+                                            ? 'Cân bằng, thông minh · 38 In / 318 Out Cr/1M token'
                                             : null,
                                   );
                                 }).toList(),
@@ -2355,8 +2361,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             runSpacing: AppSpacing.s,
             children: [
               AppBadge(
-                label:
-                    '${state.aiModel} (${state.aiModel == 'gemini-3.1-pro-preview' || state.aiModel == 'gemini-3.5-flash' ? '2' : '1'} quota/lượt)',
+                label: '${state.aiModel} (tính Credit theo token)',
                 variant: AppBadgeVariant.info,
               ),
               AppBadge(
@@ -2371,14 +2376,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ),
             ],
           ),
-          if (state.aiModel == 'gemini-3.1-pro-preview' || state.aiModel == 'gemini-3.5-flash') ...[
-            const SizedBox(height: AppSpacing.m),
-            AppAlert(
-              message:
-                  'Model ${state.aiModel} dùng quota gấp đôi. Backend sẽ trừ 2 lượt cho mỗi lần AI trả lời thành công và hoàn lại nếu upstream GCLI lỗi.',
-              variant: AppAlertVariant.warning,
-            ),
-          ],
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 24),
@@ -2440,7 +2437,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '$totalRemaining lượt',
+                  '${formatCreditAmount(totalRemaining)} Cr',
                   style: AppTextStyles.caption.copyWith(
                     color: hasNoQuota
                         ? AppColors.errorText

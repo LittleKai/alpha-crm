@@ -68,17 +68,47 @@ class _FakeChatbotRepository extends ChatbotRepository {
 }
 
 void main() {
-  test('normalizeChatbotAiModel accepts supported chatbot models', () {
+  test('normalizeChatbotAiModel normalizes legacy and supported chatbot models', () {
     expect(
       normalizeChatbotAiModel('gemini-3-flash-preview'),
-      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
     );
-    expect(normalizeChatbotAiModel('gemini-2.5-pro'), 'gemini-2.5-pro');
+    expect(normalizeChatbotAiModel('gemini-2.5-pro'), 'gemini-3.8-flash');
     expect(
-      normalizeChatbotAiModel('gemini-3.1-pro-preview'),
-      'gemini-3.1-pro-preview',
+      normalizeChatbotAiModel('gemini-3.1-pro'),
+      'gemini-3.8-flash',
     );
-    expect(normalizeChatbotAiModel('gcli-default'), 'gcli-default');
+    expect(
+      normalizeChatbotAiModel('gemini-3.5-flash'),
+      'gemini-3.8-flash',
+    );
+    expect(normalizeChatbotAiModel('gcli-default'), 'gemini-3.1-flash-lite');
+    expect(normalizeChatbotAiModel('gemini-3.8-flash'), 'gemini-3.8-flash');
+  });
+
+  test('preserves BYOK provider model when updating and loading settings', () async {
+    final repository = _FakeChatbotRepository();
+    final notifier = ChatbotNotifier(repository);
+    await Future<void>.delayed(Duration.zero);
+
+    await notifier.updateAiConfig(
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      prompt: chatbotDefaultSystemPrompt,
+      soulPrompt: chatbotDefaultSoul,
+      responseRules: chatbotDefaultResponseRules,
+      temperature: 0.7,
+      debounceSeconds: 15,
+      aiHistoryLimit: 6,
+    );
+
+    expect(notifier.state.aiProvider, 'gemini');
+    expect(notifier.state.aiModel, 'gemini-2.5-flash');
+    expect(repository.savedSettings?['aiModel'], 'gemini-2.5-flash');
+
+    await notifier.loadSettings();
+    expect(notifier.state.aiProvider, 'gemini');
+    expect(notifier.state.aiModel, 'gemini-2.5-flash');
   });
 
   test(

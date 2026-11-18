@@ -14,10 +14,10 @@ final chatbotLocalBridgeApiProvider = Provider<ChatbotLocalBridgeApi>((ref) {
 });
 
 const chatbotAiModels = [
-  'gemini-3-flash',
-  'gemini-2.5-pro',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
 ];
-const chatbotDefaultAiModel = 'gemini-3-flash';
+const chatbotDefaultAiModel = 'gemini-3.1-flash-lite';
 const chatbotDefaultSystemPrompt =
     'Bạn là một người hỗ trợ tư vấn khách hàng Zalo. Hãy phản hồi tự nhiên, ngắn gọn và đời thường như một người thật, tránh viết quá dài (dưới 100 từ). Đặc biệt: Chỉ gửi lời chào (như Chào bạn, Dạ chào anh/chị) ở câu đầu tiên của cuộc hội thoại, từ các câu tiếp theo tuyệt đối không lặp lại câu chào hỏi nữa mà trả lời thẳng vào vấn đề.';
 const chatbotDefaultSoul =
@@ -50,16 +50,16 @@ const chatbotAiProviderConfigs = <ChatbotAiProviderConfig>[
   ChatbotAiProviderConfig(
     id: 'alpha_studio',
     label: 'Alpha Studio',
-    presetModels: ['gemini-3-flash', 'gemini-2.5-pro'],
-    defaultModel: 'gemini-3-flash',
+    presetModels: ['gemini-3.1-flash-lite', 'gemini-3.8-flash'],
+    defaultModel: 'gemini-3.1-flash-lite',
     requiresApiKey: false,
   ),
   ChatbotAiProviderConfig(
     id: 'gemini',
     label: 'Google Gemini',
     keyHint: 'AIzaSy...',
-    presetModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
-    defaultModel: 'gemini-2.5-flash',
+    presetModels: ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash'],
+    defaultModel: 'gemini-3.1-flash-lite',
   ),
   ChatbotAiProviderConfig(
     id: 'openai',
@@ -93,8 +93,37 @@ ChatbotAiProviderConfig? findProviderConfig(String id) {
   return null;
 }
 
-String normalizeChatbotAiModel(String value) {
-  return value.isNotEmpty ? value : chatbotDefaultAiModel;
+String normalizeChatbotAiModel(
+  String value, {
+  String provider = chatbotDefaultAiProvider,
+}) {
+  final clean = value.trim();
+  if (clean.isEmpty) {
+    return findProviderConfig(provider)?.defaultModel ?? chatbotDefaultAiModel;
+  }
+  // Only Alpha Studio remaps retired/alias model IDs; BYOK providers keep exact model IDs.
+  if (provider != chatbotDefaultAiProvider) {
+    return clean;
+  }
+  switch (clean) {
+    case 'gemini-3.1-pro':
+    case 'gemini-3.1-pro-preview':
+    case 'gemini-3.5-flash':
+    case 'gemini-2.5-pro':
+    case 'gemini-3.8-flash':
+    case 'gemini-3.8-flash-low':
+    case 'gemini-3.8-flash-medium':
+    case 'gemini-3.8-flash-high':
+      return 'gemini-3.8-flash';
+    case 'gemini-3-flash':
+    case 'gemini-3-flash-preview':
+    case 'gemini-2.5-flash':
+    case 'gemini-3.1-flash-lite':
+    case 'gcli-default':
+      return 'gemini-3.1-flash-lite';
+    default:
+      return clean;
+  }
 }
 
 int _normalizeDebounceSeconds(Object? value) {
@@ -484,10 +513,12 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
             (json['selectedGroupKeys'] as List).map((item) => item.toString()),
           )
         : <String>[];
+    final resolvedProvider = (json['aiProvider'] ?? state.aiProvider).toString();
     state = state.copyWith(
-      aiProvider: (json['aiProvider'] ?? state.aiProvider).toString(),
+      aiProvider: resolvedProvider,
       aiModel: normalizeChatbotAiModel(
         (json['aiModel'] ?? state.aiModel).toString(),
+        provider: resolvedProvider,
       ),
       systemPrompt: (json['systemPrompt'] ?? state.systemPrompt).toString(),
       soulPrompt: (json['soulPrompt'] ?? state.soulPrompt).toString(),
@@ -703,7 +734,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   }) async {
     state = state.copyWith(
       aiProvider: provider,
-      aiModel: normalizeChatbotAiModel(model),
+      aiModel: normalizeChatbotAiModel(model, provider: provider),
       systemPrompt: prompt,
       soulPrompt: soulPrompt,
       responseRules: responseRules,

@@ -13,8 +13,16 @@ import '../../../../settings/providers/settings_provider.dart';
 /// `SUMMARY_ALLOWED_AI_MODELS` list. Stored as a LOCAL setting and sent with
 /// each summarize request — no cloud round-trip.
 const List<({String key, String label, String desc})> kSummaryModels = [
-  (key: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (mặc định)', desc: 'Chất lượng cao nhất, tiêu hao 1 quota/lần'),
-  (key: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: 'Tốc độ cực nhanh, tiêu hao 1 quota/lần'),
+  (
+    key: 'gemini-3.8-flash',
+    label: 'Gemini 3.8 Flash (mặc định)',
+    desc: 'Cân bằng, chất lượng cao · 38 Cr/1M Input · 318 Cr/1M Output',
+  ),
+  (
+    key: 'gemini-3.1-flash-lite',
+    label: 'Gemini 3.1 Flash Lite',
+    desc: 'Tốc độ nhanh, siêu tiết kiệm · 13 Cr/1M Input · 51 Cr/1M Output',
+  ),
 ];
 
 Future<void> showGroupSummarySettings(BuildContext context) {
@@ -33,7 +41,7 @@ class _GroupSummarySettingsDialog extends ConsumerWidget {
     final notifier = ref.read(settingsProvider.notifier);
     final model = kSummaryModels.any((e) => e.key == settings.summaryAiModel)
         ? settings.summaryAiModel
-        : 'gemini-3.1-pro';
+        : 'gemini-3.8-flash';
 
     return AppDialog(
       title: 'Cài đặt tóm tắt',

@@ -50,7 +50,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       _showSnack(
         product.isPlan
             ? 'Gói Alpha CRM đã được kích hoạt/gia hạn thành công.'
-            : 'Đã mua thành công ${product.aiRequests} yêu cầu AI.',
+            : 'Đã mua thành công ${product.aiRequests} AI Credits.',
       );
       return;
     }
@@ -191,8 +191,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     '${formatVnd(product.priceVnd)} hoặc ${product.priceCredits} Credits',
               ),
               _DetailRow(
-                label: product.isPlan ? 'Quota gói chính' : 'AI thêm',
-                value: '${product.aiRequests} yêu cầu AI',
+                label: product.isPlan ? 'Hạn mức gói chính' : 'Credit AI thêm',
+                value: '${product.aiRequests} AI Credits',
               ),
               _DetailRow(
                 label: 'Số dư Credits',
@@ -417,10 +417,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   },
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                Text('Gói AI bổ sung', style: AppTextStyles.sectionTitle),
+                Text('Gói AI Credits bổ sung', style: AppTextStyles.sectionTitle),
                 const SizedBox(height: AppSpacing.s),
                 Text(
-                  'Mua thêm lượt AI khi gói Alpha CRM đang hoạt động. Có thể thanh toán bằng Credits hoặc tạo mã VietQR riêng cho từng gói.',
+                  'Mua thêm AI Credits khi gói Alpha CRM đang hoạt động (trừ Credit theo lượng token thực tế, bằng 1/2 giá Gemini gốc). Có thể thanh toán bằng Credits hoặc tạo mã VietQR.',
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -456,7 +456,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
     final features = [
       'Kết nối thiết bị Windows Client & Android Connector',
-      isTrial ? '100 yêu cầu AI chất lượng cao' : '100 yêu cầu AI chất lượng cao mỗi tháng',
+      isTrial
+          ? '100 AI Credits dùng thử (tính theo token thực tế)'
+          : '200 AI Credits mỗi tháng (bằng 1/2 giá Gemini gốc)',
       'Chatbot tự động phản hồi & Live Chat tập trung',
       'Gửi tin nhắn hàng loạt & Chiến dịch Zalo marketing',
       'Tự động tóm tắt cuộc hội thoại nhóm bằng AI',
@@ -602,7 +604,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   : isActive
                   ? isTrial
                         ? 'Gói dùng thử chỉ cấp 1 lần cho tài khoản mới. Bạn có thể nâng cấp lên gói chính bất cứ lúc nào.'
-                        : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại quota gói chính về 100 yêu cầu AI.'
+                        : 'Gia hạn sẽ cộng thêm 30 ngày từ hạn hiện tại và đặt lại hạn mức gói chính về 200 AI Credits.'
                   : 'Đăng ký gói tháng để kích hoạt CRM và bắt đầu kết nối thiết bị Zalo.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
@@ -633,7 +635,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget _buildQuotaCard(CrmAuthState authState) {
     final totalRemaining =
         authState.includedAiRemaining + authState.extraAiRemaining;
-    final totalLimit = 100;
+    final baseLimit = authState.isTrialSubscription ? 100.0 : 200.0;
+    final totalLimit = totalRemaining > baseLimit ? totalRemaining : baseLimit;
     final double progress = (totalRemaining / totalLimit).clamp(0.0, 1.0);
 
     return _SurfaceCard(
@@ -646,7 +649,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               const SizedBox(width: AppSpacing.m),
               Expanded(
                 child: Text(
-                  'Hạn mức AI khả dụng',
+                  'Hạn mức AI Credit khả dụng',
                   style: AppTextStyles.cardTitle.copyWith(fontSize: 18),
                 ),
               ),
@@ -657,7 +660,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             child: Column(
               children: [
                 Text(
-                  '$totalRemaining',
+                  formatCreditAmount(totalRemaining),
                   style: AppTextStyles.pageTitle.copyWith(
                     fontSize: 56,
                     color: totalRemaining > 0
@@ -668,7 +671,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'trong tổng số $totalLimit yêu cầu AI',
+                  'trong tổng số ${formatCreditAmount(baseLimit)} AI Credits theo gói (tính theo token)',
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w600,
@@ -1031,7 +1034,7 @@ class _IconBadge extends StatelessWidget {
 
 class _QuotaBucket extends StatelessWidget {
   final String label;
-  final int value;
+  final double value;
 
   const _QuotaBucket({required this.label, required this.value});
 
@@ -1050,7 +1053,7 @@ class _QuotaBucket extends StatelessWidget {
           Text(label, style: AppTextStyles.caption),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '$value',
+            '${formatCreditAmount(value)} Cr',
             style: AppTextStyles.cardTitle.copyWith(
               color: AppColors.textPrimary,
             ),
@@ -1103,25 +1106,32 @@ class _TopUpCard extends StatelessWidget {
               _IconBadge(
                 icon: isPopular ? Icons.local_fire_department : Icons.bolt,
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.xs,
-                ),
-                decoration: BoxDecoration(
-                  color: isPopular
-                      ? AppColors.warningSoft
-                      : AppColors.primarySoft,
-                  borderRadius: AppSpacing.borderRadiusPill,
-                ),
-                child: Text(
-                  product.badge,
-                  style: AppTextStyles.caption.copyWith(
-                    color: isPopular
-                        ? AppColors.warningText
-                        : AppColors.primary,
-                    fontWeight: FontWeight.w800,
+              const SizedBox(width: AppSpacing.s),
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isPopular
+                          ? AppColors.warningSoft
+                          : AppColors.primarySoft,
+                      borderRadius: AppSpacing.borderRadiusPill,
+                    ),
+                    child: Text(
+                      product.badge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        color: isPopular
+                            ? AppColors.warningText
+                            : AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1134,7 +1144,7 @@ class _TopUpCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.s),
           Text(
-            '+${product.aiRequests} yêu cầu AI dùng cho chatbot, phân tích khách hàng và soạn chiến dịch.',
+            '+${product.aiRequests} AI Credits (trừ theo token · 1/2 giá Gemini) dùng cho chatbot, phân tích khách hàng và soạn chiến dịch.',
             style: AppTextStyles.body.copyWith(
               color: AppColors.textSecondary,
               height: 1.45,
