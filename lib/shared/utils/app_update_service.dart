@@ -256,7 +256,7 @@ class AppUpdateService {
         if (filePath.toLowerCase().endsWith('.zip')) {
           // ZIP releases are portable bundles, so apply them with a helper
           // script after this running process exits.
-          return _installWindowsZipUpdate(filePath, targetVersion);
+          return await _installWindowsZipUpdate(filePath, targetVersion);
         } else {
           // Mở file .exe hoặc .msix trực tiếp
           await Process.start(filePath, [], mode: ProcessStartMode.detached);
