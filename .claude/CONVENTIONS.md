@@ -1,6 +1,6 @@
 # Conventions - Alpha CRM
 
-**Last Updated:** 2026-11-03
+**Last Updated:** 2026-11-22
 
 | Quy uoc | Vi du that |
 |---|---|
@@ -81,3 +81,64 @@
 | Phát hành bản mới | Chạy `alpha-studio-backend/scripts/release-to-b2.js`; Windows ZIP **phải kèm** bundle backend Zalo cục bộ + Node runtime, **loại trừ** `.env` và `.data` | Bản Windows cài xong không chạy được, hoặc phát tán secret của máy build |
 
 > **Hai transport, một UI:** desktop chạy `localBridge` (agent chính là tiến trình cục bộ), mobile chạy `cloudRemote` (qua SSE + Desktop Agent ở xa). Khi thêm tính năng Live Chat, phải nghĩ cho **cả hai** — method chỉ có ở local phải trả stub `NOT_SUPPORTED_REMOTE`, không được ném lỗi.
+
+
+## Chi tiet Co che, Kiem chung & Quy tac Sua Module (2026-11-22)
+
+> Chuyen nguyen van tu `.claude/PROJECT_SUMMARY.md` (§2 Critical Files, §6 Known Issues & TODO, §7 Important Notes for Claude) ngay 2026-11-22 (nang cap Setup v2 2026-11-22 giu gon).
+
+### Chi tiet bo sung tu bang Critical Files (§2)
+
+| File | Purpose | Notes |
+|------|---------|-------|
+| `lib/features/customers/utils/customer_file_parser.dart` | Customer CSV/XLSX parser | Isolate raw-row + typed import parser; header auto-detect, column suggest, row validation (`ImportTargetField`). |
+| `lib/features/customers/presentation/widgets/customer_import_wizard.dart` | Interactive import wizard | 3-step CSV/XLSX import dialog (file/header -> column mapping -> row validation preview & confirm). |
+| `lib/shared/local_db/local_db.dart` | Local SQLite (sqflite/ffi) | Adds generic `putCache(key,value,{ttl})` / `getCache(key)` over the `cache_entries` table (expired rows purged on read) used by the Customers offline cache. |
+| `lib/features/dashboard/utils/dashboard_chart_data.dart` | Dashboard chart data helpers | Normalizes daily dashboard chart metrics, merges local chatbot daily stats into campaign performance data, and protects cumulative message series from rendering as per-day values. |
+| `lib/features/messaging/bulk/` | Bulk messaging + scheduled campaigns | Bulk messaging + đính kèm ảnh/tệp + queue Timer + thẻ "Không rõ" (`unknownCount`), `inFlightRecipient` và `aborted_fail_streak`. |
+| `lib/shared/widgets/app_close_gate.dart` | X-button confirm dialog | Wraps the whole app; listens to `DesktopShell.closeRequest` and renders an inline `AppDialog` (no `showDialog`/Navigator needed) with "Thoát luôn" / "Ẩn xuống tray" / "Hủy". |
+| `lib/shared/widgets/update_result_gate.dart` | Post-update result UI | Global inline gate: green success banner (auto-dismiss) or a "Cập nhật chưa hoàn tất → Tải lại bản mới" dialog when an in-place update did not apply. Driven by `postUpdateResultProvider`. |
+| `integration/zalo-bot-service/src/channels/official-bot-client.ts` | Official Bot API transport | Small `zalo-bot-js`-style native fetch transport used by `OfficialOaChannel` for compliant official text sends through `ZALO_BOT_TOKEN`. |
+| `integration/zalo-bot-service/src/channels/official-oa-channel.ts` | Official Bot/OA channel adapter | Handles official status, text sends, and webhook inbound normalization into `ZaloInboundMessageEvent` for CRM live chat/chatbot ingestion. |
+| `integration/zalo-bot-service/src/channels/zalo-markdown-formatter.ts` | Zalo Markdown → TextStyle[] + chunker + `@mention` | Parse Markdown sang zca-js TextStyle[], chia chunk UTF-16/UTF-8, parse `@Name`/`@All` (`findMentions`). |
+| `integration/zalo-bot-service/src/channels/zalo-media-enricher.ts` | Inbound Zalo media enricher + MIME map | Rút trích metadata media, chặn false-positive `hasRealMedia`/`share.file`, chuẩn hoá 31 đuôi MIME (`resolveAttachmentMimeType`). |
+| `integration/zalo-bot-service/src/channels/zalo-rate-limiter.ts` | Per-account priority token-bucket rate limiter | Token-bucket 2 làn (`high` cho Live Chat/Chatbot, `normal` cho campaign/friend/group) dùng `performance.now()`. |
+| `integration/zalo-bot-service/src/local-chat/vietnamese-fold.ts` | Vietnamese diacritic folder | Chuẩn hoá NFD + đ/Đ cho UDF `zd_fold` trong SQLite (`searchMessages`/`listConversations`) và escape `%`/`_`. |
+| `lib/features/messaging/live_chat/data/live_chat_contracts.dart` | Local-first bridge contracts | Path builders, response helpers, and failure indicators for local bridge API. Behind `localFirstLiveChat` feature flag. |
+| `lib/shared/api/crm_sse_client.dart` | Cloud SSE client | Singleton GET /crm/events/subscribe với connect/idle watchdog (20s/65s), generation guard, reconnectNow và log 100 dòng đã che secret. |
+| `lib/features/messaging/live_chat/utils/mobile_connection_diagnostics.dart` | Mobile connection diagnostics & calm status | CalmStatusReveal state machine, `evaluateAgentVersionCompat`, bộ phân tích chẩn đoán kết nối 9 mức ưu tiên và xuất báo cáo đã che secret. |
+| `lib/features/messaging/live_chat/presentation/widgets/mobile_connection_diagnostics_dialog.dart` | Mobile connection diagnostics dialog | `showStandardDialog` + `AppDialog` hiển thị chẩn đoán kết nối, tương thích phiên bản PC/Mobile, 4 mục kiểm tra, log SSE đã che secret, nút Kết nối lại ngay & Sao chép báo cáo. |
+
+### Hop dong da kiem chung tu §6 Known Issues & TODO
+
+Đã xử lý 5 phát hiện từ review `ed3fc11..c161233` (4 commits ngày 23/10):
+
+- [x] Outbound sync báo cloud cho `sent`/`delivered`/`seen`, retry khi cloud lỗi; không báo queued/failed.
+- [x] Release chọn đúng Targets, kiểm tra version/build nhúng và hash; manifest theo platform giữ snapshot cũ đến khi đủ hai nền tảng.
+- [x] Media xác thực từng redirect và mọi DNS result, ghim IP public trước request; giới hạn stream và deadline cả DNS.
+- [x] Programmatic echo đối chiếu account/thread/provider hoặc client ID, không chặn nhầm tin điện thoại cùng thread.
+- [x] CSV/XLSX đọc và parse trên native isolate; giới hạn file 16 MiB, XML 8 MiB/entry và 12 MiB tổng, số hàng/cột/ô.
+
+### Quy tac sua module tu §7 Important Notes for Claude
+
+#### When making changes to:
+
+- **Routing:** Keep route constants in `AppRoutes` and update `app_router.dart` only when route behavior changes.
+- **Theme:** Use existing `AppColors`, `AppSpacing`, and `AppTextStyles`. Avoid hard-coded theme values unless they are screen-specific and justified.
+- **Shared widgets:** Preserve public constructor APIs unless all usage sites are updated and verified.
+- **Feature screens:** Keep changes inside the relevant `lib/features/<feature>/` module unless the task explicitly authorizes shared/app-layer edits.
+- **Mock data:** Put reusable sample/default data in `lib/mock/`; do not embed large lists directly inside `build`.
+- **Responsive UI:** Preserve mobile stack, tablet collapsed sidebar, and desktop multi-column behavior.
+
+#### Testing checklist:
+
+- [ ] Run `flutter analyze`.
+- [ ] Run `flutter test`.
+- [ ] For UI changes, inspect desktop, tablet, and mobile widths.
+- [ ] For routing changes, navigate all affected sidebar routes.
+
+#### Don't forget to:
+
+- Follow `.claude/CONVENTIONS.md`.
+- Keep documentation current-state only.
+- Record only high-impact or likely-to-recur fixed bugs in `.claude/IMPORTANT_FIXED_BUGS.md`.
