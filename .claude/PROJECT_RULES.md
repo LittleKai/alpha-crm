@@ -5,7 +5,7 @@
 ## Core Principle
 
 Read `.claude/PROJECT_SUMMARY.md` first, not the entire codebase.
-Use the skill in `~/.agents/skills/flutter-dev`.
+Use the installed `flutter-dev` skill (when available in your agent harness).
 
 ---
 
